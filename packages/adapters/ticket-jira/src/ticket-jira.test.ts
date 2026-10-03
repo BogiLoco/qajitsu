@@ -167,3 +167,39 @@ describe("file ticket source", () => {
     });
   });
 });
+
+describe("Jira Data Center ticket source (REQ-PUB-03, REQ-CTX-01)", () => {
+  it("reads REST v2 with a personal access token and converts wiki markup", async () => {
+    const fake = createFakeFetch([
+      {
+        match: /^\/rest\/api\/2\/issue\/SHOP-482\?/,
+        reply: jsonReply(fixture("jira/datacenter/issue-SHOP-482.json")),
+      },
+      { match: /dev-status/, reply: jsonReply({ detail: [] }) },
+    ]);
+    const source = createJiraCloudTicketSource(
+      { baseUrl: BASE, flavor: "datacenter", token: "secret://env/JIRA_TOKEN" },
+      testDeps(fake.fetch, secrets),
+    );
+    const ticket = await source.getTicket(TicketKeySchema.parse("SHOP-482"));
+    expect(ticket.acceptanceCriteria).toEqual([
+      "GET `/cart` returns the total rounded once.",
+      "Codes never stack.",
+    ]);
+    expect(ticket.description).toContain("my **discount code** applied");
+    expect(ticket.description).toContain('```\n{"code":"SAVE10"}\n```');
+    expect(ticket.description).toContain("1. first");
+    expect(ticket.comments[0]?.body).toBe("Percentage codes only.");
+    expect(fake.requests[0]?.headers["authorization"]).toBe("Bearer jira-api-token-123");
+  });
+
+  it("Cloud without an e-mail is refused", async () => {
+    const source = createJiraCloudTicketSource(
+      { baseUrl: BASE, token: "secret://env/JIRA_TOKEN" },
+      testDeps(createFakeFetch(routes()).fetch, secrets),
+    );
+    await expect(source.getTicket(TicketKeySchema.parse("SHOP-482"))).rejects.toMatchObject({
+      code: "JIRA_AUTH_MISSING",
+    });
+  });
+});

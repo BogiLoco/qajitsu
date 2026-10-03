@@ -1,7 +1,7 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { checkHealth, compareDeployedSha, loginAccounts, readDeployedSha } from "@qajitsu/adapter-env-remote";
-import { createLocalEvidenceStore, readManifest } from "@qajitsu/adapter-evidence-local";
+import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
 import {
   createSandboxExecutor,
   loadContractValidator,
@@ -11,7 +11,6 @@ import {
 } from "@qajitsu/adapter-runner-api";
 import { buildChangeContext, checkSpec, createUsageTracker, runAuthor } from "@qajitsu/agents";
 import {
-  APPROVED_PLAN_FILE,
   AnalysisSchema,
   ConfigError,
   CaseResultFileSchema,
@@ -20,31 +19,16 @@ import {
   loadApprovedPlan,
   resolveEnvironment,
   selectExecutableSpecs,
-  sha256,
   type CaseResultFile,
   type Plan,
   type ResolvedEnvironment,
 } from "@qajitsu/core";
-import {
-  renderMatrixCsv,
-  renderMatrixMarkdown,
-  renderMatrixXlsx,
-  renderReportHtml,
-  chooseSummary,
-  type MatrixRow,
-  type ReportAttempt,
-} from "@qajitsu/report";
 import { createMasker } from "@qajitsu/steps";
-import {
-  checkManifest,
-  combineGates,
-  evaluateRun,
-  gateNoSecrets,
-  formatSpecProblems,
-} from "@qajitsu/verifier";
+import { formatSpecProblems } from "@qajitsu/verifier";
 import type { RuntimePorts } from "../adapters.js";
 import { openSession, type ModelPorts, type RunSession } from "../session.js";
 import type { CommandIO } from "./fetch.js";
+import { computeVerdict, writeReports } from "./verdict.js";
 
 /** Options of `qajitsu run`. */
 export interface RunOptions {
@@ -176,114 +160,10 @@ export async function runRun(
         io.write(`Rejected spec files (not in the approved plan or misplaced): ${pending.join(", ")}\n`);
     }
 
-    // Statuses, gates and reports: computed by code only (invariants 1, 6, 7).
-    const manifest = await readManifest(ws.path("evidence"));
-    const manifestCheck = await checkManifest(ws.path("evidence"), manifest);
-    const reported = (await readdir(ws.path("results")))
-      .filter((f) => f.endsWith(".json"))
-      .map((f) => f.slice(0, -5));
-    const currentSha = sha256(await readFile(ws.path("plan", APPROVED_PLAN_FILE), "utf8"));
-    const { cases, gates } = evaluateRun({
-      plan,
-      results,
-      reportedCaseIds: reported,
-      manifest,
-      manifestCheck,
-      approvedSha256: approval.sha256,
-      currentSha256: currentSha,
-    });
-    const rows: MatrixRow[] = cases.map((c) => {
-      const p = plan.cases.find((x) => x.id === c.caseId);
-      return {
-        caseId: c.caseId,
-        title: p?.title ?? c.caseId,
-        requirement: (p?.source ?? [])
-          .map((s) => (s.kind === "ac" ? s.id : s.kind === "diff" ? `${s.repo}:${s.file}` : s.kind))
-          .join(", "),
-        type: p?.type ?? "api",
-        status: c.status,
-        stepsPassed: c.stepsPassed,
-        stepsTotal: c.stepsTotal,
-        evidence:
-          c.evidence.length > 0
-            ? `${String(c.evidence.length)} file(s)`
-            : c.error
-              ? masker.maskText(c.error).slice(0, 80)
-              : "–",
-      };
-    });
-    const summary = chooseSummary(undefined, rows);
-    const attempts: Record<string, ReportAttempt[]> = {};
-    for (const [id, r] of results) {
-      attempts[id] = await Promise.all(
-        r.attempts.map(async (a) => ({
-          attempt: a.attempt,
-          outcome: a.outcome,
-          error: a.error,
-          assertions: a.assertions,
-          evidence: await Promise.all(
-            manifest
-              .filter((m) => a.evidence.includes(m.path))
-              .map(async (m) => ({
-                path: m.path,
-                sha256: m.sha256,
-                kind: m.kind,
-                stepId: m.stepId,
-                text: masker.maskText(await readFile(ws.path("evidence", m.path), "utf8")),
-              })),
-          ),
-        })),
-      );
-    }
-    const matrixMd = renderMatrixMarkdown(rows);
-    const csv = renderMatrixCsv(rows);
-    const draftHtml = (g: typeof gates) =>
-      renderReportHtml({
-        ticket: ws.ticket,
-        summary: summary.text,
-        runId: ws.runId,
-        generatedAt: ports.now().toISOString(),
-        plan,
-        planSha256: approval.sha256,
-        rows,
-        attempts,
-        environment: { name: env.name, baseUrl: env.baseUrl, deployedSha },
-        repos: Object.fromEntries(Object.entries(ws.record.repos).map(([k, v]) => [k, v.sha])),
-        gates: g,
-      });
-    const secretGate = gateNoSecrets(
-      [
-        { name: "matrix.md", text: matrixMd },
-        { name: "matrix.csv", text: csv },
-        { name: "report.html", text: draftHtml(gates) },
-        // Evidence and results leave the machine with the report (REQ-PUB-02), so they are scanned too.
-        ...(await Promise.all(
-          manifest.map(async (m) => ({
-            name: `evidence/${m.path}`,
-            text: await readFile(ws.path("evidence", m.path), "utf8").catch(() => ""),
-          })),
-        )),
-        ...(await Promise.all(
-          reported.map(async (id) => ({
-            name: `results/${id}.json`,
-            text: await readFile(ws.path("results", `${id}.json`), "utf8"),
-          })),
-        )),
-      ],
-      (t) => masker.containsSecret(t),
-    );
-    const allGates = [...gates, secretGate];
-    const verdict = combineGates(allGates);
-    await writeFile(ws.path("report", "matrix.md"), matrixMd, "utf8");
-    await writeFile(ws.path("report", "matrix.csv"), csv, "utf8");
-    await writeFile(ws.path("report", "matrix.xlsx"), renderMatrixXlsx(rows));
-    await writeFile(ws.path("report", "report.html"), masker.maskText(draftHtml(allGates)), "utf8");
-    await writeFile(
-      ws.path("report", "gates.json"),
-      `${JSON.stringify({ ok: verdict.ok, gates: allGates }, null, 2)}\n`,
-      "utf8",
-    );
-    const statuses = Object.fromEntries(cases.map((c) => [c.caseId, c.status]));
+    // Statuses, gates and reports: computed by code only, from the files on disk (invariants 1, 6, 7).
+    const verdict = await computeVerdict(session, ports.now);
+    await writeReports(session, verdict);
+    const statuses = Object.fromEntries(verdict.cases.map((c) => [c.caseId, c.status]));
     await ws.update({
       status: "completed",
       stage: "run",
@@ -291,15 +171,14 @@ export async function runRun(
       checkpoints: [...ws.record.checkpoints, { stage: "run", at: ports.now().toISOString() }],
     });
     events.emit("run", SYSTEM, "stage.end", { statuses, gatesOk: verdict.ok });
-
-    io.write(`${matrixMd}\n`);
+    io.write(`${verdict.matrixMd}\n`);
     io.write(`Report: ${ws.path("report", "report.html")}\n`);
     if (!verdict.ok) {
       io.writeError(
         `Publish gates failed; results must not be published:\n${verdict.failed.map((g) => `  ✘ ${g.gate}: ${g.problems.join("; ")}`).join("\n")}\n`,
       );
     }
-    const code = exitCodeFor(cases.map((c) => c.status));
+    const code = exitCodeFor(verdict.cases.map((c) => c.status));
     return !verdict.ok && code === 0 ? 2 : code;
   } catch (error) {
     const code = error instanceof QajitsuError ? ` [${error.code}]` : "";

@@ -1,0 +1,209 @@
+import { readdir, readFile, writeFile } from "node:fs/promises";
+import { readManifest } from "@qajitsu/adapter-evidence-local";
+import {
+  APPROVED_PLAN_FILE,
+  CaseResultFileSchema,
+  loadApprovedPlan,
+  sha256,
+  type CaseResultFile,
+  type EvidenceEntry,
+  type Plan,
+  type PlanApproval,
+} from "@qajitsu/core";
+import {
+  chooseSummary,
+  renderMatrixCsv,
+  renderMatrixMarkdown,
+  renderMatrixXlsx,
+  renderReportHtml,
+  type MatrixRow,
+  type ReportAttempt,
+} from "@qajitsu/report";
+import {
+  checkManifest,
+  combineGates,
+  evaluateRun,
+  gateNoSecrets,
+  type CaseEvaluation,
+  type GateResult,
+} from "@qajitsu/verifier";
+import type { RunSession } from "../session.js";
+
+/** Environment facts recorded in `run.json` by `qj run`. */
+export interface RunEnvironment {
+  readonly name: string;
+  readonly baseUrl: string;
+  readonly deployedSha?: string | undefined;
+}
+
+/** Statuses, gates and rendered reports of a run, all computed from files on disk (invariants 1, 6, 7). */
+export interface RunVerdict {
+  readonly plan: Plan;
+  readonly approval: PlanApproval;
+  readonly environment: RunEnvironment;
+  readonly results: ReadonlyMap<string, CaseResultFile>;
+  readonly manifest: readonly EvidenceEntry[];
+  readonly cases: readonly CaseEvaluation[];
+  readonly rows: readonly MatrixRow[];
+  readonly summary: string;
+  readonly matrixMd: string;
+  readonly csv: string;
+  readonly html: string;
+  readonly gates: readonly GateResult[];
+  readonly ok: boolean;
+  readonly failed: readonly GateResult[];
+}
+
+/**
+ * Re-reads results, evidence and the approved plan of a run and computes everything a report or a
+ * publication says. Nothing is taken from memory or from earlier reports, so files changed after
+ * `qj run` are caught here (hash gates) instead of being published.
+ *
+ * @param session - Open run session.
+ * @param now - Clock for the report date.
+ */
+export async function computeVerdict(session: RunSession, now: () => Date): Promise<RunVerdict> {
+  const { ws, masker } = session;
+  const { plan, approval } = await loadApprovedPlan(ws);
+  const environment = (ws.record.data["environment"] as RunEnvironment | undefined) ?? {
+    name: "–",
+    baseUrl: "–",
+  };
+  const results = new Map<string, CaseResultFile>();
+  const malformed: string[] = [];
+  const reported: string[] = [];
+  for (const file of (await readdir(ws.path("results"))).filter((f) => f.endsWith(".json"))) {
+    const id = file.slice(0, -5);
+    reported.push(id);
+    const parsed = CaseResultFileSchema.safeParse(
+      JSON.parse(await readFile(ws.path("results", file), "utf8").catch(() => "null")) as unknown,
+    );
+    if (parsed.success && parsed.data.caseId === id) results.set(id, parsed.data);
+    else malformed.push(`results/${file}: not a valid results file`);
+  }
+  const manifest = await readManifest(ws.path("evidence"));
+  const manifestCheck = await checkManifest(ws.path("evidence"), manifest);
+  const currentSha = sha256(await readFile(ws.path("plan", APPROVED_PLAN_FILE), "utf8"));
+  const evaluated = evaluateRun({
+    plan,
+    results,
+    reportedCaseIds: reported,
+    manifest,
+    manifestCheck,
+    approvedSha256: approval.sha256,
+    currentSha256: currentSha,
+  });
+  const cases = evaluated.cases;
+  const rows: MatrixRow[] = cases.map((c) => {
+    const p = plan.cases.find((x) => x.id === c.caseId);
+    return {
+      caseId: c.caseId,
+      title: p?.title ?? c.caseId,
+      requirement: (p?.source ?? [])
+        .map((s) => (s.kind === "ac" ? s.id : s.kind === "diff" ? `${s.repo}:${s.file}` : s.kind))
+        .join(", "),
+      type: p?.type ?? "api",
+      status: c.status,
+      stepsPassed: c.stepsPassed,
+      stepsTotal: c.stepsTotal,
+      evidence:
+        c.evidence.length > 0
+          ? `${String(c.evidence.length)} file(s)`
+          : c.error
+            ? masker.maskText(c.error).slice(0, 80)
+            : "–",
+    };
+  });
+  const summary = chooseSummary(undefined, rows).text;
+  const evidenceText = new Map<string, string>();
+  for (const m of manifest)
+    evidenceText.set(m.path, await readFile(ws.path("evidence", m.path), "utf8").catch(() => ""));
+  const attempts: Record<string, ReportAttempt[]> = {};
+  for (const [id, r] of results) {
+    attempts[id] = r.attempts.map((a) => ({
+      attempt: a.attempt,
+      outcome: a.outcome,
+      error: a.error,
+      assertions: a.assertions,
+      evidence: manifest
+        .filter((m) => a.evidence.includes(m.path))
+        .map((m) => ({
+          path: m.path,
+          sha256: m.sha256,
+          kind: m.kind,
+          stepId: m.stepId,
+          ...(m.kind === "screenshot" || m.kind === "video"
+            ? {}
+            : { text: masker.maskText(evidenceText.get(m.path) ?? "") }),
+        })),
+    }));
+  }
+  const matrixMd = renderMatrixMarkdown(rows);
+  const csv = renderMatrixCsv(rows);
+  const html = (g: readonly GateResult[]): string =>
+    renderReportHtml({
+      ticket: ws.ticket,
+      summary,
+      runId: ws.runId,
+      generatedAt: now().toISOString(),
+      plan,
+      planSha256: approval.sha256,
+      rows,
+      attempts,
+      environment,
+      repos: Object.fromEntries(Object.entries(ws.record.repos).map(([k, v]) => [k, v.sha])),
+      gates: g,
+    });
+  const secretGate = gateNoSecrets(
+    [
+      { name: "matrix.md", text: matrixMd },
+      { name: "matrix.csv", text: csv },
+      { name: "report.html", text: html(evaluated.gates) },
+      // Evidence and results leave the machine with the report (REQ-PUB-02), so they are scanned too.
+      ...manifest.map((m) => ({ name: `evidence/${m.path}`, text: evidenceText.get(m.path) ?? "" })),
+      ...(await Promise.all(
+        reported.map(async (id) => ({
+          name: `results/${id}.json`,
+          text: await readFile(ws.path("results", `${id}.json`), "utf8"),
+        })),
+      )),
+    ],
+    (t) => masker.containsSecret(t),
+  );
+  const gates: GateResult[] = [
+    ...evaluated.gates,
+    secretGate,
+    { gate: "results-valid", ok: malformed.length === 0, problems: malformed },
+  ];
+  const verdict = combineGates(gates);
+  return {
+    plan,
+    approval,
+    environment,
+    results,
+    manifest,
+    cases,
+    rows,
+    summary,
+    matrixMd,
+    csv,
+    html: masker.maskText(html(gates)),
+    gates,
+    ok: verdict.ok,
+    failed: verdict.failed,
+  };
+}
+
+/** Writes `report/matrix.md`, `.csv`, `.xlsx`, `report.html` and `gates.json` (REQ-EVD-05). */
+export async function writeReports(session: RunSession, v: RunVerdict): Promise<void> {
+  const { ws } = session;
+  await writeFile(ws.path("report", "matrix.md"), v.matrixMd, "utf8");
+  await writeFile(ws.path("report", "matrix.csv"), v.csv, "utf8");
+  await writeFile(ws.path("report", "matrix.xlsx"), renderMatrixXlsx(v.rows));
+  await writeFile(ws.path("report", "report.html"), v.html, "utf8");
+  await writeFile(
+    ws.path("report", "gates.json"),
+    `${JSON.stringify({ ok: v.ok, gates: v.gates }, null, 2)}\n`,
+    "utf8",
+  );
+}

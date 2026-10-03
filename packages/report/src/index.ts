@@ -8,3 +8,4 @@ export * from "./tables.js";
 export * from "./summary.js";
 export { zip, crc32 } from "./zip.js";
 export * from "./html.js";
+export * from "./jira-comment.js";

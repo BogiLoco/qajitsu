@@ -27,6 +27,7 @@
     "@qajitsu/adapter-codehost-local": "workspace:*",
     "@qajitsu/adapter-env-remote": "workspace:*",
     "@qajitsu/adapter-evidence-local": "workspace:*",
+    "@qajitsu/adapter-publish-jira": "workspace:*",
     "@qajitsu/adapter-runner-api": "workspace:*",
     "@qajitsu/adapter-secrets-env": "workspace:*",
     "@qajitsu/adapter-ticket-jira": "workspace:*",

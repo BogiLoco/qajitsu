@@ -124,12 +124,12 @@ Nothing leaves the machine unless every gate passes.
 
 ### REQ-VER-10 · Human preview before publishing
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 4
 - Related: REQ-PUB-01
 
 **Acceptance criteria**
 
-- [ ] AC1: The final matrix and comment are shown for confirmation before publishing (default on).
-- [ ] AC2: `--auto-publish` or CI configuration may skip the preview; the choice is recorded in `run.json`.
+- [x] AC1: The final matrix and comment are shown for confirmation before publishing (default on).
+- [x] AC2: `--auto-publish` or CI configuration may skip the preview; the choice is recorded in `run.json`.

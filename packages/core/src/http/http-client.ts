@@ -89,11 +89,13 @@ export function createHttpClient(options: {
     const context = { method, path: url.pathname };
     for (let attempt = 0; ; attempt += 1) {
       request.signal?.throwIfAborted();
+      // Header errors (e.g. a missing credential) surface as themselves, not as "unreachable".
+      const headers = { ...(await options.headers()), ...request.headers };
       let response: Response;
       try {
         response = await fetch(url, {
           method,
-          headers: { ...(await options.headers()), ...request.headers },
+          headers,
           ...(body === undefined ? {} : { body }),
           ...(request.signal === undefined ? {} : { signal: request.signal }),
           // Redirects are followed by hand so credentials never reach another origin.

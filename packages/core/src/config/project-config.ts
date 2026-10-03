@@ -100,8 +100,8 @@ export const ProjectConfigSchema = z.strictObject({
   project: z.string().regex(/^[a-z][a-z0-9-]*$/, "Use a lowercase project slug"),
   jira: z
     .strictObject({
-      /** `cloud` calls Jira Cloud REST v3; `file` reads ticket JSON files (demo, offline, tests). */
-      type: z.enum(["cloud", "file"]).default("cloud"),
+      /** `cloud`: Jira Cloud REST v3; `datacenter`: Jira Data Center REST v2; `file`: ticket JSON files (demo, offline, tests). */
+      type: z.enum(["cloud", "datacenter", "file"]).default("cloud"),
       base_url: z.url().optional(),
       /** Account e-mail for Jira Cloud basic auth, as a secret reference to keep it out of the repo. */
       email: SecretRef.optional(),
@@ -113,13 +113,26 @@ export const ProjectConfigSchema = z.strictObject({
     })
     .superRefine((jira, ctx) => {
       const need =
-        jira.type === "cloud" ? (["base_url", "email", "token"] as const) : (["tickets_dir"] as const);
+        jira.type === "cloud"
+          ? (["base_url", "email", "token"] as const)
+          : jira.type === "datacenter"
+            ? (["base_url", "token"] as const)
+            : (["tickets_dir"] as const);
       for (const key of need) {
         if (jira[key] === undefined) {
           ctx.addIssue({ code: "custom", path: [key], message: `Required when jira.type is '${jira.type}'` });
         }
       }
     }),
+  /** Publishing results to the ticket (REQ-PUB-01..04, REQ-VER-10). */
+  publish: z
+    .strictObject({
+      /** Largest attachment uploaded, in MB; bigger files are listed but not uploaded (REQ-PUB-02/AC3). */
+      max_attachment_mb: z.number().positive().max(2048).default(10),
+      /** Skip the confirmation preview (CI); recorded in run.json (REQ-VER-10/AC2). */
+      auto: z.boolean().default(false),
+    })
+    .default({ max_attachment_mb: 10, auto: false }),
   workspace: z
     .strictObject({
       /** Root of run folders; default `~/.qa-runs`, never the project repository (REQ-WS-01/AC4). */

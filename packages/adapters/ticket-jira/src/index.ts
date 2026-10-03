@@ -4,7 +4,13 @@
  *
  * @packageDocumentation
  */
-export { adfToMarkdown, extractAcceptanceCriteria, AdfNodeSchema, type AdfNode } from "./adf.js";
+export {
+  adfToMarkdown,
+  extractAcceptanceCriteria,
+  wikiToMarkdown,
+  AdfNodeSchema,
+  type AdfNode,
+} from "./adf.js";
 export { createJiraCloudTicketSource, DEV_PANEL_APPLICATIONS, type JiraCloudConfig } from "./jira-cloud.js";
 export { createFileTicketSource } from "./file-source.js";
 

@@ -20,7 +20,7 @@ Monorepo, tooling, core types, the guard and the status model; fetching a ticket
 - [REQ-CTX-01](requirements/context.md#req-ctx-01--jira-ticket-as-the-input) Jira ticket as the input (must, implemented, AC 5/5)
 - [REQ-CTX-02](requirements/context.md#req-ctx-02--github-and-gitlab-support) GitHub and GitLab support (must, implemented, AC 4/4)
 - [REQ-CTX-03](requirements/context.md#req-ctx-03--change-discovery-for-a-ticket) Change discovery for a ticket (must, implemented, AC 5/5)
-- [REQ-CTX-04](requirements/context.md#req-ctx-04--repositories-always-fetched-at-the-changes-version) Repositories always fetched at the change's version (must, in-progress, AC 2/4)
+- [REQ-CTX-04](requirements/context.md#req-ctx-04--repositories-always-fetched-at-the-changes-version) Repositories always fetched at the change's version (must, in-progress, AC 3/4)
 - [REQ-CFG-03](requirements/config-secrets.md#req-cfg-03--secret-providers) Secret providers (must, in-progress, AC 2/3)
 - [REQ-WS-01](requirements/workspace.md#req-ws-01--folder-per-ticket-and-run-id) Folder per ticket and run id (must, implemented, AC 4/4)
 - [REQ-VER-01](requirements/verification.md#req-ver-01--status-model) Status model (must, in-progress, AC 2/3)
@@ -102,11 +102,11 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 
 <!-- prettier-ignore-start -->
 <!-- req-stage:4 -->
-- [REQ-VER-10](requirements/verification.md#req-ver-10--human-preview-before-publishing) Human preview before publishing (must, accepted, AC 0/2)
-- [REQ-PUB-01](requirements/publishing.md#req-pub-01--jira-comment) Jira comment (must, accepted, AC 0/4)
-- [REQ-PUB-02](requirements/publishing.md#req-pub-02--attachments) Attachments (must, accepted, AC 0/3)
-- [REQ-PUB-03](requirements/publishing.md#req-pub-03--jira-cloud-and-data-center) Jira Cloud and Data Center (should, accepted, AC 0/2)
-- [REQ-PUB-04](requirements/publishing.md#req-pub-04--idempotent-publishing) Idempotent publishing (must, accepted, AC 0/2)
+- [REQ-VER-10](requirements/verification.md#req-ver-10--human-preview-before-publishing) Human preview before publishing (must, implemented, AC 2/2)
+- [REQ-PUB-01](requirements/publishing.md#req-pub-01--jira-comment) Jira comment (must, implemented, AC 4/4)
+- [REQ-PUB-02](requirements/publishing.md#req-pub-02--attachments) Attachments (must, in-progress, AC 1/3)
+- [REQ-PUB-03](requirements/publishing.md#req-pub-03--jira-cloud-and-data-center) Jira Cloud and Data Center (should, implemented, AC 2/2)
+- [REQ-PUB-04](requirements/publishing.md#req-pub-04--idempotent-publishing) Idempotent publishing (must, implemented, AC 2/2)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 

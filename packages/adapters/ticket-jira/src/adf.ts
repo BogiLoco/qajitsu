@@ -140,3 +140,27 @@ export function extractAcceptanceCriteria(markdown: string, wholeText = false): 
   }
   return criteria;
 }
+
+/**
+ * Converts the Jira wiki markup of Data Center descriptions and comments to Markdown: headings,
+ * bullet and numbered lists, bold, monospace and code blocks (REQ-PUB-03).
+ *
+ * @param wiki - Wiki markup.
+ */
+export function wikiToMarkdown(wiki: string): string {
+  return wiki
+    .replace(/\{code(?::[^}]*)?\}([\s\S]*?)\{code\}/g, (_, code: string) => `\`\`\`\n${code.trim()}\n\`\`\``)
+    .split(/\r?\n/)
+    .map((line) => {
+      const h = /^h([1-6])\.\s+(.*)$/.exec(line);
+      if (h?.[1] && h[2] !== undefined) return `${"#".repeat(Number(h[1]))} ${h[2]}`;
+      const bullet = /^(\*+)\s+(.*)$/.exec(line);
+      if (bullet?.[1] && bullet[2] !== undefined) return `${"  ".repeat(bullet[1].length - 1)}- ${bullet[2]}`;
+      const num = /^(#+)\s+(.*)$/.exec(line);
+      if (num?.[1] && num[2] !== undefined) return `${"  ".repeat(num[1].length - 1)}1. ${num[2]}`;
+      return line;
+    })
+    .join("\n")
+    .replace(/\{\{([^}]+)\}\}/g, "`$1`")
+    .replace(/(^|\s)\*([^*\n]+)\*(?=\s|$|[.,;:])/g, "$1**$2**");
+}

@@ -9,13 +9,15 @@ import {
   type TicketSource,
 } from "@qajitsu/core";
 import { z } from "zod";
-import { AdfNodeSchema, adfToMarkdown, extractAcceptanceCriteria } from "./adf.js";
+import { AdfNodeSchema, adfToMarkdown, extractAcceptanceCriteria, wikiToMarkdown } from "./adf.js";
 
 /** Settings of the Jira Cloud ticket source, taken from `jira` in `.qa/qa.project.yaml`. */
 export interface JiraCloudConfig {
   readonly baseUrl: string;
-  /** `secret://` reference of the account e-mail. */
-  readonly email: string;
+  /** `cloud` (REST v3, ADF, e-mail + API token) or `datacenter` (REST v2, wiki markup, personal access token). */
+  readonly flavor?: "cloud" | "datacenter";
+  /** `secret://` reference of the account e-mail (Cloud only). */
+  readonly email?: string | undefined;
   /** `secret://` reference of the API token. */
   readonly token: string;
   /** Custom field holding acceptance criteria, e.g. `customfield_10042`. */
@@ -101,14 +103,21 @@ export function createJiraCloudTicketSource(
   config: JiraCloudConfig,
   deps: AdapterDeps & { readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void> },
 ): TicketSource {
+  const dc = config.flavor === "datacenter";
+  const api = dc ? "/rest/api/2" : "/rest/api/3";
+  const toMarkdown = (value: z.infer<typeof RichText>): string =>
+    dc && typeof value === "string" ? wikiToMarkdown(value) : adfToMarkdown(value);
   const http = createHttpClient({
     service: "JIRA",
     baseUrl: config.baseUrl,
     fetch: deps.fetch,
     ...(deps.sleep ? { sleep: deps.sleep } : {}),
     headers: async () => {
-      const email = await deps.resolveSecret(config.email);
       const token = await deps.resolveSecret(config.token);
+      if (dc) return { authorization: `Bearer ${token}` };
+      if (config.email === undefined)
+        throw new AdapterError("JIRA_AUTH_MISSING", "Jira Cloud needs an e-mail and a token.", {});
+      const email = await deps.resolveSecret(config.email);
       return { authorization: `Basic ${Buffer.from(`${email}:${token}`).toString("base64")}` };
     },
   });
@@ -168,15 +177,15 @@ export function createJiraCloudTicketSource(
         "attachment",
         ...(config.acceptanceCriteriaField ? [config.acceptanceCriteriaField] : []),
       ];
-      const issue = await http.json(`/rest/api/3/issue/${safeKey}?fields=${fields.join(",")}`, IssueSchema, {
+      const issue = await http.json(`${api}/issue/${safeKey}?fields=${fields.join(",")}`, IssueSchema, {
         signal,
       });
-      const description = adfToMarkdown(issue.fields.description);
+      const description = toMarkdown(issue.fields.description);
       let acceptanceCriteria = extractAcceptanceCriteria(description);
       if (config.acceptanceCriteriaField) {
         const raw = (issue.fields as Record<string, unknown>)[config.acceptanceCriteriaField];
         const parsed = RichText.safeParse(raw);
-        const fieldText = parsed.success ? adfToMarkdown(parsed.data) : "";
+        const fieldText = parsed.success ? toMarkdown(parsed.data) : "";
         if (fieldText.trim() !== "") acceptanceCriteria = extractAcceptanceCriteria(fieldText, true);
       }
       return {
@@ -190,7 +199,7 @@ export function createJiraCloudTicketSource(
         acceptanceCriteria,
         comments: issue.fields.comment.comments.map((c) => ({
           author: c.author?.displayName ?? "unknown",
-          body: adfToMarkdown(c.body),
+          body: toMarkdown(c.body),
           created: c.created,
         })),
         linkedKeys: issue.fields.issuelinks.flatMap((l) =>

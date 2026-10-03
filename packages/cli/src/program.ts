@@ -5,6 +5,8 @@ import type { RuntimePorts } from "./adapters.js";
 import { formatProbes, probeModels } from "@qajitsu/agents";
 import { runFetch } from "./commands/fetch.js";
 import { runApprove, runPlan } from "./commands/plan.js";
+import { runEvidence } from "./commands/evidence.js";
+import { runPublish } from "./commands/publish.js";
 import { runRun, type RunPorts } from "./commands/run.js";
 import { loadProject } from "./project.js";
 import type { ModelPorts } from "./session.js";
@@ -147,6 +149,27 @@ export function createProgram(version: string, io: ProgramIO): Command {
     )
     .action((ticket: string, options: { run?: string; env?: string }) =>
       withPorts((ports) => runRun(ticket, options, commandIO, ports))(),
+    );
+
+  program
+    .command("publish")
+    .description("Publish the results comment and attachments to the ticket after a confirmed preview")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .option("--auto-publish", "skip the preview (CI); recorded in run.json")
+    .action((ticket: string, options: { run?: string; autoPublish?: boolean }) =>
+      withPorts((ports) => runPublish(ticket, options, commandIO, ports, io.user ?? "unknown"))(),
+    );
+
+  program
+    .command("evidence")
+    .description("Show statuses, failed assertions, evidence files and cURL commands of a run")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .option("--failed", "only cases that did not pass")
+    .option("--case <id>", "only this case")
+    .action((ticket: string, options: { run?: string; failed?: boolean; case?: string }) =>
+      withPorts((ports) => runEvidence(ticket, options, commandIO, ports))(),
     );
 
   return program;

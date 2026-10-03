@@ -7,6 +7,8 @@ export interface RecordedRequest {
   readonly url: URL;
   readonly headers: Record<string, string>;
   readonly body?: string;
+  /** File names of a multipart upload. */
+  readonly files?: readonly string[];
 }
 
 /** A route: method + URL pattern (matched against `pathname + search`) → response factory. */
@@ -55,6 +57,9 @@ export function createFakeFetch(routes: readonly Route[]): {
       url,
       headers,
       ...(typeof init.body === "string" ? { body: init.body } : {}),
+      ...(init.body instanceof FormData
+        ? { files: [...init.body.values()].map((v) => (typeof v === "string" ? v : (v as File).name)) }
+        : {}),
     };
     requests.push(request);
     const route = routes.find(

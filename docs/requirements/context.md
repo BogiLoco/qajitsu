@@ -65,7 +65,7 @@ Repositories with the change are fetched on every run, also when tests run again
 
 - [x] AC1: A bare mirror per repository is kept in a cache (`~/.qa-cache/git`) and updated incrementally.
 - [x] AC2: Each run gets a `git worktree` per repository at the exact SHA under `repos/`.
-- [ ] AC3: The SHA of every repository is recorded in `run.json` and in the Jira report.
+- [x] AC3: The SHA of every repository is recorded in `run.json` and in the Jira report.
 - [ ] AC4: `--build` uses exactly these worktrees, so the tested code is the analysed code.
 
 ### REQ-CTX-05 · Code analysis context for agents

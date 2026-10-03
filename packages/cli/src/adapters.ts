@@ -66,7 +66,8 @@ export function buildAdapters(
       : createJiraCloudTicketSource(
           {
             baseUrl: jira.base_url ?? "",
-            email: jira.email ?? "",
+            flavor: jira.type === "datacenter" ? "datacenter" : "cloud",
+            email: jira.email,
             token: jira.token ?? "",
             acceptanceCriteriaField: jira.acceptance_criteria_field,
           },

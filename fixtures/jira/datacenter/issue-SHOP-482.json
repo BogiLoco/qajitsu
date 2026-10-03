@@ -1,0 +1,23 @@
+{
+  "id": "20482",
+  "key": "SHOP-482",
+  "fields": {
+    "summary": "Cart total with discount codes",
+    "issuetype": { "name": "Story" },
+    "status": { "name": "Ready for QA" },
+    "labels": ["cart"],
+    "components": [{ "name": "shop-api" }],
+    "description": "As a shopper I want my *discount code* applied.\n\nh3. Acceptance criteria\n* GET {{/cart}} returns the total rounded once.\n* Codes never stack.\n\nh3. Notes\n# first\n{code:json}{\"code\":\"SAVE10\"}{code}",
+    "comment": {
+      "comments": [
+        {
+          "author": { "displayName": "Product Owner" },
+          "created": "2026-09-30T10:12:00.000+0000",
+          "body": "Percentage codes only."
+        }
+      ]
+    },
+    "issuelinks": [],
+    "attachment": []
+  }
+}
