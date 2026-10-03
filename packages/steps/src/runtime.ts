@@ -250,6 +250,8 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   let currentStep: string | undefined;
   let failure: string | undefined;
   let driver: UiDriver | undefined;
+  /** What the step did last: an API call or a UI action; decides the source of `texts` checks. */
+  const lastAction = new Map<string, "api" | "ui">();
   const maskValue = (v: unknown): unknown => masker.maskJson(v);
 
   const browser = async (): Promise<UiDriver> => {
@@ -294,6 +296,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   const call: CaseRuntime["call"] = async (alias, method, path, body, opts) => {
     if (currentStep === undefined) throw new Error("API calls must run inside step()");
     const stepId = currentStep;
+    lastAction.set(stepId, "api");
     const url = new URL(path, options.baseUrl);
     for (const [k, v] of Object.entries(opts.query ?? {})) url.searchParams.set(k, String(v));
     if (!options.allowedOrigins.includes(url.origin))
@@ -342,6 +345,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
 
   const uiOp = async (operation: UiOperation): Promise<void> => {
     if (currentStep === undefined) throw new Error("UI actions must run inside step()");
+    lastAction.set(currentStep, "ui");
     const d = await browser();
     switch (operation.op) {
       case "goto": {
@@ -406,7 +410,8 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       return;
     }
     const expected = expectationOf(planCase, stepId, field, `${caseId}.${stepId}.${field}`);
-    if (kind === "texts" && driver) {
+    // Mixed cases: the page answers `texts` only when the step's last action was in the browser.
+    if (kind === "texts" && driver && lastAction.get(stepId) === "ui") {
       // Visible text of the live page (REQ-EXEC-05); a response body counts only for API-only cases.
       const text = await driver.pageText();
       record(

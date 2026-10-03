@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createFilePublisher, createJiraPublisher } from "@qajitsu/adapter-publish-jira";
@@ -59,7 +60,8 @@ const MIME: Record<string, string> = {
 async function buildEvidenceZip(session: RunSession, v: RunVerdict): Promise<PublishAttachment> {
   const { ws, masker } = session;
   const paths = [
-    ...v.manifest.map((m) => `evidence/${m.path}`),
+    // Playwright traces stay local: they hold network headers (session tokens) inside compressed data.
+    ...v.manifest.filter((m) => m.kind !== "trace").map((m) => `evidence/${m.path}`),
     "evidence/manifest.json",
     "report/report.html",
     "report/matrix.md",
@@ -217,12 +219,16 @@ export async function runPublish(
           };
       }
     }
+    const zipHash = createHash("sha256")
+      .update(await readFile(evidenceZip.path))
+      .digest("hex");
     const notes = [evidenceZip, ...media]
       .filter((a) => a.bytes > limit)
       .map(
         (a) =>
           `${a.name} (${String(Math.ceil(a.bytes / 1e6))} MB) is larger than the ${String(project.config.publish.max_attachment_mb)} MB limit and stays in the run folder.`,
       );
+    notes.push(`Evidence zip sha256 ${zipHash}; Playwright traces stay in the run folder.`);
     const attachments = [evidenceZip, ...media];
     const model = commentModel(
       session,

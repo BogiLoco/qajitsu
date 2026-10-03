@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { PlanSchema } from "@qajitsu/core";
 import { describe, expect, it } from "vitest";
 import { createMasker } from "./masking.js";
+import type { UiDriver } from "./ui.js";
 import { createCaseRuntime, createPlanAccessor, type ApiRequest, type ApiTransport } from "./runtime.js";
 
 const plan = PlanSchema.parse({
@@ -293,5 +294,58 @@ describe("case runtime (REQ-EXEC-02, REQ-EVD-01, REQ-CFG-06)", () => {
       pass: false,
     });
     expect(JSON.parse(JSON.stringify(record.assertions[0]))).toHaveProperty("actual", "(absent)");
+  });
+
+  it("stage-5 review: in a mixed step, texts are read from the source of the step's last action", async () => {
+    const custom = PlanSchema.parse({
+      schema: 1,
+      ticket: "DEMO-5",
+      version: 1,
+      cases: [
+        {
+          id: "TC-01",
+          title: "mixed",
+          type: "web",
+          priority: "high",
+          source: [{ kind: "ac", id: "AC1" }],
+          steps: [
+            {
+              id: "S1",
+              action: "Open page then call API",
+              expect: { description: "d", texts: ["Order placed"] },
+            },
+          ],
+          evidence: ["response"],
+        },
+      ],
+    });
+    const page = "Order placed";
+    const driver = {
+      goto: () => Promise.resolve(),
+      pageText: () => Promise.resolve(page),
+      screenshot: () => Promise.resolve(new Uint8Array()),
+      url: () => "http://127.0.0.1:3000/app",
+      dom: () => Promise.resolve(""),
+    } as unknown as UiDriver;
+    const runtime = createCaseRuntime({
+      plan: custom,
+      caseId: "TC-01",
+      attempt: 1,
+      baseUrl: "http://127.0.0.1:3000",
+      transport: () => Promise.resolve({ status: 200, headers: {}, text: '{"status":"pending"}' }),
+      masker: createMasker(),
+      allowedOrigins: ["http://127.0.0.1:3000"],
+      accounts: {},
+      now: () => 0,
+      ui: () => Promise.resolve(driver),
+    });
+    runtime.beginStep("S1");
+    await runtime.uiOp({ op: "goto", path: "/app" });
+    await runtime.call(undefined, "GET", "/orders/1", undefined, {});
+    await runtime.verify("S1", "texts.0");
+    expect((await runtime.finish()).assertions[0]).toMatchObject({
+      actual: "(text not found in the response)",
+      pass: false,
+    });
   });
 });

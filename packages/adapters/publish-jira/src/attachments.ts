@@ -1,4 +1,4 @@
-import { TicketKeySchema, createHttpClient, type AdapterDeps } from "@qajitsu/core";
+import { AdapterError, TicketKeySchema, createHttpClient, type AdapterDeps } from "@qajitsu/core";
 import { z } from "zod";
 import type { JiraPublisherConfig } from "./jira-publisher.js";
 
@@ -33,7 +33,12 @@ export interface TicketAttachment {
  * @param deps - Injected fetch, logger, clock and secret resolver.
  */
 export function createJiraAttachmentReader(
-  config: Omit<JiraPublisherConfig, "maxAttachmentBytes">,
+  config: Omit<JiraPublisherConfig, "maxAttachmentBytes"> & {
+    /** Hosts Jira may redirect attachment content to (fetched without credentials). */
+    readonly mediaHosts?: readonly string[];
+    /** Largest attachment downloaded, in bytes. */
+    readonly maxDownloadBytes?: number;
+  },
   deps: AdapterDeps,
 ) {
   const api = config.flavor === "cloud" ? "/rest/api/3" : "/rest/api/2";
@@ -55,8 +60,23 @@ export function createJiraAttachmentReader(
       return (await http.json(`${api}/issue/${key}?fields=attachment`, IssueAttachments, { signal })).fields
         .attachment;
     },
-    download(attachment: TicketAttachment, signal?: AbortSignal): Promise<Uint8Array> {
-      return http.bytes(attachment.content, { signal, anonymousCrossOriginRedirect: true });
+    async download(attachment: TicketAttachment, signal?: AbortSignal): Promise<Uint8Array> {
+      const max = config.maxDownloadBytes ?? 500_000_000;
+      if (attachment.size !== undefined && attachment.size > max) {
+        throw new AdapterError(
+          "JIRA_ATTACHMENT_TOO_LARGE",
+          `${attachment.filename} is larger than ${String(max)} bytes.`,
+          {},
+        );
+      }
+      const bytes = await http.bytes(attachment.content, {
+        signal,
+        anonymousCrossOriginRedirect: true,
+        anonymousRedirectHosts: config.mediaHosts ?? ["media.atlassian.com"],
+      });
+      if (bytes.byteLength > max)
+        throw new AdapterError("JIRA_ATTACHMENT_TOO_LARGE", `${attachment.filename} is too large.`, {});
+      return bytes;
     },
   };
 }

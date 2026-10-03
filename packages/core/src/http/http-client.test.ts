@@ -148,9 +148,19 @@ describe("http client (REQ-GEN-02)", () => {
       fetch,
     });
     await expect(http.bytes("/attachment/1")).rejects.toMatchObject({ code: "SVC_FOREIGN_URL" });
-    expect(await http.bytes("/attachment/1", { anonymousCrossOriginRedirect: true })).toEqual(
-      new Uint8Array([7]),
-    );
-    expect(calls.at(-1)).toEqual({ url: "https://media.example.org/file?sig=1", headers: undefined });
+    expect(
+      await http.bytes("/attachment/1", {
+        anonymousCrossOriginRedirect: true,
+        anonymousRedirectHosts: ["example.org"],
+      }),
+    ).toEqual(new Uint8Array([7]));
+    await expect(
+      http.bytes("/attachment/1", {
+        anonymousCrossOriginRedirect: true,
+        anonymousRedirectHosts: ["other.net"],
+      }),
+    ).rejects.toMatchObject({ code: "SVC_FOREIGN_URL" });
+    expect(calls).toContainEqual({ url: "https://media.example.org/file?sig=1", headers: undefined });
+    expect(calls.filter((c) => c.url.startsWith("https://media.example.org"))).toHaveLength(1);
   });
 });

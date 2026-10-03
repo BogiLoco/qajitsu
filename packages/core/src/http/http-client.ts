@@ -12,6 +12,8 @@ export interface HttpRequest {
    * from a media host with a signed URL). Default: cross-origin redirects are refused.
    */
   readonly anonymousCrossOriginRedirect?: boolean | undefined;
+  /** Hosts (or parent domains) an anonymous redirect may go to; required with the option above. */
+  readonly anonymousRedirectHosts?: readonly string[] | undefined;
 }
 
 /** HTTP client shared by adapters: typed errors, rate-limit retries, Zod-parsed JSON. */
@@ -123,12 +125,16 @@ export function createHttpClient(options: {
         if (
           target.origin !== base.origin &&
           request.anonymousCrossOriginRedirect === true &&
-          target.protocol === "https:"
+          target.protocol === "https:" &&
+          (request.anonymousRedirectHosts ?? []).some(
+            (h) => target.hostname === h || target.hostname.endsWith(`.${h}`),
+          )
         ) {
           // Credentials never leave the service origin: the redirected request carries no headers of ours.
           const anonymous = await fetch(target, {
             method: "GET",
-            redirect: "follow",
+            // One hop only: a further redirect is not followed to unknown hosts.
+            redirect: "error",
             ...(request.signal ? { signal: request.signal } : {}),
           });
           if (anonymous.ok) return anonymous;

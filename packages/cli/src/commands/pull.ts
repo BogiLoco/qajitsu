@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createJiraAttachmentReader } from "@qajitsu/adapter-publish-jira";
@@ -40,7 +41,13 @@ export async function runPull(
     const target = join(root, key, `${id}-pulled`);
     await mkdir(target, { recursive: true });
     const reader = createJiraAttachmentReader(
-      { flavor: jira.type, baseUrl: jira.base_url ?? "", email: jira.email, token: jira.token ?? "" },
+      {
+        flavor: jira.type,
+        baseUrl: jira.base_url ?? "",
+        email: jira.email,
+        token: jira.token ?? "",
+        mediaHosts: project.config.publish.media_hosts,
+      },
       {
         fetch: ports.fetch,
         logger: createCliLogger({ file: join(target, "pull.log"), mask: (v) => masker.maskJson(v) }),
@@ -54,21 +61,30 @@ export async function runPull(
     const name = `${key}_${id}_evidence.zip`;
     const attachment = (await reader.list(key)).find((a) => a.filename === name);
     if (!attachment) throw new ConfigError("PULL_NOT_FOUND", `${key} has no attachment ${name}.`, { name });
-    const entries = unzip(await reader.download(attachment));
+    const archive = await reader.download(attachment);
+    const entries = unzip(archive);
     for (const entry of entries) {
       const file = join(target, entry.name);
       await mkdir(dirname(file), { recursive: true });
       await writeFile(file, entry.data);
     }
-    const check = await checkManifest(join(target, "evidence"), await readManifest(join(target, "evidence")));
+    // Traces are never published, so they are not expected in the archive.
+    const manifest = (await readManifest(join(target, "evidence"))).filter((m) => m.kind !== "trace");
+    const check = await checkManifest(join(target, "evidence"), manifest);
     io.write(`Pulled ${String(entries.length)} file(s) into ${target}\n`);
+    io.write(
+      `Archive sha256 ${createHash("sha256").update(archive).digest("hex")}: compare it with the hash in the Jira comment.\n`,
+    );
     if (check.problems.length > 0) {
       io.writeError(
         `Evidence does not match its manifest:\n${check.problems.map((p) => `  - ${p}`).join("\n")}\n`,
       );
       return 2;
     }
-    io.write(`Manifest verified; open ${join(target, "report", "report.html")}\n`);
+    // The manifest comes from the same archive: this proves consistency, not origin.
+    io.write(
+      `Archive is consistent with its own manifest. Only open ${join(target, "report", "report.html")} if the hash matches the comment.\n`,
+    );
     return 0;
   } catch (error) {
     const code = error instanceof QajitsuError ? ` [${error.code}]` : "";

@@ -203,10 +203,10 @@ describe("qajitsu publish (REQ-PUB-01..04, REQ-VER-10)", () => {
     const yaml = join(project, ".qa", "qa.project.yaml");
     await writeFile(
       yaml,
-      (await readFile(yaml, "utf8")).replace(
+      `${(await readFile(yaml, "utf8")).replace(
         "jira: { type: file, tickets_dir: ../tickets, project_key: DEMO }",
         "jira: { type: cloud, base_url: 'https://jira.example.com', email: secret://env/JIRA_EMAIL, token: secret://env/JIRA_TOKEN, project_key: DEMO }",
-      ),
+      )}\npublish: { media_hosts: [example.org] }\n`,
     );
     await writeFile(
       join(project, ".env.local"),
@@ -241,7 +241,8 @@ describe("qajitsu publish (REQ-PUB-01..04, REQ-VER-10)", () => {
     };
     const pulled = await run(["pull", "DEMO-1", "--run", "20261003-1046-aaaa"], { fetch: fakeJira });
     expect(pulled.err).toBe("");
-    expect(pulled.out).toContain("Manifest verified");
+    expect(pulled.out).toContain("consistent with its own manifest");
+    expect(pulled.out).toMatch(/Archive sha256 [0-9a-f]{64}/);
     expect(seen.at(-1)).toBe("media.example.org/blob auth=false");
     expect(
       await read(join(home, "runs", "DEMO-1", "20261003-1046-aaaa-pulled", "report", "report.html"), "utf8"),

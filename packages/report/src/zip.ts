@@ -75,7 +75,18 @@ export function zip(files: readonly { readonly name: string; readonly data: Uint
  * @returns Entries in archive order.
  * @throws {Error} For a malformed archive or an unsafe entry name.
  */
-export function unzip(archive: Uint8Array): { name: string; data: Uint8Array }[] {
+export function unzip(
+  archive: Uint8Array,
+  limits: {
+    readonly maxEntries?: number;
+    readonly maxEntryBytes?: number;
+    readonly maxTotalBytes?: number;
+  } = {},
+): { name: string; data: Uint8Array }[] {
+  const maxEntries = limits.maxEntries ?? 10_000;
+  const maxEntryBytes = limits.maxEntryBytes ?? 500_000_000;
+  const maxTotal = limits.maxTotalBytes ?? 2_000_000_000;
+  let total = 0;
   const buf = Buffer.from(archive);
   let end = -1;
   for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65_557); i -= 1) {
@@ -86,6 +97,8 @@ export function unzip(archive: Uint8Array): { name: string; data: Uint8Array }[]
   }
   if (end < 0) throw new Error("not a ZIP archive");
   const count = buf.readUInt16LE(end + 10);
+  if (count > maxEntries)
+    throw new Error(`ZIP has ${String(count)} entries, more than ${String(maxEntries)}`);
   let offset = buf.readUInt32LE(end + 16);
   const out: { name: string; data: Uint8Array }[] = [];
   for (let n = 0; n < count; n += 1) {
@@ -101,8 +114,13 @@ export function unzip(archive: Uint8Array): { name: string; data: Uint8Array }[]
       throw new Error(`unsafe ZIP entry name '${name}'`);
     const dataStart = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
     const raw = buf.subarray(dataStart, dataStart + compressed);
-    const data = method === 0 ? raw : method === 8 ? inflateRawSync(raw) : undefined;
+    // Size limits stop zip bombs from filling the disk.
+    const data =
+      method === 0 ? raw : method === 8 ? inflateRawSync(raw, { maxOutputLength: maxEntryBytes }) : undefined;
     if (data === undefined) throw new Error(`unsupported ZIP compression method ${String(method)}`);
+    if (data.byteLength > maxEntryBytes) throw new Error(`ZIP entry '${name}' is too large`);
+    total += data.byteLength;
+    if (total > maxTotal) throw new Error("ZIP content is too large");
     if (!name.endsWith("/")) out.push({ name, data: new Uint8Array(data) });
     offset += 46 + nameLength + extraLength + commentLength;
   }

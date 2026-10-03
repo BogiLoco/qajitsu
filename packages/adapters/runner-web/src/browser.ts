@@ -119,13 +119,26 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
           ? {}
           : { recordVideo: { dir: join(dir, "video"), size: { width: 1280, height: 800 } } }),
         recordHar: { path: join(dir, "network.har"), content: "omit" },
+        // Service workers could fetch outside the route handler (invariant 10).
+        serviceWorkers: "block",
       });
       context.setDefaultTimeout(timeout);
       // Navigation and requests stay inside the environment allowlist (invariant 10).
+      const allowed = (url: string): boolean => {
+        const u = new URL(url);
+        if (["data:", "blob:", "about:"].includes(u.protocol)) return true;
+        return input.allowedOrigins.includes(u.origin);
+      };
       await context.route("**/*", (route) => {
-        const origin = new URL(route.request().url()).origin;
-        if (input.allowedOrigins.includes(origin) || origin === "null") void route.continue();
+        if (allowed(route.request().url())) void route.continue();
         else void route.abort("blockedbyclient");
+      });
+      // WebSockets bypass page.route; check them against the same allowlist.
+      await context.routeWebSocket(/.*/, (ws) => {
+        const wsUrl = new URL(ws.url());
+        const httpOrigin = `${wsUrl.protocol === "wss:" ? "https:" : "http:"}//${wsUrl.host}`;
+        if (input.allowedOrigins.includes(httpOrigin)) ws.connectToServer();
+        else void ws.close({ code: 1008, reason: "blocked by QAJitsu allowlist" });
       });
       await context.tracing.start({ screenshots: true, snapshots: true });
       const page = await context.newPage();

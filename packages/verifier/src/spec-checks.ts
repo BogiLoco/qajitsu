@@ -278,13 +278,40 @@ interface LockedShape {
   verifies: string[];
   expects: string[];
   tries: number;
+  /** UI and API actions in order, without their selectors (which the healer may change). */
+  actions: string[];
+  /** Control flow that could skip or redirect checks. */
+  flow: string[];
 }
+
+const SELECTOR_ACTIONS = new Set(["click", "check", "uncheck", "waitFor", "fill", "select", "press"]);
 
 const lockedShape = (source: string): LockedShape => {
   const sf = ts.createSourceFile("spec.ts", source, ts.ScriptTarget.ES2023, true, ts.ScriptKind.TS);
-  const shape: LockedShape = { steps: [], verifies: [], expects: [], tries: 0 };
+  const shape: LockedShape = { steps: [], verifies: [], expects: [], tries: 0, actions: [], flow: [] };
   const visit = (node: ts.Node): void => {
     if (ts.isTryStatement(node)) shape.tries += 1;
+    if (
+      ts.isIfStatement(node) ||
+      ts.isConditionalExpression(node) ||
+      ts.isReturnStatement(node) ||
+      ts.isThrowStatement(node) ||
+      ts.isIterationStatement(node, false) ||
+      ts.isSwitchStatement(node) ||
+      ts.isBreakOrContinueStatement(node)
+    ) {
+      shape.flow.push(ts.SyntaxKind[node.kind]);
+    }
+    if (
+      ts.isBinaryExpression(node) &&
+      [
+        ts.SyntaxKind.AmpersandAmpersandToken,
+        ts.SyntaxKind.BarBarToken,
+        ts.SyntaxKind.QuestionQuestionToken,
+      ].includes(node.operatorToken.kind)
+    ) {
+      shape.flow.push(ts.SyntaxKind[node.operatorToken.kind]);
+    }
     if (ts.isCallExpression(node)) {
       const name = calleeName(node);
       const literal = (i: number): string => {
@@ -292,6 +319,18 @@ const lockedShape = (source: string): LockedShape => {
         return a && ts.isStringLiteral(a) ? a.text : `<${a ? a.getText(sf) : "missing"}>`;
       };
       if (name === "step") shape.steps.push(literal(0));
+      if (
+        name !== undefined &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        !["step", "verify", "expect"].includes(name)
+      ) {
+        // The receiver chain (ui, api.as("user:x")) and every non-selector argument are locked.
+        const receiver = node.expression.expression.getText(sf);
+        const args = node.arguments.map((a, i) =>
+          SELECTOR_ACTIONS.has(name) && i === 0 ? "<selector>" : a.getText(sf),
+        );
+        if (name !== "waitFor") shape.actions.push(`${receiver}.${name}(${args.join(",")})`);
+      }
       if (name === "verify")
         shape.verifies.push(`${literal(0)}|${literal(1)}|${node.arguments[3]?.getText(sf) ?? ""}`);
       if (
