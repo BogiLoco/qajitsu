@@ -43,7 +43,7 @@ The layer that keeps results honest. Background: ADR-0002 and the architecture i
 
 ### REQ-VER-04 · Tool-call journal
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 1
 - Related: REQ-OBS-01
@@ -51,19 +51,19 @@ The layer that keeps results honest. Background: ADR-0002 and the architecture i
 **Acceptance criteria**
 
 - [x] AC1: Every allowed and denied tool call is appended to `journal/events.jsonl` with time, run, stage, tool and decision.
-- [ ] AC2: Tool arguments and result summaries are journaled after masking.
+- [x] AC2: Tool arguments and result summaries are journaled after masking.
 
 ### REQ-VER-05 · Evidence manifest with hashes
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 3
 - Related: INV-7
 
 **Acceptance criteria**
 
-- [ ] AC1: Runners write `evidence/manifest.json` with SHA-256, size, case and step for every file.
-- [ ] AC2: Reports reference evidence by hash; a missing file or hash mismatch fails a publish gate.
+- [x] AC1: Runners write `evidence/manifest.json` with SHA-256, size, case and step for every file.
+- [x] AC2: Reports reference evidence by hash; a missing file or hash mismatch fails a publish gate.
 - [x] AC3: PASSED requires complete evidence; otherwise NEEDS_REVIEW.
 
 ### REQ-VER-06 · Independent auditor
@@ -81,7 +81,7 @@ The layer that keeps results honest. Background: ADR-0002 and the architecture i
 
 ### REQ-VER-07 · Publish gates
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 3
 - Related: REQ-PLAN-06, REQ-CFG-06, REQ-PUB-01
@@ -92,15 +92,15 @@ Nothing leaves the machine unless every gate passes.
 
 - [x] AC1: Every approved case has exactly one status; nothing outside the approved plan is reported.
 - [x] AC2: The approved plan hash matches.
-- [ ] AC3: Every PASSED has at least one executed `verify()` and evidence for every step.
-- [ ] AC4: Every FAILED records expected and actual values and evidence of the failing step.
-- [ ] AC5: All manifest files exist with matching hashes.
-- [ ] AC6: Secret scan finds no registered secret value.
+- [x] AC3: Every PASSED has at least one executed `verify()` and evidence for every step.
+- [x] AC4: Every FAILED records expected and actual values and evidence of the failing step.
+- [x] AC5: All manifest files exist with matching hashes.
+- [x] AC6: Secret scan finds no registered secret value.
 - [x] AC7: No gates run means not ok.
 
 ### REQ-VER-08 · Computed numbers and validated summary
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 3
 - Related: INV-6
@@ -108,7 +108,7 @@ Nothing leaves the machine unless every gate passes.
 **Acceptance criteria**
 
 - [x] AC1: All counts in matrix, report and comment are computed from structured results.
-- [ ] AC2: An LLM-written summary is checked: every number equals the computed value and every case id exists with the stated status; otherwise the summary is rejected and a template summary is used.
+- [x] AC2: An LLM-written summary is checked: every number equals the computed value and every case id exists with the stated status; otherwise the summary is rejected and a template summary is used.
 
 ### REQ-VER-09 · Canary check
 

@@ -1,7 +1,7 @@
 {
   "name": "@qajitsu/adapter-secrets-env",
   "version": "0.0.0",
-  "description": "QAJitsu SecretProvider reading environment variables and .env.local.",
+  "description": "QAJitsu SecretProvider 'env': process environment and .env.local.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {

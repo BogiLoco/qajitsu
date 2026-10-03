@@ -18,7 +18,8 @@ const attemptPassed = (attempt: CaseAttempt): boolean =>
  *
  * Rules, in order:
  * 1. No attempts, or the last attempt was skipped → NOT_RUN.
- * 2. The last attempt errored (could not execute) → BLOCKED.
+ * 2. The last attempt errored (could not execute) → FAILED when an earlier attempt observed a failed
+ *    assertion (a crash on retry must not hide a defect), otherwise BLOCKED.
  * 3. The first attempt passed with at least one assertion and all assertions true →
  *    PASSED when evidence is complete, otherwise NEEDS_REVIEW.
  * 4. A later attempt passed after an earlier failure → FLAKY (REQ-EXEC-08).
@@ -34,7 +35,8 @@ export function computeStatus(result: CaseRunResult, context: StatusContext): Te
   const first = attempts[0];
   const last = attempts.at(-1);
   if (first === undefined || last === undefined || last.outcome === "skipped") return "NOT_RUN";
-  if (last.outcome === "error") return "BLOCKED";
+  if (last.outcome === "error")
+    return attempts.some((a) => a.assertions.some((x) => !x.pass)) ? "FAILED" : "BLOCKED";
   if (attemptPassed(first)) return context.evidenceComplete ? "PASSED" : "NEEDS_REVIEW";
   if (attemptPassed(last) && attempts.some(attemptFailed)) return "FLAKY";
   if (

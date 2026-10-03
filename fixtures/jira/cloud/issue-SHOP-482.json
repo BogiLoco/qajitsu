@@ -1,0 +1,142 @@
+{
+  "id": "10482",
+  "key": "SHOP-482",
+  "self": "https://jira.example.com/rest/api/3/issue/10482",
+  "fields": {
+    "summary": "Cart total with discount codes",
+    "issuetype": { "name": "Story" },
+    "status": { "name": "Ready for QA" },
+    "labels": ["cart", "api"],
+    "components": [{ "name": "shop-api" }],
+    "description": {
+      "type": "doc",
+      "version": 1,
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            { "type": "text", "text": "As a shopper I want the cart total to include my " },
+            { "type": "text", "text": "discount code", "marks": [{ "type": "strong" }] },
+            { "type": "text", "text": "." }
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": { "level": 3 },
+          "content": [{ "type": "text", "text": "Acceptance criteria" }]
+        },
+        {
+          "type": "bulletList",
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    { "type": "text", "text": "GET " },
+                    { "type": "text", "text": "/cart", "marks": [{ "type": "code" }] },
+                    { "type": "text", "text": " returns the total rounded once to 2 decimals." }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                { "type": "paragraph", "content": [{ "type": "text", "text": "Codes never stack." }] }
+              ]
+            }
+          ]
+        },
+        { "type": "heading", "attrs": { "level": 3 }, "content": [{ "type": "text", "text": "Notes" }] },
+        {
+          "type": "paragraph",
+          "content": [
+            { "type": "text", "text": "See " },
+            { "type": "inlineCard", "attrs": { "url": "https://wiki.example.com/cart" } },
+            { "type": "hardBreak" },
+            { "type": "mention", "attrs": { "id": "<ACCOUNT_ID>", "text": "@Product Owner" } },
+            { "type": "text", "text": " " },
+            { "type": "emoji", "attrs": { "shortName": ":smile:", "text": "😄" } }
+          ]
+        },
+        {
+          "type": "codeBlock",
+          "attrs": { "language": "json" },
+          "content": [{ "type": "text", "text": "{\"code\":\"SAVE10\"}" }]
+        },
+        {
+          "type": "orderedList",
+          "content": [
+            {
+              "type": "listItem",
+              "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "first" }] }]
+            }
+          ]
+        },
+        { "type": "rule" },
+        {
+          "type": "table",
+          "content": [
+            {
+              "type": "tableRow",
+              "content": [
+                {
+                  "type": "tableHeader",
+                  "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Code" }] }]
+                },
+                {
+                  "type": "tableHeader",
+                  "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Percent" }] }]
+                }
+              ]
+            },
+            {
+              "type": "tableRow",
+              "content": [
+                {
+                  "type": "tableCell",
+                  "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "SAVE10" }] }]
+                },
+                {
+                  "type": "tableCell",
+                  "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "10" }] }]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "comment": {
+      "comments": [
+        {
+          "author": { "displayName": "Product Owner", "accountId": "<ACCOUNT_ID>" },
+          "created": "2026-09-30T10:12:00.000+0000",
+          "body": {
+            "type": "doc",
+            "version": 1,
+            "content": [
+              {
+                "type": "paragraph",
+                "content": [{ "type": "text", "text": "Codes are percentage only for now." }]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "issuelinks": [
+      { "type": { "name": "Relates" }, "outwardIssue": { "key": "SHOP-400" } },
+      { "type": { "name": "Blocks" }, "inwardIssue": { "key": "SHOP-311" } }
+    ],
+    "attachment": [
+      {
+        "filename": "mockup.png",
+        "mimeType": "image/png",
+        "content": "https://jira.example.com/rest/api/3/attachment/content/10001"
+      }
+    ]
+  }
+}

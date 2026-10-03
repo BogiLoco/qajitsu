@@ -1,7 +1,9 @@
 /**
- * QAJitsu model layer (REQ-LLM-01..07). The only package allowed to import LLM provider SDKs
- * (invariant 11). Provider adapters on Vercel AI SDK arrive in roadmap stage 2 (ADR-0003).
+ * QAJitsu model layer: provider-agnostic access to LLMs (cloud, LiteLLM, Ollama) with a model per
+ * agent role and capability profiles (REQ-LLM-01..03). The only package that imports provider SDKs.
  *
  * @packageDocumentation
  */
 export * from "./model-ref.js";
+export * from "./capabilities.js";
+export * from "./registry.js";

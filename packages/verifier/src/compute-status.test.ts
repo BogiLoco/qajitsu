@@ -41,7 +41,9 @@ describe("computeStatus (REQ-VER-01, REQ-VER-02)", () => {
 
   it("BLOCKED: last attempt could not execute", () => {
     expect(status([attempt("error", [])])).toBe("BLOCKED");
-    expect(status([attempt("failed", [bad], 1), attempt("error", [], 2)])).toBe("BLOCKED");
+    // Deliberately stricter since the stage-3 integrity review: a crash on retry must not hide the
+    // failed assertion observed before it, so this is FAILED (see the "FAILED" case below).
+    expect(status([attempt("failed", [bad], 1), attempt("error", [], 2)])).toBe("FAILED");
   });
 
   it("NOT_RUN: no attempts or skipped", () => {

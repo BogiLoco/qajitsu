@@ -1,0 +1,29 @@
+[
+  {
+    "number": 12,
+    "title": "SHOP-482 discount codes in cart",
+    "html_url": "https://github.com/example-org/shop-web/pull/12",
+    "state": "open",
+    "body": "Adds discount codes.",
+    "head": { "ref": "feature/SHOP-482-cart-discounts", "sha": "1111111111111111111111111111111111111111" },
+    "base": { "ref": "main" }
+  },
+  {
+    "number": 13,
+    "title": "Refactor cart totals",
+    "html_url": "https://github.com/example-org/shop-web/pull/13",
+    "state": "open",
+    "body": null,
+    "head": { "ref": "shop-482-followup", "sha": "2222222222222222222222222222222222222222" },
+    "base": { "ref": "main" }
+  },
+  {
+    "number": 14,
+    "title": "SHOP-4820 unrelated",
+    "html_url": "https://github.com/example-org/shop-web/pull/14",
+    "state": "closed",
+    "body": null,
+    "head": { "ref": "feature/SHOP-4820", "sha": "3333333333333333333333333333333333333333" },
+    "base": { "ref": "main" }
+  }
+]

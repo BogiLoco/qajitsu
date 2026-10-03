@@ -18,8 +18,8 @@ describe("shipped .qa configuration files (REQ-GEN-01)", () => {
   it("REQ-CFG-03: shipped configuration contains secret references, never values", () => {
     for (const path of ["templates/qa/qa.project.yaml", "examples/demo-shop/.qa/qa.project.yaml"]) {
       const config = parseProjectConfig(parse(read(path)), path);
-      for (const host of Object.values(config.code_hosts)) {
-        expect(host.token.startsWith("secret://")).toBe(true);
+      for (const host of Object.values(config.code_hosts).filter((h) => h.type !== "local")) {
+        expect((host.token ?? host.app?.private_key ?? "").startsWith("secret://")).toBe(true);
       }
     }
   });

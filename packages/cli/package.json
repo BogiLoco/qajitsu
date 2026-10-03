@@ -22,7 +22,22 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
+    "@qajitsu/adapter-codehost-github": "workspace:*",
+    "@qajitsu/adapter-codehost-gitlab": "workspace:*",
+    "@qajitsu/adapter-codehost-local": "workspace:*",
+    "@qajitsu/adapter-env-remote": "workspace:*",
+    "@qajitsu/adapter-evidence-local": "workspace:*",
+    "@qajitsu/adapter-runner-api": "workspace:*",
+    "@qajitsu/adapter-secrets-env": "workspace:*",
+    "@qajitsu/adapter-ticket-jira": "workspace:*",
+    "@qajitsu/agents": "workspace:*",
     "@qajitsu/core": "workspace:*",
-    "commander": "catalog:"
+    "@qajitsu/models": "workspace:*",
+    "@qajitsu/report": "workspace:*",
+    "@qajitsu/steps": "workspace:*",
+    "@qajitsu/verifier": "workspace:*",
+    "commander": "catalog:",
+    "pino": "^10.4.0",
+    "yaml": "catalog:"
   }
 }

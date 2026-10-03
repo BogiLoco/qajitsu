@@ -4,7 +4,7 @@ How approved cases become executable tests and how they run for API, web and mob
 
 ### REQ-EXEC-01 · Executable specs from the approved plan
 
-- Status: accepted
+- Status: in-progress
 - Priority: must
 - Stage: 3
 - Related: REQ-PLAN-06, REQ-CTX-06
@@ -13,50 +13,50 @@ The author agent writes test files for approved cases only. Exploring the app th
 
 **Acceptance criteria**
 
-- [ ] AC1: One spec file per case under `specs/`, in TypeScript, using `@qajitsu/steps`.
+- [x] AC1: One spec file per case under `specs/`, in TypeScript, using `@qajitsu/steps`.
 - [ ] AC2: MCP exploration is journaled and produces no results or evidence.
 - [ ] AC3: The author follows conventions of the project's tests repository when one is configured.
 
 ### REQ-EXEC-02 · Steps library: `step()` and `verify()`
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 3
 - Related: INV-4, REQ-PLAN-02, REQ-EVD-01
 
 **Acceptance criteria**
 
-- [ ] AC1: `step(id, fn)` ties work to a plan step id and records evidence (screenshot for UI, request/response for API).
-- [ ] AC2: `verify(stepId, field, actual, expected)` records an assertion with expected and actual values.
-- [ ] AC3: Expected values are read from the approved plan via `plan.expect('<case>.<step>.<field>')`, not written by the agent.
-- [ ] AC4: Everything recorded passes through the masker.
+- [x] AC1: `step(id, fn)` ties work to a plan step id and records evidence (screenshot for UI, request/response for API).
+- [x] AC2: `verify(stepId, field, actual, expected)` records an assertion with expected and actual values.
+- [x] AC3: Expected values are read from the approved plan via `plan.expect('<case>.<step>.<field>')`, not written by the agent.
+- [x] AC4: Everything recorded passes through the masker.
 
 ### REQ-EXEC-03 · Static checks before execution
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 3
 - Related: REQ-EXEC-09, INV-4
 
 **Acceptance criteria**
 
-- [ ] AC1: `tsc --noEmit` and lint on generated specs.
-- [ ] AC2: Plan coverage: every plan step has a `step()` and at least one `verify()`.
-- [ ] AC3: Assertion lock: `verify()` calls must use `plan.expect(...)`; literals and missing calls are rejected.
-- [ ] AC4: A spec failing checks returns to the author with the errors; after 2 failed attempts the case is BLOCKED.
+- [x] AC1: `tsc --noEmit` and lint on generated specs.
+- [x] AC2: Plan coverage: every plan step has a `step()` and at least one `verify()`.
+- [x] AC3: Assertion lock: `verify()` calls must use `plan.expect(...)`; literals and missing calls are rejected.
+- [x] AC4: A spec failing checks returns to the author with the errors; after 2 failed attempts the case is BLOCKED.
 
 ### REQ-EXEC-04 · API testing
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 3
 - Related: REQ-EVD-01
 
 **Acceptance criteria**
 
-- [ ] AC1: Runner on Playwright `APIRequestContext`.
-- [ ] AC2: Responses validated against the project's OpenAPI document when configured (`ajv`).
-- [ ] AC3: Authentication through account aliases and helpers.
+- [x] AC1: Runner on Playwright `APIRequestContext`.
+- [x] AC2: Responses validated against the project's OpenAPI document when configured (`ajv`).
+- [x] AC3: Authentication through account aliases and helpers.
 
 ### REQ-EXEC-05 · Web UI testing
 
@@ -97,16 +97,16 @@ The author agent writes test files for approved cases only. Exploring the app th
 
 ### REQ-EXEC-08 · Retries and FLAKY
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 3
 - Related: REQ-VER-01
 
 **Acceptance criteria**
 
-- [ ] AC1: One retry on failure by default (configurable).
-- [ ] AC2: Success only on a retry yields FLAKY, never PASSED.
-- [ ] AC3: Every attempt and its evidence is kept.
+- [x] AC1: One retry on failure by default (configurable).
+- [x] AC2: Success only on a retry yields FLAKY, never PASSED.
+- [x] AC3: Every attempt and its evidence is kept.
 
 ### REQ-EXEC-09 · Healer limited to selectors and waits
 

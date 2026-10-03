@@ -18,7 +18,14 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "catalog:",
+    "@ai-sdk/google": "catalog:",
+    "@ai-sdk/openai": "catalog:",
+    "@ai-sdk/openai-compatible": "catalog:",
+    "@ai-sdk/provider": "catalog:",
     "@qajitsu/core": "workspace:*",
+    "ai": "catalog:",
+    "ai-sdk-ollama": "catalog:",
     "zod": "catalog:"
   }
 }

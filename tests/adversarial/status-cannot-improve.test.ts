@@ -71,3 +71,21 @@ describe("invariant 3: only the approved plan counts (REQ-PLAN-06, REQ-VER-07)",
     expect(gate.problems).toContain("TC-02: no status (approved case was not reported)");
   });
 });
+
+describe("stage-3 integrity review: crashes and missing steps never improve a status", () => {
+  it("REQ-VER-02: a failed assertion followed by a crashing retry is FAILED, not BLOCKED", async () => {
+    const { computeStatus } = await import("@qajitsu/verifier");
+    const failed = {
+      attempt: 1,
+      outcome: "failed" as const,
+      assertions: [{ stepId: "S1", field: "status", expected: 200, actual: 500, pass: false }],
+    };
+    const crashed = { attempt: 2, outcome: "error" as const, assertions: [], error: "boom" };
+    expect(computeStatus({ caseId: "TC-01", attempts: [failed, crashed] }, { evidenceComplete: true })).toBe(
+      "FAILED",
+    );
+    expect(
+      computeStatus({ caseId: "TC-01", attempts: [{ ...crashed, attempt: 1 }] }, { evidenceComplete: true }),
+    ).toBe("BLOCKED");
+  });
+});

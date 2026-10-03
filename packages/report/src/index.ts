@@ -4,3 +4,7 @@
  * @packageDocumentation
  */
 export * from "./matrix.js";
+export * from "./tables.js";
+export * from "./summary.js";
+export { zip, crc32 } from "./zip.js";
+export * from "./html.js";

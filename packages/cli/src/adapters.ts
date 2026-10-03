@@ -1,0 +1,112 @@
+import { join } from "node:path";
+import { createGitHubCodeHost } from "@qajitsu/adapter-codehost-github";
+import { createGitLabCodeHost } from "@qajitsu/adapter-codehost-gitlab";
+import { createLocalCodeHost } from "@qajitsu/adapter-codehost-local";
+import { createEnvSecretProvider } from "@qajitsu/adapter-secrets-env";
+import { createFileTicketSource, createJiraCloudTicketSource } from "@qajitsu/adapter-ticket-jira";
+import {
+  ConfigError,
+  createSecretResolver,
+  type AdapterDeps,
+  type CodeHost,
+  type GitExec,
+  type TicketSource,
+} from "@qajitsu/core";
+import type { Masker } from "@qajitsu/steps";
+import type { LoadedProject } from "./project.js";
+import { resolveConfigPath } from "./project.js";
+
+/** Process-level ports the CLI injects into adapters. */
+export interface RuntimePorts {
+  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly home: string;
+  readonly now: () => Date;
+  readonly random: () => number;
+  readonly fetch: typeof globalThis.fetch;
+  readonly gitExec: GitExec;
+}
+
+/** Adapters for one project. */
+export interface ProjectAdapters {
+  readonly ticketSource: TicketSource;
+  readonly codeHosts: Readonly<Record<string, CodeHost>>;
+}
+
+/**
+ * The secret resolver of the CLI: `env` provider over the process environment and the project's
+ * `.env.local`; every resolved value is registered with the masker (REQ-CFG-03, invariant 8).
+ */
+export function createCliSecretResolver(project: LoadedProject, ports: RuntimePorts, masker: Masker) {
+  return createSecretResolver(
+    [createEnvSecretProvider({ env: ports.env, envFile: join(project.projectDir, ".env.local") })],
+    (value) => {
+      masker.register(value);
+    },
+  );
+}
+
+/**
+ * Builds the adapters a project's configuration asks for. This is the adapter registry: core never
+ * imports adapters (invariant 12), the CLI wires them.
+ *
+ * @param project - Loaded project.
+ * @param deps - Adapter dependencies (fetch, logger, clock, secret resolver).
+ * @param ports - Runtime ports.
+ */
+export function buildAdapters(
+  project: LoadedProject,
+  deps: AdapterDeps,
+  ports: RuntimePorts,
+): ProjectAdapters {
+  const { config, qaDir } = project;
+  const jira = config.jira;
+  const ticketSource =
+    jira.type === "file"
+      ? createFileTicketSource(resolveConfigPath(jira.tickets_dir ?? ".", qaDir, ports.home))
+      : createJiraCloudTicketSource(
+          {
+            baseUrl: jira.base_url ?? "",
+            email: jira.email ?? "",
+            token: jira.token ?? "",
+            acceptanceCriteriaField: jira.acceptance_criteria_field,
+          },
+          deps,
+        );
+  const codeHosts: Record<string, CodeHost> = {};
+  for (const [alias, host] of Object.entries(config.code_hosts)) {
+    switch (host.type) {
+      case "github":
+        codeHosts[alias] = createGitHubCodeHost(
+          {
+            alias,
+            baseUrl: host.base_url,
+            token: host.token,
+            app: host.app
+              ? {
+                  appId: host.app.app_id,
+                  installationId: host.app.installation_id,
+                  privateKey: host.app.private_key,
+                }
+              : undefined,
+          },
+          deps,
+        );
+        break;
+      case "gitlab":
+        codeHosts[alias] = createGitLabCodeHost(
+          { alias, baseUrl: host.base_url, token: host.token ?? "" },
+          deps,
+        );
+        break;
+      case "local":
+        if (host.root === undefined)
+          throw new ConfigError("CONFIG_INVALID", `code_hosts.${alias}.root is required.`, {});
+        codeHosts[alias] = createLocalCodeHost(
+          { alias, root: resolveConfigPath(host.root, qaDir, ports.home) },
+          ports.gitExec,
+        );
+        break;
+    }
+  }
+  return { ticketSource, codeHosts };
+}

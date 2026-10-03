@@ -1,0 +1,16 @@
+# Local demo-shop API (`node api/server.mjs --port 3000`). Accounts are aliases; passwords are secret:// references.
+base_url: http://localhost:3000
+health_path: /health
+version_path: /version
+accounts:
+  user:standard: { username: standard, password: secret://env/DEMO_USER_PASSWORD }
+  user:admin: { username: admin, password: secret://env/DEMO_USER_PASSWORD }
+  # A session that is already expired (DEMO-3).
+  user:expired:
+    { username: standard, password: secret://env/DEMO_USER_PASSWORD, login_extra: { ttl_seconds: 0 } }
+login:
+  path: /auth/login
+  body: { username: "{{username}}", password: "{{password}}" }
+  token_path: token
+  header: authorization
+  scheme: Bearer

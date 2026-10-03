@@ -1,0 +1,114 @@
+openapi: 3.0.3
+info: { title: demo-shop API, version: "1.0.0" }
+paths:
+  /health:
+    get:
+      responses:
+        "200":
+          {
+            description: ok,
+            content:
+              {
+                application/json:
+                  { schema: { type: object, required: [status], properties: { status: { type: string } } } },
+              },
+          }
+  /me:
+    get:
+      responses:
+        "200":
+          {
+            description: user,
+            content:
+              {
+                application/json:
+                  {
+                    schema:
+                      { type: object, required: [username], properties: { username: { type: string } } },
+                  },
+              },
+          }
+        "401":
+          {
+            description: unauthorized,
+            content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } },
+          }
+  /cart:
+    get:
+      responses:
+        "200":
+          {
+            description: cart,
+            content: { application/json: { schema: { $ref: "#/components/schemas/Cart" } } },
+          }
+        "401":
+          {
+            description: unauthorized,
+            content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } },
+          }
+  /cart/lines:
+    post:
+      responses:
+        "201":
+          {
+            description: cart,
+            content: { application/json: { schema: { $ref: "#/components/schemas/Cart" } } },
+          }
+        "404":
+          {
+            description: unknown product,
+            content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } },
+          }
+        "422":
+          {
+            description: invalid quantity,
+            content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } },
+          }
+  /cart/discount:
+    post:
+      responses:
+        "200":
+          {
+            description: cart,
+            content: { application/json: { schema: { $ref: "#/components/schemas/Cart" } } },
+          }
+        "404":
+          {
+            description: unknown code,
+            content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } },
+          }
+  /orders:
+    post:
+      responses:
+        "201":
+          description: order
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, product_id, quantity, total]
+                properties:
+                  id: { type: string }
+                  product_id: { type: string }
+                  quantity: { type: integer, minimum: 1 }
+                  total: { type: number, minimum: 0 }
+        "422":
+          {
+            description: invalid quantity,
+            content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } },
+          }
+components:
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties: { error: { type: string } }
+    Cart:
+      type: object
+      required: [lines, discounts, subtotal, total]
+      properties:
+        lines:
+          { type: array, items: { type: object, required: [product_id, quantity, unit_price, line_total] } }
+        discounts: { type: array, maxItems: 1, items: { type: string } }
+        subtotal: { type: number }
+        total: { type: number }

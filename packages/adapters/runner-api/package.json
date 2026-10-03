@@ -18,6 +18,14 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@qajitsu/core": "workspace:*"
+    "@qajitsu/core": "workspace:*",
+    "@qajitsu/steps": "workspace:*",
+    "ajv": "^8.20.0",
+    "playwright-core": "^1.63.0",
+    "yaml": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@qajitsu/adapter-evidence-local": "workspace:*"
   }
 }

@@ -5,6 +5,8 @@ import { evaluateToolCall, type GuardDecision, type GuardPolicy, type ToolCall }
 export interface Guard {
   /** Evaluates a tool call and journals the decision. Call before executing any agent tool. */
   check(call: ToolCall): GuardDecision;
+  /** Journals a short summary of what an allowed tool call returned (REQ-VER-04/AC2). */
+  recordResult(call: ToolCall, summary: string): void;
 }
 
 /**
@@ -25,7 +27,7 @@ export function createGuard(options: {
     check(call) {
       const decision = evaluateToolCall(call, policy);
       if (decision.allowed) {
-        journal.record({ run, stage, event: "tool_allowed", tool: call.tool });
+        journal.record({ run, stage, event: "tool_allowed", tool: call.tool, args: call.input });
       } else {
         journal.record({
           run,
@@ -34,9 +36,13 @@ export function createGuard(options: {
           tool: call.tool,
           code: decision.code,
           reason: decision.reason,
+          args: call.input,
         });
       }
       return decision;
+    },
+    recordResult(call, summary) {
+      journal.record({ run, stage, event: "tool_result", tool: call.tool, result: summary });
     },
   };
 }

@@ -2,17 +2,24 @@
 project: demo-shop
 
 jira:
+  # Fictional tickets are read from files, so the demo runs without a Jira account.
+  type: file
+  tickets_dir: ../tickets
   project_key: DEMO
 
 code_hosts:
-  github:
-    type: github
-    token: secret://env/GITHUB_TOKEN
+  # Local git repositories, created by `node examples/demo-shop/scripts/setup-demo-repo.mjs`,
+  # so the demo needs no GitHub account. Real projects use github or gitlab hosts.
+  local:
+    type: local
+    root: ~/.qa-demo/git
 
 repos:
   shop:
-    host: github
+    host: local
     path: demo-org/demo-shop
+    # API responses are validated against this contract from the analysed version (REQ-EXEC-04/AC2).
+    openapi: api/openapi.yaml
 
 environments:
   default: local
@@ -22,7 +29,15 @@ environments:
     - http://localhost:5173
 
 models:
+  providers:
+    # Local model through Ollama, so the demo needs no API key. Capabilities as reported by
+    # `ollama show gemma4:e2b` (131072 context, tools, vision); 65536 is the context QAJitsu uses.
+    local:
+      type: ollama
+      base_url: http://localhost:11434
+      models:
+        gemma4:e2b: { tools: true, structured_output: true, vision: true, context_window: 65536 }
   roles:
-    default: mock/default
+    default: local/gemma4:e2b
 
 test_types: [api, web]

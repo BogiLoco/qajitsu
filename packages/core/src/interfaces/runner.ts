@@ -12,7 +12,7 @@ export interface CaseAttempt {
   readonly attempt: number;
   readonly outcome: "passed" | "failed" | "error" | "skipped";
   readonly assertions: readonly AssertionRecord[];
-  readonly error?: string;
+  readonly error?: string | undefined;
 }
 
 /** Everything a runner reports for one test case; statuses are computed from this by code. */

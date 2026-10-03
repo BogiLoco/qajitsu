@@ -1,0 +1,12 @@
+{
+  "diffs": [
+    {
+      "old_path": "a.ts",
+      "new_path": "a.ts",
+      "new_file": false,
+      "renamed_file": false,
+      "deleted_file": false,
+      "diff": "@@ -1 +1 @@\n-a\n+b\n"
+    }
+  ]
+}

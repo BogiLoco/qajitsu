@@ -1,0 +1,50 @@
+{
+  "summary": "Cart total and discount codes for DEMO-1.",
+  "cases": [
+    {
+      "id": "TC-01",
+      "title": "Cart total is rounded once",
+      "type": "api",
+      "priority": "high",
+      "source": [{ "kind": "ac", "id": "AC1" }],
+      "preconditions": ["Cart has 3 lines of 0.335 PLN"],
+      "data": { "user": "user:standard" },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "GET /cart",
+          "expect": { "description": "Total is 1.01", "status": 200, "fields": { "total": 1.01 } }
+        }
+      ],
+      "evidence": ["request", "response"]
+    },
+    {
+      "id": "TC-02",
+      "title": "Second code replaces the first",
+      "type": "api",
+      "priority": "high",
+      "source": [
+        { "kind": "quote", "text": "Applying a second code replaces the first; codes never stack." }
+      ],
+      "steps": [
+        {
+          "id": "S1",
+          "action": "POST /cart/discount SAVE10",
+          "expect": { "description": "Accepted", "status": 200 }
+        },
+        {
+          "id": "S2",
+          "action": "POST /cart/discount SAVE20",
+          "expect": {
+            "description": "Only SAVE20 applies",
+            "status": 200,
+            "fields": { "discounts.length": 1 }
+          }
+        }
+      ],
+      "evidence": ["request", "response"]
+    }
+  ],
+  "open_questions": [],
+  "out_of_scope": ["Fixed-amount codes (comment from product owner)"]
+}

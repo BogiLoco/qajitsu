@@ -5,9 +5,18 @@
 project: my-service
 
 jira:
+  type: cloud # or `file` with tickets_dir for offline demos
+  base_url: https://example.atlassian.net
+  email: secret://env/JIRA_EMAIL
+  token: secret://env/JIRA_TOKEN
   project_key: SHOP
   # Custom field holding acceptance criteria, if your Jira uses one.
   # acceptance_criteria_field: customfield_10042
+
+# Where run folders live (REQ-WS-01). Defaults keep run data out of the repository.
+# workspace:
+#   root: ~/.qa-runs
+#   git_cache: ~/.qa-cache/git
 
 code_hosts:
   github:
@@ -43,10 +52,22 @@ environments:
     - https://api.staging.example.com
 
 models:
-  # <provider>/<model>; providers are configured from stage 2 (REQ-LLM-02).
+  # Providers (REQ-LLM-01/02): anthropic, openai, google, ollama, openai-compatible (LiteLLM, vLLM, LM Studio).
+  providers:
+    cloud:
+      type: anthropic
+      api_key: secret://env/ANTHROPIC_API_KEY
+    local:
+      type: ollama
+      base_url: http://localhost:11434
+      # Declare capabilities of local models after `ollama show <model>` (REQ-LLM-03).
+      models:
+        qwen3:32b: { tools: true, structured_output: true, context_window: 65536 }
+  # Model per role: analyst, planner, author, healer, auditor, summary; `default` covers the rest.
   roles:
-    default: anthropic/claude-sonnet
-    summary: local/qwen3
+    default: cloud/claude-sonnet-5
+    summary: local/qwen3:32b
+  # token_budget: 2000000   # per run; exceeding it stops the run as BLOCKED (REQ-LLM-07)
 
 test_types: [api, web]
 

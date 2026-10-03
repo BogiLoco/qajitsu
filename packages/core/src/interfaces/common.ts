@@ -13,4 +13,6 @@ export interface AdapterDeps {
   readonly now: () => Date;
   /** Resolves `secret://` references; resolved values are registered with the masker (REQ-CFG-06). */
   readonly resolveSecret: (reference: string) => Promise<string>;
+  /** Registers a secret an adapter obtained another way (e.g. a minted installation token) with the masker. */
+  readonly registerSecret: (value: string) => void;
 }

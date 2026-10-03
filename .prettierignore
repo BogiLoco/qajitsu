@@ -6,3 +6,5 @@ pnpm-lock.yaml
 docs/plan.md
 **/CHANGELOG.md
 tests/golden/**/*.md
+fixtures/jira/file-mismatch/DEMO-9.json
+schemas/*.json

@@ -1,0 +1,21 @@
+{
+  "key": "DEMO-3",
+  "type": "Story",
+  "status": "Ready for QA",
+  "summary": "Session tokens expire",
+  "description": "Login returns a session token with an expiry. Requests with an expired token are rejected.",
+  "acceptanceCriteria": [
+    "GET /me with a valid token returns 200 and the user name.",
+    "GET /me with an expired token returns 401 with error code UNAUTHORIZED."
+  ],
+  "labels": ["auth", "api"],
+  "components": ["shop-api"],
+  "attachments": [],
+  "comments": [
+    {
+      "author": "security",
+      "created": "2026-09-29T09:00:00Z",
+      "body": "Tokens with ttl_seconds 0 expire immediately; use that in tests."
+    }
+  ]
+}

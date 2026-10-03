@@ -1,0 +1,373 @@
+{
+  "$id": "https://qajitsu.dev/schemas/qa.project.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "project": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "jira": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "default": "cloud",
+          "type": "string",
+          "enum": [
+            "cloud",
+            "file"
+          ]
+        },
+        "base_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "email": {
+          "type": "string",
+          "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+        },
+        "token": {
+          "type": "string",
+          "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+        },
+        "tickets_dir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "project_key": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]+$"
+        },
+        "acceptance_criteria_field": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_key"
+      ],
+      "additionalProperties": false
+    },
+    "workspace": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "root": {
+          "type": "string",
+          "minLength": 1
+        },
+        "git_cache": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "code_hosts": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9_-]{0,39}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "github",
+              "gitlab",
+              "local"
+            ]
+          },
+          "root": {
+            "type": "string",
+            "minLength": 1
+          },
+          "base_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "token": {
+            "type": "string",
+            "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+          },
+          "app": {
+            "type": "object",
+            "properties": {
+              "app_id": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^\\d+$"
+                  },
+                  {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                ]
+              },
+              "installation_id": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^\\d+$"
+                  },
+                  {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                ]
+              },
+              "private_key": {
+                "type": "string",
+                "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+              }
+            },
+            "required": [
+              "app_id",
+              "installation_id",
+              "private_key"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "repos": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9_-]{0,39}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^[\\w.-]+(?:\\/[\\w.-]+)+$"
+          },
+          "default_ref": {
+            "default": "main",
+            "type": "string",
+            "minLength": 1
+          },
+          "role": {
+            "default": "app",
+            "type": "string",
+            "enum": [
+              "app",
+              "tests"
+            ]
+          },
+          "openapi": {
+            "type": "string",
+            "pattern": "^(?!\\/)(?!.*\\.\\.)[\\w./-]+\\.(ya?ml|json)$"
+          }
+        },
+        "required": [
+          "host",
+          "path"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "change_discovery": {
+      "default": [
+        "jira_dev_panel",
+        "ticket_key_in_branch",
+        "ticket_key_in_title"
+      ],
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "jira_dev_panel",
+          "ticket_key_in_branch",
+          "ticket_key_in_title"
+        ]
+      }
+    },
+    "environments": {
+      "default": {
+        "allowlist": [],
+        "allow_production": false,
+        "on_version_mismatch": "warn",
+        "retries": 1
+      },
+      "type": "object",
+      "properties": {
+        "default": {
+          "type": "string"
+        },
+        "version_endpoint": {
+          "type": "string",
+          "format": "starts_with",
+          "pattern": "^\\/.*"
+        },
+        "allowlist": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uri"
+          }
+        },
+        "allow_production": {
+          "default": false,
+          "type": "boolean"
+        },
+        "on_version_mismatch": {
+          "default": "warn",
+          "type": "string",
+          "enum": [
+            "fail",
+            "warn"
+          ]
+        },
+        "retries": {
+          "default": 1,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        }
+      },
+      "additionalProperties": false
+    },
+    "models": {
+      "default": {
+        "providers": {},
+        "roles": {}
+      },
+      "type": "object",
+      "properties": {
+        "providers": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,39}$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "anthropic",
+                  "openai",
+                  "google",
+                  "ollama",
+                  "openai-compatible"
+                ]
+              },
+              "base_url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "api_key": {
+                "type": "string",
+                "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+              },
+              "models": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "tools": {
+                      "type": "boolean"
+                    },
+                    "structured_output": {
+                      "type": "boolean"
+                    },
+                    "vision": {
+                      "type": "boolean"
+                    },
+                    "context_window": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "cost_per_mtok": {
+                      "type": "object",
+                      "properties": {
+                        "input": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "output": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "input",
+                        "output"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "roles": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "token_budget": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "additionalProperties": false
+    },
+    "test_types": {
+      "default": [
+        "api"
+      ],
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "api",
+          "web",
+          "mobile"
+        ]
+      }
+    }
+  },
+  "required": [
+    "project",
+    "jira"
+  ],
+  "additionalProperties": false
+}

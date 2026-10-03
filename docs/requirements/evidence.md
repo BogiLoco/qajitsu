@@ -4,16 +4,16 @@ What proof QAJitsu collects per test type and how results are summarised.
 
 ### REQ-EVD-01 · API evidence
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 3
 - Related: REQ-EXEC-04, REQ-CFG-06
 
 **Acceptance criteria**
 
-- [ ] AC1: One JSON file per call: method, URL, masked headers, body, status, duration, assertions with expected and actual.
-- [ ] AC2: A reproducible cURL command (masked) per call.
-- [ ] AC3: All attempts kept, numbered.
+- [x] AC1: One JSON file per call: method, URL, masked headers, body, status, duration, assertions with expected and actual.
+- [x] AC2: A reproducible cURL command (masked) per call.
+- [x] AC3: All attempts kept, numbered.
 
 ### REQ-EVD-02 · Web evidence
 
@@ -64,7 +64,7 @@ What proof QAJitsu collects per test type and how results are summarised.
 **Acceptance criteria**
 
 - [x] AC1: `matrix.md` (basis of the Jira comment).
-- [ ] AC2: `matrix.csv` and `matrix.xlsx`.
+- [x] AC2: `matrix.csv` and `matrix.xlsx`.
 - [ ] AC3: `report.html`: one self-contained file with matrix, steps, screenshots, video player and trace links.
 
 ### REQ-EVD-06 · Media policy

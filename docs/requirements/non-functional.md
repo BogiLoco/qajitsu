@@ -17,7 +17,7 @@ Quality bars for the codebase and the project itself.
 
 ### REQ-NFR-02 · Test-first and test levels
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 1
 - Related: REQ-NFR-04
@@ -26,7 +26,7 @@ Quality bars for the codebase and the project itself.
 
 - [x] AC1: Unit, contract, adversarial and golden tests run in `pnpm verify` without network or real models.
 - [x] AC2: Coverage thresholds: 80% overall, 95% for guard, verifier and steps.
-- [ ] AC3: End-to-end on demo-shop in CI on every PR (stage 3).
+- [x] AC3: End-to-end on demo-shop in CI on every PR (stage 3).
 - [x] AC4: Test titles reference requirement ids.
 
 ### REQ-NFR-03 · Documentation
@@ -64,8 +64,8 @@ Quality bars for the codebase and the project itself.
 **Acceptance criteria**
 
 - [x] AC1: No secrets in the repository; Claude Code hooks block writing credential-like content and reading `.env` files.
-- [ ] AC2: Ticket, PR and web content is treated as untrusted data in prompts.
-- [ ] AC3: Shell execution only with argument arrays; validated identifiers in paths and commands.
+- [x] AC2: Ticket, PR and web content is treated as untrusted data in prompts.
+- [x] AC3: Shell execution only with argument arrays; validated identifiers in paths and commands.
 - [ ] AC4: Dependency review in CI.
 
 ### REQ-NFR-06 · Open source and contributor experience

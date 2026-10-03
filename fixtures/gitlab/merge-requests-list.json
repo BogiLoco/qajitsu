@@ -1,0 +1,20 @@
+[
+  {
+    "iid": 7,
+    "title": "SHOP-482 cart discount API",
+    "description": "Discount endpoint.",
+    "web_url": "https://gitlab.example.com/shop/platform/backend/-/merge_requests/7",
+    "source_branch": "SHOP-482-discounts",
+    "target_branch": "main",
+    "sha": "1111111111111111111111111111111111111111"
+  },
+  {
+    "iid": 8,
+    "title": "SHOP-4820 unrelated",
+    "description": null,
+    "web_url": "https://gitlab.example.com/shop/platform/backend/-/merge_requests/8",
+    "source_branch": "other",
+    "target_branch": "main",
+    "sha": "3333333333333333333333333333333333333333"
+  }
+]

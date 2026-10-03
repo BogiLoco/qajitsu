@@ -1,0 +1,131 @@
+{
+  "$id": "https://qajitsu.dev/schemas/env-profile.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "base_url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "production": {
+      "default": false,
+      "type": "boolean"
+    },
+    "health_path": {
+      "default": "/health",
+      "type": "string",
+      "format": "starts_with",
+      "pattern": "^\\/.*"
+    },
+    "version_path": {
+      "type": "string",
+      "format": "starts_with",
+      "pattern": "^\\/.*"
+    },
+    "version_field": {
+      "default": "sha",
+      "type": "string"
+    },
+    "accounts": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "minLength": 1
+          },
+          "password": {
+            "type": "string",
+            "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+          },
+          "login_extra": {
+            "default": {},
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            }
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "login": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "default": "POST",
+          "type": "string",
+          "enum": [
+            "POST",
+            "PUT"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "format": "starts_with",
+          "pattern": "^\\/.*"
+        },
+        "body": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "token_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "header": {
+          "default": "authorization",
+          "type": "string"
+        },
+        "scheme": {
+          "default": "Bearer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "body",
+        "token_path"
+      ],
+      "additionalProperties": false
+    },
+    "flags": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean"
+        ]
+      }
+    }
+  },
+  "required": [
+    "base_url"
+  ],
+  "additionalProperties": false
+}

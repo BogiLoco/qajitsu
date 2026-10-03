@@ -1,0 +1,18 @@
+{
+  "errors": [],
+  "detail": [
+    {
+      "pullRequests": [
+        {
+          "id": "!7",
+          "name": "SHOP-482 cart discount API",
+          "url": "https://gitlab.example.com/shop/platform/backend/-/merge_requests/7",
+          "status": "OPEN",
+          "source": { "branch": "SHOP-482-discounts" },
+          "destination": { "branch": "main" }
+        }
+      ],
+      "branches": []
+    }
+  ]
+}

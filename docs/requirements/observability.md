@@ -4,15 +4,15 @@ Users can see what the tester did and when, and teams can monitor QAJitsu over t
 
 ### REQ-OBS-01 · Structured event log per run
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 1
 - Related: REQ-VER-04, REQ-LLM-07
 
 **Acceptance criteria**
 
-- [ ] AC1: `journal/events.jsonl` records stage start/end, every agent tool call (allowed or denied), every runner `step()`/`verify()`, human actions (approval, revisions, publish confirmation) and model usage.
-- [ ] AC2: Each event has ISO time, run id, ticket, stage, actor (agent role, runner or user) and masked details.
+- [x] AC1: `journal/events.jsonl` records stage start/end, every agent tool call (allowed or denied), every runner `step()`/`verify()`, human actions (approval, revisions, publish confirmation) and model usage.
+- [x] AC2: Each event has ISO time, run id, ticket, stage, actor (agent role, runner or user) and masked details.
 
 ### REQ-OBS-02 · Viewing logs
 

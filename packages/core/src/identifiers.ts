@@ -43,3 +43,15 @@ export function createRunId(now: Date, random: () => number): RunId {
   }
   return RunIdSchema.parse(`${date}-${time}-${suffix}`);
 }
+
+/**
+ * True when `text` mentions the ticket key as a whole token, case-insensitively: `SHOP-482` matches
+ * `feature/shop-482-cart` and `SHOP-482: fix`, but not `SHOP-4820` or `XSHOP-482` (REQ-CTX-03/AC2).
+ *
+ * @param text - PR/MR title or branch name.
+ * @param key - Validated ticket key.
+ */
+export function mentionsTicketKey(text: string, key: TicketKey): boolean {
+  const escaped = key.replace(/[-]/g, "\\-");
+  return new RegExp(`(?:^|[^A-Za-z0-9])${escaped}(?![0-9])`, "i").test(text);
+}

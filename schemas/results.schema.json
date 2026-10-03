@@ -1,0 +1,128 @@
+{
+  "$id": "https://qajitsu.dev/schemas/results.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "number",
+      "const": 1
+    },
+    "caseId": {
+      "type": "string",
+      "pattern": "^TC-\\d{2,4}$"
+    },
+    "runner": {
+      "type": "string",
+      "enum": [
+        "api",
+        "web",
+        "mobile"
+      ]
+    },
+    "spec": {
+      "type": "string"
+    },
+    "attempts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "attempt": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed",
+              "error",
+              "skipped"
+            ]
+          },
+          "assertions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "stepId": {
+                  "type": "string"
+                },
+                "field": {
+                  "type": "string"
+                },
+                "expected": {},
+                "actual": {},
+                "pass": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "stepId",
+                "field",
+                "expected",
+                "actual",
+                "pass"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "error": {
+            "type": "string"
+          },
+          "steps": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "ok": {
+                  "type": "boolean"
+                },
+                "error": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "ok"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "evidence": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "durationMs": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "attempt",
+          "outcome",
+          "assertions"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "caseId",
+    "runner",
+    "attempts"
+  ],
+  "additionalProperties": false
+}

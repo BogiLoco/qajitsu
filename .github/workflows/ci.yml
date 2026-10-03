@@ -38,6 +38,21 @@ jobs:
           path: coverage/
           if-no-files-found: ignore
 
+  e2e:
+    name: e2e (demo-shop self-test, sandboxed runner)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Builds the packages, then runs every seeded bug (FAILED) and every clean ticket (PASSED). REQ-NFR-02/AC3, REQ-NFR-04/AC1.
+      - run: pnpm test:e2e
+
   dependency-review:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest

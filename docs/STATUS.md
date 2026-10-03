@@ -1,24 +1,25 @@
 # Project status
 
-Roadmap stage 1 (Foundation) in progress: workspace, tooling, core types, guard, status model and CLI skeleton are in place; next is fetching a ticket and its code (REQ-CTX-01..04, REQ-WS-01).
+Roadmap stages 1–3 work end to end on the demo-shop: `qj fetch` → `qj plan` (analyst + planner, verified with a local Ollama model) → `qj approve` (SHA-256 freeze) → `qj run --env local` (author agent, static checks, sandboxed API runner, evidence, statuses computed by code, publish gates, matrix/CSV/XLSX/HTML). The self-test proves every seeded API bug ends FAILED and PASSED without its flag. Next: stage 4 (Jira publishing).
 
-| Area                                                                                   | State                                 |
-| -------------------------------------------------------------------------------------- | ------------------------------------- |
-| Monorepo, TypeScript, ESLint, Prettier, Vitest, Changesets, CI                         | done                                  |
-| `@qajitsu/core`: errors, statuses, ids, interfaces, project config schema              | done (stage-1 subset)                 |
-| `@qajitsu/guard`: policy, write bans, URL allowlist, journal                           | done (not yet wired to an agent loop) |
-| `@qajitsu/steps` masking, `@qajitsu/verifier` status + gates, `@qajitsu/report` matrix | first slices                          |
-| `@qajitsu/cli`: `--version`, `doctor`                                                  | done                                  |
-| Adapters                                                                               | 11 stub packages, none implemented    |
-| Requirements catalogue, roadmap, architecture docs                                     | done; `pnpm req:check` in CI          |
-| Claude Code setup (rules, agents, skills, hooks)                                       | done; hooks tested                    |
+| Area                                                                                   | State                                                                              |
+| -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Monorepo, TypeScript, ESLint, Prettier, Vitest, Changesets, CI                         | done                                                                               |
+| `@qajitsu/core`: errors, statuses, ids, interfaces, project config schema              | done (stage-1 subset)                                                              |
+| `@qajitsu/guard`: policy, write bans, URL allowlist, journal                           | done (not yet wired to an agent loop)                                              |
+| `@qajitsu/steps` masking, `@qajitsu/verifier` status + gates, `@qajitsu/report` matrix | first slices                                                                       |
+| `@qajitsu/cli`: `--version`, `doctor`, `fetch`                                         | done                                                                               |
+| Adapters                                                                               | ticket-jira, codehost-github/gitlab/local, secrets-env implemented; others planned |
+| Run workspace, event log, change discovery, git mirrors/worktrees (`@qajitsu/core`)    | done                                                                               |
+| Requirements catalogue, roadmap, architecture docs                                     | done; `pnpm req:check` in CI                                                       |
+| Claude Code setup (rules, agents, skills, hooks)                                       | done; hooks tested                                                                 |
 
 Live numbers: `pnpm req:list -- --status in-progress` and the index in [requirements/README.md](requirements/README.md).
 
-Next steps (stage 1):
+Next steps (stage 4):
 
-1. REQ-WS-01: run workspace creation (`.qa-runs/<TICKET>/<RUN_ID>/`, subfolders, `run.json`).
-2. REQ-CFG-03: `secrets-env` adapter and `secret://` resolution.
-3. REQ-CTX-01: `ticket-jira` adapter with recorded fixtures; `qj fetch`.
-4. REQ-CTX-02..04: `codehost-github`, `codehost-gitlab`, change discovery, repos at the change's commit.
-5. REQ-OBS-01 / REQ-VER-04: journal written to `journal/events.jsonl`.
+1. REQ-PUB-01..04: Jira comment (ADF) with matrix, attachments, idempotent updates; Data Center.
+2. REQ-VER-10: human preview before publishing.
+
+Open from stage 3: REQ-CTX-06 (tests repository awareness), REQ-EXEC-04/AC2 (OpenAPI validation), REQ-EXEC-01/AC2-3.
+Open from stage 2: REQ-LLM-01/AC4 needs one run against a real cloud provider.

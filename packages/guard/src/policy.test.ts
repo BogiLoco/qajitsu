@@ -41,8 +41,19 @@ describe("evaluateToolCall (REQ-VER-03)", () => {
       evaluateToolCall({ tool: "write_file", input: { path: "results-notes.md" } }, policy).allowed,
     ).toBe(true);
     expect(
-      evaluateToolCall({ tool: "write_file", input: { path: "plan/plan.v2.yaml" } }, policy).allowed,
+      evaluateToolCall({ tool: "write_file", input: { path: "planning-notes.md" } }, policy).allowed,
     ).toBe(true);
+  });
+
+  it("protects every plan version, not only the approved one (stage-2 integrity review)", () => {
+    // Deliberately stricter than before: plan versions are written by QAJitsu from validated
+    // planner output, so an agent tool must never drop a plan.vN.yaml that could be approved unseen.
+    expect(
+      evaluateToolCall({ tool: "write_file", input: { path: "plan/plan.v2.yaml" } }, policy),
+    ).toMatchObject({
+      allowed: false,
+      code: "PROTECTED_PATH",
+    });
   });
 
   it.each(["../other-run/results/x.json", "/etc/passwd", "specs/../../x", "..\\..\\x"])(

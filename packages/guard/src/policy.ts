@@ -34,7 +34,8 @@ export interface GuardPolicy {
 export const DEFAULT_PROTECTED_PATHS: readonly string[] = [
   "results/",
   "evidence/",
-  "plan/plan.approved.yaml",
+  // Plan versions are written by QAJitsu from validated planner output, never by agent tools.
+  "plan/",
   "journal/",
   "run.json",
 ];
@@ -58,9 +59,12 @@ export function resolveInWorkspace(workspaceRoot: string, path: string): string 
 }
 
 function isProtected(relative: string, protectedPaths: readonly string[]): boolean {
-  return protectedPaths.some((p) =>
-    p.endsWith("/") ? relative === p.slice(0, -1) || relative.startsWith(p) : relative === p,
-  );
+  // Case-insensitive: macOS and Windows file systems treat `Results/` and `results/` as one folder.
+  const rel = relative.toLowerCase();
+  return protectedPaths.some((raw) => {
+    const p = raw.toLowerCase();
+    return p.endsWith("/") ? rel === p.slice(0, -1) || rel.startsWith(p) : rel === p;
+  });
 }
 
 function checkPath(policy: GuardPolicy, value: unknown, field: string): GuardDecision {

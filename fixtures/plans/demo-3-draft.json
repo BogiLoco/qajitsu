@@ -1,0 +1,48 @@
+{
+  "summary": "Token expiry for DEMO-3.",
+  "cases": [
+    {
+      "id": "TC-01",
+      "title": "Valid token returns the user",
+      "type": "api",
+      "priority": "medium",
+      "source": [{ "kind": "ac", "id": "AC1" }],
+      "data": { "user": "user:standard" },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "GET /me as user:standard",
+          "expect": {
+            "description": "200 with user name",
+            "status": 200,
+            "fields": { "username": "standard" }
+          }
+        }
+      ],
+      "evidence": ["request", "response"]
+    },
+    {
+      "id": "TC-02",
+      "title": "Expired token is rejected",
+      "type": "api",
+      "priority": "high",
+      "source": [
+        { "kind": "ac", "id": "AC2" },
+        { "kind": "quote", "text": "Tokens with ttl_seconds 0 expire immediately" }
+      ],
+      "data": { "user": "user:expired" },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "GET /me as user:expired",
+          "expect": {
+            "description": "401 UNAUTHORIZED",
+            "status": 401,
+            "fields": { "error": "UNAUTHORIZED" }
+          }
+        }
+      ],
+      "evidence": ["request", "response"]
+    }
+  ]
+}

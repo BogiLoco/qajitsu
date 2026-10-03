@@ -31,15 +31,15 @@ Five layers, each overriding the previous: framework defaults, project profile (
 
 ### REQ-CFG-03 · Secret providers
 
-- Status: accepted
+- Status: in-progress
 - Priority: must
 - Stage: 1
 - Related: REQ-GEN-02, INV-8
 
 **Acceptance criteria**
 
-- [ ] AC1: References use `secret://<provider>/<path>`; plain-text secrets in config are rejected by the schema.
-- [ ] AC2: Provider `env` (environment and `.env.local`) in stage 1.
+- [x] AC1: References use `secret://<provider>/<path>`; plain-text secrets in config are rejected by the schema.
+- [x] AC2: Provider `env` (environment and `.env.local`) in stage 1.
 - [ ] AC3: Later providers: 1Password CLI, HashiCorp Vault, AWS/GCP Secret Manager, Doppler.
 
 ### REQ-CFG-04 · Validate configuration before start
@@ -69,7 +69,7 @@ Five layers, each overriding the previous: framework defaults, project profile (
 
 ### REQ-CFG-06 · Masking
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 3
 - Related: INV-8, REQ-VER-07
@@ -78,18 +78,18 @@ Secret values are masked in everything that can be read by people or models.
 
 **Acceptance criteria**
 
-- [ ] AC1: Every resolved secret is registered with the masker; occurrences become `***` in evidence, logs, reports, Jira comments and model context.
-- [ ] AC2: Headers `Authorization`, `Cookie`, `Set-Cookie`, `X-Api-Key` and configured JSON keys (`password`, `token`, ...) are always masked.
-- [ ] AC3: A publish gate scans every outgoing artifact for registered secret values and blocks publishing on a hit.
+- [x] AC1: Every resolved secret is registered with the masker; occurrences become `***` in evidence, logs, reports, Jira comments and model context.
+- [x] AC2: Headers `Authorization`, `Cookie`, `Set-Cookie`, `X-Api-Key` and configured JSON keys (`password`, `token`, ...) are always masked.
+- [x] AC3: A publish gate scans every outgoing artifact for registered secret values and blocks publishing on a hit.
 
 ### REQ-CFG-07 · Test accounts as aliases
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 3
 - Related: INV-8, REQ-EXEC-02
 
 **Acceptance criteria**
 
-- [ ] AC1: Plans and agents refer to accounts by alias (`user:standard`, `user:admin`).
-- [ ] AC2: Login is performed by framework helpers (e.g. stored Playwright `storageState`); passwords never enter model context.
+- [x] AC1: Plans and agents refer to accounts by alias (`user:standard`, `user:admin`).
+- [x] AC2: Login is performed by framework helpers (e.g. stored Playwright `storageState`); passwords never enter model context.

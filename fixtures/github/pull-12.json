@@ -1,0 +1,9 @@
+{
+  "number": 12,
+  "title": "SHOP-482 discount codes in cart",
+  "html_url": "https://github.com/example-org/shop-web/pull/12",
+  "state": "open",
+  "body": "Adds discount codes.",
+  "head": { "ref": "feature/SHOP-482-cart-discounts", "sha": "1111111111111111111111111111111111111111" },
+  "base": { "ref": "main" }
+}

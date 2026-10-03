@@ -19,13 +19,17 @@ export default defineConfig({
       "tests/contract/**/*.test.ts",
       "tests/golden/**/*.test.ts",
       "scripts/**/*.test.mjs",
+      "examples/**/*.test.ts",
     ],
     environment: "node",
     restoreMocks: true,
     coverage: {
       provider: "v8",
       // Add a package here when it gets its first implementation.
-      include: ["packages/{core,guard,steps,verifier,report,models,agents,cli}/src/**/*.ts"],
+      include: [
+        "packages/{core,guard,steps,verifier,report,models,agents,cli}/src/**/*.ts",
+        "packages/adapters/*/src/**/*.ts",
+      ],
       exclude: ["**/*.test.ts", "**/src/interfaces/**", "packages/cli/src/bin.ts"],
       reporter: ["text-summary", "html", "lcov"],
       thresholds: {

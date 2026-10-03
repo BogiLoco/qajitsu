@@ -6,3 +6,6 @@
  */
 export * from "./compute-status.js";
 export * from "./gates.js";
+export * from "./sources.js";
+export * from "./spec-checks.js";
+export * from "./evaluate.js";

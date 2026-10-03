@@ -1,0 +1,10 @@
+[
+  {
+    "author": { "username": "reviewer-1" },
+    "body": "Codes must not stack.",
+    "system": false,
+    "position": { "new_path": "src/discount.ts", "new_line": 1 }
+  },
+  { "author": { "username": "gitlab-bot" }, "body": "added 1 commit", "system": true },
+  { "author": { "username": "author-1" }, "body": "Ready for QA.", "system": false }
+]

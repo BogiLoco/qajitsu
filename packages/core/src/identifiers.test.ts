@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RunIdSchema, TicketKeySchema, createRunId } from "./identifiers.js";
+import { RunIdSchema, TicketKeySchema, createRunId, mentionsTicketKey } from "./identifiers.js";
 
 describe("TicketKeySchema (REQ-CTX-01)", () => {
   it.each(["SHOP-482", "AB-1", "QA_TEAM-99999"])("accepts %s", (key) => {
@@ -21,5 +21,19 @@ describe("createRunId (REQ-WS-01)", () => {
 
   it("stays valid when random returns the upper edge", () => {
     expect(RunIdSchema.safeParse(createRunId(new Date(0), () => 0.999999)).success).toBe(true);
+  });
+});
+
+describe("mentionsTicketKey (REQ-CTX-03/AC2)", () => {
+  const key = TicketKeySchema.parse("SHOP-482");
+  it.each([
+    ["SHOP-482 discount codes", true],
+    ["feature/shop-482-cart", true],
+    ["[SHOP-482] fix", true],
+    ["SHOP-4820 other", false],
+    ["XSHOP-482", false],
+    ["nothing", false],
+  ])("%s → %s", (text, expected) => {
+    expect(mentionsTicketKey(text, key)).toBe(expected);
   });
 });

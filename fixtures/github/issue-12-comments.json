@@ -1,0 +1,4 @@
+[
+  { "user": { "login": "author-1" }, "body": "Ready for QA." },
+  { "user": null, "body": "Deleted user comment." }
+]

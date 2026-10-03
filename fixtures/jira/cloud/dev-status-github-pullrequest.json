@@ -1,0 +1,23 @@
+{
+  "errors": [],
+  "detail": [
+    {
+      "pullRequests": [
+        {
+          "id": "#12",
+          "name": "SHOP-482 discount codes in cart",
+          "url": "https://github.com/example-org/shop-web/pull/12",
+          "status": "OPEN",
+          "source": { "branch": "feature/SHOP-482-cart-discounts" },
+          "destination": { "branch": "main" }
+        }
+      ],
+      "branches": [
+        {
+          "name": "feature/SHOP-482-cart-discounts",
+          "url": "https://github.com/example-org/shop-web/tree/feature/SHOP-482-cart-discounts"
+        }
+      ]
+    }
+  ]
+}

@@ -19,6 +19,7 @@ function authorGuard() {
   const journal = createJournal(
     (l) => lines.push(l),
     () => new Date("2026-10-03T10:46:00Z"),
+    (value) => value,
   );
   const guard = createGuard({ run: "20261003-1046-k7f3", stage: "author", policy: authorPolicy, journal });
   return { guard, journal: () => lines.map((l) => JSON.parse(l) as Record<string, unknown>) };

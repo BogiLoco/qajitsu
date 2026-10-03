@@ -4,7 +4,7 @@ Where tests run: an environment the user provides, or one QAJitsu builds from th
 
 ### REQ-ENV-01 · Provided environment
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 3
 - Related: INV-10, REQ-CFG-01
@@ -13,13 +13,13 @@ Where tests run: an environment the user provides, or one QAJitsu builds from th
 
 **Acceptance criteria**
 
-- [ ] AC1: Health check before tests; an unreachable environment makes every case BLOCKED.
-- [ ] AC2: Environment allowlist applies to runners and agents; production hosts are denied unless explicitly allowed.
-- [ ] AC3: Account aliases, flags and URLs come from the profile.
+- [x] AC1: Health check before tests; an unreachable environment makes every case BLOCKED.
+- [x] AC2: Environment allowlist applies to runners and agents; production hosts are denied unless explicitly allowed.
+- [x] AC3: Account aliases, flags and URLs come from the profile.
 
 ### REQ-ENV-02 · Deployed version check
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: 3
 - Related: REQ-CTX-04
@@ -28,9 +28,9 @@ QAJitsu warns when the environment does not run the code being tested.
 
 **Acceptance criteria**
 
-- [ ] AC1: A configurable endpoint (e.g. `/version`) is read and its SHA compared with the change SHA.
-- [ ] AC2: Mismatch: interactive warning with confirm/abort; in CI a configurable fail or warn.
-- [ ] AC3: The deployed SHA is recorded in `run.json` and the report.
+- [x] AC1: A configurable endpoint (e.g. `/version`) is read and its SHA compared with the change SHA.
+- [x] AC2: Mismatch: interactive warning with confirm/abort; in CI a configurable fail or warn.
+- [x] AC3: The deployed SHA is recorded in `run.json` and the report.
 
 ### REQ-ENV-03 · Build the environment from repositories
 
@@ -87,12 +87,12 @@ QAJitsu warns when the environment does not run the code being tested.
 
 ### REQ-ENV-07 · Default environment selection
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: 3
 - Related: REQ-ENV-01
 
 **Acceptance criteria**
 
-- [ ] AC1: Without `--env` or `--build`, `environments.default` from project config is used.
-- [ ] AC2: Without a default, interactive runs ask and CI runs fail with a configuration error.
+- [x] AC1: Without `--env` or `--build`, `environments.default` from project config is used.
+- [x] AC2: Without a default, interactive runs ask and CI runs fail with a configuration error.

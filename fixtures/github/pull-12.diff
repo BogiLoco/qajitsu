@@ -1,0 +1,10 @@
+diff --git a/src/cart/total.ts b/src/cart/total.ts
+index 1111111..2222222 100644
+--- a/src/cart/total.ts
++++ b/src/cart/total.ts
+@@ -1,3 +1,4 @@
+ export function total(lines: Line[]): number {
+-  return lines.reduce((s, l) => s + round(l.price * l.qty), 0);
++  const sum = lines.reduce((s, l) => s + l.price * l.qty, 0);
++  return round(sum);
+ }

@@ -45,7 +45,7 @@ describe("qajitsu CLI (REQ-GEN-05)", () => {
   });
 
   it("rejects unknown commands", async () => {
-    const result = await run(["plan", "SHOP-1"]);
+    const result = await run(["frobnicate", "SHOP-1"]);
     expect(result.err).toContain("unknown command");
   });
 

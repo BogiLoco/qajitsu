@@ -1,0 +1,41 @@
+{
+  "summary": "Order quantity validation for DEMO-2.",
+  "cases": [
+    {
+      "id": "TC-01",
+      "title": "Negative quantity is rejected",
+      "type": "api",
+      "priority": "high",
+      "source": [{ "kind": "ac", "id": "AC1" }],
+      "data": { "user": "user:standard" },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "POST /orders with quantity -1",
+          "expect": {
+            "description": "422 INVALID_QUANTITY",
+            "status": 422,
+            "fields": { "error": "INVALID_QUANTITY" }
+          }
+        }
+      ],
+      "evidence": ["request", "response"]
+    },
+    {
+      "id": "TC-02",
+      "title": "Positive quantity creates an order",
+      "type": "api",
+      "priority": "medium",
+      "source": [{ "kind": "ac", "id": "AC2" }],
+      "data": { "user": "user:standard" },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "POST /orders with quantity 2",
+          "expect": { "description": "201 created", "status": 201 }
+        }
+      ],
+      "evidence": ["request", "response"]
+    }
+  ]
+}

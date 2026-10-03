@@ -18,6 +18,13 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@qajitsu/core": "workspace:*"
+    "@qajitsu/core": "workspace:*",
+    "@qajitsu/guard": "workspace:*",
+    "@qajitsu/models": "workspace:*",
+    "@qajitsu/steps": "workspace:*",
+    "@qajitsu/verifier": "workspace:*",
+    "ai": "catalog:",
+    "yaml": "catalog:",
+    "zod": "catalog:"
   }
 }

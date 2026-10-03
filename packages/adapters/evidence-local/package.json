@@ -1,7 +1,7 @@
 {
   "name": "@qajitsu/adapter-evidence-local",
   "version": "0.0.0",
-  "description": "QAJitsu EvidenceStore on the local run workspace with SHA-256 manifest.",
+  "description": "QAJitsu EvidenceStore on the local disk with a SHA-256 manifest.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -18,6 +18,7 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@qajitsu/core": "workspace:*"
+    "@qajitsu/core": "workspace:*",
+    "zod": "catalog:"
   }
 }

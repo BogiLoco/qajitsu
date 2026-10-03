@@ -1,0 +1,21 @@
+{
+  "key": "DEMO-2",
+  "type": "Bug",
+  "status": "Ready for QA",
+  "summary": "Order quantity validation",
+  "description": "Orders must have a positive whole quantity. Invalid quantities are rejected before an order is created.",
+  "acceptanceCriteria": [
+    "POST /orders with quantity 0 or a negative quantity returns 422 with error code INVALID_QUANTITY.",
+    "POST /orders with quantity 1 or more returns 201 with the order id."
+  ],
+  "labels": ["orders", "api"],
+  "components": ["shop-api"],
+  "attachments": [],
+  "comments": [
+    {
+      "author": "product-owner",
+      "created": "2026-09-30T11:00:00Z",
+      "body": "No order may ever be created with a negative quantity."
+    }
+  ]
+}

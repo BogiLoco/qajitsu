@@ -25,7 +25,7 @@ QAJitsu plugs into any project through configuration; differences between projec
 **Acceptance criteria**
 
 - [x] AC1: Interfaces in `@qajitsu/core`: TicketSource, CodeHost, ModelProvider, EnvProvider, SecretProvider, Runner, EvidenceStore, Publisher.
-- [ ] AC2: Each adapter is a separate package selected by `type` in config through a registry.
+- [x] AC2: Each adapter is a separate package selected by `type` in config through a registry.
 - [ ] AC3: Each interface has a shared contract test suite.
 
 ### REQ-GEN-03 · `init` and `doctor`

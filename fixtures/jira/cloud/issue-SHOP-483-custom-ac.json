@@ -1,0 +1,41 @@
+{
+  "id": "10483",
+  "key": "SHOP-483",
+  "fields": {
+    "summary": "Order quantity validation",
+    "issuetype": { "name": "Bug" },
+    "status": { "name": "In Review" },
+    "labels": [],
+    "components": [],
+    "description": null,
+    "customfield_10042": {
+      "type": "doc",
+      "version": 1,
+      "content": [
+        {
+          "type": "orderedList",
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [{ "type": "text", "text": "Negative quantity returns 422." }]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                { "type": "paragraph", "content": [{ "type": "text", "text": "Zero quantity returns 422." }] }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "comment": { "comments": [] },
+    "issuelinks": [],
+    "attachment": []
+  }
+}

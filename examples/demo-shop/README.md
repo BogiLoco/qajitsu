@@ -10,10 +10,37 @@ If QAJitsu ever reports PASSED for a seeded bug, the trust layer is broken.
 
 | Part                                                                         | Stage | State   |
 | ---------------------------------------------------------------------------- | ----- | ------- |
-| `.qa/qa.project.yaml`, `tickets/` fixtures                                   | 1     | present |
-| REST API (products, cart, orders, auth) with seeded API bugs, Docker Compose | 3     | planned |
+| `.qa/qa.project.yaml`, `tickets/` fixtures, `scripts/setup-demo-repo.mjs`    | 1     | present |
+| REST API (products, cart, orders, auth) with seeded API bugs, Docker Compose | 3     | present |
 | Web UI with seeded UI bugs                                                   | 5     | planned |
 | Mobile build (Android)                                                       | 8     | planned |
+
+## Stage 1 demo
+
+```sh
+pnpm build
+node examples/demo-shop/scripts/setup-demo-repo.mjs
+cd examples/demo-shop && node ../../packages/cli/dist/bin.js fetch DEMO-1
+```
+
+## Stage 2 demo (local model through Ollama)
+
+```sh
+ollama pull gemma4:e2b
+cd examples/demo-shop
+node ../../packages/cli/dist/bin.js doctor --models
+node ../../packages/cli/dist/bin.js plan DEMO-1      # analysis.json, plan/plan.v1.yaml + .md, review loop
+node ../../packages/cli/dist/bin.js approve DEMO-1 --confirm-open-questions
+```
+
+## Stage 3 demo (API tests on the local environment)
+
+```sh
+export DEMO_USER_PASSWORD=<any value>          # or put it into examples/demo-shop/.env.local
+node examples/demo-shop/api/server.mjs --port 3000 &   # add BUG_CART_TOTAL_ROUNDING=1 to see TC-01 fail
+cd examples/demo-shop
+node ../../packages/cli/dist/bin.js run DEMO-1 --env local   # after fetch, plan and approve
+```
 
 ## Layout (target)
 

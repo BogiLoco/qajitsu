@@ -11,15 +11,15 @@ QAJitsu works with any capable model: cloud APIs, company gateways and local mod
 
 **Acceptance criteria**
 
-- [ ] AC1: Providers through Vercel AI SDK: Anthropic, OpenAI, Google; AWS Bedrock, Azure and Vertex later.
-- [ ] AC2: Ollama through `ai-sdk-ollama`.
-- [ ] AC3: Any OpenAI-compatible endpoint (LiteLLM, vLLM, LM Studio) through the OpenAI-compatible provider.
+- [x] AC1: Providers through Vercel AI SDK: Anthropic, OpenAI, Google; AWS Bedrock, Azure and Vertex later.
+- [x] AC2: Ollama through `ai-sdk-ollama`.
+- [x] AC3: Any OpenAI-compatible endpoint (LiteLLM, vLLM, LM Studio) through the OpenAI-compatible provider.
 - [ ] AC4: At least one cloud provider and Ollama work in stage 2.
 - [x] AC5: Only `packages/models` imports provider SDKs.
 
 ### REQ-LLM-02 · Model per role
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 2
 - Related: REQ-VER-06
@@ -27,11 +27,11 @@ QAJitsu works with any capable model: cloud APIs, company gateways and local mod
 **Acceptance criteria**
 
 - [x] AC1: `models.roles` maps roles (analyst, planner, author, healer, auditor, summary) to `<provider>/<model>`, with an optional `default`.
-- [ ] AC2: Provider definitions (type, base URL, secret reference) live in `models.providers`.
+- [x] AC2: Provider definitions (type, base URL, secret reference) live in `models.providers`.
 
 ### REQ-LLM-03 · Capability profiles
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 2
 - Related: REQ-GEN-03
@@ -39,21 +39,21 @@ QAJitsu works with any capable model: cloud APIs, company gateways and local mod
 **Acceptance criteria**
 
 - [x] AC1: Each role declares required capabilities: tools, structured output, vision, minimum context window.
-- [ ] AC2: `qajitsu doctor --models` probes configured models and reports mismatches.
-- [ ] AC3: A role cannot run on a model missing a required capability.
+- [x] AC2: `qajitsu doctor --models` probes configured models and reports mismatches.
+- [x] AC3: A role cannot run on a model missing a required capability.
 
 ### REQ-LLM-04 · Structured output with repair
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 2
 - Related: REQ-PLAN-02
 
 **Acceptance criteria**
 
-- [ ] AC1: Agent outputs are validated with Zod.
-- [ ] AC2: Invalid output is returned to the agent with the validation errors, up to 3 attempts, then the stage fails (no guessing).
-- [ ] AC3: Models without native structured output use JSON mode plus validation.
+- [x] AC1: Agent outputs are validated with Zod.
+- [x] AC2: Invalid output is returned to the agent with the validation errors, up to 3 attempts, then the stage fails (no guessing).
+- [x] AC3: Models without native structured output use JSON mode plus validation.
 
 ### REQ-LLM-05 · Local models used honestly
 
@@ -82,12 +82,12 @@ QAJitsu works with any capable model: cloud APIs, company gateways and local mod
 
 ### REQ-LLM-07 · Cost and token tracking
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: 2
 - Related: REQ-OBS-01
 
 **Acceptance criteria**
 
-- [ ] AC1: Tokens and estimated cost per call, role, model and run are recorded in the journal.
-- [ ] AC2: A per-run token budget stops the run with BLOCKED when exceeded.
+- [x] AC1: Tokens and estimated cost per call, role, model and run are recorded in the journal.
+- [x] AC2: A per-run token budget stops the run with BLOCKED when exceeded.
