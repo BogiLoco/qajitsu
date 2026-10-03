@@ -5,7 +5,8 @@ import ts from "typescript";
 
 /** One problem found in a generated spec. */
 export interface SpecProblem {
-  readonly check: "typecheck" | "lint" | "coverage" | "assertion-lock";
+  /** `review` findings are reported but do not block execution (e.g. CSS selectors, REQ-EXEC-05/AC2). */
+  readonly check: "typecheck" | "lint" | "coverage" | "assertion-lock" | "review";
   readonly message: string;
   readonly line?: number;
 }
@@ -24,6 +25,8 @@ const FORBIDDEN_GLOBALS = new Set([
   "Bun",
   "setInterval",
 ]);
+
+const UI_ACTIONS = new Set(["click", "fill", "check", "uncheck", "select", "press", "waitFor"]);
 
 const FORBIDDEN_MEMBERS = new Set([
   "constructor",
@@ -143,6 +146,19 @@ export function checkSpecSource(source: string, caseId: string, plan: Plan): Spe
         if (!first || !ts.isStringLiteral(first)) add("coverage", "step() needs a literal step id", node);
         else stepCalls.set(first.text, (stepCalls.get(first.text) ?? 0) + 1);
       }
+      if (
+        name !== undefined &&
+        UI_ACTIONS.has(name) &&
+        first &&
+        ts.isStringLiteral(first) &&
+        first.text.startsWith("css:")
+      ) {
+        add(
+          "review",
+          `CSS selector '${first.text}' is brittle; prefer testid:, role: or label: (REQ-EXEC-05/AC2)`,
+          node,
+        );
+      }
       if (name === "verify") {
         if (
           node.arguments.length !== 4 ||
@@ -245,9 +261,84 @@ export function typecheckSpecs(files: readonly string[]): Map<string, SpecProble
   return out;
 }
 
+/** Problems that stop a spec from running; `review` findings are only reported. */
+export function blockingProblems(problems: readonly SpecProblem[]): SpecProblem[] {
+  return problems.filter((p) => p.check !== "review");
+}
+
 /** Formats problems for the author's repair prompt or the terminal. */
 export function formatSpecProblems(problems: readonly SpecProblem[]): string {
   return problems
     .map((p) => `${p.check}${p.line === undefined ? "" : ` (line ${String(p.line)})`}: ${p.message}`)
     .join("\n");
+}
+
+interface LockedShape {
+  steps: string[];
+  verifies: string[];
+  expects: string[];
+  tries: number;
+}
+
+const lockedShape = (source: string): LockedShape => {
+  const sf = ts.createSourceFile("spec.ts", source, ts.ScriptTarget.ES2023, true, ts.ScriptKind.TS);
+  const shape: LockedShape = { steps: [], verifies: [], expects: [], tries: 0 };
+  const visit = (node: ts.Node): void => {
+    if (ts.isTryStatement(node)) shape.tries += 1;
+    if (ts.isCallExpression(node)) {
+      const name = calleeName(node);
+      const literal = (i: number): string => {
+        const a = node.arguments[i];
+        return a && ts.isStringLiteral(a) ? a.text : `<${a ? a.getText(sf) : "missing"}>`;
+      };
+      if (name === "step") shape.steps.push(literal(0));
+      if (name === "verify")
+        shape.verifies.push(`${literal(0)}|${literal(1)}|${node.arguments[3]?.getText(sf) ?? ""}`);
+      if (
+        name === "expect" &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        ts.isIdentifier(node.expression.expression) &&
+        node.expression.expression.text === "plan"
+      ) {
+        shape.expects.push(literal(0));
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return shape;
+};
+
+/**
+ * Assertion lock for the healer (REQ-EXEC-09/AC2): a healed spec may change selectors and waits, but
+ * its `step()` ids, `verify()` calls (step, field and expected value) and `plan.expect(...)` keys must be
+ * identical, and it may not add `try` blocks that could swallow failures.
+ *
+ * @param before - Original spec source.
+ * @param after - Healed spec source.
+ * @returns Problems; empty when the change only touches selectors and waits.
+ */
+export function assertionLockDiff(before: string, after: string): SpecProblem[] {
+  const a = lockedShape(before);
+  const b = lockedShape(after);
+  const problems: SpecProblem[] = [];
+  const same = (x: string[], y: string[]): boolean => x.length === y.length && x.every((v, i) => v === y[i]);
+  if (!same(a.steps, b.steps))
+    problems.push({
+      check: "assertion-lock",
+      message: `step() calls changed: ${a.steps.join(", ")} → ${b.steps.join(", ")}`,
+    });
+  if (!same(a.verifies, b.verifies))
+    problems.push({
+      check: "assertion-lock",
+      message: "verify() calls changed; the healer may change selectors and waits only",
+    });
+  if (!same(a.expects, b.expects))
+    problems.push({ check: "assertion-lock", message: "plan.expect(...) keys changed" });
+  if (b.tries > a.tries)
+    problems.push({
+      check: "assertion-lock",
+      message: "try/catch was added; failures must not be swallowed",
+    });
+  return problems;
 }

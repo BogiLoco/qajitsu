@@ -9,7 +9,8 @@ import {
   type AttemptExecutor,
   type ContractValidator,
 } from "@qajitsu/adapter-runner-api";
-import { buildChangeContext, checkSpec, createUsageTracker, runAuthor } from "@qajitsu/agents";
+import { createPlaywrightBrowserFactory } from "@qajitsu/adapter-runner-web";
+import { buildChangeContext, checkSpec, createUsageTracker, healSpec, runAuthor } from "@qajitsu/agents";
 import {
   AnalysisSchema,
   ConfigError,
@@ -257,7 +258,18 @@ async function executeCases(
     events.emit("run", SYSTEM, "case.blocked", { caseId, reason: reason.slice(0, 500) });
     await writeBlocked(session, [caseId], reason, results);
   }
-  const executor = ports.executor ?? createSandboxExecutor();
+  const executor =
+    ports.executor ??
+    createSandboxExecutor({
+      // The browser starts only when a spec uses ui.* (REQ-EXEC-05, REQ-EXEC-07).
+      browser: createPlaywrightBrowserFactory({
+        browser: project.config.web.browser,
+        video: project.config.web.video,
+        headless: project.config.web.headless,
+        actionTimeoutMs: project.config.web.action_timeout_ms,
+        webSession: env.profile.web_session,
+      }),
+    });
   // The contract is read from the worktree, i.e. from exactly the analysed version of the code.
   let contract: ContractValidator | undefined;
   for (const [alias, repo] of Object.entries(project.config.repos)) {
@@ -283,6 +295,43 @@ async function executeCases(
         },
       }),
     retries: project.config.environments.retries,
+    workers: project.config.environments.workers,
+    // REQ-EXEC-09: web cases that could not run get at most two healed attempts.
+    heal: async (caseId, specFile, failed, healAttempt) => {
+      if (plan.cases.find((c) => c.id === caseId)?.type !== "web") return undefined;
+      const usage = createUsageTracker({
+        events,
+        budget: project.config.models.token_budget,
+        alreadyUsed: Number(ws.record.data["tokens"] ?? 0),
+      });
+      const dom = failed.evidence.find((e) => e.kind === "dom")?.content;
+      const { file } = await healSpec(
+        {
+          ws,
+          models: session.models,
+          events,
+          usage,
+          now: ports.now,
+          maskJson: (v: unknown) => masker.maskJson(v),
+          maskText: (t: string) => masker.maskText(t),
+        },
+        plan,
+        {
+          caseId,
+          specFile,
+          error: masker.maskText(failed.error ?? "unknown error"),
+          dom: typeof dom === "string" ? dom : undefined,
+          attempt: healAttempt,
+        },
+      ).catch((error: unknown) => {
+        events.emit("heal", { kind: "agent", name: "healer" }, "heal.error", {
+          caseId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return { file: undefined };
+      });
+      return file;
+    },
     contract,
     events,
     now: ports.now,

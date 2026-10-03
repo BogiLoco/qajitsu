@@ -26,7 +26,7 @@ How results and evidence reach Jira and the people who need them.
 **Acceptance criteria**
 
 - [x] AC1: `<TICKET>_<RUN-ID>_evidence.zip` with the evidence folder, `report.html` and manifest.
-- [ ] AC2: Failure screenshots and videos attached individually so they are visible without unzipping.
+- [x] AC2: Failure screenshots and videos attached individually so they are visible without unzipping.
 - [ ] AC3: Sizes checked against the instance limit; oversized files go to object storage (S3, MinIO, Azure Blob) with a time-limited link.
 
 ### REQ-PUB-03 · Jira Cloud and Data Center
@@ -69,13 +69,13 @@ How results and evidence reach Jira and the people who need them.
 
 ### REQ-PUB-06 · Failure videos and evidence for the user
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 5
 - Related: REQ-EVD-02, REQ-OBS-02
 
 **Acceptance criteria**
 
-- [ ] AC1: `qajitsu evidence <TICKET>` opens `report.html` of the latest run.
-- [ ] AC2: `--failed` opens failure videos in the system player; `--trace <case>` opens Playwright Trace Viewer.
-- [ ] AC3: `qajitsu pull <TICKET> --run <id>` downloads evidence of a CI run from Jira or object storage.
+- [x] AC1: `qajitsu evidence <TICKET>` opens `report.html` of the latest run.
+- [x] AC2: `--failed` opens failure videos in the system player; `--trace <case>` opens Playwright Trace Viewer.
+- [x] AC3: `qajitsu pull <TICKET> --run <id>` downloads evidence of a CI run from Jira or object storage.

@@ -14,3 +14,5 @@ login:
   token_path: token
   header: authorization
   scheme: Bearer
+# The web UI keeps the session token here; QAJitsu sets it for ui.as(alias) (stage 5).
+web_session: { storage: sessionStorage, key: token }

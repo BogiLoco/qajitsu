@@ -60,7 +60,7 @@ The author agent writes test files for approved cases only. Exploring the app th
 
 ### REQ-EXEC-05 · Web UI testing
 
-- Status: accepted
+- Status: in-progress
 - Priority: must
 - Stage: 5
 - Related: REQ-EVD-02
@@ -68,8 +68,8 @@ The author agent writes test files for approved cases only. Exploring the app th
 **Acceptance criteria**
 
 - [ ] AC1: Runner on Playwright Test (Chromium by default; Firefox and WebKit configurable).
-- [ ] AC2: `data-testid` and accessible-role selectors preferred; CSS-class selectors flagged in review.
-- [ ] AC3: Screenshot after each step, video and trace kept on failure.
+- [x] AC2: `data-testid` and accessible-role selectors preferred; CSS-class selectors flagged in review.
+- [x] AC3: Screenshot after each step, video and trace kept on failure.
 
 ### REQ-EXEC-06 · Mobile testing (Android and iOS)
 
@@ -86,14 +86,14 @@ The author agent writes test files for approved cases only. Exploring the app th
 
 ### REQ-EXEC-07 · Mixed cases
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: 5
 - Related: REQ-EXEC-04, REQ-EXEC-05
 
 **Acceptance criteria**
 
-- [ ] AC1: One case may combine UI actions and API checks (e.g. act in the browser, verify state through the API).
+- [x] AC1: One case may combine UI actions and API checks (e.g. act in the browser, verify state through the API).
 
 ### REQ-EXEC-08 · Retries and FLAKY
 
@@ -110,25 +110,25 @@ The author agent writes test files for approved cases only. Exploring the app th
 
 ### REQ-EXEC-09 · Healer limited to selectors and waits
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 5
 - Related: INV-4, REQ-EXEC-03
 
 **Acceptance criteria**
 
-- [ ] AC1: After a failure, the healer may change selectors and waits only, at most 2 attempts per case.
-- [ ] AC2: An AST diff rejects any change to `verify()` calls, `plan.expect(...)` keys, or added `try/catch` around them.
-- [ ] AC3: Healed specs are re-run and their status follows the normal rules (a heal never turns FAILED into PASSED without a new passing run).
+- [x] AC1: After a failure, the healer may change selectors and waits only, at most 2 attempts per case.
+- [x] AC2: An AST diff rejects any change to `verify()` calls, `plan.expect(...)` keys, or added `try/catch` around them.
+- [x] AC3: Healed specs are re-run and their status follows the normal rules (a heal never turns FAILED into PASSED without a new passing run).
 
 ### REQ-EXEC-10 · Parallelism
 
-- Status: accepted
+- Status: in-progress
 - Priority: should
 - Stage: 5
 - Related: REQ-WS-04
 
 **Acceptance criteria**
 
-- [ ] AC1: API and web cases run in parallel with a configurable worker count.
+- [x] AC1: API and web cases run in parallel with a configurable worker count.
 - [ ] AC2: Mobile cases run sequentially per device; several devices may run in parallel.

@@ -7,6 +7,11 @@ export interface HttpRequest {
   readonly headers?: Readonly<Record<string, string>>;
   readonly body?: string | Uint8Array | FormData;
   readonly signal?: AbortSignal | undefined;
+  /**
+   * Follow a redirect to another origin WITHOUT any credentials (e.g. Jira attachment content served
+   * from a media host with a signed URL). Default: cross-origin redirects are refused.
+   */
+  readonly anonymousCrossOriginRedirect?: boolean | undefined;
 }
 
 /** HTTP client shared by adapters: typed errors, rate-limit retries, Zod-parsed JSON. */
@@ -114,7 +119,26 @@ export function createHttpClient(options: {
         if (redirects >= HTTP_MAX_REDIRECTS) {
           throw new AdapterError(`${service}_HTTP_ERROR`, `${service} redirected too many times.`, context);
         }
-        url = resolveUrl(new URL(location, url).toString());
+        const target = new URL(location, url);
+        if (
+          target.origin !== base.origin &&
+          request.anonymousCrossOriginRedirect === true &&
+          target.protocol === "https:"
+        ) {
+          // Credentials never leave the service origin: the redirected request carries no headers of ours.
+          const anonymous = await fetch(target, {
+            method: "GET",
+            redirect: "follow",
+            ...(request.signal ? { signal: request.signal } : {}),
+          });
+          if (anonymous.ok) return anonymous;
+          throw new AdapterError(
+            `${service}_HTTP_ERROR`,
+            `${service} redirect target answered HTTP ${String(anonymous.status)}.`,
+            { ...context, status: anonymous.status },
+          );
+        }
+        url = resolveUrl(target.toString());
         redirects += 1;
         attempt -= 1;
         if (response.status === 303) {

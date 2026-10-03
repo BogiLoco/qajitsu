@@ -6,7 +6,9 @@ import { formatProbes, probeModels } from "@qajitsu/agents";
 import { runFetch } from "./commands/fetch.js";
 import { runApprove, runPlan } from "./commands/plan.js";
 import { runEvidence } from "./commands/evidence.js";
+import { runLogs } from "./commands/logs.js";
 import { runPublish } from "./commands/publish.js";
+import { runPull } from "./commands/pull.js";
 import { runRun, type RunPorts } from "./commands/run.js";
 import { loadProject } from "./project.js";
 import type { ModelPorts } from "./session.js";
@@ -27,6 +29,12 @@ export interface ProgramIO {
   readonly openEditor?: (file: string) => Promise<void>;
   /** User name recorded as approver. */
   readonly user?: string;
+  /** Opens a file with the system application (report, video). */
+  readonly openFile?: (path: string) => Promise<void>;
+  /** Opens a Playwright trace in Trace Viewer. */
+  readonly openTrace?: (path: string) => Promise<void>;
+  /** Compresses a video for upload (ffmpeg); resolves true on success (REQ-EVD-06/AC2). */
+  readonly compressVideo?: (input: string, output: string) => Promise<boolean>;
 }
 
 const collect = (value: string, previous: string[]): string[] => [...previous, value];
@@ -158,7 +166,9 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--run <id>", "run id (default: latest run of the ticket)")
     .option("--auto-publish", "skip the preview (CI); recorded in run.json")
     .action((ticket: string, options: { run?: string; autoPublish?: boolean }) =>
-      withPorts((ports) => runPublish(ticket, options, commandIO, ports, io.user ?? "unknown"))(),
+      withPorts((ports) =>
+        runPublish(ticket, options, commandIO, ports, io.user ?? "unknown", io.compressVideo),
+      )(),
     );
 
   program
@@ -168,8 +178,44 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--run <id>", "run id (default: latest run of the ticket)")
     .option("--failed", "only cases that did not pass")
     .option("--case <id>", "only this case")
-    .action((ticket: string, options: { run?: string; failed?: boolean; case?: string }) =>
-      withPorts((ports) => runEvidence(ticket, options, commandIO, ports))(),
+    .option("--trace <case>", "open the Playwright trace of a case")
+    .option("--no-open", "print only, do not open the report, videos or traces")
+    .action(
+      (
+        ticket: string,
+        options: { run?: string; failed?: boolean; case?: string; trace?: string; open?: boolean },
+      ) =>
+        withPorts((ports) =>
+          runEvidence(ticket, options, commandIO, ports, {
+            ...(io.openFile ? { openFile: io.openFile } : {}),
+            ...(io.openTrace ? { openTrace: io.openTrace } : {}),
+          }),
+        )(),
+    );
+
+  program
+    .command("pull")
+    .description("Download the evidence zip of a run (e.g. from CI) from the ticket and verify it")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .requiredOption("--run <id>", "run id")
+    .action((ticket: string, options: { run: string }) =>
+      withPorts((ports) => runPull(ticket, options.run, commandIO, ports))(),
+    );
+
+  program
+    .command("logs")
+    .description("Show the structured event log of a run")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .option("--follow", "keep printing new events while the run is running")
+    .option("--stage <stage>", "only this stage, e.g. run or plan")
+    .option("--agent <role>", "only this agent, e.g. planner")
+    .option("--case <id>", "only events of this case")
+    .action(
+      (
+        ticket: string,
+        options: { run?: string; follow?: boolean; stage?: string; agent?: string; case?: string },
+      ) => withPorts((ports) => runLogs(ticket, options, commandIO, ports))(),
     );
 
   return program;

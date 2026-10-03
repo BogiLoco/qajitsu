@@ -43,6 +43,19 @@ export interface ReportInput {
     readonly ok: boolean;
     readonly problems: readonly string[];
   }[];
+  /** Timeline of the run; `evidencePath` links an event to its screenshot or request/response (REQ-OBS-02/AC2). */
+  readonly timeline?:
+    | readonly {
+        readonly ts: string;
+        readonly stage: string;
+        readonly actor: string;
+        readonly event: string;
+        readonly text: string;
+        readonly evidencePath?: string | undefined;
+      }[]
+    | undefined;
+  /** Inline SVG of the transition graph (REQ-OBS-06/AC2), rendered by code. */
+  readonly graphSvg?: string | undefined;
 }
 
 const esc = (s: string): string =>
@@ -66,6 +79,9 @@ const STATUS_COLOR: Record<TestStatus, string> = {
 
 const badge = (status: TestStatus): string =>
   `<span class="badge" style="background:${STATUS_COLOR[status]}">${status}</span>`;
+
+/** Anchor id of an evidence file in the report. */
+export const evidenceAnchor = (path: string): string => `ev-${path.replace(/[^A-Za-z0-9_-]/g, "_")}`;
 
 const safeDataUri = (uri: string): boolean =>
   /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(uri);
@@ -111,13 +127,15 @@ export function renderReportHtml(input: ReportInput): string {
             .join("");
           const evidence = a.evidence
             .map((e) => {
-              const body =
-                e.dataUri && safeDataUri(e.dataUri)
-                  ? `<img alt="${esc(e.path)}" src="${e.dataUri}">`
-                  : e.text === undefined
-                    ? ""
-                    : `<pre>${esc(e.text)}</pre>`;
-              return `<details><summary>${esc(e.stepId ?? "")} · ${esc(e.kind)} · <a href="../evidence/${esc(e.path)}">${esc(e.path)}</a> · <code title="SHA-256">${e.sha256.slice(0, 16)}…</code></summary>${body}</details>`;
+              const head = `${esc(e.stepId ?? "")} · ${esc(e.kind)} · <a href="../evidence/${esc(e.path)}">${esc(e.path)}</a> · <code title="SHA-256">${e.sha256.slice(0, 16)}…</code>`;
+              const id = evidenceAnchor(e.path);
+              if (e.dataUri && safeDataUri(e.dataUri)) {
+                return `<figure id="${id}"><figcaption>${head}</figcaption><img alt="${esc(e.path)}" src="${e.dataUri}"></figure>`;
+              }
+              if (e.kind === "video") {
+                return `<figure id="${id}"><figcaption>${head}</figcaption><video controls preload="none" src="../evidence/${esc(e.path)}"></video></figure>`;
+              }
+              return `<details id="${id}"><summary>${head}</summary>${e.text === undefined ? "" : `<pre>${esc(e.text)}</pre>`}</details>`;
             })
             .join("");
           return `<h4>Attempt ${String(a.attempt)}: ${esc(a.outcome)}</h4>${a.error ? `<p class="bad">${esc(a.error)}</p>` : ""}${assertions ? `<table><tr><th>Step</th><th>Field</th><th>Expected</th><th>Actual</th><th></th></tr>${assertions}</table>` : '<p class="muted">No assertions recorded.</p>'}${evidence}`;
@@ -132,12 +150,18 @@ export function renderReportHtml(input: ReportInput): string {
         `<li class="${g.ok ? "ok" : "bad"}">${g.ok ? "✔" : "✘"} ${esc(g.gate)}${g.problems.length > 0 ? `<ul>${g.problems.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>` : ""}</li>`,
     )
     .join("");
+  const timeline = (input.timeline ?? [])
+    .map(
+      (t) =>
+        `<tr><td>${esc(t.ts.slice(11, 19))}</td><td>${esc(t.stage)}</td><td>${esc(t.actor)}</td><td>${t.evidencePath ? `<a href="#${evidenceAnchor(t.evidencePath)}">${esc(t.event)}</a>` : esc(t.event)}</td><td>${esc(t.text)}</td></tr>`,
+    )
+    .join("");
   const repos = Object.entries(input.repos)
     .map(([k, v]) => `${esc(k)} <code>${esc(v)}</code>`)
     .join(", ");
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; media-src 'self'; style-src 'unsafe-inline'">
 <title>QAJitsu ${esc(input.ticket)} · ${esc(input.runId)}</title>
 <style>
 body{font:14px/1.5 system-ui,sans-serif;margin:0 auto;max-width:1100px;padding:24px;color:#1f2328}
@@ -145,7 +169,8 @@ table{border-collapse:collapse;width:100%;margin:8px 0}td,th{border:1px solid #d
 .badge{color:#fff;border-radius:10px;padding:1px 8px;font-size:12px;font-weight:600}.tiles{display:flex;gap:12px;flex-wrap:wrap}
 .tile{border-left:4px solid;padding:6px 12px;background:#f6f8fa}.tile b{font-size:20px;margin-right:6px}
 .muted{color:#57606a}.ok{color:#1a7f37}.bad{color:#cf222e}tr.bad td{background:#ffebe9}pre{background:#f6f8fa;padding:8px;overflow:auto;max-height:400px}
-section{border-top:1px solid #d0d7de;margin-top:16px}img{max-width:100%}
+section{border-top:1px solid #d0d7de;margin-top:16px}img,video{max-width:100%}
+:target{outline:3px solid #0969da}figure{margin:8px 0}.timeline td{font-size:12px}
 </style></head><body>
 <h1>${esc(input.ticket)} test report</h1>
 <p class="muted">Run ${esc(input.runId)} · ${esc(input.generatedAt)} · environment ${esc(input.environment.name)} (${esc(input.environment.baseUrl)})${input.environment.deployedSha ? ` · deployed <code>${esc(input.environment.deployedSha)}</code>` : ""}<br>Code: ${repos || "–"} · plan sha256 <code>${esc(input.planSha256.slice(0, 16))}…</code></p>
@@ -153,6 +178,8 @@ section{border-top:1px solid #d0d7de;margin-top:16px}img{max-width:100%}
 <h2>Summary</h2><p>${esc(input.summary).replace(/\n/g, "<br>")}</p>
 <h2>Matrix</h2><table><tr><th>TC</th><th>Title</th><th>Requirement</th><th>Type</th><th>Status</th><th>Steps OK</th><th>Evidence</th></tr>${matrix}</table>
 <h2>Publish gates</h2><ul>${gates}</ul>
+${input.graphSvg ? `<h2>Transition graph</h2><div class="graph">${input.graphSvg}</div>` : ""}
+${timeline ? `<h2>Timeline</h2><table class="timeline"><tr><th>Time</th><th>Stage</th><th>Actor</th><th>Event</th><th>Details</th></tr>${timeline}</table>` : ""}
 <h2>Cases</h2>${cases}
 </body></html>
 `;

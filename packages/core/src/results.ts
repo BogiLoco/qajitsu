@@ -16,11 +16,20 @@ export const CaseAttemptSchema = z.strictObject({
   assertions: z.array(AssertionRecordSchema),
   error: z.string().optional(),
   steps: z
-    .array(z.strictObject({ id: z.string(), ok: z.boolean(), error: z.string().optional() }))
+    .array(
+      z.strictObject({
+        id: z.string(),
+        ok: z.boolean(),
+        error: z.string().optional(),
+        url: z.string().optional(),
+      }),
+    )
     .default([]),
   /** Evidence paths (relative to `evidence/`) written for this attempt. */
   evidence: z.array(z.string()).default([]),
   startedAt: z.string().optional(),
+  /** The attempt ran a spec changed by the healer (REQ-EXEC-09). */
+  healed: z.boolean().optional(),
   durationMs: z.number().nonnegative().optional(),
 });
 

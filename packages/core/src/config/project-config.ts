@@ -132,6 +132,15 @@ export const ProjectConfigSchema = z.strictObject({
         }
       }
     }),
+  /** Web runner (REQ-EXEC-05, REQ-EVD-06). */
+  web: z
+    .strictObject({
+      browser: z.enum(["chromium", "firefox", "webkit"]).default("chromium"),
+      video: z.enum(["retain-on-failure", "always", "off"]).default("retain-on-failure"),
+      headless: z.boolean().default(true),
+      action_timeout_ms: z.number().int().min(500).max(120_000).default(5_000),
+    })
+    .default({ browser: "chromium", video: "retain-on-failure", headless: true, action_timeout_ms: 5_000 }),
   /** Publishing results to the ticket (REQ-PUB-01..04, REQ-VER-10). */
   publish: z
     .strictObject({
@@ -166,8 +175,10 @@ export const ProjectConfigSchema = z.strictObject({
       on_version_mismatch: z.enum(["fail", "warn"]).default("warn"),
       /** Retries after a failed attempt (REQ-EXEC-08/AC1). */
       retries: z.number().int().min(0).max(3).default(1),
+      /** Cases running in parallel (REQ-EXEC-10/AC1). */
+      workers: z.number().int().min(1).max(16).default(1),
     })
-    .default({ allowlist: [], allow_production: false, on_version_mismatch: "warn", retries: 1 }),
+    .default({ allowlist: [], allow_production: false, on_version_mismatch: "warn", retries: 1, workers: 1 }),
   models: z
     .strictObject({
       /** Model provider definitions referenced as `<alias>/<model>` in `roles` (REQ-LLM-02/AC2). */

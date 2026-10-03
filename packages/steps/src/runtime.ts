@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import type { AssertionRecord, Plan, TestCase } from "@qajitsu/core";
 import type { Masker } from "./masking.js";
+import { assertSelector, type UiClient, type UiDriver, type UiOperation, type UiProperty } from "./ui.js";
 
 /** HTTP methods the API client supports. */
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -61,26 +62,29 @@ export interface PlanAccessor {
 
 /**
  * What a generated spec receives (REQ-EXEC-02). The verdict of `verify()` is computed by QAJitsu:
- * `actual` is read from the last response recorded in the step and `expected` from the approved plan.
- * The values a spec passes are documentation only, so a spec cannot assert on values it made up.
+ * `actual` is read from the last response of the step or from the live page, `expected` from the
+ * approved plan. The values a spec passes are documentation only (ADR-0004).
  */
 export interface CaseContext {
   readonly caseId: string;
   readonly plan: PlanAccessor;
   readonly api: ApiClient;
+  /** Browser actions, performed by QAJitsu (ADR-0004). */
+  readonly ui: UiClient;
   /** Runs one plan step; errors end the attempt as an error. */
   readonly step: (stepId: string, fn: () => Promise<void> | void) => Promise<void>;
-  /** Records the assertion `<field>` of the step against the last response of the step. */
+  /** Records the assertion `<field>` of the step; it is evaluated before the step ends. */
   readonly verify: (stepId: string, field: string, actual?: unknown, expected?: unknown) => void;
 }
 
 /** One evidence item produced by an attempt, before it is stored. */
 export interface EvidenceItem {
+  /** Plan step, or `case` for evidence of the whole attempt (video, trace, HAR, console log). */
   readonly stepId: string;
-  readonly kind: "request" | "response" | "log";
-  /** File name inside the attempt folder: `S1-01.json`. */
+  readonly kind: "request" | "response" | "screenshot" | "video" | "trace" | "log" | "har" | "dom";
+  /** File name inside the attempt folder: `S1-01.json`, `S1.png`, `failure.png`, `video.webm`. */
   readonly name: string;
-  readonly content: string;
+  readonly content: string | Uint8Array;
 }
 
 /** Everything one attempt produced; the runner turns it into results and evidence. */
@@ -89,7 +93,13 @@ export interface AttemptRecord {
   readonly attempt: number;
   readonly outcome: "passed" | "failed" | "error";
   readonly error?: string;
-  readonly steps: readonly { readonly id: string; readonly ok: boolean; readonly error?: string }[];
+  /** Steps in order; `url` is the page at the end of a step that used the browser (REQ-OBS-06). */
+  readonly steps: readonly {
+    readonly id: string;
+    readonly ok: boolean;
+    readonly error?: string;
+    readonly url?: string;
+  }[];
   readonly assertions: readonly AssertionRecord[];
   readonly evidence: readonly EvidenceItem[];
 }
@@ -102,11 +112,13 @@ export interface CaseRuntimeOptions {
   readonly baseUrl: string;
   readonly transport: ApiTransport;
   readonly masker: Masker;
-  /** Origins API calls may reach (REQ-ENV-01/AC2). */
+  /** Origins API calls and page loads may reach (REQ-ENV-01/AC2). */
   readonly allowedOrigins: readonly string[];
   /** Headers per account alias, prepared by framework login helpers (REQ-CFG-07/AC2). */
   readonly accounts: Readonly<Record<string, Readonly<Record<string, string>>>>;
   readonly now: () => number;
+  /** Starts the browser on first use; absent for API-only runs (REQ-EXEC-05). */
+  readonly ui?: (() => Promise<UiDriver>) | undefined;
 }
 
 /** The recorder of one attempt. Runs in the trusted process; specs only reach it through these operations. */
@@ -114,7 +126,7 @@ export interface CaseRuntime {
   /** In-process context (unit tests). The sandbox builds an equivalent proxy over IPC. */
   readonly context: CaseContext;
   readonly beginStep: (stepId: string) => void;
-  readonly endStep: (stepId: string, error?: string) => void;
+  readonly endStep: (stepId: string, error?: string) => Promise<void>;
   readonly call: (
     alias: string | undefined,
     method: HttpMethod,
@@ -122,9 +134,11 @@ export interface CaseRuntime {
     body: unknown,
     options: ApiCallOptions,
   ) => Promise<ApiTransportResponse>;
-  /** Computes and records an assertion from the step's last response and the approved plan. */
-  readonly verify: (stepId: string, field: string) => void;
-  readonly finish: (error?: unknown) => AttemptRecord;
+  /** Performs one browser action (REQ-EXEC-05, REQ-EXEC-07). */
+  readonly uiOp: (operation: UiOperation) => Promise<void>;
+  /** Computes and records an assertion from the step's last response or the live page and the approved plan. */
+  readonly verify: (stepId: string, field: string) => Promise<void>;
+  readonly finish: (error?: unknown) => Promise<AttemptRecord>;
 }
 
 const at = (value: unknown, path: string | undefined): unknown => {
@@ -169,7 +183,10 @@ function expectationOf(planCase: TestCase, stepId: string, field: string, path: 
       throw new Error(`plan.expect('${path}'): no expected field '${key}'`);
     value = e.fields[key];
   } else if (kind === "texts" && rest.length === 1) value = e.texts?.[Number(rest[0])];
-  else throw new Error(`plan.expect('${path}'): unknown field`);
+  else if (kind === "elements" && rest.length >= 2) {
+    const property = rest.at(-1) as UiProperty;
+    value = e.elements?.[rest.slice(0, -1).join(".")]?.[property];
+  } else throw new Error(`plan.expect('${path}'): unknown field`);
   if (value === undefined) throw new Error(`plan.expect('${path}'): no expected value`);
   return value;
 }
@@ -193,7 +210,11 @@ export function createPlanAccessor(plan: Plan, caseId: string): PlanAccessor {
   };
 }
 
+/** Recorded as the actual value when the response or page has no value at the expected place. */
+export const ABSENT = "(absent)";
+
 const ACTION = /^(GET|POST|PUT|PATCH|DELETE)\s+(\/[^\s?]*)/i;
+const PROPERTIES: readonly UiProperty[] = ["visible", "enabled", "checked", "text", "value"];
 
 /** True when a concrete path matches a plan path like `/carts/{id}` or `/carts/:id`. */
 const pathMatches = (template: string, path: string): boolean => {
@@ -203,18 +224,20 @@ const pathMatches = (template: string, path: string): boolean => {
 };
 
 /**
- * Creates the recorder of one case attempt (REQ-EXEC-02, REQ-EVD-01). It performs every HTTP call,
- * records evidence and computes every assertion itself; everything recorded is masked.
+ * Creates the recorder of one case attempt (REQ-EXEC-02, REQ-EVD-01, REQ-EVD-02). It performs every
+ * HTTP call and browser action, records evidence and computes every assertion itself; everything
+ * recorded is masked.
  *
- * @param options - Plan, case, transport, accounts, allowlist, masker and clock.
+ * @param options - Plan, case, transport, browser, accounts, allowlist, masker and clock.
  */
 export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   const { plan, caseId, attempt, masker } = options;
   const planCase = plan.cases.find((c) => c.id === caseId);
   if (!planCase) throw new Error(`${caseId} is not in the approved plan`);
   const stepIds = new Set(planCase.steps.map((s) => s.id));
-  const steps: { id: string; ok: boolean; error?: string }[] = [];
+  const steps: { id: string; ok: boolean; error?: string; url?: string }[] = [];
   const assertions: AssertionRecord[] = [];
+  const media: EvidenceItem[] = [];
   const calls: {
     stepId: string;
     method: HttpMethod;
@@ -226,7 +249,14 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   }[] = [];
   let currentStep: string | undefined;
   let failure: string | undefined;
+  let driver: UiDriver | undefined;
   const maskValue = (v: unknown): unknown => masker.maskJson(v);
+
+  const browser = async (): Promise<UiDriver> => {
+    if (!options.ui) throw new Error("This run has no browser; UI actions need the web runner");
+    driver ??= await options.ui();
+    return driver;
+  };
 
   const beginStep = (stepId: string): void => {
     if (!stepIds.has(stepId))
@@ -237,14 +267,28 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     currentStep = stepId;
   };
 
-  const endStep = (stepId: string, error?: string): void => {
+  const endStep = async (stepId: string, error?: string): Promise<void> => {
     if (currentStep !== stepId) throw new Error(`step('${stepId}') ended but was not running`);
     steps.push({
       id: stepId,
       ok: error === undefined,
       ...(error === undefined ? {} : { error: masker.maskText(error) }),
+      ...(driver ? { url: masker.maskText(driver.url()) } : {}),
     });
     currentStep = undefined;
+    // REQ-EVD-02/AC1: a screenshot after every step of a case that uses the browser.
+    if (driver) {
+      try {
+        media.push({
+          stepId,
+          kind: "screenshot",
+          name: `${stepId}.png`,
+          content: await driver.screenshot(false),
+        });
+      } catch {
+        // A crashed page has no screenshot; the failure evidence still records the state.
+      }
+    }
   };
 
   const call: CaseRuntime["call"] = async (alias, method, path, body, opts) => {
@@ -296,13 +340,84 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     return response;
   };
 
-  const verify = (stepId: string, field: string): void => {
+  const uiOp = async (operation: UiOperation): Promise<void> => {
+    if (currentStep === undefined) throw new Error("UI actions must run inside step()");
+    const d = await browser();
+    switch (operation.op) {
+      case "goto": {
+        const url = new URL(operation.path, options.baseUrl);
+        if (!options.allowedOrigins.includes(url.origin))
+          throw new Error(`URL ${url.origin} is not in the environment allowlist`);
+        await d.goto(url.toString());
+        return;
+      }
+      case "as":
+        if (!(operation.alias in options.accounts))
+          throw new Error(`Unknown account alias '${operation.alias}'`);
+        await d.useAccount(operation.alias);
+        return;
+      case "click":
+        await d.click(assertSelector(operation.selector));
+        return;
+      case "check":
+      case "uncheck":
+        await d.check(assertSelector(operation.selector), operation.op === "check");
+        return;
+      case "fill":
+        await d.fill(assertSelector(operation.selector), operation.value);
+        return;
+      case "select":
+        await d.select(assertSelector(operation.selector), operation.value);
+        return;
+      case "press":
+        await d.press(assertSelector(operation.selector), operation.value);
+        return;
+      case "waitFor":
+        await d.waitFor(assertSelector(operation.selector), operation.state);
+        return;
+    }
+  };
+
+  const verify = async (stepId: string, field: string): Promise<void> => {
     if (!stepIds.has(stepId)) throw new Error(`verify('${stepId}') is not a step of ${caseId}`);
     if (currentStep !== stepId) throw new Error(`verify('${stepId}') must run inside step('${stepId}')`);
+    const [kind, ...rest] = field.split(".");
+    const record = (expected: unknown, actual: unknown): void => {
+      assertions.push({
+        stepId,
+        field,
+        expected: maskValue(expected),
+        // A missing value is recorded explicitly: JSON drops `undefined`, which would make the record unreadable.
+        actual: actual === undefined ? ABSENT : maskValue(actual),
+        pass: isDeepStrictEqual(actual, expected),
+      });
+    };
+    if (kind === "elements") {
+      // elements.<selector>.<property>: read from the live page by the parent.
+      const property = rest.at(-1) as UiProperty | undefined;
+      if (property === undefined || !PROPERTIES.includes(property) || rest.length < 2) {
+        throw new Error(
+          `verify('${stepId}', '${field}'): use elements.<selector>.<visible|enabled|checked|text|value>`,
+        );
+      }
+      const expected = expectationOf(planCase, stepId, field, `${caseId}.${stepId}.${field}`);
+      if (!driver) throw new Error(`verify('${stepId}', '${field}') needs the browser to be open`);
+      record(expected, await driver.property(assertSelector(rest.slice(0, -1).join(".")), property));
+      return;
+    }
     const expected = expectationOf(planCase, stepId, field, `${caseId}.${stepId}.${field}`);
+    if (kind === "texts" && driver) {
+      // Visible text of the live page (REQ-EXEC-05); a response body counts only for API-only cases.
+      const text = await driver.pageText();
+      record(
+        expected,
+        typeof expected === "string" && text.includes(expected) ? expected : "(text not visible on the page)",
+      );
+      return;
+    }
     const last = calls.filter((c) => c.stepId === stepId).at(-1);
     if (!last) throw new Error(`verify('${stepId}', '${field}') needs a response recorded in the step`);
-    const action = ACTION.exec(planCase.steps.find((s) => s.id === stepId)?.action ?? "");
+    const action = ACTION.exec(planCase.steps.find((x) => x.id === stepId)?.action ?? "");
     if (
       action?.[1] &&
       action[2] &&
@@ -312,7 +427,6 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         `verify('${stepId}'): the last response is ${last.method} ${last.pathname}, the plan step is ${action[1].toUpperCase()} ${action[2]}`,
       );
     }
-    const [kind, ...rest] = field.split(".");
     let actual: unknown;
     if (kind === "status") actual = last.status;
     else if (kind === "fields") actual = at(last.body, rest.join("."));
@@ -323,15 +437,9 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
           : "(text not found in the response)";
     else
       throw new Error(
-        `verify('${stepId}', '${field}'): only status, fields.<key> and texts.<n> can be verified`,
+        `verify('${stepId}', '${field}'): only status, fields.<key>, texts.<n> and elements.<selector>.<property> can be verified`,
       );
-    assertions.push({
-      stepId,
-      field,
-      expected: maskValue(expected),
-      actual: maskValue(actual),
-      pass: isDeepStrictEqual(actual, expected),
-    });
+    record(expected, actual);
   };
 
   const client = (alias: string | undefined): ApiClient => {
@@ -355,22 +463,40 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     };
   };
 
+  // verify() is fire-and-forget in specs; its evaluation is chained and awaited before the step ends.
+  let pending: Promise<void> = Promise.resolve();
   const context: CaseContext = {
     caseId,
     plan: createPlanAccessor(plan, caseId),
     api: client(undefined),
+    ui: {
+      goto: (path) => uiOp({ op: "goto", path }),
+      click: (selector) => uiOp({ op: "click", selector }),
+      fill: (selector, value) => uiOp({ op: "fill", selector, value }),
+      check: (selector) => uiOp({ op: "check", selector }),
+      uncheck: (selector) => uiOp({ op: "uncheck", selector }),
+      select: (selector, value) => uiOp({ op: "select", selector, value }),
+      press: (selector, value) => uiOp({ op: "press", selector, value }),
+      waitFor: (selector, state = "visible") => uiOp({ op: "waitFor", selector, state }),
+      as: (alias) => uiOp({ op: "as", alias }),
+    },
     step: async (stepId, fn) => {
       beginStep(stepId);
       try {
         await fn();
-        endStep(stepId);
+        await pending;
+        await endStep(stepId);
       } catch (error) {
-        if (currentStep === stepId) endStep(stepId, describeError(error));
+        pending = Promise.resolve();
+        if (currentStep === stepId) await endStep(stepId, describeError(error));
         throw error;
       }
     },
     verify: (stepId, field) => {
-      verify(stepId, field);
+      // Misuse is reported at once; the evaluation itself is chained and awaited by step().
+      if (!stepIds.has(stepId)) throw new Error(`verify('${stepId}') is not a step of ${caseId}`);
+      if (currentStep !== stepId) throw new Error(`verify('${stepId}') must run inside step('${stepId}')`);
+      pending = pending.then(() => verify(stepId, field));
     },
   };
 
@@ -379,10 +505,11 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     beginStep,
     endStep,
     call,
+    uiOp,
     verify,
-    finish: (error) => {
+    finish: async (error) => {
       if (error !== undefined) failure = masker.maskText(describeError(error));
-      const evidence: EvidenceItem[] = [];
+      const evidence: EvidenceItem[] = [...media];
       const perStep = new Map<string, number>();
       for (const c of calls) {
         const n = (perStep.get(c.stepId) ?? 0) + 1;
@@ -401,6 +528,25 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         : failure !== undefined
           ? "error"
           : "passed";
+      // REQ-EVD-02/AC2: on failure a full-page screenshot and the DOM of the browser.
+      if (driver && outcome !== "passed") {
+        try {
+          evidence.push({
+            stepId: "case",
+            kind: "screenshot",
+            name: "failure.png",
+            content: await driver.screenshot(true),
+          });
+          evidence.push({
+            stepId: "case",
+            kind: "dom",
+            name: "failure.html",
+            content: masker.maskText(await driver.dom()),
+          });
+        } catch {
+          // The page is gone; video and trace from the runner still show what happened.
+        }
+      }
       return {
         caseId,
         attempt,

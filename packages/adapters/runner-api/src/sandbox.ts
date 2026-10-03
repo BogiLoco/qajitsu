@@ -8,6 +8,8 @@ import {
   type ApiTransport,
   type AttemptRecord,
   type CaseRuntime,
+  type EvidenceItem,
+  type UiDriver,
 } from "@qajitsu/steps";
 import { z } from "zod";
 import type { AttemptInput } from "./attempt.js";
@@ -41,6 +43,30 @@ const Options = z.strictObject({
   query: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
 });
 
+const Selector = z.string().max(300);
+const UiOperationSchema = z.discriminatedUnion("op", [
+  z.strictObject({ op: z.literal("goto"), path: z.string().max(4096) }),
+  z.strictObject({ op: z.enum(["click", "check", "uncheck"]), selector: Selector }),
+  z.strictObject({
+    op: z.enum(["fill", "select", "press"]),
+    selector: Selector,
+    value: z.string().max(10_000),
+  }),
+  z.strictObject({ op: z.literal("waitFor"), selector: Selector, state: z.enum(["visible", "hidden"]) }),
+  z.strictObject({ op: z.literal("as"), alias: z.string().max(200) }),
+]);
+
+/** A browser for one attempt, created by the web runner (ADR-0004). */
+export interface BrowserSession {
+  /** Starts the browser on first use. */
+  readonly driver: () => Promise<UiDriver>;
+  /** Closes the browser and returns case evidence: video, trace, HAR, console log (REQ-EVD-02). */
+  readonly close: (failed: boolean) => Promise<EvidenceItem[]>;
+}
+
+/** Creates the browser session of an attempt; absent for API-only runs. */
+export type BrowserFactory = (input: AttemptInput) => BrowserSession;
+
 /** Operations a child may ask for; anything else ends the attempt as an error. */
 const OpSchema = z.discriminatedUnion("op", [
   z.strictObject({
@@ -66,6 +92,12 @@ const OpSchema = z.discriminatedUnion("op", [
   z.strictObject({
     type: z.literal("op"),
     id: z.number().int(),
+    op: z.literal("ui"),
+    operation: UiOperationSchema,
+  }),
+  z.strictObject({
+    type: z.literal("op"),
+    id: z.number().int(),
     op: z.literal("call"),
     alias: z.string().optional(),
     method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
@@ -86,6 +118,9 @@ const expectationsOf = (input: AttemptInput): Record<string, unknown> => {
     if (s.expect.status !== undefined) out[`${p}.status`] = s.expect.status;
     for (const [k, v] of Object.entries(s.expect.fields ?? {})) out[`${p}.fields.${k}`] = v;
     (s.expect.texts ?? []).forEach((t, i) => (out[`${p}.texts.${String(i)}`] = t));
+    for (const [selector, state] of Object.entries(s.expect.elements ?? {})) {
+      for (const [prop, value] of Object.entries(state)) out[`${p}.elements.${selector}.${prop}`] = value;
+    }
   }
   return out;
 };
@@ -114,6 +149,8 @@ export function createSandboxExecutor(
     readonly childScript?: string;
     readonly transport?: ApiTransport;
     readonly now?: () => number;
+    /** Browser per attempt for web and mixed cases (REQ-EXEC-05, REQ-EXEC-07). */
+    readonly browser?: BrowserFactory;
   } = {},
 ): AttemptExecutor {
   const childScript = options.childScript ?? fileURLToPath(new URL("./child.js", import.meta.url));
@@ -126,6 +163,7 @@ export function createSandboxExecutor(
       transport = pw.transport;
       dispose = pw.dispose;
     }
+    const session = options.browser?.(input);
     const runtime: CaseRuntime = createCaseRuntime({
       plan: input.plan,
       caseId: input.caseId,
@@ -136,6 +174,7 @@ export function createSandboxExecutor(
       allowedOrigins: input.allowedOrigins,
       accounts: input.accounts,
       now,
+      ...(session ? { ui: session.driver } : {}),
     });
     let specFile = input.specFile;
     try {
@@ -169,7 +208,10 @@ export function createSandboxExecutor(
           settled = true;
           clearTimeout(timer);
           child.kill("SIGKILL");
-          resolve(runtime.finish(fatal ?? error));
+          void runtime.finish(fatal ?? error).then(async (record) => {
+            const media = session ? await session.close(record.outcome !== "passed").catch(() => []) : [];
+            resolve({ ...record, evidence: [...record.evidence, ...media] });
+          });
         };
         const timer = setTimeout(() => {
           done(`case timed out after ${String(input.timeoutMs)} ms`);
@@ -194,8 +236,9 @@ export function createSandboxExecutor(
             try {
               let value: unknown;
               if (op.op === "beginStep") runtime.beginStep(op.stepId);
-              else if (op.op === "endStep") runtime.endStep(op.stepId, op.error);
-              else if (op.op === "verify") runtime.verify(op.stepId, op.field);
+              else if (op.op === "endStep") await runtime.endStep(op.stepId, op.error);
+              else if (op.op === "verify") await runtime.verify(op.stepId, op.field);
+              else if (op.op === "ui") await runtime.uiOp(op.operation);
               else {
                 const r = await runtime.call(op.alias, op.method, op.path, op.body, {
                   ...(op.options.headers ? { headers: op.options.headers } : {}),

@@ -1,0 +1,34 @@
+{
+  "summary": "Checkout confirmation and order state for DEMO-5.",
+  "cases": [
+    {
+      "id": "TC-01",
+      "title": "Order placed in the UI empties the cart",
+      "type": "web",
+      "priority": "high",
+      "source": [
+        { "kind": "ac", "id": "AC1" },
+        { "kind": "ac", "id": "AC2" }
+      ],
+      "data": { "user": "user:standard" },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "POST /cart/lines with one mug",
+          "expect": { "description": "Line added", "status": 201 }
+        },
+        {
+          "id": "S2",
+          "action": "Accept the terms and place the order in the UI",
+          "expect": { "description": "Toast shown", "texts": ["Order placed"] }
+        },
+        {
+          "id": "S3",
+          "action": "GET /cart",
+          "expect": { "description": "Cart is empty", "status": 200, "fields": { "lines.length": 0 } }
+        }
+      ],
+      "evidence": ["screenshot", "request", "response"]
+    }
+  ]
+}

@@ -16,15 +16,15 @@ Users can see what the tester did and when, and teams can monitor QAJitsu over t
 
 ### REQ-OBS-02 · Viewing logs
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 5
 - Related: REQ-PUB-06
 
 **Acceptance criteria**
 
-- [ ] AC1: `qajitsu logs <TICKET> [--run] [--follow] [--stage] [--agent] [--case]`.
-- [ ] AC2: `report.html` has a timeline tab; selecting an event shows the screenshot or request/response from that moment.
+- [x] AC1: `qajitsu logs <TICKET> [--run] [--follow] [--stage] [--agent] [--case]`.
+- [x] AC2: `report.html` has a timeline tab; selecting an event shows the screenshot or request/response from that moment.
 
 ### REQ-OBS-03 · OpenTelemetry export
 
@@ -64,7 +64,7 @@ Users can see what the tester did and when, and teams can monitor QAJitsu over t
 
 ### REQ-OBS-06 · Transition graph per run
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: 5
 - Related: REQ-OBS-02
@@ -73,9 +73,9 @@ Built by code from the journal, never drawn by an agent.
 
 **Acceptance criteria**
 
-- [ ] AC1: Nodes are screens/pages (web: route pattern, mobile: screen/activity) and API endpoints (OpenAPI template); edges are tester actions.
-- [ ] AC2: Edges coloured by outcome (passed, failed); shown in `report.html`.
-- [ ] AC3: URL normalisation to route patterns (`/product/:id`) through router information or rules in `.qa/`.
+- [x] AC1: Nodes are screens/pages (web: route pattern, mobile: screen/activity) and API endpoints (OpenAPI template); edges are tester actions.
+- [x] AC2: Edges coloured by outcome (passed, failed); shown in `report.html`.
+- [x] AC3: URL normalisation to route patterns (`/product/:id`) through router information or rules in `.qa/`.
 
 ### REQ-OBS-07 · Application map across runs
 

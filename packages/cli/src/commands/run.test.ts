@@ -119,6 +119,14 @@ describe("qajitsu run (stage 3: REQ-EXEC-*, REQ-ENV-*, REQ-VER-07, REQ-EVD-05)",
     expect(gates.ok).toBe(true);
     const html = await readFile(join(runDir, "report", "report.html"), "utf8");
     expect(html).not.toContain(PASSWORD);
+    // REQ-OBS-02/AC2 + REQ-OBS-06/AC2: timeline linked to evidence, transition graph from results.
+    expect(html).toContain("<h2>Timeline</h2>");
+    expect(html).toMatch(/<a href="#ev-TC-01_attempt-1_S1-0\d_json">verify<\/a>/);
+    expect(html).toContain("<h2>Transition graph</h2>");
+    const graph = JSON.parse(await readFile(join(runDir, "report", "graph.json"), "utf8")) as {
+      nodes: { id: string }[];
+    };
+    expect(graph.nodes.map((n) => n.id)).toContain("api:GET /cart");
     const events = parseEventLines(await readFile(join(runDir, "journal", "events.jsonl"), "utf8"));
     expect(events.invalidLines).toEqual([]);
     expect(events.events.map((e) => e.event)).toEqual(

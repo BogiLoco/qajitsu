@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import type { Plan } from "@qajitsu/core";
+import type { BrowserFactory } from "./sandbox.js";
 import {
   createCaseRuntime,
   createMasker,
@@ -21,6 +22,8 @@ export interface AttemptInput {
   /** Values the child's masker must hide (session tokens, passwords). */
   readonly secrets: readonly string[];
   readonly timeoutMs: number;
+  /** Raw session tokens per alias for the browser (never sent to the sandbox; REQ-CFG-07). */
+  readonly sessions?: Readonly<Record<string, string>>;
 }
 
 /** Shape a spec module must export. */
@@ -52,12 +55,15 @@ const withTimeout = async <T>(promise: Promise<T>, ms: number): Promise<T> => {
  * @param input - Attempt settings.
  * @param transport - HTTP transport (Playwright in production).
  * @param now - Clock in milliseconds.
+ * @param browser - Browser factory for web and mixed cases.
  */
 export async function executeAttempt(
   input: AttemptInput,
   transport: ApiTransport,
   now: () => number = Date.now,
+  browser?: BrowserFactory,
 ): Promise<AttemptRecord> {
+  const session = browser?.(input);
   const masker = createMasker({ secrets: input.secrets });
   const runtime = createCaseRuntime({
     plan: input.plan,
@@ -69,7 +75,9 @@ export async function executeAttempt(
     allowedOrigins: input.allowedOrigins,
     accounts: input.accounts,
     now,
+    ...(session ? { ui: session.driver } : {}),
   });
+  let record: AttemptRecord;
   try {
     const mod = (await import(pathToFileURL(input.specFile).href)) as SpecModule;
     if (mod.caseId !== input.caseId)
@@ -77,8 +85,10 @@ export async function executeAttempt(
     if (typeof mod.run !== "function") throw new Error("spec must export async function run(context)");
     const run = mod.run as (context: CaseContext) => Promise<void>;
     await withTimeout(run(runtime.context), input.timeoutMs);
-    return runtime.finish();
+    record = await runtime.finish();
   } catch (error) {
-    return runtime.finish(error);
+    record = await runtime.finish(error);
   }
+  const media = session ? await session.close(record.outcome !== "passed") : [];
+  return { ...record, evidence: [...record.evidence, ...media] };
 }

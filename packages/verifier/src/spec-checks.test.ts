@@ -4,7 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PlanSchema } from "@qajitsu/core";
 import { describe, expect, it } from "vitest";
-import { checkSpecSource, formatSpecProblems, stepsTypesEntry, typecheckSpecs } from "./spec-checks.js";
+import {
+  assertionLockDiff,
+  blockingProblems,
+  checkSpecSource,
+  formatSpecProblems,
+  stepsTypesEntry,
+  typecheckSpecs,
+} from "./spec-checks.js";
 
 const plan = PlanSchema.parse({
   schema: 1,
@@ -137,5 +144,61 @@ describe("static checks of generated specs (REQ-EXEC-03)", () => {
     expect(stepsTypesEntry(() => true)).toMatch(/steps\/dist\/index\.d\.ts$/);
     expect(stepsTypesEntry(() => false)).toMatch(/steps\/src\/index\.ts$/);
     expect(formatSpecProblems([{ check: "lint", message: "m" }])).toBe("lint: m");
+  });
+
+  it("REQ-EXEC-05/AC2: CSS selectors are flagged for review but do not block", () => {
+    const web = readFileSync(
+      new URL("../../../fixtures/specs/demo-4/TC-01.spec.ts", import.meta.url),
+      "utf8",
+    ).replace('"testid:accept-terms"', '"css:#terms"');
+    const webPlan = PlanSchema.parse({
+      schema: 1,
+      ticket: "DEMO-4",
+      version: 1,
+      ...JSON.parse(
+        readFileSync(new URL("../../../fixtures/plans/demo-4-draft.json", import.meta.url), "utf8"),
+      ),
+    });
+    const problems = checkSpecSource(web, "TC-01", webPlan);
+    expect(problems.map((p) => p.check)).toEqual(["review"]);
+    expect(blockingProblems(problems)).toEqual([]);
+  });
+});
+
+describe("assertion lock for the healer (REQ-EXEC-09/AC2)", () => {
+  const original = readFileSync(
+    new URL("../../../fixtures/specs/demo-5/TC-01.spec.ts", import.meta.url),
+    "utf8",
+  );
+  it("allows changed selectors and waits", () => {
+    const healed = original
+      .replace('"testid:place-order"', '"role:button:Place order"')
+      .replace(
+        'await ui.waitFor("testid:toast");',
+        'await ui.waitFor("testid:toast");\n    await ui.waitFor("role:status");',
+      );
+    expect(assertionLockDiff(original, healed)).toEqual([]);
+  });
+  it.each([
+    [
+      "a removed verify",
+      (s: string) => s.replace(/verify\(\s*"S3",\s*"fields\.lines\.length"[\s\S]*?\);\n/, ""),
+    ],
+    [
+      "a changed expectation key",
+      (s: string) => s.replace('plan.expect("TC-01.S3.status")', 'plan.expect("TC-01.S1.status")'),
+    ],
+    ["a literal expected value", (s: string) => s.replace('plan.expect("TC-01.S3.status")', "200")],
+    ["a renamed step", (s: string) => s.replace('step("S2"', 'step("S9"')],
+    [
+      "an added try/catch",
+      (s: string) =>
+        s.replace(
+          'await ui.click("testid:place-order");',
+          'try { await ui.click("testid:place-order"); } catch {}',
+        ),
+    ],
+  ])("rejects %s", (_, mutate) => {
+    expect(assertionLockDiff(original, mutate(original)).length).toBeGreaterThan(0);
   });
 });

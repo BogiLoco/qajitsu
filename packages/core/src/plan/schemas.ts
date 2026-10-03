@@ -68,6 +68,22 @@ export const ExpectationSchema = z.strictObject({
   fields: z.record(z.string(), z.unknown()).optional(),
   /** Texts that must be visible (web/mobile). */
   texts: z.array(z.string()).optional(),
+  /**
+   * Expected state of UI elements by selector (`testid:place-order`, `role:button:Pay`, `label:Email`,
+   * `text:Total`), e.g. `{ "testid:place-order": { "enabled": true } }` (REQ-EXEC-05).
+   */
+  elements: z
+    .record(
+      z.string().regex(/^(testid|role|label|text|css):[^.]+$/, "Selector like testid:place-order (no dots)"),
+      z.strictObject({
+        visible: z.boolean().optional(),
+        enabled: z.boolean().optional(),
+        checked: z.boolean().optional(),
+        text: z.string().optional(),
+        value: z.string().optional(),
+      }),
+    )
+    .optional(),
 });
 
 /** Structured expectation. */

@@ -1,0 +1,21 @@
+{
+  "key": "DEMO-5",
+  "type": "Bug",
+  "status": "Ready for QA",
+  "summary": "Checkout confirmation matches the order state",
+  "description": "After Place order the page shows Order placed only when the order was created. A created order empties the cart.",
+  "acceptanceCriteria": [
+    "Placing an order with accepted terms shows the toast Order placed.",
+    "After a successful order GET /cart returns no lines."
+  ],
+  "labels": ["checkout", "web", "api"],
+  "components": ["shop-web", "shop-api"],
+  "attachments": [],
+  "comments": [
+    {
+      "author": "support",
+      "created": "2026-09-29T15:00:00Z",
+      "body": "Customers saw Order placed but their cart was still full."
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "name": "@qajitsu/adapter-runner-web",
   "version": "0.0.0",
-  "description": "QAJitsu web UI Runner on Playwright Test with screenshots, video and trace.",
+  "description": "QAJitsu web UI runner: the trusted parent drives Playwright with screenshots, video, trace, HAR and console log.",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -18,6 +18,13 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@qajitsu/core": "workspace:*"
+    "@qajitsu/adapter-runner-api": "workspace:*",
+    "@qajitsu/steps": "workspace:*",
+    "playwright-core": "^1.63.0"
+  },
+  "devDependencies": {
+    "@qajitsu/adapter-evidence-local": "workspace:*",
+    "@qajitsu/core": "workspace:*",
+    "@qajitsu/verifier": "workspace:*"
   }
 }

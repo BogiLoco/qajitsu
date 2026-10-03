@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { homedir, userInfo } from "node:os";
 import { createInterface } from "node:readline/promises";
 import { createGitExec } from "@qajitsu/core";
@@ -28,6 +30,53 @@ const program = createProgram(readVersion(), {
           resolve();
         })
         .on("error", reject);
+    }),
+  // Argument arrays only, never a shell string (security rules).
+  openFile: (file: string) =>
+    new Promise<void>((resolve) => {
+      const [cmd, args] =
+        process.platform === "darwin"
+          ? ["open", [file]]
+          : process.platform === "win32"
+            ? ["explorer", [file]]
+            : ["xdg-open", [file]];
+      execFile(cmd, args, () => {
+        resolve();
+      });
+    }),
+  compressVideo: (input: string, output: string) =>
+    new Promise<boolean>((resolve) => {
+      execFile(
+        "ffmpeg",
+        [
+          "-y",
+          "-loglevel",
+          "error",
+          "-i",
+          input,
+          "-vf",
+          "scale=960:-2",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "32",
+          "-preset",
+          "veryfast",
+          "-an",
+          output,
+        ],
+        (error) => {
+          resolve(error === null);
+        },
+      );
+    }),
+  openTrace: (file: string) =>
+    new Promise<void>((resolve) => {
+      // cli.js is the package's bin entry; it is not in the exports map, so resolve it next to package.json.
+      const cli = join(dirname(createRequire(import.meta.url).resolve("playwright-core")), "cli.js");
+      spawn(process.execPath, [cli, "show-trace", file], { stdio: "inherit" }).on("exit", () => {
+        resolve();
+      });
     }),
   ports: {
     env: process.env,

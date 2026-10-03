@@ -1,0 +1,47 @@
+{
+  "summary": "Checkout terms and price format for DEMO-4.",
+  "cases": [
+    {
+      "id": "TC-01",
+      "title": "Place order is enabled after accepting the terms",
+      "type": "web",
+      "priority": "high",
+      "source": [{ "kind": "ac", "id": "AC1" }],
+      "data": { "user": "user:standard" },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "Open the checkout page",
+          "expect": {
+            "description": "Button disabled",
+            "elements": { "testid:place-order": { "enabled": false } }
+          }
+        },
+        {
+          "id": "S2",
+          "action": "Accept the terms",
+          "expect": {
+            "description": "Button enabled",
+            "elements": { "testid:place-order": { "enabled": true } }
+          }
+        }
+      ],
+      "evidence": ["screenshot"]
+    },
+    {
+      "id": "TC-02",
+      "title": "Prices use the Polish format",
+      "type": "web",
+      "priority": "medium",
+      "source": [{ "kind": "ac", "id": "AC2" }],
+      "steps": [
+        {
+          "id": "S1",
+          "action": "Open the products page",
+          "expect": { "description": "Mug costs 24,99 zł", "texts": ["24,99 zł"] }
+        }
+      ],
+      "evidence": ["screenshot"]
+    }
+  ]
+}

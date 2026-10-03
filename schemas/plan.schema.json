@@ -200,6 +200,34 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "elements": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "pattern": "^(testid|role|label|text|css):[^.]+$"
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "visible": {
+                            "type": "boolean"
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "checked": {
+                            "type": "boolean"
+                          },
+                          "text": {
+                            "type": "string"
+                          },
+                          "value": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [

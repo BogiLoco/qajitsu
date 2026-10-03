@@ -13,6 +13,8 @@ export interface CaseAttempt {
   readonly outcome: "passed" | "failed" | "error" | "skipped";
   readonly assertions: readonly AssertionRecord[];
   readonly error?: string | undefined;
+  /** The attempt ran a spec changed by the healer (REQ-EXEC-09). */
+  readonly healed?: boolean | undefined;
 }
 
 /** Everything a runner reports for one test case; statuses are computed from this by code. */

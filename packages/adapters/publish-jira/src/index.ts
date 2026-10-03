@@ -6,6 +6,7 @@
  */
 export { createJiraPublisher, type JiraPublisherConfig } from "./jira-publisher.js";
 export { createFilePublisher } from "./file-publisher.js";
+export { createJiraAttachmentReader, type TicketAttachment } from "./attachments.js";
 
 /** Adapter metadata used by `qajitsu doctor` and the adapter table in the docs. */
 export const ADAPTER = {

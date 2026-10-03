@@ -65,6 +65,9 @@ importers:
       '@qajitsu/adapter-runner-api':
         specifier: workspace:*
         version: link:packages/adapters/runner-api
+      '@qajitsu/adapter-runner-web':
+        specifier: workspace:*
+        version: link:packages/adapters/runner-web
       '@qajitsu/agents':
         specifier: workspace:*
         version: link:packages/agents
@@ -207,9 +210,25 @@ importers:
 
   packages/adapters/runner-web:
     dependencies:
+      '@qajitsu/adapter-runner-api':
+        specifier: workspace:*
+        version: link:../runner-api
+      '@qajitsu/steps':
+        specifier: workspace:*
+        version: link:../../steps
+      playwright-core:
+        specifier: ^1.63.0
+        version: 1.63.0
+    devDependencies:
+      '@qajitsu/adapter-evidence-local':
+        specifier: workspace:*
+        version: link:../evidence-local
       '@qajitsu/core':
         specifier: workspace:*
         version: link:../../core
+      '@qajitsu/verifier':
+        specifier: workspace:*
+        version: link:../../verifier
 
   packages/adapters/secrets-env:
     dependencies:
@@ -276,6 +295,9 @@ importers:
       '@qajitsu/adapter-runner-api':
         specifier: workspace:*
         version: link:../adapters/runner-api
+      '@qajitsu/adapter-runner-web':
+        specifier: workspace:*
+        version: link:../adapters/runner-web
       '@qajitsu/adapter-secrets-env':
         specifier: workspace:*
         version: link:../adapters/secrets-env
@@ -306,6 +328,9 @@ importers:
       pino:
         specifier: ^10.4.0
         version: 10.4.0
+      playwright-core:
+        specifier: ^1.63.0
+        version: 1.63.0
       yaml:
         specifier: 'catalog:'
         version: 2.9.1

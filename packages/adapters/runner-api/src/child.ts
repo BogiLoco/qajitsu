@@ -78,6 +78,21 @@ async function start(m: StartMessage): Promise<void> {
       },
     },
     api: client(undefined),
+    ui: {
+      goto: (path: string) => rpc({ op: "ui", operation: { op: "goto", path } }),
+      click: (selector: string) => rpc({ op: "ui", operation: { op: "click", selector } }),
+      check: (selector: string) => rpc({ op: "ui", operation: { op: "check", selector } }),
+      uncheck: (selector: string) => rpc({ op: "ui", operation: { op: "uncheck", selector } }),
+      fill: (selector: string, value: unknown) =>
+        rpc({ op: "ui", operation: { op: "fill", selector, value: String(value) } }),
+      select: (selector: string, value: unknown) =>
+        rpc({ op: "ui", operation: { op: "select", selector, value: String(value) } }),
+      press: (selector: string, value: unknown) =>
+        rpc({ op: "ui", operation: { op: "press", selector, value: String(value) } }),
+      waitFor: (selector: string, state = "visible") =>
+        rpc({ op: "ui", operation: { op: "waitFor", selector, state } }),
+      as: (alias: string) => rpc({ op: "ui", operation: { op: "as", alias } }),
+    },
     step: async (stepId: string, fn: () => unknown): Promise<void> => {
       await rpc({ op: "beginStep", stepId });
       try {

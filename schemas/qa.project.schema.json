@@ -48,6 +48,46 @@
       ],
       "additionalProperties": false
     },
+    "web": {
+      "default": {
+        "browser": "chromium",
+        "video": "retain-on-failure",
+        "headless": true,
+        "action_timeout_ms": 5000
+      },
+      "type": "object",
+      "properties": {
+        "browser": {
+          "default": "chromium",
+          "type": "string",
+          "enum": [
+            "chromium",
+            "firefox",
+            "webkit"
+          ]
+        },
+        "video": {
+          "default": "retain-on-failure",
+          "type": "string",
+          "enum": [
+            "retain-on-failure",
+            "always",
+            "off"
+          ]
+        },
+        "headless": {
+          "default": true,
+          "type": "boolean"
+        },
+        "action_timeout_ms": {
+          "default": 5000,
+          "type": "integer",
+          "minimum": 500,
+          "maximum": 120000
+        }
+      },
+      "additionalProperties": false
+    },
     "publish": {
       "default": {
         "max_attachment_mb": 10,
@@ -224,7 +264,8 @@
         "allowlist": [],
         "allow_production": false,
         "on_version_mismatch": "warn",
-        "retries": 1
+        "retries": 1,
+        "workers": 1
       },
       "type": "object",
       "properties": {
@@ -261,6 +302,12 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 3
+        },
+        "workers": {
+          "default": 1,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
         }
       },
       "additionalProperties": false

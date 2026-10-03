@@ -129,4 +129,28 @@ describe("http client (REQ-GEN-02)", () => {
     expect(seeOther.calls[1]?.init).toMatchObject({ method: "GET" });
     expect(seeOther.calls[1]?.init.body).toBeUndefined();
   });
+
+  it("follows a cross-origin redirect only when asked, and then without credentials", async () => {
+    const calls: { url: string; headers: unknown }[] = [];
+    const fetch = ((input: string | URL | Request, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : input.toString();
+      calls.push({ url, headers: init?.headers });
+      if (url.startsWith("https://api.example.com"))
+        return Promise.resolve(
+          new Response(null, { status: 302, headers: { location: "https://media.example.org/file?sig=1" } }),
+        );
+      return Promise.resolve(new Response(new Uint8Array([7])));
+    }) as typeof globalThis.fetch;
+    const http = createHttpClient({
+      service: "SVC",
+      baseUrl: "https://api.example.com",
+      headers: () => Promise.resolve({ authorization: "Bearer secret" }),
+      fetch,
+    });
+    await expect(http.bytes("/attachment/1")).rejects.toMatchObject({ code: "SVC_FOREIGN_URL" });
+    expect(await http.bytes("/attachment/1", { anonymousCrossOriginRedirect: true })).toEqual(
+      new Uint8Array([7]),
+    );
+    expect(calls.at(-1)).toEqual({ url: "https://media.example.org/file?sig=1", headers: undefined });
+  });
 });

@@ -109,8 +109,13 @@ export async function loginAccounts(
     readonly resolveSecret: (reference: string) => Promise<string>;
     readonly registerSecret: (value: string) => void;
   },
-): Promise<{ accounts: Record<string, Record<string, string>>; secrets: string[] }> {
+): Promise<{
+  accounts: Record<string, Record<string, string>>;
+  secrets: string[];
+  sessions: Record<string, string>;
+}> {
   const accounts: Record<string, Record<string, string>> = {};
+  const sessions: Record<string, string> = {};
   const secrets: string[] = [];
   const login = env.profile.login;
   for (const [alias, account] of Object.entries(env.profile.accounts)) {
@@ -153,6 +158,7 @@ export async function loginAccounts(
     deps.registerSecret(token);
     secrets.push(token);
     accounts[alias] = { [login.header.toLowerCase()]: login.scheme ? `${login.scheme} ${token}` : token };
+    sessions[alias] = token;
   }
-  return { accounts, secrets };
+  return { accounts, secrets, sessions };
 }

@@ -2,7 +2,13 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Analysis, Plan, TestCase } from "@qajitsu/core";
-import { checkSpecSource, formatSpecProblems, typecheckSpecs, type SpecProblem } from "@qajitsu/verifier";
+import {
+  blockingProblems,
+  checkSpecSource,
+  formatSpecProblems,
+  typecheckSpecs,
+  type SpecProblem,
+} from "@qajitsu/verifier";
 import { generateText, stepCountIs, type ModelMessage } from "ai";
 import { guardTools } from "./loop.js";
 import { untrusted, UNTRUSTED_DATA_RULES, type ChangeContext } from "./context.js";
@@ -73,7 +79,7 @@ const describeCase = (c: TestCase): string =>
  * @returns Every problem found; empty when the spec may run.
  */
 export async function checkSpec(source: string, caseId: string, plan: Plan): Promise<SpecProblem[]> {
-  const problems = checkSpecSource(source, caseId, plan);
+  const problems = blockingProblems(checkSpecSource(source, caseId, plan));
   if (problems.length > 0) return problems;
   const dir = await mkdtemp(join(tmpdir(), "qj-spec-"));
   try {

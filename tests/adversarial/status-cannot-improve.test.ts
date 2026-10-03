@@ -89,3 +89,24 @@ describe("stage-3 integrity review: crashes and missing steps never improve a st
     ).toBe("BLOCKED");
   });
 });
+
+describe("REQ-EXEC-09/AC3: a heal never yields PASSED", () => {
+  it("a healed spec that passes is NEEDS_REVIEW; a healed spec that fails is FAILED", async () => {
+    const { computeStatus } = await import("@qajitsu/verifier");
+    const error = { attempt: 1, outcome: "error" as const, assertions: [], error: "selector timeout" };
+    const ok = { stepId: "S1", field: "status", expected: 200, actual: 200, pass: true };
+    const healedPass = { attempt: 2, outcome: "passed" as const, assertions: [ok], healed: true };
+    const healedFail = {
+      attempt: 2,
+      outcome: "failed" as const,
+      assertions: [{ ...ok, actual: 500, pass: false }],
+      healed: true,
+    };
+    expect(
+      computeStatus({ caseId: "TC-01", attempts: [error, healedPass] }, { evidenceComplete: true }),
+    ).toBe("NEEDS_REVIEW");
+    expect(
+      computeStatus({ caseId: "TC-01", attempts: [error, healedFail] }, { evidenceComplete: true }),
+    ).toBe("FAILED");
+  });
+});

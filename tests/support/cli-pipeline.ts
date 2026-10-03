@@ -3,21 +3,23 @@ import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPlaywrightTransport, executeAttempt, type AttemptExecutor } from "@qajitsu/adapter-runner-api";
+import { createPlaywrightBrowserFactory } from "@qajitsu/adapter-runner-web";
 import { startShop } from "../../examples/demo-shop/api/server.mjs";
 import { createProgram } from "../../packages/cli/src/program.js";
 import { createCliProject, gitExec } from "./cli-project.js";
 import { scriptedModel, type Turn } from "./mock-model.js";
 
 export const DEMO_PASSWORD = "fictional-demo-password";
-const draft = readFileSync(new URL("../../fixtures/plans/demo-1-draft.json", import.meta.url), "utf8");
+const draftOf = (ticket: string): string =>
+  readFileSync(new URL(`../../fixtures/plans/${ticket.toLowerCase()}-draft.json`, import.meta.url), "utf8");
 const analysis = JSON.stringify({
   summary: "Cart API.",
   change_type: ["api"],
   endpoints: [{ method: "GET", path: "/cart", source: [{ kind: "ac", id: "AC1" }] }],
   confidence: "high",
 });
-const specFixture = (id: string): string =>
-  fileURLToPath(new URL(`../../fixtures/specs/demo-1/${id}.spec.ts`, import.meta.url));
+const specFixture = (ticket: string, id: string): string =>
+  fileURLToPath(new URL(`../../fixtures/specs/${ticket.toLowerCase()}/${id}.spec.ts`, import.meta.url));
 
 /** In-process executor for CLI tests (the sandbox has its own e2e tests). */
 export const inProcessExecutor: AttemptExecutor = async (input) => {
@@ -29,15 +31,38 @@ export const inProcessExecutor: AttemptExecutor = async (input) => {
   }
 };
 
+const webBrowser = createPlaywrightBrowserFactory({
+  webSession: { storage: "sessionStorage", key: "token" },
+  actionTimeoutMs: 3000,
+});
+
+/** In-process executor with a browser for web and mixed cases. */
+export const inProcessWebExecutor: AttemptExecutor = async (input) => {
+  const { transport, dispose } = await createPlaywrightTransport({ timeoutMs: 5000 });
+  try {
+    return await executeAttempt(input, transport, Date.now, webBrowser);
+  } finally {
+    await dispose();
+  }
+};
+
 /**
- * A DEMO-1 project with a running demo-shop, ready for `fetch → plan → approve → run` through the
+ * A demo-shop project with a running demo-shop, ready for `fetch → plan → approve → run` through the
  * CLI program (no network beyond localhost, scripted models). Call `cleanup` in afterEach.
  */
-export async function createDemoPipeline(options: { flag?: string } = {}) {
+export async function createDemoPipeline(options: { flag?: string; ticket?: string } = {}) {
+  const ticket = options.ticket ?? "DEMO-1";
+  const web = ticket === "DEMO-4" || ticket === "DEMO-5";
   const shop = await startShop({
     env: { DEMO_USER_PASSWORD: DEMO_PASSWORD, ...(options.flag ? { [options.flag]: "1" } : {}) },
   });
   const { home, project } = await createCliProject(["models: { roles: { default: mock/scripted } }"]);
+  if (ticket !== "DEMO-1") {
+    await copyFile(
+      new URL(`../../examples/demo-shop/tickets/${ticket}.json`, import.meta.url),
+      join(project, "tickets", `${ticket}.json`),
+    );
+  }
   const yaml = join(project, ".qa", "qa.project.yaml");
   await writeFile(
     yaml,
@@ -49,11 +74,16 @@ export async function createDemoPipeline(options: { flag?: string } = {}) {
   await mkdir(join(project, ".qa", "envs"));
   await writeFile(
     join(project, ".qa", "envs", "local.yaml"),
-    `base_url: ${shop.url}\naccounts:\n  user:standard: { username: standard, password: secret://env/DEMO_USER_PASSWORD }\nlogin:\n  path: /auth/login\n  body: { username: "{{username}}", password: "{{password}}" }\n  token_path: token\n`,
+    `base_url: ${shop.url}\nweb_session: { storage: sessionStorage, key: token }\naccounts:\n  user:standard: { username: standard, password: secret://env/DEMO_USER_PASSWORD }\nlogin:\n  path: /auth/login\n  body: { username: "{{username}}", password: "{{password}}" }\n  token_path: token\n`,
   );
   const run = async (
     args: string[],
-    opts: { script?: Turn[]; ask?: string[]; fetch?: typeof globalThis.fetch } = {},
+    opts: {
+      script?: Turn[];
+      ask?: string[];
+      fetch?: typeof globalThis.fetch;
+      compressVideo?: (input: string, output: string) => Promise<boolean>;
+    } = {},
   ) => {
     let out = "";
     let err = "";
@@ -68,6 +98,7 @@ export async function createDemoPipeline(options: { flag?: string } = {}) {
       setExitCode: (c) => (exitCode = c),
       user: "qa-lead",
       ...(opts.ask ? { ask: () => Promise.resolve(answers.shift() ?? "") } : {}),
+      ...(opts.compressVideo ? { compressVideo: opts.compressVideo } : {}),
       ports: {
         env: { DEMO_USER_PASSWORD: DEMO_PASSWORD },
         home,
@@ -76,22 +107,22 @@ export async function createDemoPipeline(options: { flag?: string } = {}) {
         fetch: opts.fetch ?? globalThis.fetch,
         gitExec,
         extraModels: { mock: () => model.mock },
-        executor: inProcessExecutor,
+        executor: web ? inProcessWebExecutor : inProcessExecutor,
       },
     })
       .exitOverride()
       .parseAsync(["node", "qj", ...args]);
     return { out, err, exitCode };
   };
-  const runDir = join(home, "runs", "DEMO-1", "20261003-1046-aaaa");
+  const runDir = join(home, "runs", ticket, "20261003-1046-aaaa");
   /** fetch, plan, approve, copy fixture specs and run. */
   const executed = async () => {
-    await run(["fetch", "DEMO-1"]);
-    await run(["plan", "DEMO-1"], { script: [{ text: analysis }, { text: draft }] });
-    await run(["approve", "DEMO-1"]);
-    for (const id of ["TC-01", "TC-02"])
-      await copyFile(specFixture(id), join(runDir, "specs", `${id}.spec.ts`));
-    return run(["run", "DEMO-1"]);
+    await run(["fetch", ticket, ...(ticket === "DEMO-1" ? [] : ["--ref", "shop=main"])]);
+    await run(["plan", ticket], { script: [{ text: analysis }, { text: draftOf(ticket) }] });
+    await run(["approve", ticket]);
+    const ids = (JSON.parse(draftOf(ticket)) as { cases: { id: string }[] }).cases.map((c) => c.id);
+    for (const id of ids) await copyFile(specFixture(ticket, id), join(runDir, "specs", `${id}.spec.ts`));
+    return run(["run", ticket]);
   };
   const cleanup = async () => {
     await shop.close();

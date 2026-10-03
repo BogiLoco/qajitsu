@@ -17,16 +17,16 @@ What proof QAJitsu collects per test type and how results are summarised.
 
 ### REQ-EVD-02 · Web evidence
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 5
 - Related: REQ-EXEC-05
 
 **Acceptance criteria**
 
-- [ ] AC1: Screenshot after every step.
-- [ ] AC2: On failure: full-page screenshot, DOM snapshot, video and Playwright trace.
-- [ ] AC3: Browser console log and HAR per case.
+- [x] AC1: Screenshot after every step.
+- [x] AC2: On failure: full-page screenshot, DOM snapshot, video and Playwright trace.
+- [x] AC3: Browser console log and HAR per case.
 
 ### REQ-EVD-03 · Mobile evidence
 
@@ -56,7 +56,7 @@ What proof QAJitsu collects per test type and how results are summarised.
 
 ### REQ-EVD-05 · Report formats
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 3
 - Related: REQ-EVD-04
@@ -65,16 +65,16 @@ What proof QAJitsu collects per test type and how results are summarised.
 
 - [x] AC1: `matrix.md` (basis of the Jira comment).
 - [x] AC2: `matrix.csv` and `matrix.xlsx`.
-- [ ] AC3: `report.html`: one self-contained file with matrix, steps, screenshots, video player and trace links.
+- [x] AC3: `report.html`: one self-contained file with matrix, steps, screenshots, video player and trace links.
 
 ### REQ-EVD-06 · Media policy
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: 5
 - Related: REQ-PUB-02
 
 **Acceptance criteria**
 
-- [ ] AC1: Video `retain-on-failure` by default, `always` configurable.
-- [ ] AC2: Videos compressed with ffmpeg before upload to fit Jira attachment limits.
+- [x] AC1: Video `retain-on-failure` by default, `always` configurable.
+- [x] AC2: Videos compressed with ffmpeg before upload to fit Jira attachment limits.

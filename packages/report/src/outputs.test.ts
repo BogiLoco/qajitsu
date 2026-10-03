@@ -174,3 +174,20 @@ describe("summary validation (REQ-VER-08/AC2)", () => {
     );
   });
 });
+
+describe("unzip", () => {
+  it("round-trips zip() and rejects unsafe entry names", async () => {
+    const { zip, unzip } = await import("./zip.js");
+    const enc = (s: string) => new TextEncoder().encode(s);
+    const archive = zip([
+      { name: "evidence/a.json", data: enc("{}") },
+      { name: "report/report.html", data: enc("<html>") },
+    ]);
+    expect(unzip(archive).map((e) => [e.name, Buffer.from(e.data).toString()])).toEqual([
+      ["evidence/a.json", "{}"],
+      ["report/report.html", "<html>"],
+    ]);
+    expect(() => unzip(zip([{ name: "../../etc/passwd", data: enc("x") }]))).toThrow(/unsafe/);
+    expect(() => unzip(enc("not a zip at all, definitely not"))).toThrow(/not a ZIP/);
+  });
+});

@@ -1,0 +1,21 @@
+{
+  "key": "DEMO-4",
+  "type": "Story",
+  "status": "Ready for QA",
+  "summary": "Checkout page and Polish price format",
+  "description": "Shoppers accept the terms on the checkout page before they can place an order. Prices are shown in Polish format.",
+  "acceptanceCriteria": [
+    "The Place order button is disabled until the terms are accepted, then enabled.",
+    "Prices on the products page use the pl-PL format with the currency, e.g. 24,99 zł."
+  ],
+  "labels": ["checkout", "web"],
+  "components": ["shop-web"],
+  "attachments": [],
+  "comments": [
+    {
+      "author": "designer",
+      "created": "2026-09-28T09:00:00Z",
+      "body": "The button uses data-testid place-order; the checkbox is accept-terms."
+    }
+  ]
+}

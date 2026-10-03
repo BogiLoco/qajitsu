@@ -40,6 +40,10 @@ export const EnvProfileSchema = z.strictObject({
     )
     .default({}),
   login: LoginSchema.optional(),
+  /** Where the web app keeps the session token; the framework sets it for `ui.as(alias)` (REQ-CFG-07). */
+  web_session: z
+    .strictObject({ storage: z.enum(["sessionStorage", "localStorage"]), key: z.string().min(1) })
+    .optional(),
   /** Feature flags of this environment, available to plans and specs as data. */
   flags: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}),
 });

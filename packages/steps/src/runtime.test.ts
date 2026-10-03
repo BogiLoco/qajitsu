@@ -73,7 +73,7 @@ describe("case runtime (REQ-EXEC-02, REQ-EVD-01, REQ-CFG-06)", () => {
     });
     expect(sent[0]?.url).toBe("http://127.0.0.1:3000/cart?verbose=1");
     expect(sent[0]?.headers["authorization"]).toBe(`Bearer ${TOKEN}`);
-    const record = finish();
+    const record = await finish();
     expect(record.outcome).toBe("passed");
     expect(record.steps).toEqual([{ id: "S1", ok: true }]);
     expect(record.assertions).toEqual([
@@ -81,7 +81,7 @@ describe("case runtime (REQ-EXEC-02, REQ-EVD-01, REQ-CFG-06)", () => {
       { stepId: "S1", field: "fields.total", expected: 1.01, actual: 1.01, pass: true },
     ]);
     expect(record.evidence).toHaveLength(1);
-    const file = JSON.parse(record.evidence[0]!.content) as Record<string, unknown>;
+    const file = JSON.parse(String(record.evidence[0]!.content)) as Record<string, unknown>;
     expect(record.evidence[0]!.name).toBe("S1-01.json");
     expect(file).toMatchObject({
       method: "GET",
@@ -101,7 +101,7 @@ describe("case runtime (REQ-EXEC-02, REQ-EVD-01, REQ-CFG-06)", () => {
         throw new Error(`boom ${TOKEN}`);
       }),
     ).rejects.toThrow();
-    const record = finish(new Error(`boom ${TOKEN}`));
+    const record = await finish(new Error(`boom ${TOKEN}`));
     expect(record.outcome).toBe("error");
     expect(JSON.stringify(record)).not.toContain(TOKEN);
     expect(JSON.stringify(record)).not.toContain("pw-plain");
@@ -113,7 +113,7 @@ describe("case runtime (REQ-EXEC-02, REQ-EVD-01, REQ-CFG-06)", () => {
       const res = await context.api.get("/cart");
       context.verify("S1", "fields.total", res.json("total"), context.plan.expect("TC-01.S1.fields.total"));
     });
-    const record = finish(new Error("later crash"));
+    const record = await finish(new Error("later crash"));
     expect(record.outcome).toBe("failed");
     expect(record.error).toBe("later crash");
   });
@@ -155,7 +155,7 @@ describe("case runtime (REQ-EXEC-02, REQ-EVD-01, REQ-CFG-06)", () => {
       expect(del.json()).toBeUndefined();
     });
     expect(sent.map((r) => r.method)).toEqual(["PUT", "PATCH", "DELETE"]);
-    expect(finish().evidence.map((e) => e.name)).toEqual(["S1-01.json", "S1-02.json", "S1-03.json"]);
+    expect((await finish()).evidence.map((e) => e.name)).toEqual(["S1-01.json", "S1-02.json", "S1-03.json"]);
   });
 
   it("refuses a case that is not in the approved plan", () => {
@@ -182,7 +182,7 @@ describe("case runtime (REQ-EXEC-02, REQ-EVD-01, REQ-CFG-06)", () => {
       context.verify("S1", "fields.total", 1.01, 1.01);
       context.verify("S1", "status", 500, 500);
     });
-    expect(finish().assertions).toEqual([
+    expect((await finish()).assertions).toEqual([
       { stepId: "S1", field: "fields.total", expected: 1.01, actual: 1.02, pass: false },
       { stepId: "S1", field: "status", expected: 200, actual: 200, pass: true },
     ]);
@@ -263,13 +263,11 @@ describe("case runtime (REQ-EXEC-02, REQ-EVD-01, REQ-CFG-06)", () => {
     await expect(runtime.call("user:ghost", "GET", "/banner", undefined, {})).rejects.toThrow(
       /Unknown account alias 'user:ghost'/,
     );
-    runtime.verify("S1", "texts.0");
-    runtime.verify("S1", "texts.1");
-    expect(() => {
-      runtime.endStep("S9");
-    }).toThrow(/was not running/);
-    runtime.endStep("S1");
-    expect(runtime.finish("plain string failure")).toMatchObject({
+    await runtime.verify("S1", "texts.0");
+    await runtime.verify("S1", "texts.1");
+    await expect(runtime.endStep("S9")).rejects.toThrow(/was not running/);
+    await runtime.endStep("S1");
+    expect(await runtime.finish("plain string failure")).toMatchObject({
       outcome: "failed",
       error: "plain string failure",
       assertions: [
@@ -277,6 +275,23 @@ describe("case runtime (REQ-EXEC-02, REQ-EVD-01, REQ-CFG-06)", () => {
         { field: "texts.1", actual: "(text not found in the response)", pass: false },
       ],
     });
-    expect(setup().finish(42).error).toBe("non-Error value thrown");
+    expect((await setup().finish(42)).error).toBe("non-Error value thrown");
+  });
+
+  it("REQ-VER-02: a value missing from the response is recorded as (absent), so the record stays valid JSON", async () => {
+    const { context, finish } = setup({ "GET /cart": { status: 200, body: {} } });
+    await context.step("S1", async () => {
+      await context.api.get("/cart");
+      context.verify("S1", "fields.total");
+    });
+    const record = await finish();
+    expect(record.assertions[0]).toEqual({
+      stepId: "S1",
+      field: "fields.total",
+      expected: 1.01,
+      actual: "(absent)",
+      pass: false,
+    });
+    expect(JSON.parse(JSON.stringify(record.assertions[0]))).toHaveProperty("actual", "(absent)");
   });
 });

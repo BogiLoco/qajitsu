@@ -109,6 +109,27 @@
       ],
       "additionalProperties": false
     },
+    "web_session": {
+      "type": "object",
+      "properties": {
+        "storage": {
+          "type": "string",
+          "enum": [
+            "sessionStorage",
+            "localStorage"
+          ]
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "storage",
+        "key"
+      ],
+      "additionalProperties": false
+    },
     "flags": {
       "default": {},
       "type": "object",

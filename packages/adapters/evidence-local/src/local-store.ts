@@ -25,7 +25,7 @@ const EntrySchema = z.strictObject({
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
   caseId: z.string(),
   stepId: z.string().optional(),
-  kind: z.enum(["request", "response", "screenshot", "video", "trace", "log", "har", "other"]),
+  kind: z.enum(["request", "response", "screenshot", "video", "trace", "log", "har", "dom", "other"]),
   bytes: z.number().int().nonnegative(),
 });
 

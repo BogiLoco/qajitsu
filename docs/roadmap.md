@@ -90,7 +90,7 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 - [REQ-VER-08](requirements/verification.md#req-ver-08--computed-numbers-and-validated-summary) Computed numbers and validated summary (must, implemented, AC 2/2)
 - [REQ-EVD-01](requirements/evidence.md#req-evd-01--api-evidence) API evidence (must, implemented, AC 3/3)
 - [REQ-EVD-04](requirements/evidence.md#req-evd-04--test-matrix) Test matrix (must, implemented, AC 3/3)
-- [REQ-EVD-05](requirements/evidence.md#req-evd-05--report-formats) Report formats (must, in-progress, AC 2/3)
+- [REQ-EVD-05](requirements/evidence.md#req-evd-05--report-formats) Report formats (must, implemented, AC 3/3)
 - [REQ-NFR-04](requirements/non-functional.md#req-nfr-04--framework-self-test) Framework self-test (must, in-progress, AC 1/2)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
@@ -104,7 +104,7 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 <!-- req-stage:4 -->
 - [REQ-VER-10](requirements/verification.md#req-ver-10--human-preview-before-publishing) Human preview before publishing (must, implemented, AC 2/2)
 - [REQ-PUB-01](requirements/publishing.md#req-pub-01--jira-comment) Jira comment (must, implemented, AC 4/4)
-- [REQ-PUB-02](requirements/publishing.md#req-pub-02--attachments) Attachments (must, in-progress, AC 1/3)
+- [REQ-PUB-02](requirements/publishing.md#req-pub-02--attachments) Attachments (must, in-progress, AC 2/3)
 - [REQ-PUB-03](requirements/publishing.md#req-pub-03--jira-cloud-and-data-center) Jira Cloud and Data Center (should, implemented, AC 2/2)
 - [REQ-PUB-04](requirements/publishing.md#req-pub-04--idempotent-publishing) Idempotent publishing (must, implemented, AC 2/2)
 <!-- /req-stage -->
@@ -117,15 +117,15 @@ without touching assertions, `qj logs` and the report timeline show what happene
 
 <!-- prettier-ignore-start -->
 <!-- req-stage:5 -->
-- [REQ-EXEC-05](requirements/execution.md#req-exec-05--web-ui-testing) Web UI testing (must, accepted, AC 0/3)
-- [REQ-EXEC-07](requirements/execution.md#req-exec-07--mixed-cases) Mixed cases (should, accepted, AC 0/1)
-- [REQ-EXEC-09](requirements/execution.md#req-exec-09--healer-limited-to-selectors-and-waits) Healer limited to selectors and waits (must, accepted, AC 0/3)
-- [REQ-EXEC-10](requirements/execution.md#req-exec-10--parallelism) Parallelism (should, accepted, AC 0/2)
-- [REQ-EVD-02](requirements/evidence.md#req-evd-02--web-evidence) Web evidence (must, accepted, AC 0/3)
-- [REQ-EVD-06](requirements/evidence.md#req-evd-06--media-policy) Media policy (should, accepted, AC 0/2)
-- [REQ-PUB-06](requirements/publishing.md#req-pub-06--failure-videos-and-evidence-for-the-user) Failure videos and evidence for the user (must, accepted, AC 0/3)
-- [REQ-OBS-02](requirements/observability.md#req-obs-02--viewing-logs) Viewing logs (must, accepted, AC 0/2)
-- [REQ-OBS-06](requirements/observability.md#req-obs-06--transition-graph-per-run) Transition graph per run (should, accepted, AC 0/3)
+- [REQ-EXEC-05](requirements/execution.md#req-exec-05--web-ui-testing) Web UI testing (must, in-progress, AC 2/3)
+- [REQ-EXEC-07](requirements/execution.md#req-exec-07--mixed-cases) Mixed cases (should, implemented, AC 1/1)
+- [REQ-EXEC-09](requirements/execution.md#req-exec-09--healer-limited-to-selectors-and-waits) Healer limited to selectors and waits (must, implemented, AC 3/3)
+- [REQ-EXEC-10](requirements/execution.md#req-exec-10--parallelism) Parallelism (should, in-progress, AC 1/2)
+- [REQ-EVD-02](requirements/evidence.md#req-evd-02--web-evidence) Web evidence (must, implemented, AC 3/3)
+- [REQ-EVD-06](requirements/evidence.md#req-evd-06--media-policy) Media policy (should, implemented, AC 2/2)
+- [REQ-PUB-06](requirements/publishing.md#req-pub-06--failure-videos-and-evidence-for-the-user) Failure videos and evidence for the user (must, implemented, AC 3/3)
+- [REQ-OBS-02](requirements/observability.md#req-obs-02--viewing-logs) Viewing logs (must, implemented, AC 2/2)
+- [REQ-OBS-06](requirements/observability.md#req-obs-06--transition-graph-per-run) Transition graph per run (should, implemented, AC 3/3)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 

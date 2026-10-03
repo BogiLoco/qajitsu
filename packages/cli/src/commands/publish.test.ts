@@ -166,4 +166,113 @@ describe("qajitsu publish (REQ-PUB-01..04, REQ-VER-10)", () => {
     await executed();
     expect((await run(["publish", "DEMO-1"], { ask: ["n"] })).exitCode).toBe(2);
   });
+
+  it("REQ-PUB-06/AC1+AC2: qj evidence opens the report; --trace needs a failed case trace", async () => {
+    const { runDir, executed, project, home } = await pipeline();
+    await executed();
+    const { runEvidence } = await import("./evidence.js");
+    const opened: string[] = [];
+    const io = { write: () => undefined, writeError: () => undefined, cwd: project };
+    const ports = {
+      env: {},
+      home,
+      now: () => new Date(),
+      random: Math.random,
+      fetch: globalThis.fetch,
+      gitExec: () => Promise.resolve({ stdout: "", stderr: "" }),
+    };
+    const openPorts = {
+      openFile: (f: string) => (opened.push(f), Promise.resolve()),
+      openTrace: (f: string) => (opened.push(`trace:${f}`), Promise.resolve()),
+    };
+    expect(await runEvidence("DEMO-1", {}, io, ports, openPorts)).toBe(0);
+    expect(opened).toEqual([join(runDir, "report", "report.html")]);
+    expect(await runEvidence("DEMO-1", { trace: "TC-01" }, io, ports, openPorts)).toBe(3);
+    expect(await runEvidence("DEMO-1", { open: false }, io, ports, openPorts)).toBe(0);
+    expect(opened).toHaveLength(1);
+  });
+
+  it("REQ-PUB-06/AC3: qj pull downloads the evidence zip of a run from Jira and verifies the manifest", async () => {
+    const { run, executed, project, home } = await pipeline();
+    await executed();
+    expect((await run(["publish", "DEMO-1", "--auto-publish"])).exitCode).toBe(0);
+    const { readFile: read } = await import("node:fs/promises");
+    const zipBytes = await read(
+      join(home, "runs", "DEMO-1", "20261003-1046-aaaa", "report", "DEMO-1_20261003-1046-aaaa_evidence.zip"),
+    );
+    const yaml = join(project, ".qa", "qa.project.yaml");
+    await writeFile(
+      yaml,
+      (await readFile(yaml, "utf8")).replace(
+        "jira: { type: file, tickets_dir: ../tickets, project_key: DEMO }",
+        "jira: { type: cloud, base_url: 'https://jira.example.com', email: secret://env/JIRA_EMAIL, token: secret://env/JIRA_TOKEN, project_key: DEMO }",
+      ),
+    );
+    await writeFile(
+      join(project, ".env.local"),
+      "JIRA_EMAIL=qa@example.com\nJIRA_TOKEN=jira-cloud-token-123456\n",
+    );
+    const seen: string[] = [];
+    const fakeJira: typeof globalThis.fetch = (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      seen.push(
+        `${url.host}${url.pathname} auth=${String(Boolean((init?.headers as Record<string, string> | undefined)?.["authorization"]))}`,
+      );
+      if (url.pathname === "/rest/api/3/issue/DEMO-1") {
+        return Promise.resolve(
+          Response.json({
+            fields: {
+              attachment: [
+                {
+                  id: 9,
+                  filename: "DEMO-1_20261003-1046-aaaa_evidence.zip",
+                  content: "https://jira.example.com/rest/api/3/attachment/content/9",
+                },
+              ],
+            },
+          }),
+        );
+      }
+      if (url.pathname === "/rest/api/3/attachment/content/9")
+        return Promise.resolve(
+          new Response(null, { status: 302, headers: { location: "https://media.example.org/blob?sig=x" } }),
+        );
+      return Promise.resolve(new Response(zipBytes));
+    };
+    const pulled = await run(["pull", "DEMO-1", "--run", "20261003-1046-aaaa"], { fetch: fakeJira });
+    expect(pulled.err).toBe("");
+    expect(pulled.out).toContain("Manifest verified");
+    expect(seen.at(-1)).toBe("media.example.org/blob auth=false");
+    expect(
+      await read(join(home, "runs", "DEMO-1", "20261003-1046-aaaa-pulled", "report", "report.html"), "utf8"),
+    ).toContain("DEMO-1 test report");
+    expect((await run(["pull", "DEMO-1", "--run", "20261003-1046-zzzz"], { fetch: fakeJira })).err).toContain(
+      "[PULL_NOT_FOUND]",
+    );
+  });
+
+  it("REQ-PUB-02/AC2 + REQ-EVD-06/AC2: failure screenshots and the compressed video of a web failure are attached individually", async () => {
+    const p = await createDemoPipeline({ ticket: "DEMO-4", flag: "BUG_CHECKOUT_BUTTON_DISABLED" });
+    cleanups.push(p.cleanup);
+    expect((await p.executed()).exitCode).toBe(1);
+    const yaml = join(p.project, ".qa", "qa.project.yaml");
+    await writeFile(yaml, `${await readFile(yaml, "utf8")}\npublish: { max_attachment_mb: 0.01 }\n`);
+    const compressed: string[] = [];
+    const result = await p.run(["publish", "DEMO-4", "--auto-publish"], {
+      compressVideo: async (input, output) => {
+        compressed.push(input);
+        await writeFile(output, "small");
+        return true;
+      },
+    });
+    expect(result.exitCode).toBe(0);
+    const record = JSON.parse(await readFile(join(p.runDir, "run.json"), "utf8")) as PublishData;
+    const names = record.data.publish.attachmentNames;
+    expect(names).toEqual(
+      expect.arrayContaining(["TC-01_case_failure.png", "TC-01_S2_S2.png", "TC-01_case_video.mp4"]),
+    );
+    expect(compressed.length).toBeGreaterThan(0);
+    const adf = await readFile(join(p.runDir, "report", "published", "jira-comment.adf.json"), "utf8");
+    expect(adf).toContain("TC-01_S2_S2.png");
+  }, 120_000);
 });

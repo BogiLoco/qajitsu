@@ -1,4 +1,4 @@
-import { deflateRawSync } from "node:zlib";
+import { deflateRawSync, inflateRawSync } from "node:zlib";
 
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
@@ -65,4 +65,46 @@ export function zip(files: readonly { readonly name: string; readonly data: Uint
   end.writeUInt32LE(centralSize, 12);
   end.writeUInt32LE(offset, 16);
   return new Uint8Array(Buffer.concat([...local, ...central, end]));
+}
+
+/**
+ * Reads a ZIP archive (stored or deflated entries). Entry names that are absolute or contain `..` are
+ * rejected, so an archive can never write outside its target folder (zip-slip).
+ *
+ * @param archive - ZIP bytes.
+ * @returns Entries in archive order.
+ * @throws {Error} For a malformed archive or an unsafe entry name.
+ */
+export function unzip(archive: Uint8Array): { name: string; data: Uint8Array }[] {
+  const buf = Buffer.from(archive);
+  let end = -1;
+  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65_557); i -= 1) {
+    if (buf.readUInt32LE(i) === 0x06054b50) {
+      end = i;
+      break;
+    }
+  }
+  if (end < 0) throw new Error("not a ZIP archive");
+  const count = buf.readUInt16LE(end + 10);
+  let offset = buf.readUInt32LE(end + 16);
+  const out: { name: string; data: Uint8Array }[] = [];
+  for (let n = 0; n < count; n += 1) {
+    if (buf.readUInt32LE(offset) !== 0x02014b50) throw new Error("corrupt ZIP central directory");
+    const method = buf.readUInt16LE(offset + 10);
+    const compressed = buf.readUInt32LE(offset + 20);
+    const nameLength = buf.readUInt16LE(offset + 28);
+    const extraLength = buf.readUInt16LE(offset + 30);
+    const commentLength = buf.readUInt16LE(offset + 32);
+    const local = buf.readUInt32LE(offset + 42);
+    const name = buf.subarray(offset + 46, offset + 46 + nameLength).toString("utf8");
+    if (name.startsWith("/") || name.includes("\\") || name.split("/").some((s) => s === ".."))
+      throw new Error(`unsafe ZIP entry name '${name}'`);
+    const dataStart = local + 30 + buf.readUInt16LE(local + 26) + buf.readUInt16LE(local + 28);
+    const raw = buf.subarray(dataStart, dataStart + compressed);
+    const data = method === 0 ? raw : method === 8 ? inflateRawSync(raw) : undefined;
+    if (data === undefined) throw new Error(`unsupported ZIP compression method ${String(method)}`);
+    if (!name.endsWith("/")) out.push({ name, data: new Uint8Array(data) });
+    offset += 46 + nameLength + extraLength + commentLength;
+  }
+  return out;
 }

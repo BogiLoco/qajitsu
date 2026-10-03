@@ -29,12 +29,25 @@ export interface RunCasesOptions {
   readonly login: () => Promise<{
     readonly accounts: AttemptInput["accounts"];
     readonly secrets: readonly string[];
+    readonly sessions?: Readonly<Record<string, string>>;
   }>;
   /** Retries after a failed or errored attempt (REQ-EXEC-08/AC1, default 1). */
   readonly retries?: number;
   readonly timeoutMs?: number;
   readonly events: EventLog;
   readonly now: () => Date;
+  /**
+   * Healer for cases that could not run (selector or wait errors): returns a healed spec, or undefined.
+   * Called at most twice per case; healed attempts are marked and never yield PASSED (REQ-EXEC-09).
+   */
+  readonly heal?: (
+    caseId: string,
+    specFile: string,
+    failed: AttemptRecord,
+    healAttempt: number,
+  ) => Promise<string | undefined>;
+  /** Cases running at the same time (REQ-EXEC-10/AC1, default 1). */
+  readonly workers?: number;
   /** OpenAPI contract of the application; responses that violate it fail the step (REQ-EXEC-04/AC2). */
   readonly contract?: ContractValidator | undefined;
 }
@@ -47,7 +60,7 @@ export function applyContract(record: AttemptRecord, contract: ContractValidator
   if (!contract) return record;
   const violations = record.evidence.flatMap((item) => {
     try {
-      const call = JSON.parse(item.content) as {
+      const call = JSON.parse(typeof item.content === "string" ? item.content : "") as {
         method?: string;
         url?: string;
         response?: { status?: number; body?: unknown };
@@ -69,20 +82,105 @@ export function applyContract(record: AttemptRecord, contract: ContractValidator
   return { ...record, outcome: "failed", assertions: [...record.assertions, ...violations] };
 }
 
+type Attempt = CaseResultFile["attempts"][number];
+
 /**
  * Executes approved cases and writes `results/<case>.json` plus evidence for every attempt
  * (REQ-EXEC-04, REQ-EXEC-08, REQ-EVD-01/AC3). Cases without a spec get a `skipped` attempt (NOT_RUN).
- * Statuses are not decided here: the verifier computes them from these files (invariant 1).
+ * Up to `workers` cases run at the same time (REQ-EXEC-10). Statuses are not decided here: the
+ * verifier computes them from these files (invariant 1).
  *
  * @returns The results per case id.
  */
 export async function runCases(options: RunCasesOptions): Promise<Map<string, CaseResultFile>> {
   const retries = options.retries ?? 1;
   await mkdir(options.resultsDir, { recursive: true });
-  const out = new Map<string, CaseResultFile>();
-  for (const planCase of options.plan.cases) {
-    const spec = options.specs.get(planCase.id);
-    const attempts: CaseResultFile["attempts"] = [];
+  const actor = { kind: "runner", name: "api" } as const;
+
+  const runAttempt = async (
+    caseId: string,
+    spec: string,
+    attempt: number,
+    healed: boolean,
+  ): Promise<{ entry: Attempt; record?: AttemptRecord }> => {
+    const started = options.now();
+    options.events.emit("run", actor, "case.attempt.start", { caseId, attempt, healed });
+    let session;
+    try {
+      session = await options.login();
+    } catch (error) {
+      return {
+        entry: {
+          attempt,
+          outcome: "error",
+          assertions: [],
+          error: `login failed: ${error instanceof Error ? error.message : String(error)}`,
+          steps: [],
+          evidence: [],
+        },
+      };
+    }
+    const executed = await options.executor({
+      specFile: spec,
+      caseId,
+      attempt,
+      plan: options.plan,
+      baseUrl: options.baseUrl,
+      allowedOrigins: options.allowedOrigins,
+      accounts: session.accounts,
+      secrets: session.secrets,
+      ...(session.sessions ? { sessions: session.sessions } : {}),
+      timeoutMs: options.timeoutMs ?? 60_000,
+    });
+    const record = applyContract(executed, options.contract);
+    const evidencePaths: string[] = [];
+    for (const item of record.evidence) {
+      const stored = await options.evidence.put(
+        {
+          path: `${caseId}/attempt-${String(attempt)}/${item.name}`,
+          caseId,
+          stepId: item.stepId,
+          kind: item.kind,
+        },
+        typeof item.content === "string" ? new TextEncoder().encode(item.content) : item.content,
+      );
+      evidencePaths.push(stored.path);
+    }
+    for (const step of record.steps)
+      options.events.emit("run", actor, "step", { caseId, attempt, step: step.id, ok: step.ok });
+    for (const a of record.assertions)
+      options.events.emit("run", actor, "verify", {
+        caseId,
+        attempt,
+        step: a.stepId,
+        field: a.field,
+        pass: a.pass,
+      });
+    options.events.emit("run", actor, "case.attempt.end", {
+      caseId,
+      attempt,
+      outcome: record.outcome,
+      healed,
+    });
+    return {
+      record,
+      entry: {
+        attempt,
+        outcome: record.outcome,
+        assertions: [...record.assertions],
+        ...(record.error === undefined ? {} : { error: record.error }),
+        steps: [...record.steps],
+        evidence: evidencePaths,
+        startedAt: started.toISOString(),
+        durationMs: options.now().getTime() - started.getTime(),
+        ...(healed ? { healed: true } : {}),
+      },
+    };
+  };
+
+  const runCase = async (caseId: string): Promise<CaseResultFile> => {
+    const spec = options.specs.get(caseId);
+    const attempts: Attempt[] = [];
     if (spec === undefined) {
       attempts.push({
         attempt: 1,
@@ -93,97 +191,51 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
         evidence: [],
       });
     } else {
+      let last: AttemptRecord | undefined;
       for (let attempt = 1; attempt <= 1 + retries; attempt += 1) {
-        const started = options.now();
-        options.events.emit("run", { kind: "runner", name: "api" }, "case.attempt.start", {
-          caseId: planCase.id,
-          attempt,
-        });
-        let session;
-        try {
-          session = await options.login();
-        } catch (error) {
-          attempts.push({
-            attempt,
-            outcome: "error",
-            assertions: [],
-            error: `login failed: ${error instanceof Error ? error.message : String(error)}`,
-            steps: [],
-            evidence: [],
-          });
-          continue;
-        }
-        const executed: AttemptRecord = await options.executor({
-          specFile: spec,
-          caseId: planCase.id,
-          attempt,
-          plan: options.plan,
-          baseUrl: options.baseUrl,
-          allowedOrigins: options.allowedOrigins,
-          accounts: session.accounts,
-          secrets: session.secrets,
-          timeoutMs: options.timeoutMs ?? 60_000,
-        });
-        const record = applyContract(executed, options.contract);
-        const evidencePaths: string[] = [];
-        for (const item of record.evidence) {
-          const stored = await options.evidence.put(
-            {
-              path: `${planCase.id}/attempt-${String(attempt)}/${item.name}`,
-              caseId: planCase.id,
-              stepId: item.stepId,
-              kind: item.kind,
-            },
-            new TextEncoder().encode(item.content),
-          );
-          evidencePaths.push(stored.path);
-        }
-        for (const step of record.steps) {
-          options.events.emit("run", { kind: "runner", name: "api" }, "step", {
-            caseId: planCase.id,
-            attempt,
-            step: step.id,
-            ok: step.ok,
-          });
-        }
-        for (const a of record.assertions) {
-          options.events.emit("run", { kind: "runner", name: "api" }, "verify", {
-            caseId: planCase.id,
-            attempt,
-            step: a.stepId,
-            field: a.field,
-            pass: a.pass,
-          });
-        }
-        attempts.push({
-          attempt,
-          outcome: record.outcome,
-          assertions: [...record.assertions],
-          ...(record.error === undefined ? {} : { error: record.error }),
-          steps: [...record.steps],
-          evidence: evidencePaths,
-          startedAt: started.toISOString(),
-          durationMs: options.now().getTime() - started.getTime(),
-        });
-        options.events.emit("run", { kind: "runner", name: "api" }, "case.attempt.end", {
-          caseId: planCase.id,
-          attempt,
-          outcome: record.outcome,
-        });
-        if (record.outcome === "passed") break;
+        const { entry, record } = await runAttempt(caseId, spec, attempt, false);
+        attempts.push(entry);
+        last = record;
+        if (entry.outcome === "passed") break;
+      }
+      // REQ-EXEC-09: only a case that could not run (error, not a failed assertion) is healed.
+      for (let heal = 1; options.heal && last?.outcome === "error" && heal <= 2; heal += 1) {
+        const healedSpec = await options.heal(caseId, spec, last, heal);
+        if (healedSpec === undefined) break;
+        const { entry, record } = await runAttempt(caseId, healedSpec, attempts.length + 1, true);
+        attempts.push(entry);
+        last = record;
       }
     }
     const result = CaseResultFileSchema.parse({
       schema: 1,
-      caseId: planCase.id,
+      caseId,
       runner: "api",
       ...(spec ? { spec } : {}),
       attempts,
     });
-    await writeFile(join(options.resultsDir, `${planCase.id}.json`), `${JSON.stringify(result, null, 2)}\n`, {
+    await writeFile(join(options.resultsDir, `${caseId}.json`), `${JSON.stringify(result, null, 2)}\n`, {
       flag: "wx",
     });
-    out.set(planCase.id, result);
-  }
-  return out;
+    return result;
+  };
+
+  // REQ-EXEC-10/AC1: a pool of workers; each case still runs its attempts in order.
+  const ids = options.plan.cases.map((c) => c.id);
+  const out = new Map<string, CaseResultFile>();
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < ids.length) {
+      const id = ids[next];
+      next += 1;
+      if (id !== undefined) out.set(id, await runCase(id));
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(options.workers ?? 1, ids.length)) }, worker));
+  return new Map(
+    ids.flatMap((id) => {
+      const r = out.get(id);
+      return r ? [[id, r] as const] : [];
+    }),
+  );
 }

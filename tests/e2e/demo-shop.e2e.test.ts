@@ -6,6 +6,7 @@ import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createSandboxExecutor } from "@qajitsu/adapter-runner-api";
+import { createPlaywrightBrowserFactory } from "@qajitsu/adapter-runner-web";
 import { describe, expect, it } from "vitest";
 import { createCliProject, gitExec } from "../support/cli-project.js";
 import { scriptedModel, type Turn } from "../support/mock-model.js";
@@ -97,7 +98,12 @@ async function pipeline(
           fetch: globalThis.fetch,
           gitExec,
           extraModels: { mock: () => model.mock },
-          executor: createSandboxExecutor({ childScript }),
+          executor: createSandboxExecutor({
+            childScript,
+            browser: createPlaywrightBrowserFactory({
+              webSession: { storage: "sessionStorage", key: "token" },
+            }),
+          }),
         },
       })
         .exitOverride()
@@ -136,8 +142,14 @@ describe("demo-shop self-test (REQ-NFR-04/AC1)", () => {
     expect(exitCode).toBe(1);
   });
 
-  it.each(["DEMO-1", "DEMO-2", "DEMO-3"])("%s: every case is PASSED with all bugs off", async (ticket) => {
-    const { exitCode, statuses, out } = await pipeline(ticket, ["TC-01", "TC-02"]);
+  it.each([
+    ["DEMO-1", ["TC-01", "TC-02"]],
+    ["DEMO-2", ["TC-01", "TC-02"]],
+    ["DEMO-3", ["TC-01", "TC-02"]],
+    ["DEMO-4", ["TC-01", "TC-02"]],
+    ["DEMO-5", ["TC-01"]],
+  ] as const)("%s: every case is PASSED with all bugs off", async (ticket, specs) => {
+    const { exitCode, statuses, out } = await pipeline(ticket, specs);
     expect(
       Object.values(statuses).every((s) => s === "PASSED"),
       `${JSON.stringify(statuses)}\n${out}`,

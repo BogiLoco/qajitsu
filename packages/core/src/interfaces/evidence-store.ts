@@ -4,7 +4,7 @@ export interface EvidenceEntry {
   readonly sha256: string;
   readonly caseId: string;
   readonly stepId?: string;
-  readonly kind: "request" | "response" | "screenshot" | "video" | "trace" | "log" | "har" | "other";
+  readonly kind: "request" | "response" | "screenshot" | "video" | "trace" | "log" | "har" | "dom" | "other";
   readonly bytes: number;
 }
 

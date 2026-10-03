@@ -29,6 +29,7 @@
     "@qajitsu/adapter-evidence-local": "workspace:*",
     "@qajitsu/adapter-publish-jira": "workspace:*",
     "@qajitsu/adapter-runner-api": "workspace:*",
+    "@qajitsu/adapter-runner-web": "workspace:*",
     "@qajitsu/adapter-secrets-env": "workspace:*",
     "@qajitsu/adapter-ticket-jira": "workspace:*",
     "@qajitsu/agents": "workspace:*",
@@ -39,6 +40,7 @@
     "@qajitsu/verifier": "workspace:*",
     "commander": "catalog:",
     "pino": "^10.4.0",
+    "playwright-core": "^1.63.0",
     "yaml": "catalog:"
   }
 }

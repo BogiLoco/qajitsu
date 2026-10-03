@@ -35,6 +35,7 @@
     "@eslint/js": "^10.0.1",
     "@qajitsu/adapter-evidence-local": "workspace:*",
     "@qajitsu/adapter-runner-api": "workspace:*",
+    "@qajitsu/adapter-runner-web": "workspace:*",
     "@qajitsu/agents": "workspace:*",
     "@qajitsu/core": "workspace:*",
     "@qajitsu/guard": "workspace:*",

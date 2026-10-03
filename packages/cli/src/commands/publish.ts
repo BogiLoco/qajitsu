@@ -1,4 +1,4 @@
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createFilePublisher, createJiraPublisher } from "@qajitsu/adapter-publish-jira";
 import {
@@ -163,6 +163,7 @@ export async function runPublish(
   io: CommandIO,
   ports: RuntimePorts & ModelPorts,
   user: string,
+  compressVideo?: (input: string, output: string) => Promise<boolean>,
 ): Promise<number> {
   const masker = createMasker();
   try {
@@ -199,6 +200,23 @@ export async function runPublish(
       });
     }
     const limit = project.config.publish.max_attachment_mb * 1_000_000;
+    // REQ-EVD-06/AC2: videos over the limit are compressed (ffmpeg) before upload when possible.
+    for (let i = 0; i < media.length; i += 1) {
+      const item = media[i];
+      if (item?.mimeType !== "video/webm" || item.bytes <= limit || !compressVideo) continue;
+      const output = ws.path("report", "media", `${item.name.replace(/\.webm$/, "")}.mp4`);
+      await mkdir(ws.path("report", "media"), { recursive: true });
+      if (await compressVideo(item.path, output).catch(() => false)) {
+        const bytes = (await stat(output)).size;
+        if (bytes < item.bytes)
+          media[i] = {
+            path: output,
+            name: `${item.name.replace(/\.webm$/, "")}.mp4`,
+            mimeType: "video/mp4",
+            bytes,
+          };
+      }
+    }
     const notes = [evidenceZip, ...media]
       .filter((a) => a.bytes > limit)
       .map(

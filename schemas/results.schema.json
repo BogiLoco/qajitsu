@@ -85,6 +85,9 @@
                 },
                 "error": {
                   "type": "string"
+                },
+                "url": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -103,6 +106,9 @@
           },
           "startedAt": {
             "type": "string"
+          },
+          "healed": {
+            "type": "boolean"
           },
           "durationMs": {
             "type": "number",

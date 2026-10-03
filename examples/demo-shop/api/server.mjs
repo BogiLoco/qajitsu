@@ -5,6 +5,7 @@
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
+import { serveWeb } from "./web.mjs";
 
 /** Seeded bug flags (BUGS.md). */
 export const BUG_FLAGS = [
@@ -12,6 +13,9 @@ export const BUG_FLAGS = [
   "BUG_ORDER_ACCEPTS_NEGATIVE_QTY",
   "BUG_AUTH_EXPIRED_TOKEN_OK",
   "BUG_DISCOUNT_STACKS",
+  "BUG_CHECKOUT_BUTTON_DISABLED",
+  "BUG_PRICE_FORMAT_LOCALE",
+  "BUG_SILENT_500_TOAST",
 ];
 
 const PRODUCTS = [
@@ -81,6 +85,7 @@ export function createShop(options) {
   return async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const route = `${req.method} ${url.pathname}`;
+    if (req.method === "GET" && serveWeb(url.pathname, bugs, res)) return;
     if (route === "GET /health") return json(res, 200, { status: "ok" });
     if (route === "GET /version") return json(res, 200, { sha: options.sha ?? "unknown" });
     if (route === "GET /products") return json(res, 200, PRODUCTS);
@@ -132,6 +137,17 @@ export function createShop(options) {
         quantity: q,
         total: round2(product.price * q),
       });
+    }
+    if (route === "POST /checkout") {
+      const input = await body(req);
+      // BUG-07: the API fails, the UI still reports success (see web.mjs).
+      if (bugs.BUG_SILENT_500_TOAST) return json(res, 500, { error: "INTERNAL" });
+      if (input?.accept_terms !== true) return json(res, 422, { error: "TERMS_NOT_ACCEPTED" });
+      if (s.cart.lines.size === 0) return json(res, 422, { error: "CART_EMPTY" });
+      orderSeq += 1;
+      const order = { id: `O-${String(orderSeq)}`, total: cartView(s.cart).total };
+      s.cart = { lines: new Map(), discounts: [] };
+      return json(res, 201, order);
     }
     return json(res, 404, { error: "NOT_FOUND" });
   };
