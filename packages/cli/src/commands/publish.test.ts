@@ -139,4 +139,31 @@ describe("qajitsu publish (REQ-PUB-01..04, REQ-VER-10)", () => {
     expect(updated.out).toContain("Updated DEMO-1 comment 20001");
     expect(calls.at(-1)).toMatchObject({ method: "PUT", url: "/rest/api/3/issue/DEMO-1/comment/20001" });
   });
+
+  it("stage-4 review: a file in evidence/ that is not in the manifest blocks publishing", async () => {
+    const { run, runDir, executed } = await pipeline();
+    await executed();
+    await writeFile(join(runDir, "evidence", "TC-01", "debug.json"), '{"token":"sneaky"}');
+    const result = await run(["publish", "DEMO-1", "--auto-publish"]);
+    expect(result.exitCode).toBe(3);
+    expect(result.err).toContain("evidence-listed");
+  });
+
+  it("stage-4 review: a manifest entry pointing outside evidence/ is rejected", async () => {
+    const { run, runDir, executed } = await pipeline();
+    await executed();
+    const manifestFile = join(runDir, "evidence", "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestFile, "utf8")) as Record<string, unknown>[];
+    manifest.push({ ...manifest[0], path: "../run.json", kind: "video" });
+    await writeFile(manifestFile, JSON.stringify(manifest));
+    const result = await run(["publish", "DEMO-1", "--auto-publish"]);
+    expect(result.exitCode).toBe(3);
+    expect(result.err).toContain("EVIDENCE_MANIFEST_INVALID");
+  });
+
+  it("stage-4 review: declining the preview is exit code 2 (not published)", async () => {
+    const { run, executed } = await pipeline();
+    await executed();
+    expect((await run(["publish", "DEMO-1"], { ask: ["n"] })).exitCode).toBe(2);
+  });
 });

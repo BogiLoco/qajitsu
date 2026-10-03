@@ -1,5 +1,5 @@
-import { readdir, readFile, stat, writeFile } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { readFile, stat, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { createFilePublisher, createJiraPublisher } from "@qajitsu/adapter-publish-jira";
 import {
   ConfigError,
@@ -50,31 +50,33 @@ const MIME: Record<string, string> = {
   zip: "application/zip",
 };
 
-async function listFiles(dir: string): Promise<string[]> {
-  const out: string[] = [];
-  for (const entry of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...(await listFiles(full)));
-    else if (entry.isFile()) out.push(full);
-  }
-  return out;
-}
-
-/** Builds `<TICKET>_<RUN-ID>_evidence.zip` with evidence, manifest and report (REQ-PUB-02/AC1). */
-async function buildEvidenceZip(session: RunSession): Promise<PublishAttachment> {
-  const { ws } = session;
-  const files = [
-    ...(await listFiles(ws.path("evidence"))),
-    ws.path("report", "report.html"),
-    ws.path("report", "matrix.md"),
-    ws.path("report", "matrix.csv"),
+/**
+ * Builds `<TICKET>_<RUN-ID>_evidence.zip` from the manifest entries, the manifest and the reports only
+ * (REQ-PUB-02/AC1, invariant 7). Every entry is secret-scanned uncompressed before zipping.
+ *
+ * @throws {GateFailedError} `PUBLISH_GATES_FAILED` when an entry contains a registered secret.
+ */
+async function buildEvidenceZip(session: RunSession, v: RunVerdict): Promise<PublishAttachment> {
+  const { ws, masker } = session;
+  const paths = [
+    ...v.manifest.map((m) => `evidence/${m.path}`),
+    "evidence/manifest.json",
+    "report/report.html",
+    "report/matrix.md",
+    "report/matrix.csv",
   ];
   const entries = await Promise.all(
-    files.map(async (f) => ({
-      name: relative(ws.dir, f).split("\\").join("/"),
-      data: new Uint8Array(await readFile(f)),
-    })),
+    paths.map(async (p) => ({ name: p, data: new Uint8Array(await readFile(join(ws.dir, p))) })),
   );
+  const leaking = entries
+    .filter((e) => masker.containsSecret(Buffer.from(e.data).toString("utf8")))
+    .map((e) => e.name);
+  if (leaking.length > 0)
+    throw new GateFailedError(
+      "PUBLISH_GATES_FAILED",
+      `Secret scan failed: ${leaking.join(", ")} contain a secret value.`,
+      {},
+    );
   const name = `${ws.ticket}_${ws.runId}_evidence.zip`;
   const path = ws.path("report", name);
   const data = zip(entries);
@@ -153,7 +155,7 @@ function publisherFor(session: RunSession, ports: RuntimePorts): Publisher {
  * Statuses and gates are recomputed from disk first; nothing is published unless every gate passes
  * and a human confirmed the preview, or auto-publish was chosen explicitly (REQ-VER-07, REQ-VER-10).
  *
- * @returns 0 published, 3 refused or failed.
+ * @returns 0 published, 2 preview declined (not published), 3 refused or failed.
  */
 export async function runPublish(
   rawKey: string,
@@ -179,7 +181,7 @@ export async function runPublish(
         },
       );
     }
-    const evidenceZip = await buildEvidenceZip(session);
+    const evidenceZip = await buildEvidenceZip(session, verdict);
     // Failure screenshots and videos are attached individually so they show without unzipping (REQ-PUB-02/AC2).
     const failing = new Set(
       verdict.cases.filter((c) => c.status === "FAILED" || c.status === "FLAKY").map((c) => c.caseId),
@@ -219,7 +221,6 @@ export async function runPublish(
       [
         { name: "comment (ADF)", text: JSON.stringify(adf) },
         { name: "comment (wiki)", text: wiki },
-        { name: evidenceZip.name, text: (await readFile(evidenceZip.path)).toString("latin1") },
       ],
       (t) => masker.containsSecret(t),
     );
@@ -241,7 +242,7 @@ export async function runPublish(
       events.emit("publish", { kind: "user", name: user }, "publish.preview", { answer });
       if (answer !== "y" && answer !== "yes") {
         io.write("Not published.\n");
-        return 0;
+        return 2;
       }
       mode = "confirmed";
     } else {

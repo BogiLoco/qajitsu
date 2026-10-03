@@ -170,9 +170,20 @@ export async function computeVerdict(session: RunSession, now: () => Date): Prom
     ],
     (t) => masker.containsSecret(t),
   );
+  // Every file under evidence/ must be in the manifest: unlisted files are neither hash-checked nor
+  // secret-scanned, so they would leave the machine unverified (invariants 7 and 8).
+  const listed = new Set(manifest.map((m) => m.path));
+  const unlisted = (await listEvidenceFiles(ws.path("evidence"))).filter(
+    (p) => p !== "manifest.json" && !listed.has(p),
+  );
   const gates: GateResult[] = [
     ...evaluated.gates,
     secretGate,
+    {
+      gate: "evidence-listed",
+      ok: unlisted.length === 0,
+      problems: unlisted.map((p) => `evidence/${p}: not in the manifest`),
+    },
     { gate: "results-valid", ok: malformed.length === 0, problems: malformed },
   ];
   const verdict = combineGates(gates);
@@ -192,6 +203,17 @@ export async function computeVerdict(session: RunSession, now: () => Date): Prom
     ok: verdict.ok,
     failed: verdict.failed,
   };
+}
+
+/** Relative paths of every file under `evidence/`. */
+export async function listEvidenceFiles(dir: string, prefix = ""): Promise<string[]> {
+  const out: string[] = [];
+  for (const entry of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
+    const rel = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
+    if (entry.isDirectory()) out.push(...(await listEvidenceFiles(`${dir}/${entry.name}`, rel)));
+    else out.push(rel);
+  }
+  return out;
 }
 
 /** Writes `report/matrix.md`, `.csv`, `.xlsx`, `report.html` and `gates.json` (REQ-EVD-05). */

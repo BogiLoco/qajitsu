@@ -41,6 +41,14 @@ const ModelProviderSchema = z
     }
   });
 
+/** Credentials are only sent over HTTPS; `http://localhost` stays allowed for local tools (stage-4 review). */
+const SecureUrl = z
+  .url()
+  .refine(
+    (u) => u.startsWith("https://") || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(u),
+    "Use https:// (credentials are sent to this URL)",
+  );
+
 const IdSchema = z.union([z.string().regex(/^\d+$/), z.number().int().positive()]).transform(String);
 
 const CodeHostSchema = z
@@ -50,7 +58,7 @@ const CodeHostSchema = z
     /** Directory with `<path>` repositories for `type: local`; `~/` and paths relative to `.qa/` allowed. */
     root: z.string().min(1).optional(),
     /** Web URL of a self-hosted instance (GitHub Enterprise Server, GitLab self-managed). */
-    base_url: z.url().optional(),
+    base_url: SecureUrl.optional(),
     /** GitHub fine-grained token or GitLab project/group access token (REQ-CTX-02/AC3). */
     token: SecretRef.optional(),
     /** GitHub App installation, as an alternative to a token (REQ-CTX-02/AC3). */
@@ -102,7 +110,7 @@ export const ProjectConfigSchema = z.strictObject({
     .strictObject({
       /** `cloud`: Jira Cloud REST v3; `datacenter`: Jira Data Center REST v2; `file`: ticket JSON files (demo, offline, tests). */
       type: z.enum(["cloud", "datacenter", "file"]).default("cloud"),
-      base_url: z.url().optional(),
+      base_url: SecureUrl.optional(),
       /** Account e-mail for Jira Cloud basic auth, as a secret reference to keep it out of the repo. */
       email: SecretRef.optional(),
       token: SecretRef.optional(),

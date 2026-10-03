@@ -7,8 +7,21 @@ import { z } from "zod";
 /** Manifest file name inside `evidence/`. */
 export const MANIFEST_FILE = "manifest.json";
 
+/** Manifest paths stay inside `evidence/`: relative, no `..` segments, no backslashes. */
+const SafePath = z
+  .string()
+  .min(1)
+  .refine(
+    (p) =>
+      !p.startsWith("/") &&
+      !p.includes("\\") &&
+      !p.split("/").some((s) => s === ".." || s === "." || s === "") &&
+      p !== MANIFEST_FILE,
+    "path must stay inside evidence/",
+  );
+
 const EntrySchema = z.strictObject({
-  path: z.string(),
+  path: SafePath,
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
   caseId: z.string(),
   stepId: z.string().optional(),
