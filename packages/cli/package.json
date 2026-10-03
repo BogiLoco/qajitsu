@@ -1,0 +1,28 @@
+{
+  "name": "@qajitsu/cli",
+  "version": "0.0.0",
+  "description": "QAJitsu command line: qajitsu (alias qj).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "qajitsu": "./dist/bin.js",
+    "qj": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "qajitsu-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@qajitsu/core": "workspace:*",
+    "commander": "catalog:"
+  }
+}

@@ -1,0 +1,23 @@
+# Benchmark cases for `qajitsu bench` (REQ-LLM-06). Bug ids refer to examples/demo-shop/BUGS.md.
+version: 1
+cases:
+  - id: bench-cart-rounding
+    ticket: DEMO-1
+    flags: [BUG_CART_TOTAL_ROUNDING]
+    expect: { detects: BUG-01 }
+  - id: bench-discount-stacking
+    ticket: DEMO-1
+    flags: [BUG_DISCOUNT_STACKS]
+    expect: { detects: BUG-04 }
+  - id: bench-negative-quantity
+    ticket: DEMO-2
+    flags: [BUG_ORDER_ACCEPTS_NEGATIVE_QTY]
+    expect: { detects: BUG-02 }
+  - id: bench-expired-token
+    ticket: DEMO-3
+    flags: [BUG_AUTH_EXPIRED_TOKEN_OK]
+    expect: { detects: BUG-03 }
+  - id: bench-clean-cart
+    ticket: DEMO-1
+    flags: []
+    expect: { all_passed: true } # measures false FAILED

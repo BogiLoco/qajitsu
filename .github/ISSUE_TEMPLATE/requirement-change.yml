@@ -1,0 +1,24 @@
+name: Requirement change
+description: Change, split or deprecate an existing requirement in docs/requirements/.
+labels: [requirements]
+body:
+  - type: input
+    id: id
+    attributes:
+      label: Requirement id
+      placeholder: REQ-WS-03
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of change
+      options: [change acceptance criteria, change stage or priority, split, deprecate, other]
+    validations:
+      required: true
+  - type: textarea
+    id: change
+    attributes:
+      label: Proposed change and reason
+    validations:
+      required: true

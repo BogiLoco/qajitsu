@@ -1,0 +1,28 @@
+# QAJitsu configuration for the fictional demo-shop (REQ-NFR-04).
+project: demo-shop
+
+jira:
+  project_key: DEMO
+
+code_hosts:
+  github:
+    type: github
+    token: secret://env/GITHUB_TOKEN
+
+repos:
+  shop:
+    host: github
+    path: demo-org/demo-shop
+
+environments:
+  default: local
+  version_endpoint: /health/version
+  allowlist:
+    - http://localhost:3000
+    - http://localhost:5173
+
+models:
+  roles:
+    default: mock/default
+
+test_types: [api, web]

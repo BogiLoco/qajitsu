@@ -1,0 +1,109 @@
+# Test plan and approval (PLAN)
+
+How the agents turn context into a test plan and how a human approves it before anything executes.
+
+### REQ-PLAN-01 · Change analysis and classification
+
+- Status: accepted
+- Priority: must
+- Stage: 2
+- Related: REQ-CTX-05, REQ-LLM-02
+
+The analyst agent decides what kind of testing the change needs and where the risks are.
+
+**Acceptance criteria**
+
+- [ ] AC1: Output `analysis.json`, validated by schema: change type (`api`, `web`, `mobile`, any combination), affected endpoints and screens, regression risks, confidence.
+- [ ] AC2: Every claim references its source: ticket field, diff file and line, or review comment.
+- [ ] AC3: Low confidence produces open questions instead of guesses.
+
+### REQ-PLAN-02 · Structured test plan
+
+- Status: accepted
+- Priority: must
+- Stage: 2
+- Related: REQ-PLAN-03, REQ-EXEC-02
+
+The planner writes a plan as YAML validated by a published JSON Schema, plus a readable Markdown rendering.
+
+**Acceptance criteria**
+
+- [ ] AC1: Each case has `id`, `title`, `type` (api/web/mobile), `priority`, `source`, `preconditions`, test data as aliases, `steps[]` (each with `id`, `action`, `expect`) and required `evidence`.
+- [ ] AC2: Expected results are structured where possible (status codes, fields, UI texts) so `plan.expect()` can read them.
+- [ ] AC3: The plan contains `open_questions` and `out_of_scope` sections.
+- [ ] AC4: Versions are kept as `plan.vN.yaml` and `plan.vN.md`.
+
+### REQ-PLAN-03 · Grounded sources
+
+- Status: accepted
+- Priority: must
+- Stage: 2
+- Related: REQ-VER-07, INV-1
+
+Every case must be traceable to something real, which blocks invented requirements.
+
+**Acceptance criteria**
+
+- [ ] AC1: `source` is one of: an acceptance criterion id, a verbatim quote from the ticket snapshot, or a file (and line range) from the diff.
+- [ ] AC2: Quotes are checked verbatim against the snapshot; diff references are checked against the diff. Failures reject the plan with the offending cases listed.
+
+### REQ-PLAN-04 · Human review loop
+
+- Status: accepted
+- Priority: must
+- Stage: 2
+- Related: REQ-PLAN-06, REQ-PLAN-07
+
+The user reviews the plan and approves it, revises it in words, edits the file, or aborts, as many rounds as needed.
+
+**Acceptance criteria**
+
+- [ ] AC1: Terminal prompt with: accept, revise (free-text instruction), edit (opens `$EDITOR`), quit.
+- [ ] AC2: A revision produces a new version and shows the diff: added, removed and changed cases.
+- [ ] AC3: Manual edits are schema-validated and re-run through the source check before approval.
+
+### REQ-PLAN-05 · Open questions instead of guessing
+
+- Status: accepted
+- Priority: must
+- Stage: 2
+- Related: REQ-PLAN-01
+
+When the ticket is unclear, the planner asks instead of assuming.
+
+**Acceptance criteria**
+
+- [ ] AC1: Unresolved questions are listed in `open_questions`.
+- [ ] AC2: Approving a plan with open questions requires explicit confirmation, recorded in `run.json`.
+
+### REQ-PLAN-06 · Plan freeze
+
+- Status: accepted
+- Priority: must
+- Stage: 2
+- Related: INV-3, REQ-VER-07
+
+Approval freezes the plan; only approved cases can execute.
+
+**Acceptance criteria**
+
+- [ ] AC1: Approval writes `plan/plan.approved.yaml` with SHA-256, approver and time in `run.json`.
+- [ ] AC2: The approved plan is read-only to agents (guard).
+- [ ] AC3: A hash mismatch before execution or publishing blocks the run.
+- [ ] AC4: Specs for cases not in the approved plan are not executed and are reported.
+
+### REQ-PLAN-07 · Approval channels
+
+- Status: accepted
+- Priority: should
+- Stage: 10
+- Related: REQ-CI-03
+
+Besides the terminal, plans can be approved where the team already works.
+
+**Acceptance criteria**
+
+- [ ] AC1: Terminal approval (stage 2).
+- [ ] AC2: In CI: plan posted to the PR/MR and Jira; approval via protected environment (GitHub), manual job (GitLab) or `/qa approve` comment; `/qa revise <text>` triggers a new version.
+- [ ] AC3: Later: approval in Jira by comment and in a small web UI.
+- [ ] AC4: New plans are never approved automatically.

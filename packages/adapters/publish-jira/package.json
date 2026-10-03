@@ -1,0 +1,23 @@
+{
+  "name": "@qajitsu/adapter-publish-jira",
+  "version": "0.0.0",
+  "description": "QAJitsu Publisher: Jira comment (ADF on Cloud, wiki markup on Data Center) with attachments.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "qajitsu-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@qajitsu/core": "workspace:*"
+  }
+}

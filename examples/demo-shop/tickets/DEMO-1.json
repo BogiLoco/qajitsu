@@ -1,0 +1,35 @@
+{
+  "key": "DEMO-1",
+  "type": "Story",
+  "status": "Ready for QA",
+  "summary": "Cart total with discount codes",
+  "description": "As a shopper I want the cart total to include my discount code so that I see the final price before checkout.\n\nThe cart endpoint returns line totals and a cart total in PLN with two decimals. One discount code per cart.",
+  "acceptanceCriteria": [
+    "GET /cart returns total = sum of (unit price × quantity) for all lines, rounded once to 2 decimals.",
+    "POST /cart/discount with a valid code reduces the total by the code's percentage.",
+    "Applying a second code replaces the first; codes never stack.",
+    "An unknown code returns 404 with error code DISCOUNT_NOT_FOUND and leaves the total unchanged."
+  ],
+  "labels": ["cart", "api"],
+  "components": ["shop-api"],
+  "links": {
+    "pullRequests": [
+      {
+        "host": "github",
+        "repo": "demo-org/demo-shop",
+        "number": 12,
+        "title": "DEMO-1 discount codes in cart",
+        "sourceBranch": "feature/DEMO-1-cart-discounts",
+        "targetBranch": "main"
+      }
+    ]
+  },
+  "attachments": [],
+  "comments": [
+    {
+      "author": "product-owner",
+      "created": "2026-09-30T10:12:00Z",
+      "body": "Codes are percentage only for now; fixed-amount codes come later."
+    }
+  ]
+}

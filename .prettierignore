@@ -1,0 +1,8 @@
+dist
+coverage
+node_modules
+pnpm-lock.yaml
+.qa-runs
+docs/plan.md
+**/CHANGELOG.md
+tests/golden/**/*.md

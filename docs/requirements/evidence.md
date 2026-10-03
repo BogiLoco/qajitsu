@@ -1,0 +1,80 @@
+# Evidence and test matrix (EVD)
+
+What proof QAJitsu collects per test type and how results are summarised.
+
+### REQ-EVD-01 · API evidence
+
+- Status: accepted
+- Priority: must
+- Stage: 3
+- Related: REQ-EXEC-04, REQ-CFG-06
+
+**Acceptance criteria**
+
+- [ ] AC1: One JSON file per call: method, URL, masked headers, body, status, duration, assertions with expected and actual.
+- [ ] AC2: A reproducible cURL command (masked) per call.
+- [ ] AC3: All attempts kept, numbered.
+
+### REQ-EVD-02 · Web evidence
+
+- Status: accepted
+- Priority: must
+- Stage: 5
+- Related: REQ-EXEC-05
+
+**Acceptance criteria**
+
+- [ ] AC1: Screenshot after every step.
+- [ ] AC2: On failure: full-page screenshot, DOM snapshot, video and Playwright trace.
+- [ ] AC3: Browser console log and HAR per case.
+
+### REQ-EVD-03 · Mobile evidence
+
+- Status: accepted
+- Priority: must
+- Stage: 8
+- Related: REQ-EXEC-06
+
+**Acceptance criteria**
+
+- [ ] AC1: Screenshot after every step.
+- [ ] AC2: Screen recording per case, kept on failure by default.
+- [ ] AC3: Device logs (logcat or syslog) and page source on failure.
+
+### REQ-EVD-04 · Test matrix
+
+- Status: implemented
+- Priority: must
+- Stage: 3
+- Related: REQ-VER-08, REQ-PUB-01
+
+**Acceptance criteria**
+
+- [x] AC1: One row per approved case, including cases that did not run.
+- [x] AC2: Columns: case id, title, requirement/AC reference, type, status, steps passed/total, evidence summary.
+- [x] AC3: A summary line with counts per status, computed by code.
+
+### REQ-EVD-05 · Report formats
+
+- Status: in-progress
+- Priority: must
+- Stage: 3
+- Related: REQ-EVD-04
+
+**Acceptance criteria**
+
+- [x] AC1: `matrix.md` (basis of the Jira comment).
+- [ ] AC2: `matrix.csv` and `matrix.xlsx`.
+- [ ] AC3: `report.html`: one self-contained file with matrix, steps, screenshots, video player and trace links.
+
+### REQ-EVD-06 · Media policy
+
+- Status: accepted
+- Priority: should
+- Stage: 5
+- Related: REQ-PUB-02
+
+**Acceptance criteria**
+
+- [ ] AC1: Video `retain-on-failure` by default, `always` configurable.
+- [ ] AC2: Videos compressed with ffmpeg before upload to fit Jira attachment limits.

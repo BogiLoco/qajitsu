@@ -1,0 +1,23 @@
+{
+  "name": "@qajitsu/verifier",
+  "version": "0.0.0",
+  "description": "QAJitsu verifier: status computation, publish gates, assertion lock and plan coverage checks.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "qajitsu-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@qajitsu/core": "workspace:*"
+  }
+}

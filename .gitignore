@@ -1,0 +1,27 @@
+# dependencies and build output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# QAJitsu run workspaces and local secrets
+.qa-runs/
+.env
+.env.local
+**/.env.local
+
+# Claude Code personal files
+CLAUDE.local.md
+.claude/settings.local.json
+.claude/agent-memory-local/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Personal project overrides and local results
+**/.qa/qa.local.yaml
+bench/results/

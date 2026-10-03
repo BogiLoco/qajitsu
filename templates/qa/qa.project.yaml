@@ -1,0 +1,56 @@
+# QAJitsu project configuration (REQ-GEN-01). Copy to `<your-repo>/.qa/qa.project.yaml`.
+# Validated by ProjectConfigSchema in @qajitsu/core: unknown keys are rejected.
+# Secrets are never written here: use secret:// references (REQ-CFG-03).
+
+project: my-service
+
+jira:
+  project_key: SHOP
+  # Custom field holding acceptance criteria, if your Jira uses one.
+  # acceptance_criteria_field: customfield_10042
+
+code_hosts:
+  github:
+    type: github
+    token: secret://env/GITHUB_TOKEN
+  gitlab:
+    type: gitlab
+    base_url: https://gitlab.example.com
+    token: secret://env/GITLAB_TOKEN
+
+repos:
+  backend:
+    host: gitlab
+    path: shop/platform/backend
+    default_ref: main
+  web:
+    host: github
+    path: example-org/shop-web
+  e2e-tests:
+    host: github
+    path: example-org/shop-e2e
+    role: tests
+
+# How changes are linked to a ticket (REQ-CTX-03), tried in order.
+change_discovery: [jira_dev_panel, ticket_key_in_branch, ticket_key_in_title]
+
+environments:
+  default: staging
+  version_endpoint: /health/version
+  # Hosts agents and runners may call (REQ-ENV-01, INV-10). Production is never listed.
+  allowlist:
+    - https://staging.example.com
+    - https://api.staging.example.com
+
+models:
+  # <provider>/<model>; providers are configured from stage 2 (REQ-LLM-02).
+  roles:
+    default: anthropic/claude-sonnet
+    summary: local/qwen3
+
+test_types: [api, web]
+
+# Planned sections, added to the schema in later stages:
+# services:  variable schema and env templates per service      (REQ-CFG-02, stage 6)
+# cleanup:   retention per outcome                               (REQ-WS-03, stage 6)
+# publish:   Jira comment and attachment options                 (REQ-PUB-01, stage 4)

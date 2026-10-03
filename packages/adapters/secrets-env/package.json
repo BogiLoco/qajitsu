@@ -1,0 +1,23 @@
+{
+  "name": "@qajitsu/adapter-secrets-env",
+  "version": "0.0.0",
+  "description": "QAJitsu SecretProvider reading environment variables and .env.local.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "qajitsu-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@qajitsu/core": "workspace:*"
+  }
+}

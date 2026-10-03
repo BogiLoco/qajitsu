@@ -1,0 +1,23 @@
+{
+  "name": "@qajitsu/adapter-env-remote",
+  "version": "0.0.0",
+  "description": "QAJitsu EnvProvider for an existing environment given by profile or URL.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "qajitsu-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@qajitsu/core": "workspace:*"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@qajitsu/models",
+  "version": "0.0.0",
+  "description": "QAJitsu model layer: provider-agnostic access to LLMs (cloud, LiteLLM, Ollama) with a model per agent role.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "qajitsu-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@qajitsu/core": "workspace:*",
+    "zod": "catalog:"
+  }
+}

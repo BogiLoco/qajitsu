@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "vitest.explorer",
+    "redhat.vscode-yaml",
+    "editorconfig.editorconfig",
+    "yzhang.markdown-all-in-one",
+    "anthropic.claude-code"
+  ]
+}

@@ -1,0 +1,32 @@
+name: Bug report
+description: Something does not work as a requirement says.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A wrong PASSED (a real failure reported as passed) is the most serious bug class. Please label it in the title with `[false PASSED]`.
+        Do not paste secrets, tokens or real company data; scrub logs and evidence first.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened and what you expected
+    validations:
+      required: true
+  - type: input
+    id: requirement
+    attributes:
+      label: Requirement it violates
+      placeholder: REQ-VER-02
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Command, config (scrubbed), qajitsu version (`qj --version`), Node.js version, OS.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Journal or log excerpt (scrubbed)
+      render: text

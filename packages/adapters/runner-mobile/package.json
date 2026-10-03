@@ -1,0 +1,23 @@
+{
+  "name": "@qajitsu/adapter-runner-mobile",
+  "version": "0.0.0",
+  "description": "QAJitsu mobile Runner on WebdriverIO and Appium (Android UiAutomator2, iOS XCUITest).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "qajitsu-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@qajitsu/core": "workspace:*"
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "name": "qajitsu-monorepo",
+  "private": true,
+  "description": "QAJitsu: agentic QA framework. Jira ticket in, approved test plan, executed tests, evidence and a Jira report out.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"./packages/**\" run build",
+    "clean": "pnpm -r --filter \"./packages/**\" exec node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:adversarial": "vitest run tests/adversarial",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:hooks": "node --test \".claude/hooks/__tests__/*.test.mjs\"",
+    "req:check": "node scripts/requirements.mjs check",
+    "req:index": "node scripts/requirements.mjs index",
+    "verify": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test:coverage && pnpm test:hooks && pnpm req:check",
+    "bench": "node scripts/not-yet.mjs bench \"roadmap stage 7 (REQ-LLM-06)\"",
+    "docs": "node scripts/not-yet.mjs docs \"roadmap stage 9 (REQ-NFR-03)\"",
+    "qajitsu": "node packages/cli/dist/bin.js",
+    "changeset": "changeset",
+    "req:list": "node scripts/requirements.mjs list"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^3.0.3",
+    "@eslint/js": "^10.0.1",
+    "@qajitsu/agents": "workspace:*",
+    "@qajitsu/core": "workspace:*",
+    "@qajitsu/guard": "workspace:*",
+    "@qajitsu/models": "workspace:*",
+    "@qajitsu/report": "workspace:*",
+    "@qajitsu/steps": "workspace:*",
+    "@qajitsu/verifier": "workspace:*",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.9",
+    "typescript": "catalog:",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "catalog:",
+    "yaml": "catalog:"
+  }
+}

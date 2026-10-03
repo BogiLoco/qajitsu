@@ -1,0 +1,28 @@
+{
+  "name": "@qajitsu/core",
+  "version": "0.0.0",
+  "description": "QAJitsu core: orchestrator, run workspace, statuses, errors, config schema and adapter interfaces.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "qajitsu-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./errors": {
+      "qajitsu-source": "./src/errors.ts",
+      "types": "./dist/errors.d.ts",
+      "import": "./dist/errors.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  }
+}
