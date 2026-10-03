@@ -39,6 +39,8 @@ export function createShop(options) {
   /** token -> { user, expiresAt, cart: { lines: Map<string, number>, discounts: string[] } } */
   const sessions = new Map();
   let orderSeq = 0;
+  /** Seed markers written by `.qa/hooks/seed.mjs` with the QAJitsu run id (stage 6). */
+  const seeds = [];
 
   const json = (res, status, body) => {
     res.writeHead(status, { "content-type": "application/json" });
@@ -103,6 +105,15 @@ export function createShop(options) {
     const s = session(req);
     if (!s) return json(res, 401, { error: "UNAUTHORIZED" });
     if (route === "GET /me") return json(res, 200, { username: s.user });
+    if (route === "POST /admin/seed" || route === "GET /admin/seed") {
+      if (s.user !== "admin") return json(res, 403, { error: "FORBIDDEN" });
+      if (req.method === "GET") return json(res, 200, { markers: seeds });
+      const input = await body(req);
+      if (typeof input?.marker !== "string" || input.marker === "")
+        return json(res, 422, { error: "MARKER_REQUIRED" });
+      seeds.push(input.marker);
+      return json(res, 201, { markers: seeds });
+    }
     if (route === "GET /cart") return json(res, 200, cartView(s.cart));
     if (route === "POST /cart/lines") {
       const input = await body(req);
@@ -156,7 +167,7 @@ export function createShop(options) {
 /**
  * Starts the server; flags come from the environment (`BUG_*=1`).
  *
- * @param {{ port?: number, env?: Record<string, string | undefined> }} options
+ * @param {{ port?: number, host?: string, env?: Record<string, string | undefined> }} options
  * @returns {Promise<{ url: string, close: () => Promise<void> }>}
  */
 export function startShop(options = {}) {
@@ -169,10 +180,10 @@ export function startShop(options = {}) {
     void handler(req, res);
   });
   return new Promise((resolve) => {
-    server.listen(options.port ?? 0, "127.0.0.1", () => {
+    server.listen(options.port ?? 0, options.host ?? "127.0.0.1", () => {
       const address = server.address();
       resolve({
-        url: `http://127.0.0.1:${String(address.port)}`,
+        url: `http://${options.host === "0.0.0.0" || options.host === undefined ? "127.0.0.1" : options.host}:${String(address.port)}`,
         close: () => new Promise((done) => server.close(() => done())),
       });
     });
@@ -181,8 +192,11 @@ export function startShop(options = {}) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const i = process.argv.indexOf("--port");
+  const h = process.argv.indexOf("--host");
   const shop = await startShop({
     port: i > 0 ? Number(process.argv[i + 1]) : Number(process.env.PORT ?? 3000),
+    // Inside a container the API must listen on all interfaces (docker-compose.yml passes --host 0.0.0.0).
+    host: h > 0 ? process.argv[h + 1] : "127.0.0.1",
   });
   const on = BUG_FLAGS.filter((f) => process.env[f] === "1" || process.env[f] === "true");
   process.stdout.write(

@@ -10,6 +10,8 @@ import { runLogs } from "./commands/logs.js";
 import { runPublish } from "./commands/publish.js";
 import { runPull } from "./commands/pull.js";
 import { runRun, type RunPorts } from "./commands/run.js";
+import { runClean, runGc, runResume, runRuns } from "./commands/runs.js";
+import { runEnvCheck, runEnvRender } from "./commands/env.js";
 import { loadProject } from "./project.js";
 import type { ModelPorts } from "./session.js";
 import { formatDoctor, runDoctor } from "./doctor.js";
@@ -155,9 +157,77 @@ export function createProgram(version: string, io: ProgramIO): Command {
       "--env <profile|url>",
       "environment profile from .qa/envs or a URL (default: environments.default)",
     )
-    .action((ticket: string, options: { run?: string; env?: string }) =>
-      withPorts((ports) => runRun(ticket, options, commandIO, ports))(),
+    .option(
+      "--build",
+      "build the application from the fetched worktrees (services and build in qa.project.yaml)",
+    )
+    .option("--keep", "with --build: keep containers and worktrees after the run")
+    .option(
+      "--set <service.VAR=value>",
+      "with --build: override an overridable service variable (repeatable)",
+      collect,
+      [],
+    )
+    .action(
+      (
+        ticket: string,
+        options: { run?: string; env?: string; build?: boolean; keep?: boolean; set: string[] },
+      ) => withPorts((ports) => runRun(ticket, options, commandIO, ports))(),
     );
+
+  const env = program.command("env").description("Check or render the environment configuration");
+  env
+    .command("check")
+    .description("List every missing or invalid variable of the environment and --build configuration")
+    .option("--env <profile>", "environment profile (default: build.profile or environments.default)")
+    .action((options: { env?: string }) => withPorts((ports) => runEnvCheck(options, commandIO, ports))());
+  env
+    .command("render")
+    .description("Recreate the per-service .env files of a run (0600; removed by clean)")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .action((ticket: string, options: { run?: string }) =>
+      withPorts((ports) => runEnvRender(ticket, options, commandIO, ports))(),
+    );
+
+  program
+    .command("runs")
+    .description("List the runs of a ticket")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .action((ticket: string) => withPorts((ports) => runRuns(ticket, commandIO, ports))());
+
+  program
+    .command("resume")
+    .description("Continue a run from its last checkpoint (stops at human approval and publish)")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .option("--env <profile|url>", "environment for the run stage")
+    .option("--build", "build the environment for the run stage")
+    .action((ticket: string, options: { run?: string; env?: string; build?: boolean }) =>
+      withPorts((ports) =>
+        runResume(ticket, options, commandIO, ports, (stage, runId) =>
+          stage === "plan"
+            ? runPlan(ticket, { run: runId }, commandIO, ports, review)
+            : runRun(ticket, { run: runId, env: options.env, build: options.build }, commandIO, ports),
+        ),
+      )(),
+    );
+
+  program
+    .command("clean")
+    .description("Remove containers, volumes, networks, worktrees and .env files of a run; artifacts stay")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .option("--all", "every run of the ticket")
+    .action((ticket: string, options: { run?: string; all?: boolean }) =>
+      withPorts((ports) => runClean(ticket, options, commandIO, ports))(),
+    );
+
+  program
+    .command("gc")
+    .description("Apply retention (cleanup.keep_last, cleanup.max_age_days) to every ticket")
+    .option("--dry-run", "only list the runs that would be removed")
+    .action((options: { dryRun?: boolean }) => withPorts((ports) => runGc(options, commandIO, ports))());
 
   program
     .command("publish")

@@ -22,6 +22,8 @@ export interface CommentModel {
     readonly name: string;
     readonly baseUrl: string;
     readonly deployedSha?: string | undefined;
+    /** Stubbed services: what was not real in this run (REQ-ENV-05/AC2). */
+    readonly stubs?: readonly string[] | undefined;
   };
   /** Tested repositories and SHAs (REQ-CTX-04/AC3). */
   readonly repos: Readonly<Record<string, string>>;
@@ -68,7 +70,7 @@ const bullets = (items: AdfNode[][]): AdfNode => ({
 
 const header = (m: CommentModel): string[] => [
   `Run ${m.runId} · ${m.date}`,
-  `Environment: ${m.environment.name} (${m.environment.baseUrl})${m.environment.deployedSha ? `, deployed ${m.environment.deployedSha}` : ""}`,
+  `Environment: ${m.environment.name} (${m.environment.baseUrl})${m.environment.deployedSha ? `, deployed ${m.environment.deployedSha}` : ""}${m.environment.stubs?.length ? `; stubbed (not real): ${m.environment.stubs.join(", ")}` : ""}`,
   `Tested code: ${
     Object.entries(m.repos)
       .map(([k, v]) => `${k}@${v.slice(0, 12)}`)

@@ -106,6 +106,34 @@ describe("provided environment (REQ-ENV-01, REQ-ENV-02, REQ-ENV-07, REQ-CFG-07)"
     });
   });
 
+  it("REQ-ENV-03 + REQ-CTX-04/AC4: a built environment uses the profile's accounts with its own loopback URL", async () => {
+    const { qaDir, config } = await project(
+      profileFor("https://staging.example.com", "production: true\n"),
+      {},
+      [],
+    );
+    const env = await resolveEnvironment({ config, qaDir, buildBaseUrl: "http://127.0.0.1:41234" });
+    expect(env).toMatchObject({
+      name: "build (local)",
+      baseUrl: "http://127.0.0.1:41234",
+      origin: "http://127.0.0.1:41234",
+      profile: { production: false, accounts: { "user:standard": { username: "standard" } } },
+    });
+    await expect(
+      resolveEnvironment({ config, qaDir, buildBaseUrl: "http://10.0.0.5:8080" }),
+    ).rejects.toMatchObject({ code: "ENV_NOT_ALLOWED" });
+    const bare = parseProjectConfig({
+      project: "demo",
+      jira: { type: "file", tickets_dir: "t", project_key: "DEMO" },
+    });
+    expect(
+      await resolveEnvironment({ config: bare, qaDir, buildBaseUrl: "http://127.0.0.1:5000" }),
+    ).toMatchObject({
+      name: "build",
+      baseUrl: "http://127.0.0.1:5000",
+    });
+  });
+
   it("REQ-CFG-07/AC1: account passwords must be secret references", async () => {
     const { qaDir, config } = await project(
       "base_url: http://127.0.0.1:3000\naccounts:\n  user:standard: { username: standard, password: hunter2 }\n",

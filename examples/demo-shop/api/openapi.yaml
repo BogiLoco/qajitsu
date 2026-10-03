@@ -33,6 +33,36 @@ paths:
             description: unauthorized,
             content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } },
           }
+  /admin/seed:
+    get:
+      responses:
+        "200":
+          {
+            description: seed markers,
+            content: { application/json: { schema: { $ref: "#/components/schemas/Seeds" } } },
+          }
+        "403":
+          {
+            description: not admin,
+            content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } },
+          }
+    post:
+      responses:
+        "201":
+          {
+            description: marker stored,
+            content: { application/json: { schema: { $ref: "#/components/schemas/Seeds" } } },
+          }
+        "403":
+          {
+            description: not admin,
+            content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } },
+          }
+        "422":
+          {
+            description: no marker,
+            content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } },
+          }
   /cart:
     get:
       responses:
@@ -99,6 +129,8 @@ paths:
           }
 components:
   schemas:
+    Seeds:
+      { type: object, required: [markers], properties: { markers: { type: array, items: { type: string } } } }
     Error:
       type: object
       required: [error]

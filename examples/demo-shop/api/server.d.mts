@@ -12,5 +12,6 @@ export declare function createShop(options: {
 
 export declare function startShop(options?: {
   port?: number;
+  host?: string;
   env?: Record<string, string | undefined>;
 }): Promise<{ url: string; close: () => Promise<void> }>;

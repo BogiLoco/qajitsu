@@ -3,6 +3,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { z } from "zod";
 import { ConfigError } from "../errors.js";
 import { RunIdSchema, createRunId, type RunId, type TicketKey } from "../identifiers.js";
+import { withFileLock } from "./locks.js";
 
 /** Subfolders of every run folder (REQ-WS-01/AC2). */
 export const RUN_SUBDIRS = [
@@ -141,14 +142,35 @@ export async function readRunIndex(root: string, ticket: TicketKey): Promise<Run
 const writeRunIndex = async (root: string, index: RunIndex): Promise<void> => {
   await writeJsonAtomic(join(root, index.ticket, "index.json"), index);
   const link = join(root, index.ticket, "latest");
-  if (index.latest === undefined) return;
   await rm(link, { force: true });
+  if (index.latest === undefined) return;
   try {
     await symlink(index.latest, link, "dir");
   } catch {
     // Symlinks may be unavailable (Windows without privileges); index.json `latest` stays authoritative.
   }
 };
+
+/**
+ * Read-modify-write of `<TICKET>/index.json` under a lock, so parallel runs of one ticket keep every
+ * entry (REQ-WS-04/AC2).
+ *
+ * @param root - Workspace root.
+ * @param ticket - Ticket key.
+ * @param change - Pure function from the current to the new index.
+ */
+export async function updateRunIndex(
+  root: string,
+  ticket: TicketKey,
+  change: (index: RunIndex) => RunIndex,
+): Promise<RunIndex> {
+  await mkdir(join(root, ticket), { recursive: true });
+  return withFileLock(join(root, ticket, "index.lock"), async () => {
+    const next = change(await readRunIndex(root, ticket));
+    await writeRunIndex(root, next);
+    return next;
+  });
+}
 
 const bindWorkspace = (
   root: string,
@@ -178,11 +200,11 @@ const bindWorkspace = (
     async update(patch) {
       record = RunRecordSchema.parse({ ...record, ...patch, updatedAt: now().toISOString() });
       await writeJsonAtomic(join(dir, "run.json"), record);
-      const index = await readRunIndex(root, ticket);
-      const runs = index.runs.map((entry) =>
-        entry.runId === runId ? { ...entry, status: record.status } : entry,
-      );
-      await writeRunIndex(root, { ...index, runs });
+      const status = record.status;
+      await updateRunIndex(root, ticket, (index) => ({
+        ...index,
+        runs: index.runs.map((entry) => (entry.runId === runId ? { ...entry, status } : entry)),
+      }));
       return record;
     },
   };
@@ -228,12 +250,11 @@ export async function createRunWorkspace(options: {
     status: "created",
   });
   await writeJsonAtomic(join(dir, "run.json"), record);
-  const index = await readRunIndex(root, ticket);
-  await writeRunIndex(root, {
+  await updateRunIndex(root, ticket, (index) => ({
     ticket,
     latest: runId,
     runs: [...index.runs, { runId, createdAt: iso, status: "created", retention: "default" }],
-  });
+  }));
   return bindWorkspace(root, ticket, runId, record, now);
 }
 

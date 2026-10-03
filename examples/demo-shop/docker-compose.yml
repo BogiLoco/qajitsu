@@ -1,20 +1,14 @@
-# demo-shop for QAJitsu e2e tests and `--build` (stage 6). QAJitsu adds qajitsu.* labels when it starts it (REQ-WS-02).
+# demo-shop for `qj run --build` (stage 6). QAJitsu adds an overlay with a dynamic localhost port, the
+# qajitsu.* labels and an env file generated from the `services` section of .qa/qa.project.yaml
+# (password from the secret provider, bug flags as overridable values). No fixed host port here, so
+# parallel runs never clash; for a manual start use: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 services:
   api:
     image: node:22-alpine
     working_dir: /app
-    command: ["node", "api/server.mjs", "--port", "3000"]
+    command: ["node", "api/server.mjs", "--port", "3000", "--host", "0.0.0.0"]
     volumes:
       - ./api:/app/api:ro
-    environment:
-      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:?set DEMO_USER_PASSWORD}
-      DEMO_SHA: ${DEMO_SHA:-unknown}
-      BUG_CART_TOTAL_ROUNDING: ${BUG_CART_TOTAL_ROUNDING:-0}
-      BUG_ORDER_ACCEPTS_NEGATIVE_QTY: ${BUG_ORDER_ACCEPTS_NEGATIVE_QTY:-0}
-      BUG_AUTH_EXPIRED_TOKEN_OK: ${BUG_AUTH_EXPIRED_TOKEN_OK:-0}
-      BUG_DISCOUNT_STACKS: ${BUG_DISCOUNT_STACKS:-0}
-    ports:
-      - "127.0.0.1:3000:3000"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
       interval: 2s

@@ -78,6 +78,15 @@ describe("Jira comment (REQ-PUB-01, REQ-PUB-03)", () => {
     expect(wiki).toContain("expected {{1.01}}, actual {{1.02}}");
   });
 
+  it("REQ-ENV-05/AC2: stubbed services are named in the header", () => {
+    const wiki = renderJiraWiki({
+      ...model,
+      environment: { ...model.environment, stubs: ["payments (wiremock)"] },
+    });
+    expect(wiki).toContain("stubbed (not real): payments (wiremock)");
+    expect(renderJiraWiki(model)).not.toContain("stubbed");
+  });
+
   it("REQ-VER-10/AC1: a plain preview shows matrix and failures", () => {
     const preview = renderCommentPreview(model);
     expect(preview).toContain("TC-01 | Cart total | rounded | AC1 | API | FAILED | 0/1");

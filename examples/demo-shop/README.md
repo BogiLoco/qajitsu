@@ -42,6 +42,19 @@ cd examples/demo-shop
 node ../../packages/cli/dist/bin.js run DEMO-1 --env local   # after fetch, plan and approve
 ```
 
+## Stage 6 demo (`--build` from the worktree with Docker Compose)
+
+```sh
+docker pull node:22-alpine
+cd examples/demo-shop
+node ../../packages/cli/dist/bin.js env check
+node ../../packages/cli/dist/bin.js run DEMO-1 --build      # after fetch, plan and approve
+node ../../packages/cli/dist/bin.js run DEMO-1 --build --set api.BUG_CART_TOTAL_ROUNDING=1   # in a new run (fetch, plan, approve again): TC-01 FAILED
+node ../../packages/cli/dist/bin.js clean DEMO-1
+```
+
+`docker-compose.dev.yml` starts the API manually on port 3000; QAJitsu never uses it.
+
 ## Layout (target)
 
 ```text

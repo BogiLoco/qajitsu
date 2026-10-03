@@ -40,6 +40,8 @@ export interface RunEnvironment {
   readonly name: string;
   readonly baseUrl: string;
   readonly deployedSha?: string | undefined;
+  /** Stubbed services (REQ-ENV-05/AC2). */
+  readonly stubs?: readonly string[] | undefined;
 }
 
 /** Statuses, gates and rendered reports of a run, all computed from files on disk (invariants 1, 6, 7). */

@@ -7,6 +7,8 @@
  */
 export {
   startBuildEnvironment,
+  writeEnvFiles,
+  endpointsFor,
   BuildStartError,
   execCommand,
   freePort,
@@ -26,3 +28,4 @@ export const ADAPTER = {
   requirements: ["REQ-ENV-03", "REQ-ENV-04", "REQ-ENV-05", "REQ-WS-02"],
   status: "implemented",
 } as const;
+export { removeRunResources, type RemovedResources } from "./cleanup.js";

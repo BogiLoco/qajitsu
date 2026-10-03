@@ -70,9 +70,29 @@ export async function resolveEnvironment(options: {
   readonly config: ProjectConfig;
   readonly qaDir: string;
   readonly env?: string | undefined;
+  /**
+   * URL of an environment this run built on localhost (`--build`). The profile then provides
+   * accounts, login and web session only; the URL needs no allowlist entry because it is a loopback
+   * address the run itself started, and it is never production.
+   */
+  readonly buildBaseUrl?: string | undefined;
 }): Promise<ResolvedEnvironment> {
-  const { config, qaDir } = options;
-  const selected = options.env ?? config.environments.default;
+  const { config, qaDir, buildBaseUrl } = options;
+  if (buildBaseUrl !== undefined && !/^http:\/\/127\.0\.0\.1:\d+$/.test(buildBaseUrl)) {
+    throw new ConfigError("ENV_NOT_ALLOWED", "A built environment must listen on 127.0.0.1.", {});
+  }
+  const selected =
+    options.env ??
+    (buildBaseUrl === undefined ? undefined : config.build?.profile) ??
+    config.environments.default;
+  if (selected === undefined && buildBaseUrl !== undefined) {
+    return {
+      name: "build",
+      baseUrl: buildBaseUrl,
+      origin: buildBaseUrl,
+      profile: EnvProfileSchema.parse({ base_url: buildBaseUrl }),
+    };
+  }
   if (selected === undefined) {
     throw new ConfigError(
       "ENV_NOT_SELECTED",
@@ -99,6 +119,7 @@ export async function resolveEnvironment(options: {
   const parsed = EnvProfileSchema.safeParse({
     ...(raw as Record<string, unknown> | undefined),
     ...(isUrl ? { base_url: selected } : {}),
+    ...(buildBaseUrl === undefined ? {} : { base_url: buildBaseUrl, production: false }),
   });
   if (!parsed.success) {
     throw new ConfigError(
@@ -112,7 +133,7 @@ export async function resolveEnvironment(options: {
   const profile = parsed.data;
   const origin = new URL(profile.base_url).origin;
   const allowed = config.environments.allowlist.map((a) => new URL(a).origin);
-  if (!allowed.includes(origin)) {
+  if (buildBaseUrl === undefined && !allowed.includes(origin)) {
     throw new ConfigError("ENV_NOT_ALLOWED", `${origin} is not in environments.allowlist.`, {
       origin,
       allowed,
@@ -126,7 +147,12 @@ export async function resolveEnvironment(options: {
     );
   }
   return {
-    name: isUrl ? selected : (profileName ?? selected),
+    name:
+      buildBaseUrl !== undefined
+        ? `build (${profileName ?? selected})`
+        : isUrl
+          ? selected
+          : (profileName ?? selected),
     baseUrl: profile.base_url,
     origin,
     profile,

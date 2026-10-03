@@ -1,4 +1,4 @@
-import { copyFile, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createGitExec } from "@qajitsu/core";
@@ -11,6 +11,7 @@ export const gitExec = createGitExec({ PATH: process.env["PATH"] ?? "", HOME: tm
  */
 export async function createCliProject(
   extraYaml: string[] = [],
+  options: { readonly withShopApi?: boolean } = {},
 ): Promise<{ home: string; project: string; sha: string }> {
   const home = await mkdtemp(join(tmpdir(), "qj-home-"));
   const project = join(home, "project");
@@ -19,6 +20,16 @@ export async function createCliProject(
     gitExec(["-C", repo, "-c", "user.name=qa", "-c", "user.email=qa@example.com", ...args]);
   await gitExec(["init", "-q", "-b", "main", repo]);
   await writeFile(join(repo, "cart.ts"), "export const v = 1;\n");
+  // The demo-shop API in the repository, so `--build` can start it from the worktree (stage 6).
+  if (options.withShopApi === true) {
+    await cp(new URL("../../examples/demo-shop/api", import.meta.url), join(repo, "api"), {
+      recursive: true,
+    });
+    await copyFile(
+      new URL("../../examples/demo-shop/docker-compose.yml", import.meta.url),
+      join(repo, "docker-compose.yml"),
+    );
+  }
   await g("add", ".");
   await g("commit", "-qm", "init");
   await g("checkout", "-qb", "feature/DEMO-1-cart-discounts");

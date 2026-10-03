@@ -125,7 +125,12 @@ describe("report formats (REQ-EVD-05)", () => {
           },
         ],
       },
-      environment: { name: "local", baseUrl: "http://127.0.0.1:3000", deployedSha: "abc123" },
+      environment: {
+        name: "local",
+        baseUrl: "http://127.0.0.1:3000",
+        deployedSha: "abc123",
+        stubs: ["payments (wiremock)"],
+      },
       repos: { shop: "1".repeat(40) },
       gates: [{ gate: "manifest-intact", ok: false, problems: ["x missing"] }],
     });
@@ -139,6 +144,8 @@ describe("report formats (REQ-EVD-05)", () => {
     expect(html).not.toContain("javascript:alert");
     expect(html).toContain("✘ manifest-intact");
     expect(html).toContain("Not run.");
+    // REQ-ENV-05/AC2: readers see what was not real.
+    expect(html).toContain("stubbed (not real):</strong> payments (wiremock)");
   });
 });
 

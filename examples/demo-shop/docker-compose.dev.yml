@@ -1,0 +1,7 @@
+# Manual start on http://localhost:3000 (not used by QAJitsu): set DEMO_USER_PASSWORD first.
+services:
+  api:
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      DEMO_USER_PASSWORD: ${DEMO_USER_PASSWORD:?set DEMO_USER_PASSWORD}

@@ -33,6 +33,7 @@
   "devDependencies": {
     "@changesets/cli": "^3.0.3",
     "@eslint/js": "^10.0.1",
+    "@qajitsu/adapter-env-compose": "workspace:*",
     "@qajitsu/adapter-evidence-local": "workspace:*",
     "@qajitsu/adapter-runner-api": "workspace:*",
     "@qajitsu/adapter-runner-web": "workspace:*",

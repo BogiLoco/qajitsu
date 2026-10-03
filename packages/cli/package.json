@@ -25,6 +25,7 @@
     "@qajitsu/adapter-codehost-github": "workspace:*",
     "@qajitsu/adapter-codehost-gitlab": "workspace:*",
     "@qajitsu/adapter-codehost-local": "workspace:*",
+    "@qajitsu/adapter-env-compose": "workspace:*",
     "@qajitsu/adapter-env-remote": "workspace:*",
     "@qajitsu/adapter-evidence-local": "workspace:*",
     "@qajitsu/adapter-publish-jira": "workspace:*",

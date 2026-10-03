@@ -41,3 +41,32 @@ models:
     default: local/gemma4:e2b
 
 test_types: [api, web]
+
+# `qj run DEMO-1 --build` (stage 6): the API is built from the fetched worktree of `shop` with Docker Compose.
+services:
+  api:
+    kind: compose
+    port: 3000
+    env:
+      DEMO_USER_PASSWORD: { secret: secret://env/DEMO_USER_PASSWORD }
+      # Seeded bugs (BUGS.md), switched on for one run with: --set api.BUG_CART_TOTAL_ROUNDING=1
+      BUG_CART_TOTAL_ROUNDING: { value: "0", overridable: true }
+      BUG_ORDER_ACCEPTS_NEGATIVE_QTY: { value: "0", overridable: true }
+      BUG_AUTH_EXPIRED_TOKEN_OK: { value: "0", overridable: true }
+      BUG_DISCOUNT_STACKS: { value: "0", overridable: true }
+      BUG_CHECKOUT_BUTTON_DISABLED: { value: "0", overridable: true }
+      BUG_PRICE_FORMAT_LOCALE: { value: "0", overridable: true }
+      BUG_SILENT_500_TOAST: { value: "0", overridable: true }
+    health: { http: /health, timeout_s: 180 }
+
+build:
+  repo: shop
+  compose_file: docker-compose.yml
+  base_service: api
+  profile: local
+  seed: hooks/seed.mjs
+
+cleanup:
+  policy: on_success
+  keep_last: 10
+  max_age_days: 30

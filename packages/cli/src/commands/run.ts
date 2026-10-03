@@ -15,6 +15,7 @@ import {
   AnalysisSchema,
   ConfigError,
   CaseResultFileSchema,
+  acquireRunLock,
   QajitsuError,
   exitCodeFor,
   loadApprovedPlan,
@@ -30,16 +31,40 @@ import type { RuntimePorts } from "../adapters.js";
 import { openSession, type ModelPorts, type RunSession } from "../session.js";
 import type { CommandIO } from "./fetch.js";
 import { computeVerdict, writeReports } from "./verdict.js";
+import {
+  blockAfterStartFailure,
+  effectiveConfig,
+  finishRunResources,
+  parseOverrides,
+  prepareBuild,
+  removeEnvFiles,
+  type PreparedBuild,
+} from "./build-env.js";
+import type { CommandExec } from "@qajitsu/adapter-env-compose";
 
 /** Options of `qajitsu run`. */
 export interface RunOptions {
   readonly run?: string | undefined;
   readonly env?: string | undefined;
+  /** Build the application from the fetched worktrees instead of testing a provided environment. */
+  readonly build?: boolean | undefined;
+  /** Keep containers and worktrees after this run, whatever the cleanup policy (REQ-WS-03/AC1). */
+  readonly keep?: boolean | undefined;
+  /** Run overrides `<service>.<VAR>=<value>` (REQ-CFG-02/AC3). */
+  readonly set?: readonly string[] | undefined;
 }
 
 /** Ports `run` needs beyond the common ones; the executor is replaceable in tests. */
 export interface RunPorts {
   readonly executor?: AttemptExecutor;
+  /** Runs docker and other commands of `--build` (replaced in tests). */
+  readonly buildExec?: CommandExec;
+  /** Source of SIGINT/SIGTERM and the exit function (default: the process; replaced in tests). */
+  readonly signals?: {
+    once(event: "SIGINT" | "SIGTERM", listener: () => void): unknown;
+    off(event: "SIGINT" | "SIGTERM", listener: () => void): unknown;
+  };
+  readonly exit?: (code: number) => void;
 }
 
 const RUNNER = { kind: "runner", name: "api" } as const;
@@ -103,6 +128,19 @@ export async function runRun(
   ports: RuntimePorts & ModelPorts & RunPorts,
 ): Promise<number> {
   const masker = createMasker();
+  let release: (() => Promise<void>) | undefined;
+  let stopOnInterrupt: (() => Promise<void>) | undefined;
+  // REQ-CFG-05/AC2: an interrupt still stops the environment and deletes the generated .env files.
+  const onSignal = (): void => {
+    void (stopOnInterrupt?.() ?? Promise.resolve()).finally(() => {
+      void (release?.() ?? Promise.resolve()).finally(() => {
+        (ports.exit ?? ((code: number) => process.exit(code)))(130);
+      });
+    });
+  };
+  const signals = ports.signals ?? process;
+  signals.once("SIGINT", onSignal);
+  signals.once("SIGTERM", onSignal);
   try {
     const session = await openSession(rawKey, options.run, io.cwd, ports, masker);
     const { ws, events, project } = session;
@@ -113,26 +151,88 @@ export async function runRun(
         {},
       );
     }
+    if (!options.build && (options.keep || (options.set ?? []).length > 0))
+      throw new ConfigError("BUILD_OPTION_WITHOUT_BUILD", "--keep and --set apply to --build runs only.", {});
+    if (options.build && options.env !== undefined && /^https?:\/\//.test(options.env))
+      throw new ConfigError(
+        "BUILD_WITH_URL",
+        "--build starts its own environment; --env takes a profile name.",
+        {},
+      );
+    const overrides = parseOverrides(options.set ?? []);
+    // REQ-WS-04/AC2: one process per run; other runs of the ticket may run in parallel.
+    release = await acquireRunLock(ws.path("run.lock"));
     const { plan, approval } = await loadApprovedPlan(ws);
     events.emit("run", SYSTEM, "stage.start", { planVersion: approval.version });
     const results = new Map<string, CaseResultFile>();
 
-    const env = await chooseEnvironment(session, io, options.env);
-    const health = await checkHealth(env, ports.fetch);
+    let prepared: PreparedBuild = {};
+    if (options.build) {
+      io.write(`Building the environment from ${project.config.build?.repo ?? "?"}…\n`);
+      const started = prepareBuild(session, { overrides, exec: ports.buildExec, fetch: ports.fetch });
+      stopOnInterrupt = async () => {
+        const pending: PreparedBuild = await started.catch(() => ({}));
+        await pending.build?.stop();
+        await removeEnvFiles(session);
+      };
+      prepared = await started;
+      events.emit("run", SYSTEM, "env.build", {
+        ok: prepared.failure === undefined,
+        ...(prepared.build ? { project: prepared.build.project, stubs: prepared.build.stubs } : {}),
+        ...(prepared.failure ? { error: masker.maskText(prepared.failure.message) } : {}),
+      });
+      stopOnInterrupt = async () => {
+        await prepared.build?.stop();
+        await removeEnvFiles(session);
+      };
+    }
+    const built = prepared.build;
+    const env = options.build
+      ? await resolveEnvironment({
+          config: project.config,
+          qaDir: project.qaDir,
+          env: options.env,
+          buildBaseUrl: built?.baseUrl ?? "http://127.0.0.1:9",
+        })
+      : await chooseEnvironment(session, io, options.env);
+    const health = prepared.failure
+      ? { ok: false, detail: prepared.failure.message }
+      : await checkHealth(env, ports.fetch);
     events.emit("run", SYSTEM, "env.health", { env: env.name, ok: health.ok, detail: health.detail });
-    const deployedSha = health.ok ? await readDeployedSha(env, ports.fetch) : undefined;
+    const deployedSha = health.ok && !built ? await readDeployedSha(env, ports.fetch) : undefined;
     const analysed = Object.values(ws.record.repos).map((r) => r.sha);
-    const versionCheck = compareDeployedSha(deployedSha, analysed);
+    // A built environment runs exactly the fetched worktree (REQ-CTX-04/AC4).
+    const versionCheck = built ? "built-from-worktree" : compareDeployedSha(deployedSha, analysed);
     await ws.update({
       status: "running",
       stage: "run",
       data: {
         ...ws.record.data,
-        environment: { name: env.name, baseUrl: env.baseUrl, deployedSha, versionCheck },
+        environment: {
+          name: env.name,
+          baseUrl: env.baseUrl,
+          deployedSha,
+          versionCheck,
+          ...(built ? { stubs: built.stubs } : {}),
+        },
+        // REQ-CFG-01/AC2: the effective configuration, secrets masked.
+        config: effectiveConfig(session, env, overrides),
+        ...(built ? { build: { project: built.project, ports: built.ports, services: built.services } } : {}),
       },
     });
 
-    if (!health.ok) {
+    if (prepared.failure) {
+      // REQ-ENV-04/AC3: the application did not start; every case is BLOCKED with the service logs.
+      io.writeError(
+        `The environment did not start (${masker.maskText(prepared.failure.message)}); every case is BLOCKED.\n`,
+      );
+      await blockAfterStartFailure(
+        session,
+        plan.cases.map((c) => c.id),
+        prepared.failure,
+        results,
+      );
+    } else if (!health.ok) {
       // REQ-ENV-01/AC1: an unreachable environment makes every case BLOCKED.
       io.writeError(`Environment ${env.name} is not healthy (${health.detail}); every case is BLOCKED.\n`);
       await writeBlocked(
@@ -165,6 +265,19 @@ export async function runRun(
     const verdict = await computeVerdict(session, ports.now);
     await writeReports(session, verdict);
     const statuses = Object.fromEntries(verdict.cases.map((c) => [c.caseId, c.status]));
+    // REQ-WS-03: cleanup policy; service logs land in logs/ before containers go.
+    stopOnInterrupt = undefined;
+    const cleanup = await finishRunResources(session, built, {
+      keep: options.keep === true,
+      allPassed: verdict.cases.every((c) => c.status === "PASSED"),
+    });
+    if (built) {
+      events.emit("run", SYSTEM, "env.cleanup", { kept: cleanup.kept, logs: cleanup.logs.length });
+      if (cleanup.kept)
+        io.write(
+          `Environment kept (${built.project}); remove it with: qajitsu clean ${ws.ticket} --run ${ws.runId}\n`,
+        );
+    }
     await ws.update({
       status: "completed",
       stage: "run",
@@ -186,7 +299,12 @@ export async function runRun(
     io.writeError(
       masker.maskText(`Error${code}: ${error instanceof Error ? error.message : String(error)}\n`),
     );
+    await stopOnInterrupt?.().catch(() => undefined);
     return 3;
+  } finally {
+    signals.off("SIGINT", onSignal);
+    signals.off("SIGTERM", onSignal);
+    await release?.();
   }
 }
 

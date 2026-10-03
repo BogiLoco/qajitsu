@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import {
   AdapterError,
   ConfigError,
+  renderTemplate,
   resolveServiceEnv,
   toDotenv,
   type Endpoint,
@@ -98,11 +99,18 @@ export interface BuildOptions {
 /** A started build environment. */
 export interface BuildEnvironment {
   readonly baseUrl: string;
+  /** Compose project name (REQ-WS-02/AC2). */
+  readonly project: string;
+  /** Host ports by service, recorded in `run.json` for `qajitsu env render` and cleanup. */
+  readonly ports: Readonly<Record<string, number>>;
   readonly services: Readonly<Record<string, { readonly kind: ServiceConfig["kind"]; readonly url: string }>>;
   /** Stubbed services, listed in the report (REQ-ENV-05/AC2). */
   readonly stubs: readonly string[];
-  /** Stops everything this run started and writes service logs to `logs/` (REQ-WS-03). */
-  stop(): Promise<{ readonly logs: readonly string[] }>;
+  /**
+   * Writes service logs to `logs/` and stops what this run started (REQ-WS-03). With `keep` the
+   * containers stay up for debugging (`qajitsu clean` removes them later); managed processes always stop.
+   */
+  stop(options?: { readonly keep?: boolean }): Promise<{ readonly logs: readonly string[] }>;
 }
 
 /** Start failure with the service logs collected so far (REQ-ENV-04/AC3). */
@@ -113,14 +121,78 @@ const STUB_IMAGES: Record<string, { image: string; port: number; mount: string }
   mockoon: { image: "mockoon/cli:9.1.0", port: 3000, mount: "/data" },
 };
 
+/** Container port of a containerised service. */
+const containerPort = (s: ServiceConfig): number =>
+  s.kind === "compose" ? s.port : s.kind === "stub" ? (STUB_IMAGES[s.engine]?.port ?? 8080) : 0;
+
+/**
+ * Endpoints of every service as seen from inside the compose network and from the host.
+ *
+ * @param config - Project configuration.
+ * @param hostPorts - Host port per service.
+ */
+export function endpointsFor(
+  config: ProjectConfig,
+  hostPorts: Readonly<Record<string, number>>,
+): { inNetwork: Record<string, Endpoint>; onHost: Record<string, Endpoint> } {
+  const inNetwork: Record<string, Endpoint> = {};
+  const onHost: Record<string, Endpoint> = {};
+  for (const [name, s] of Object.entries(config.services)) {
+    onHost[name] = { host: "127.0.0.1", port: hostPorts[name] ?? 0 };
+    inNetwork[name] =
+      s.kind === "compose"
+        ? { host: s.compose_service ?? name, port: s.port }
+        : s.kind === "stub"
+          ? { host: name, port: containerPort(s) }
+          : { host: "host.docker.internal", port: hostPorts[name] ?? 0 };
+  }
+  return { inNetwork, onHost };
+}
+
+/**
+ * Writes one `<service>.env` per service with permissions 0600 (REQ-CFG-05/AC1, AC3). Containers see
+ * in-network endpoints, processes see host endpoints.
+ *
+ * @returns The files written; the caller deletes them (REQ-CFG-05/AC2).
+ */
+export async function writeEnvFiles(options: {
+  readonly config: ProjectConfig;
+  readonly envDir: string;
+  readonly hostPorts: Readonly<Record<string, number>>;
+  readonly resolveSecret: (reference: string) => Promise<string>;
+  readonly overrides?: Readonly<Record<string, Readonly<Record<string, string>>>> | undefined;
+  readonly only?: (service: ServiceConfig) => boolean;
+}): Promise<string[]> {
+  const { inNetwork, onHost } = endpointsFor(options.config, options.hostPorts);
+  await mkdir(options.envDir, { recursive: true, mode: 0o700 });
+  const files: string[] = [];
+  for (const [name, s] of Object.entries(options.config.services)) {
+    if (options.only && !options.only(s)) continue;
+    const { vars } = await resolveServiceEnv(
+      s.env,
+      s.kind === "process" ? { svc: onHost, port: options.hostPorts[name] } : { svc: inNetwork },
+      options.resolveSecret,
+      options.overrides?.[name],
+    );
+    const file = join(options.envDir, `${name}.env`);
+    await writeFile(file, toDotenv(vars), { encoding: "utf8", mode: 0o600 });
+    await chmod(file, 0o600);
+    files.push(file);
+  }
+  return files;
+}
+
 const waitFor = async (
   check: () => Promise<boolean>,
   timeoutMs: number,
   sleep: (ms: number) => Promise<void>,
+  gone: () => boolean = () => false,
 ): Promise<boolean> => {
   const end = Date.now() + timeoutMs;
   while (Date.now() < end) {
     if (await check().catch(() => false)) return true;
+    // A managed process that exited will never become ready.
+    if (gone()) return false;
     await sleep(250);
   }
   return false;
@@ -176,7 +248,7 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
   const logs: string[] = [];
   let composeStarted = false;
 
-  const stop = async (): Promise<{ logs: readonly string[] }> => {
+  const stop = async (stopOptions: { keep?: boolean } = {}): Promise<{ logs: readonly string[] }> => {
     if (composeStarted) {
       for (const [name, s] of containerized) {
         const svc = s.kind === "compose" ? (s.compose_service ?? name) : name;
@@ -192,10 +264,12 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
           // A service that never started has no logs.
         }
       }
-      await exec("docker", composeArgs("down", "--volumes", "--remove-orphans"), {
-        cwd: options.worktree,
-        timeoutMs: 180_000,
-      }).catch(() => undefined);
+      if (stopOptions.keep !== true) {
+        await exec("docker", composeArgs("down", "--volumes", "--remove-orphans"), {
+          cwd: options.worktree,
+          timeoutMs: 180_000,
+        }).catch(() => undefined);
+      }
       composeStarted = false;
     }
     for (const child of children.values()) child.kill("SIGTERM");
@@ -209,27 +283,20 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
     await mkdir(options.logsDir, { recursive: true });
     for (const [name] of processes) hostPorts.set(name, await freePort());
 
-    // Endpoints as seen from inside the compose network.
-    const inNetwork: Record<string, Endpoint> = {};
-    for (const [name, s] of services) {
-      if (s.kind === "compose") inNetwork[name] = { host: s.compose_service ?? name, port: s.port };
-      else if (s.kind === "stub") inNetwork[name] = { host: name, port: STUB_IMAGES[s.engine]?.port ?? 8080 };
-      else inNetwork[name] = { host: "host.docker.internal", port: hostPorts.get(name) ?? 0 };
-    }
-
     if (containerized.length > 0) {
       const overlayServices: Record<string, unknown> = {};
+      envFiles.push(
+        ...(await writeEnvFiles({
+          config,
+          envDir: options.envDir,
+          hostPorts: Object.fromEntries(hostPorts),
+          resolveSecret: options.resolveSecret,
+          overrides: options.overrides,
+          only: (svc) => svc.kind !== "process",
+        })),
+      );
       for (const [name, s] of containerized) {
-        const { vars } = await resolveServiceEnv(
-          s.env,
-          { svc: inNetwork },
-          options.resolveSecret,
-          options.overrides?.[name],
-        );
         const envFile = join(options.envDir, `${name}.env`);
-        await writeFile(envFile, toDotenv(vars), { encoding: "utf8", mode: 0o600 });
-        await chmod(envFile, 0o600);
-        envFiles.push(envFile);
         if (s.kind === "compose") {
           overlayServices[s.compose_service ?? name] = {
             ports: [`127.0.0.1::${String(s.port)}`],
@@ -256,27 +323,41 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
         } | null;
         volumes = Object.fromEntries(Object.keys(base?.volumes ?? {}).map((v) => [v, { labels }]));
       }
-      await writeFile(
-        overlay,
-        stringify({
-          services: overlayServices,
-          networks: { default: { labels } },
-          ...(Object.keys(volumes).length > 0 ? { volumes } : {}),
-        }),
-        { encoding: "utf8", mode: 0o600 },
-      );
+      const writeOverlay = (withEnvFiles: boolean): Promise<void> =>
+        writeFile(
+          overlay,
+          stringify({
+            services: withEnvFiles
+              ? overlayServices
+              : Object.fromEntries(
+                  Object.entries(overlayServices).map(([k, v]) => [
+                    k,
+                    Object.fromEntries(
+                      Object.entries(v as Record<string, unknown>).filter(([key]) => key !== "env_file"),
+                    ),
+                  ]),
+                ),
+            networks: { default: { labels } },
+            ...(Object.keys(volumes).length > 0 ? { volumes } : {}),
+          }),
+          { encoding: "utf8", mode: 0o600 },
+        );
+      await writeOverlay(true);
       composeStarted = true;
-      await exec("docker", composeArgs("up", "--detach", "--build"), {
-        cwd: options.worktree,
-        timeoutMs: 900_000,
-      });
-      // REQ-CFG-05/AC2: the containers have their environment; the files are not needed any more.
-      await Promise.all(envFiles.map((f) => rm(f, { force: true })));
+      try {
+        await exec("docker", composeArgs("up", "--detach", "--build"), {
+          cwd: options.worktree,
+          timeoutMs: 900_000,
+        });
+      } finally {
+        // REQ-CFG-05/AC2: the containers have their environment; the files are not needed any more.
+        // The overlay is rewritten without them so that logs, port and down still parse it.
+        await Promise.all(envFiles.map((f) => rm(f, { force: true })));
+        await writeOverlay(false);
+      }
       for (const [name, s] of containerized) {
         const svc = s.kind === "compose" ? (s.compose_service ?? name) : name;
-        const containerPort =
-          s.kind === "compose" ? s.port : (STUB_IMAGES[s.kind === "stub" ? s.engine : ""]?.port ?? 8080);
-        const { stdout } = await exec("docker", composeArgs("port", svc, String(containerPort)), {
+        const { stdout } = await exec("docker", composeArgs("port", svc, String(containerPort(s))), {
           cwd: options.worktree,
         });
         const port = Number(/:(\d+)\s*$/.exec(stdout.trim())?.[1]);
@@ -287,9 +368,7 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
     }
 
     // Endpoints as seen from the host (managed processes and the test runner).
-    const onHost: Record<string, Endpoint> = Object.fromEntries(
-      services.map(([name]) => [name, { host: "127.0.0.1", port: hostPorts.get(name) ?? 0 }]),
-    );
+    const { onHost } = endpointsFor(config, Object.fromEntries(hostPorts));
     for (const [name, s] of processes) {
       if (s.kind !== "process") continue;
       const port = hostPorts.get(name) ?? 0;
@@ -299,7 +378,6 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
         options.resolveSecret,
         options.overrides?.[name],
       );
-      const { renderTemplate } = await import("@qajitsu/core");
       const [cmd, ...args] = s.command.map((part) => renderTemplate(part, { svc: onHost, port }));
       const log = createWriteStream(join(options.logsDir, `${name}.log`));
       logs.push(join(options.logsDir, `${name}.log`));
@@ -326,7 +404,6 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
       const port = hostPorts.get(name) ?? 0;
       const ready = await waitFor(
         async () => {
-          if (children.get(name)?.exitCode !== null && children.has(name)) return false;
           if (health.http)
             return (
               (
@@ -354,30 +431,52 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
         },
         health.timeout_s * 1000,
         sleep,
+        () => {
+          const child = children.get(name);
+          return child !== undefined && (child.exitCode !== null || child.signalCode !== null);
+        },
       );
       if (!ready)
         throw new BuildStartError(
           "BUILD_START_FAILED",
-          `Service ${name} did not become ready within ${String(health.timeout_s)} s.`,
+          children.get(name)?.exitCode != null
+            ? `Service ${name} exited with code ${String(children.get(name)?.exitCode)} before it was ready.`
+            : `Service ${name} did not become ready within ${String(health.timeout_s)} s.`,
           { service: name },
         );
     }
 
     const baseUrl = `http://127.0.0.1:${String(hostPorts.get(build.base_service) ?? 0)}`;
-    // REQ-ENV-04/AC2: seed hook after readiness.
+    // REQ-ENV-04/AC2: seed hook after readiness, with the base service's variables (it seeds that
+    // service) and the run marker QAJITSU_RUN for the data it creates. Output goes to logs/seed.log.
     if (build.seed) {
       const hook = resolve(options.qaDir, build.seed);
       const [cmd, args] = /\.(mjs|cjs|js)$/.test(hook) ? [process.execPath, [hook]] : [hook, []];
-      await exec(cmd, args, { cwd: options.worktree, timeoutMs: 120_000, env: { BASE_URL: baseUrl } }).catch(
-        (error: unknown) => {
-          throw new BuildStartError("BUILD_START_FAILED", `Seed hook ${build.seed ?? ""} failed.`, {
-            stderr: stderrOf(error).slice(-2000),
-          });
-        },
-      );
+      const baseService = config.services[build.base_service];
+      const { vars } = baseService
+        ? await resolveServiceEnv(
+            baseService.env,
+            { svc: onHost, port: hostPorts.get(build.base_service) },
+            options.resolveSecret,
+            options.overrides?.[build.base_service],
+          )
+        : { vars: {} };
+      const seedLog = join(options.logsDir, "seed.log");
+      logs.push(seedLog);
+      const output = await exec(cmd, args, {
+        cwd: options.worktree,
+        timeoutMs: 120_000,
+        env: { ...vars, BASE_URL: baseUrl, QAJITSU_RUN: runId, QAJITSU_TICKET: ticket },
+      }).catch(async (error: unknown) => {
+        await writeFile(seedLog, stderrOf(error), "utf8");
+        throw new BuildStartError("BUILD_START_FAILED", `Seed hook ${build.seed ?? ""} failed.`, {});
+      });
+      await writeFile(seedLog, `${output.stdout}${output.stderr}`, "utf8");
     }
     return {
       baseUrl,
+      project,
+      ports: Object.fromEntries(hostPorts),
       services: Object.fromEntries(
         services.map(([name, s]) => [
           name,

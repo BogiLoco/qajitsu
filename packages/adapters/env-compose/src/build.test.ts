@@ -80,6 +80,31 @@ describe("--build environment (REQ-ENV-03, REQ-ENV-04, REQ-CFG-05, REQ-WS-02)", 
     expect(await readFile(join(ws.logsDir, "api.log"), "utf8")).toContain("demo-shop API on");
   });
 
+  it("REQ-ENV-04/AC1: a log-line health check waits for the service's log", async () => {
+    const ws = await workspace();
+    const config = parseProjectConfig({
+      ...base,
+      services: { api: { ...apiService, health: { log: "demo-shop API on", timeout_s: 20 } } },
+      build: { repo: "shop", base_service: "api" },
+    });
+    const env = await startBuildEnvironment({
+      ticket: "DEMO-1",
+      runId: "20261003-1046-aaaa",
+      config,
+      qaDir: ws.qaDir,
+      worktree: ws.worktree,
+      envDir: ws.envDir,
+      logsDir: ws.logsDir,
+      resolveSecret: () => Promise.resolve(PASSWORD),
+      sleep: () => new Promise((r) => setTimeout(r, 20)),
+    });
+    try {
+      expect((await fetch(`${env.baseUrl}/health`)).status).toBe(200);
+    } finally {
+      await env.stop();
+    }
+  });
+
   it("REQ-ENV-03/AC3: two builds run in parallel without port clashes", async () => {
     const a = await workspace();
     const b = await workspace();
@@ -138,11 +163,11 @@ describe("--build environment (REQ-ENV-03, REQ-ENV-04, REQ-CFG-05, REQ-WS-02)", 
     });
   });
 
-  it("REQ-ENV-04/AC2: the seed hook runs after readiness with BASE_URL", async () => {
+  it("REQ-ENV-04/AC2: the demo seed hook runs after readiness and seeds data with the run marker", async () => {
     const ws = await workspace();
-    await writeFile(
+    await cp(
+      fileURLToPath(new URL("../../../../examples/demo-shop/.qa/hooks/seed.mjs", import.meta.url)),
       join(ws.qaDir, "hooks", "seed.mjs"),
-      `import { writeFileSync } from "node:fs"; writeFileSync(${JSON.stringify(join(ws.root, "seeded.txt"))}, process.env.BASE_URL);`,
     );
     const config = parseProjectConfig({
       ...base,
@@ -159,8 +184,45 @@ describe("--build environment (REQ-ENV-03, REQ-ENV-04, REQ-CFG-05, REQ-WS-02)", 
       logsDir: ws.logsDir,
       resolveSecret: () => Promise.resolve(PASSWORD),
     });
-    await env.stop();
-    expect(await readFile(join(ws.root, "seeded.txt"), "utf8")).toBe(env.baseUrl);
+    try {
+      const { token } = (await (
+        await fetch(`${env.baseUrl}/auth/login`, {
+          method: "POST",
+          body: JSON.stringify({ username: "admin", password: PASSWORD }),
+        })
+      ).json()) as { token: string };
+      const seeds = await fetch(`${env.baseUrl}/admin/seed`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(await seeds.json()).toEqual({ markers: ["qj-DEMO-1-20261003-1046-aaaa"] });
+    } finally {
+      await env.stop();
+    }
+    expect(await readFile(join(ws.logsDir, "seed.log"), "utf8")).toContain(
+      "seeded qj-DEMO-1-20261003-1046-aaaa",
+    );
+  });
+
+  it("REQ-ENV-04/AC3: a failing seed hook fails the start and stops what was started", async () => {
+    const ws = await workspace();
+    await writeFile(join(ws.qaDir, "hooks", "seed.mjs"), "process.stderr.write('no seed'); process.exit(2);");
+    const config = parseProjectConfig({
+      ...base,
+      services: { api: apiService },
+      build: { repo: "shop", base_service: "api", seed: "hooks/seed.mjs" },
+    });
+    const error = await startBuildEnvironment({
+      ticket: "DEMO-1",
+      runId: "20261003-1046-aaaa",
+      config,
+      qaDir: ws.qaDir,
+      worktree: ws.worktree,
+      envDir: ws.envDir,
+      logsDir: ws.logsDir,
+      resolveSecret: () => Promise.resolve(PASSWORD),
+    }).catch((e: unknown) => e);
+    expect(error).toMatchObject({ code: "BUILD_START_FAILED", message: "Seed hook hooks/seed.mjs failed." });
+    expect(await readFile(join(ws.logsDir, "seed.log"), "utf8")).toContain("no seed");
   });
 
   it("REQ-ENV-03/AC1 + REQ-WS-02 + REQ-CFG-05 + REQ-ENV-05: compose overlay with labels, dynamic ports, 0600 env files deleted after start, stubs listed", async () => {
@@ -255,6 +317,9 @@ describe("--build environment (REQ-ENV-03, REQ-ENV-04, REQ-CFG-05, REQ-WS-02)", 
       expect(envFileModes).toEqual([0o600, 0o600]);
       expect((await readdir(ws.envDir)).filter((n) => n.endsWith(".env"))).toEqual([]);
       expect(JSON.stringify(overlay)).not.toContain("db-secret-123456");
+      // After up the overlay no longer names the deleted env files, so logs/port/down still parse it.
+      expect(await readFile(join(ws.envDir, "compose.overlay.yml"), "utf8")).not.toContain("env_file");
+      expect(JSON.stringify(overlay)).toContain("env_file");
       expect(env.stubs).toEqual(["payments (wiremock)"]);
       expect(env.services["db"]?.url).toBe(`http://127.0.0.1:${String(ports[0])}`);
     } finally {

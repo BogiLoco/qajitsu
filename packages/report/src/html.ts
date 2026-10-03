@@ -36,6 +36,8 @@ export interface ReportInput {
     readonly name: string;
     readonly baseUrl: string;
     readonly deployedSha?: string | undefined;
+    /** Stubbed services: what was not real in this run (REQ-ENV-05/AC2). */
+    readonly stubs?: readonly string[] | undefined;
   };
   readonly repos: Readonly<Record<string, string>>;
   readonly gates: readonly {
@@ -173,7 +175,7 @@ section{border-top:1px solid #d0d7de;margin-top:16px}img,video{max-width:100%}
 :target{outline:3px solid #0969da}figure{margin:8px 0}.timeline td{font-size:12px}
 </style></head><body>
 <h1>${esc(input.ticket)} test report</h1>
-<p class="muted">Run ${esc(input.runId)} · ${esc(input.generatedAt)} · environment ${esc(input.environment.name)} (${esc(input.environment.baseUrl)})${input.environment.deployedSha ? ` · deployed <code>${esc(input.environment.deployedSha)}</code>` : ""}<br>Code: ${repos || "–"} · plan sha256 <code>${esc(input.planSha256.slice(0, 16))}…</code></p>
+<p class="muted">Run ${esc(input.runId)} · ${esc(input.generatedAt)} · environment ${esc(input.environment.name)} (${esc(input.environment.baseUrl)})${input.environment.deployedSha ? ` · deployed <code>${esc(input.environment.deployedSha)}</code>` : ""}${input.environment.stubs?.length ? ` · <strong>stubbed (not real):</strong> ${esc(input.environment.stubs.join(", "))}` : ""}<br>Code: ${repos || "–"} · plan sha256 <code>${esc(input.planSha256.slice(0, 16))}…</code></p>
 <div class="tiles">${tiles}</div>
 <h2>Summary</h2><p>${esc(input.summary).replace(/\n/g, "<br>")}</p>
 <h2>Matrix</h2><table><tr><th>TC</th><th>Title</th><th>Requirement</th><th>Type</th><th>Status</th><th>Steps OK</th><th>Evidence</th></tr>${matrix}</table>

@@ -34,7 +34,7 @@ QAJitsu warns when the environment does not run the code being tested.
 
 ### REQ-ENV-03 · Build the environment from repositories
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 6
 - Related: REQ-CTX-04, REQ-WS-02, REQ-CFG-02
@@ -43,34 +43,34 @@ QAJitsu warns when the environment does not run the code being tested.
 
 **Acceptance criteria**
 
-- [ ] AC1: Docker Compose with the project's compose file plus a generated overlay: project name from the run id, dynamic ports, labels `qajitsu.ticket` and `qajitsu.run` on containers, networks and volumes.
-- [ ] AC2: Services without Docker run as managed processes from a configured command, logs to `logs/`.
-- [ ] AC3: Two runs can build in parallel without port or name clashes.
+- [x] AC1: Docker Compose with the project's compose file plus a generated overlay: project name from the run id, dynamic ports, labels `qajitsu.ticket` and `qajitsu.run` on containers, networks and volumes.
+- [x] AC2: Services without Docker run as managed processes from a configured command, logs to `logs/`.
+- [x] AC3: Two runs can build in parallel without port or name clashes.
 
 ### REQ-ENV-04 · Readiness, seeding and start failures
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 6
 - Related: REQ-VER-01
 
 **Acceptance criteria**
 
-- [ ] AC1: Health checks per service (HTTP status, open port, log line) with timeouts.
-- [ ] AC2: Optional seed hook (`.qa/hooks/seed.*`) runs after readiness.
-- [ ] AC3: Start failure: every case BLOCKED, service logs attached as evidence; agents may describe a probable cause but cannot mark tests as executed.
+- [x] AC1: Health checks per service (HTTP status, open port, log line) with timeouts.
+- [x] AC2: Optional seed hook (`.qa/hooks/seed.*`) runs after readiness.
+- [x] AC3: Start failure: every case BLOCKED, service logs attached as evidence; agents may describe a probable cause but cannot mark tests as executed.
 
 ### REQ-ENV-05 · Stubs for external dependencies
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: 6
 - Related: REQ-ENV-03
 
 **Acceptance criteria**
 
-- [ ] AC1: A service can be declared as a stub (WireMock or Mockoon) with mappings in `.qa/stubs/`.
-- [ ] AC2: Stubbed services are listed in the report so readers know what was not real.
+- [x] AC1: A service can be declared as a stub (WireMock or Mockoon) with mappings in `.qa/stubs/`.
+- [x] AC2: Stubbed services are listed in the report so readers know what was not real.
 
 ### REQ-ENV-06 · Mobile apps and devices
 

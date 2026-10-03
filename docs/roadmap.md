@@ -20,7 +20,7 @@ Monorepo, tooling, core types, the guard and the status model; fetching a ticket
 - [REQ-CTX-01](requirements/context.md#req-ctx-01--jira-ticket-as-the-input) Jira ticket as the input (must, implemented, AC 5/5)
 - [REQ-CTX-02](requirements/context.md#req-ctx-02--github-and-gitlab-support) GitHub and GitLab support (must, implemented, AC 4/4)
 - [REQ-CTX-03](requirements/context.md#req-ctx-03--change-discovery-for-a-ticket) Change discovery for a ticket (must, implemented, AC 5/5)
-- [REQ-CTX-04](requirements/context.md#req-ctx-04--repositories-always-fetched-at-the-changes-version) Repositories always fetched at the change's version (must, in-progress, AC 3/4)
+- [REQ-CTX-04](requirements/context.md#req-ctx-04--repositories-always-fetched-at-the-changes-version) Repositories always fetched at the change's version (must, implemented, AC 4/4)
 - [REQ-CFG-03](requirements/config-secrets.md#req-cfg-03--secret-providers) Secret providers (must, in-progress, AC 2/3)
 - [REQ-WS-01](requirements/workspace.md#req-ws-01--folder-per-ticket-and-run-id) Folder per ticket and run id (must, implemented, AC 4/4)
 - [REQ-VER-01](requirements/verification.md#req-ver-01--status-model) Status model (must, in-progress, AC 2/3)
@@ -136,16 +136,16 @@ the variable schema and secrets, seeds data with the run's marker, and cleans ev
 
 <!-- prettier-ignore-start -->
 <!-- req-stage:6 -->
-- [REQ-ENV-03](requirements/environment.md#req-env-03--build-the-environment-from-repositories) Build the environment from repositories (must, accepted, AC 0/3)
-- [REQ-ENV-04](requirements/environment.md#req-env-04--readiness-seeding-and-start-failures) Readiness, seeding and start failures (must, accepted, AC 0/3)
-- [REQ-ENV-05](requirements/environment.md#req-env-05--stubs-for-external-dependencies) Stubs for external dependencies (should, accepted, AC 0/2)
-- [REQ-CFG-01](requirements/config-secrets.md#req-cfg-01--layered-configuration) Layered configuration (must, accepted, AC 0/2)
-- [REQ-CFG-02](requirements/config-secrets.md#req-cfg-02--service-variable-schema-and-templates) Service variable schema and templates (must, accepted, AC 0/3)
-- [REQ-CFG-04](requirements/config-secrets.md#req-cfg-04--validate-configuration-before-start) Validate configuration before start (must, accepted, AC 0/2)
-- [REQ-CFG-05](requirements/config-secrets.md#req-cfg-05--generated-env-files) Generated .env files (must, accepted, AC 0/3)
-- [REQ-WS-02](requirements/workspace.md#req-ws-02--labels-and-names-for-runtime-resources) Labels and names for runtime resources (must, accepted, AC 0/2)
-- [REQ-WS-03](requirements/workspace.md#req-ws-03--cleanup-policy-and-retention) Cleanup policy and retention (must, accepted, AC 0/4)
-- [REQ-WS-04](requirements/workspace.md#req-ws-04--run-management-commands) Run management commands (should, accepted, AC 0/3)
+- [REQ-ENV-03](requirements/environment.md#req-env-03--build-the-environment-from-repositories) Build the environment from repositories (must, implemented, AC 3/3)
+- [REQ-ENV-04](requirements/environment.md#req-env-04--readiness-seeding-and-start-failures) Readiness, seeding and start failures (must, implemented, AC 3/3)
+- [REQ-ENV-05](requirements/environment.md#req-env-05--stubs-for-external-dependencies) Stubs for external dependencies (should, implemented, AC 2/2)
+- [REQ-CFG-01](requirements/config-secrets.md#req-cfg-01--layered-configuration) Layered configuration (must, implemented, AC 2/2)
+- [REQ-CFG-02](requirements/config-secrets.md#req-cfg-02--service-variable-schema-and-templates) Service variable schema and templates (must, implemented, AC 3/3)
+- [REQ-CFG-04](requirements/config-secrets.md#req-cfg-04--validate-configuration-before-start) Validate configuration before start (must, implemented, AC 2/2)
+- [REQ-CFG-05](requirements/config-secrets.md#req-cfg-05--generated-env-files) Generated .env files (must, implemented, AC 3/3)
+- [REQ-WS-02](requirements/workspace.md#req-ws-02--labels-and-names-for-runtime-resources) Labels and names for runtime resources (must, implemented, AC 2/2)
+- [REQ-WS-03](requirements/workspace.md#req-ws-03--cleanup-policy-and-retention) Cleanup policy and retention (must, implemented, AC 4/4)
+- [REQ-WS-04](requirements/workspace.md#req-ws-04--run-management-commands) Run management commands (should, implemented, AC 3/3)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 
