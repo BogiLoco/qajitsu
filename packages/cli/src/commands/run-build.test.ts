@@ -92,6 +92,7 @@ describe("qajitsu run --build (stage 6)", () => {
             baseUrl = input.baseUrl;
             await writeFile(join(envDir, "api.env"), `DEMO_USER_PASSWORD="${PASSWORD}"\n`, { mode: 0o600 });
             signals.emit("SIGINT");
+            signals.emit("SIGINT");
             await new Promise((r) => setTimeout(r, 300));
           }
           return inProcessExecutor(input);

@@ -1,4 +1,5 @@
-import { open, readFile, rm, stat } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { link, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { ConfigError } from "../errors.js";
 
 const isErrno = (error: unknown, code: string): boolean =>
@@ -9,10 +10,13 @@ const pause = (ms: number): Promise<void> =>
     setTimeout(resolve, ms);
   });
 
+const unique = (path: string): string => `${path}.${String(process.pid)}-${randomBytes(4).toString("hex")}`;
+
 /**
  * Runs `fn` while holding an exclusive lock file (created with `O_EXCL`). Used for the read-modify-write
  * of `index.json`, so parallel runs of one ticket do not lose entries (REQ-WS-04/AC2). A lock older than
- * `staleMs` is considered abandoned by a crashed process and taken over.
+ * `staleMs` is considered abandoned by a crashed process; it is taken over by an atomic rename, so two
+ * processes never both take it, and a fresh lock renamed by mistake is put back.
  *
  * @param path - Lock file path.
  * @param fn - Work done under the lock.
@@ -38,7 +42,20 @@ export async function withFileLock<T>(
         () => 0,
       );
       if (age > staleMs) {
-        await rm(path, { force: true });
+        const aside = unique(path);
+        const moved = await rename(path, aside).then(
+          () => true,
+          () => false,
+        );
+        if (moved) {
+          const movedAge = await stat(aside).then(
+            (s) => Date.now() - s.mtimeMs,
+            () => Number.POSITIVE_INFINITY,
+          );
+          // Someone else replaced the stale lock in between: give theirs back.
+          if (movedAge <= staleMs) await link(aside, path).catch(() => undefined);
+          await rm(aside, { force: true });
+        }
         continue;
       }
       if (Date.now() - start > timeoutMs)
@@ -63,37 +80,65 @@ export const processAlive = (pid: number): boolean => {
   }
 };
 
+const readHolder = async (lockFile: string): Promise<number | undefined> => {
+  const text = (await readFile(lockFile, "utf8").catch(() => "")).trim();
+  const pid = Number(text);
+  return /^\d+$/.test(text) && pid > 0 ? pid : undefined;
+};
+
 /**
  * Takes the lock of one run folder: two processes never write the same run, different runs of a ticket
- * may run in parallel (REQ-WS-04/AC2). A lock left by a dead process is taken over.
+ * may run in parallel (REQ-WS-04/AC2). The lock file appears atomically with the owner's pid inside
+ * (`link` of a written temp file). A lock whose owner is dead is taken over; an unreadable lock counts
+ * as held.
  *
  * @param lockFile - `<run>/run.lock`.
  * @param pid - Pid of this process.
  * @param alive - Liveness check (injected in tests).
- * @returns A function releasing the lock.
- * @throws {ConfigError} `RUN_LOCKED` when a live process holds the run.
+ * @returns A function releasing the lock (only while it still holds this pid).
+ * @throws {ConfigError} `RUN_LOCKED` when another live process, or an unknown one, holds the run.
  */
 export async function acquireRunLock(
   lockFile: string,
   pid: number = process.pid,
   alive: (pid: number) => boolean = processAlive,
 ): Promise<() => Promise<void>> {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      const handle = await open(lockFile, "wx", 0o600);
-      await handle.writeFile(`${String(pid)}\n`);
-      await handle.close();
-      return () => rm(lockFile, { force: true });
-    } catch (error) {
-      if (!isErrno(error, "EEXIST")) throw error;
-      const holder = Number((await readFile(lockFile, "utf8").catch(() => "")).trim());
-      if (Number.isInteger(holder) && holder > 0 && holder !== pid && alive(holder)) {
-        throw new ConfigError("RUN_LOCKED", `This run is in use by process ${String(holder)}.`, {
-          pid: holder,
-        });
+  const tmp = unique(lockFile);
+  await writeFile(tmp, `${String(pid)}\n`, { mode: 0o600 });
+  try {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await link(tmp, lockFile);
+        return async () => {
+          if ((await readHolder(lockFile)) === pid) await rm(lockFile, { force: true });
+        };
+      } catch (error) {
+        if (!isErrno(error, "EEXIST")) throw error;
+        const holder = await readHolder(lockFile);
+        if (holder === undefined || holder === pid || alive(holder)) {
+          throw new ConfigError(
+            "RUN_LOCKED",
+            holder === undefined
+              ? `This run is locked (${lockFile}); remove the file if no process uses the run.`
+              : `This run is in use by process ${String(holder)}.`,
+            holder === undefined ? {} : { pid: holder },
+          );
+        }
+        // The owner is dead: move its lock aside atomically; only one taker wins the rename.
+        const aside = unique(lockFile);
+        if (
+          await rename(lockFile, aside).then(
+            () => true,
+            () => false,
+          )
+        ) {
+          if ((await readHolder(aside)) !== holder) await link(aside, lockFile).catch(() => undefined);
+          await rm(aside, { force: true });
+        }
       }
-      await rm(lockFile, { force: true });
     }
+    throw new ConfigError("RUN_LOCKED", "Could not lock the run.", {});
+  } finally {
+    await rm(tmp, { force: true });
   }
-  throw new ConfigError("RUN_LOCKED", "Could not lock the run.", {});
 }

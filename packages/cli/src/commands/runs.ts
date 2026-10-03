@@ -141,12 +141,16 @@ export async function runResume(
   }
 }
 
-/** Cleans one run's runtime resources unless another process holds it. */
+/**
+ * Cleans one run's runtime resources unless another process holds it; `then` runs before the lock is
+ * released (gc deletes the run under the same lock).
+ */
 async function cleanOne(
   root: string,
   ticket: TicketKey,
   runId: string,
   exec: CommandExec | undefined,
+  then?: () => Promise<void>,
 ): Promise<string> {
   const ws = await openRunWorkspace(root, ticket, runId);
   let release: () => Promise<void>;
@@ -158,6 +162,7 @@ async function cleanOne(
   try {
     const removed = await removeRunResources(ws.runId, exec);
     const files = await cleanRunFiles(ws);
+    await then?.();
     return `${runId}: ${String(removed.containers)} container(s), ${String(removed.volumes)} volume(s), ${String(removed.networks)} network(s), ${String(files.length)} worktree/env path(s) removed`;
   } finally {
     await release();
@@ -215,13 +220,10 @@ export async function runGc(
           io.write(`would remove ${ticket}/${runId}\n`);
           continue;
         }
-        const cleaned = await cleanOne(root, ticket, runId, ports.buildExec);
-        if (cleaned.endsWith("skipped")) {
-          io.write(`${ticket}/${cleaned}\n`);
-          continue;
-        }
-        await deleteRun(root, ticket, runId);
-        io.write(`removed ${ticket}/${runId}\n`);
+        const cleaned = await cleanOne(root, ticket, runId, ports.buildExec, () =>
+          deleteRun(root, ticket, runId),
+        );
+        io.write(cleaned.endsWith("skipped") ? `${ticket}/${cleaned}\n` : `removed ${ticket}/${runId}\n`);
       }
     }
     io.write(

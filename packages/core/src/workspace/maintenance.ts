@@ -28,7 +28,13 @@ export async function cleanRunFiles(ws: RunWorkspace): Promise<string[]> {
       removed.push(`repos/${entry}`);
     }
   }
-  for (const entry of await readdir(ws.path("env")).catch(() => [])) {
+  const envDir = ws.path("env");
+  if ((await lstat(envDir).catch(() => undefined))?.isSymbolicLink() === true) {
+    // A planted symlink: remove the link, never what it points to.
+    await rm(envDir, { force: true });
+    return [...removed, "env"];
+  }
+  for (const entry of await readdir(envDir).catch(() => [])) {
     await rm(ws.path("env", entry), { recursive: true, force: true });
     removed.push(`env/${entry}`);
   }

@@ -107,11 +107,12 @@ describe("provided environment (REQ-ENV-01, REQ-ENV-02, REQ-ENV-07, REQ-CFG-07)"
   });
 
   it("REQ-ENV-03 + REQ-CTX-04/AC4: a built environment uses the profile's accounts with its own loopback URL", async () => {
-    const { qaDir, config } = await project(
-      profileFor("https://staging.example.com", "production: true\n"),
-      {},
-      [],
-    );
+    const prod = await project(profileFor("https://shop.example.com", "production: true\n"), {}, []);
+    // A production profile's accounts must not log in to the built code unless production is allowed.
+    await expect(
+      resolveEnvironment({ config: prod.config, qaDir: prod.qaDir, buildBaseUrl: "http://127.0.0.1:41234" }),
+    ).rejects.toMatchObject({ code: "ENV_PRODUCTION_DENIED" });
+    const { qaDir, config } = await project(profileFor("https://staging.example.com"), {}, []);
     const env = await resolveEnvironment({ config, qaDir, buildBaseUrl: "http://127.0.0.1:41234" });
     expect(env).toMatchObject({
       name: "build (local)",

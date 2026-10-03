@@ -42,7 +42,10 @@ export const ServiceSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("compose"),
     /** Service name in the project's compose file; defaults to the key. */
-    compose_service: z.string().min(1).optional(),
+    compose_service: z
+      .string()
+      .regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/, "A compose service name (no leading '-')")
+      .optional(),
     /** Container port published on a dynamic localhost port. */
     port: z.number().int().min(1).max(65535),
     ...Common,

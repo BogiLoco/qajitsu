@@ -61,7 +61,7 @@ export interface RunPorts {
   readonly buildExec?: CommandExec;
   /** Source of SIGINT/SIGTERM and the exit function (default: the process; replaced in tests). */
   readonly signals?: {
-    once(event: "SIGINT" | "SIGTERM", listener: () => void): unknown;
+    on(event: "SIGINT" | "SIGTERM", listener: () => void): unknown;
     off(event: "SIGINT" | "SIGTERM", listener: () => void): unknown;
   };
   readonly exit?: (code: number) => void;
@@ -131,7 +131,11 @@ export async function runRun(
   let release: (() => Promise<void>) | undefined;
   let stopOnInterrupt: (() => Promise<void>) | undefined;
   // REQ-CFG-05/AC2: an interrupt still stops the environment and deletes the generated .env files.
+  // Listening with `on`: a second Ctrl+C during a long `docker compose up` must not skip the cleanup.
+  let interrupted = false;
   const onSignal = (): void => {
+    if (interrupted) return;
+    interrupted = true;
     void (stopOnInterrupt?.() ?? Promise.resolve()).finally(() => {
       void (release?.() ?? Promise.resolve()).finally(() => {
         (ports.exit ?? ((code: number) => process.exit(code)))(130);
@@ -139,8 +143,8 @@ export async function runRun(
     });
   };
   const signals = ports.signals ?? process;
-  signals.once("SIGINT", onSignal);
-  signals.once("SIGTERM", onSignal);
+  signals.on("SIGINT", onSignal);
+  signals.on("SIGTERM", onSignal);
   try {
     const session = await openSession(rawKey, options.run, io.cwd, ports, masker);
     const { ws, events, project } = session;

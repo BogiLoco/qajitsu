@@ -104,6 +104,7 @@ export async function prepareBuild(
         envDir: ws.path("env"),
         logsDir: ws.path("logs"),
         resolveSecret: (ref) => session.resolveSecret(ref),
+        mask: (text) => session.masker.maskText(text),
         overrides: options.overrides,
         fetch: options.fetch,
         ...(options.exec ? { exec: options.exec } : {}),

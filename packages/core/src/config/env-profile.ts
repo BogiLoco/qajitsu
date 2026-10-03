@@ -73,7 +73,7 @@ export async function resolveEnvironment(options: {
   /**
    * URL of an environment this run built on localhost (`--build`). The profile then provides
    * accounts, login and web session only; the URL needs no allowlist entry because it is a loopback
-   * address the run itself started, and it is never production.
+   * address the run itself started. The production ban of the profile still applies.
    */
   readonly buildBaseUrl?: string | undefined;
 }): Promise<ResolvedEnvironment> {
@@ -119,7 +119,8 @@ export async function resolveEnvironment(options: {
   const parsed = EnvProfileSchema.safeParse({
     ...(raw as Record<string, unknown> | undefined),
     ...(isUrl ? { base_url: selected } : {}),
-    ...(buildBaseUrl === undefined ? {} : { base_url: buildBaseUrl, production: false }),
+    // The production flag of the profile still applies: its accounts would log in to the built code.
+    ...(buildBaseUrl === undefined ? {} : { base_url: buildBaseUrl }),
   });
   if (!parsed.success) {
     throw new ConfigError(

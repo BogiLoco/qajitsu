@@ -1,4 +1,15 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile, cp } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -248,6 +259,10 @@ describe("--build environment (REQ-ENV-03, REQ-ENV-04, REQ-CFG-05, REQ-WS-02)", 
     });
     const calls: string[][] = [];
     const envFileModes: number[] = [];
+    const composePath = await realpath(join(ws.worktree, "docker-compose.yml"));
+    let composeModel: unknown = {
+      services: { db: { ports: [{ host_ip: "127.0.0.1", published: "1", target: 5432 }] } },
+    };
     let overlay: unknown;
     const listeners = await Promise.all(
       [0, 1].map(
@@ -270,7 +285,8 @@ describe("--build environment (REQ-ENV-03, REQ-ENV-04, REQ-CFG-05, REQ-WS-02)", 
       }
       if (args.includes("port"))
         return { stdout: `127.0.0.1:${String(args.includes("db") ? ports[0] : ports[1])}\n`, stderr: "" };
-      if (args.includes("logs")) return { stdout: "service log line\n", stderr: "" };
+      if (args.includes("logs")) return { stdout: "service log line db-secret-123456\n", stderr: "" };
+      if (args.includes("config")) return { stdout: JSON.stringify(composeModel), stderr: "" };
       return { stdout: "", stderr: "" };
     };
     const env = await startBuildEnvironment({
@@ -283,6 +299,7 @@ describe("--build environment (REQ-ENV-03, REQ-ENV-04, REQ-CFG-05, REQ-WS-02)", 
       logsDir: ws.logsDir,
       resolveSecret: (r) => Promise.resolve(r.endsWith("DB_PASSWORD") ? "db-secret-123456" : PASSWORD),
       exec,
+      mask: (t) => t.replaceAll("db-secret-123456", "***"),
     });
     try {
       expect(projectName("DEMO-1", "20261003-1046-aaaa")).toBe("qj-demo-1-aaaa");
@@ -292,7 +309,7 @@ describe("--build environment (REQ-ENV-03, REQ-ENV-04, REQ-CFG-05, REQ-WS-02)", 
         "--project-name",
         "qj-demo-1-aaaa",
         "--file",
-        join(ws.worktree, "docker-compose.yml"),
+        composePath,
         "--file",
         join(ws.envDir, "compose.overlay.yml"),
         "up",
@@ -332,14 +349,59 @@ describe("--build environment (REQ-ENV-03, REQ-ENV-04, REQ-CFG-05, REQ-WS-02)", 
       "--project-name",
       "qj-demo-1-aaaa",
       "--file",
-      join(ws.worktree, "docker-compose.yml"),
+      composePath,
       "--file",
       join(ws.envDir, "compose.overlay.yml"),
       "down",
       "--volumes",
       "--remove-orphans",
     ]);
-    expect(await readFile(join(ws.logsDir, "db.log"), "utf8")).toBe("service log line\n");
+    // Logs are masked before they are written (invariant 8).
+    expect(await readFile(join(ws.logsDir, "db.log"), "utf8")).toBe("service log line ***\n");
+
+    // The analysed branch's compose model is checked before up (privileged, host network, ...).
+    composeModel = { services: { db: { privileged: true, network_mode: "host" } } };
+    calls.length = 0;
+    const rejected = await startBuildEnvironment({
+      ticket: "DEMO-1",
+      runId: "20261003-1046-bbbb",
+      config,
+      qaDir: ws.qaDir,
+      worktree: ws.worktree,
+      envDir: ws.envDir,
+      logsDir: ws.logsDir,
+      resolveSecret: () => Promise.resolve("db-secret-123456"),
+      exec,
+    }).catch((e: unknown) => e);
+    expect(rejected).toMatchObject({ code: "BUILD_START_FAILED" });
+    expect((rejected as Error).message).toContain("db: privileged containers are not allowed");
+    expect(calls.some((c) => c.includes("up"))).toBe(false);
+    expect((await readdir(ws.envDir)).filter((n) => n.endsWith(".env"))).toEqual([]);
+  });
+
+  it("REQ-ENV-03: a compose_file symlinked outside the worktree is refused without reading it", async () => {
+    const ws = await workspace();
+    await writeFile(join(ws.root, "credentials"), "aws_secret_access_key = fictional");
+    await rm(join(ws.worktree, "docker-compose.yml"));
+    await symlink(join(ws.root, "credentials"), join(ws.worktree, "docker-compose.yml"));
+    const config = parseProjectConfig({
+      ...base,
+      services: { db: { kind: "compose", port: 5432 } },
+      build: { repo: "shop", base_service: "db", compose_file: "docker-compose.yml" },
+    });
+    const error = await startBuildEnvironment({
+      ticket: "DEMO-1",
+      runId: "20261003-1046-aaaa",
+      config,
+      qaDir: ws.qaDir,
+      worktree: ws.worktree,
+      envDir: ws.envDir,
+      logsDir: ws.logsDir,
+      resolveSecret: () => Promise.resolve(""),
+      exec: () => Promise.reject(new Error("docker must not run")),
+    }).catch((e: unknown) => e);
+    expect(error).toMatchObject({ code: "BUILD_START_FAILED" });
+    expect((error as Error).message).toBe("docker-compose.yml points outside the worktree.");
   });
 
   it("refuses a run without build configuration", async () => {

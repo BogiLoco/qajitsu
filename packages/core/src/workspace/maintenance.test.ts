@@ -27,9 +27,15 @@ describe("run locks (REQ-WS-04/AC2)", () => {
     const release = await acquireRunLock(lock, 111, () => true);
     await expect(acquireRunLock(lock, 222, () => true)).rejects.toMatchObject({ code: "RUN_LOCKED" });
     const taken = await acquireRunLock(lock, 222, () => false);
-    await taken();
+    // The first owner's release must not remove the lock it no longer holds.
     await release();
+    expect(await readdir(dir)).toEqual(["run.lock"]);
+    await expect(acquireRunLock(lock, 222, () => true)).rejects.toMatchObject({ code: "RUN_LOCKED" });
+    await taken();
     expect(await readdir(dir)).toEqual([]);
+    // An unreadable or empty lock counts as held.
+    await writeFile(lock, "");
+    await expect(acquireRunLock(lock, 333, () => false)).rejects.toMatchObject({ code: "RUN_LOCKED" });
     expect(processAlive(process.pid)).toBe(true);
     expect(processAlive(2 ** 22 + 12345)).toBe(false);
   });
@@ -82,6 +88,11 @@ describe("cleanup and retention (REQ-WS-03)", () => {
     expect((await cleanRunFiles(ws)).sort()).toEqual(["env/api.env", "repos/evil", "repos/shop"]);
     expect(await readdir(ws.path("repos"))).toEqual(["shop.diff"]);
     expect(await readdir(ws.path("results"))).toEqual(["TC-01.json"]);
+    expect(await readdir(outside)).toEqual(["precious.txt"]);
+    // A symlinked env/ folder is unlinked, its target untouched.
+    await rm(ws.path("env"), { recursive: true });
+    await symlink(outside, ws.path("env"));
+    expect(await cleanRunFiles(ws)).toEqual(["env"]);
     expect(await readdir(outside)).toEqual(["precious.txt"]);
   });
 

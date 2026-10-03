@@ -157,7 +157,7 @@ describe("qajitsu env (REQ-CFG-04, REQ-CFG-05)", () => {
     const runId = (await index(home)).latest ?? "";
     const file = join(home, "runs", "DEMO-1", runId, "env", "api.env");
     expect((await stat(file)).mode & 0o777).toBe(0o600);
-    expect(await readFile(file, "utf8")).toContain(`DEMO_USER_PASSWORD="${PASSWORD}"`);
+    expect(await readFile(file, "utf8")).toContain(`DEMO_USER_PASSWORD='${PASSWORD}'`);
     expect((await run(["env", "render", "DEMO-9"])).exitCode).toBe(3);
   });
 });

@@ -39,7 +39,10 @@ describe("service variables and templates (REQ-CFG-02)", () => {
     await expect(resolveServiceEnv(env, context, resolve, { MODE: "prod" })).rejects.toMatchObject({
       code: "VARIABLE_NOT_OVERRIDABLE",
     });
-    expect(toDotenv({ A: 'x"y', B: "l1\nl2" })).toBe('A="x\\"y"\nB="l1\\nl2"\n');
+    // Single quotes: compose takes the value literally, no ${HOST_VAR} interpolation.
+    expect(toDotenv({ A: 'x"y$z', B: "${HOME}" })).toBe("A='x\"y$z'\nB='${HOME}'\n");
+    expect(() => toDotenv({ A: "it's" })).toThrow(/single quote/);
+    expect(() => toDotenv({ A: "l1\nl2" })).toThrow(/line break/);
   });
 
   it("REQ-ENV-03: build and services are validated with the project", () => {

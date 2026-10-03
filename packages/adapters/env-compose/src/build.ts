@@ -1,8 +1,8 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { createWriteStream } from "node:fs";
-import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { createServer, connect } from "node:net";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import {
   AdapterError,
   ConfigError,
@@ -14,6 +14,7 @@ import {
   type ServiceConfig,
 } from "@qajitsu/core";
 import { parse, stringify } from "yaml";
+import { checkComposeModel } from "./compose-safety.js";
 
 /** Runs a command with an argument array (never a shell string). */
 export type CommandExec = (
@@ -36,7 +37,9 @@ export const execCommand: CommandExec = (cmd, args, options = {}) =>
         cwd: options.cwd,
         timeout: options.timeoutMs ?? 600_000,
         maxBuffer: 32 * 1024 * 1024,
-        env: { ...process.env, ...options.env },
+        // Never the whole parent environment: the compose file and the seed hook come from the code
+        // under test and must not see QAJitsu's own credentials (compose interpolates ${VAR}).
+        env: { ...baseEnv(), ...options.env },
       },
       (error, stdout, stderr) => {
         if (error) reject(Object.assign(new Error(`${cmd} ${args[0] ?? ""} failed`), { stderr }));
@@ -44,6 +47,25 @@ export const execCommand: CommandExec = (cmd, args, options = {}) =>
       },
     );
   });
+
+const PASSED_THROUGH = [
+  "PATH",
+  "HOME",
+  "TMPDIR",
+  "USER",
+  "LANG",
+  "DOCKER_HOST",
+  "DOCKER_CONFIG",
+  "DOCKER_CONTEXT",
+  "DOCKER_CERT_PATH",
+  "DOCKER_TLS_VERIFY",
+];
+
+/** The only parent variables passed to docker, the seed hook and managed processes. */
+const baseEnv = (): Record<string, string> =>
+  Object.fromEntries(
+    PASSED_THROUGH.flatMap((k) => (process.env[k] === undefined ? [] : [[k, process.env[k] ?? ""]])),
+  );
 
 const stderrOf = (error: unknown): string => {
   const v = (error as { stderr?: unknown }).stderr;
@@ -94,6 +116,8 @@ export interface BuildOptions {
   /** Run-level overrides of overridable variables, per service (REQ-CFG-02/AC3). */
   readonly overrides?: Readonly<Record<string, Readonly<Record<string, string>>>>;
   readonly sleep?: (ms: number) => Promise<void>;
+  /** Masks secrets in service and seed logs before they are written (invariant 8). */
+  readonly mask?: (text: string) => string;
 }
 
 /** A started build environment. */
@@ -165,6 +189,8 @@ export async function writeEnvFiles(options: {
 }): Promise<string[]> {
   const { inNetwork, onHost } = endpointsFor(options.config, options.hostPorts);
   await mkdir(options.envDir, { recursive: true, mode: 0o700 });
+  if ((await lstat(options.envDir)).isSymbolicLink())
+    throw new ConfigError("ENV_DIR_SYMLINK", "The run's env/ folder must not be a symbolic link.", {});
   const files: string[] = [];
   for (const [name, s] of Object.entries(options.config.services)) {
     if (options.only && !options.only(s)) continue;
@@ -175,12 +201,30 @@ export async function writeEnvFiles(options: {
       options.overrides?.[name],
     );
     const file = join(options.envDir, `${name}.env`);
-    await writeFile(file, toDotenv(vars), { encoding: "utf8", mode: 0o600 });
+    // Removed first and created exclusively, so a planted symlink is never followed.
+    await rm(file, { force: true });
+    await writeFile(file, toDotenv(vars), { encoding: "utf8", mode: 0o600, flag: "wx" });
     await chmod(file, 0o600);
     files.push(file);
   }
   return files;
 }
+
+/** Resolves a path in the worktree and refuses one that leaves it, also through symlinks. */
+const insideWorktree = async (worktree: string, file: string): Promise<string> => {
+  const root = await realpath(worktree);
+  const target = await realpath(resolve(worktree, file)).catch(() => resolve(worktree, file));
+  const rel = relative(root, target);
+  if (rel.startsWith("..") || isAbsolute(rel))
+    throw new BuildStartError("BUILD_START_FAILED", `${file} points outside the worktree.`, {});
+  return target;
+};
+
+/** Given and real paths of the allowed roots (macOS tmp folders are symlinks). */
+const rootsOf = async (dirs: readonly string[]): Promise<string[]> => [
+  ...dirs,
+  ...(await Promise.all(dirs.map((d) => realpath(d).catch(() => d)))),
+];
 
 const waitFor = async (
   check: () => Promise<boolean>,
@@ -225,6 +269,7 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
   if (!build)
     throw new ConfigError("BUILD_NOT_CONFIGURED", "`build` is not configured in .qa/qa.project.yaml.", {});
   const exec = options.exec ?? execCommand;
+  const mask = options.mask ?? ((text: string) => text);
   const fetch = options.fetch ?? globalThis.fetch;
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const labels = labelsFor(ticket, runId);
@@ -233,11 +278,14 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
   const containerized = services.filter(([, s]) => s.kind !== "process");
   const processes = services.filter(([, s]) => s.kind === "process");
   const overlay = join(options.envDir, "compose.overlay.yml");
+  const composeFile = build.compose_file
+    ? await insideWorktree(options.worktree, build.compose_file)
+    : undefined;
   const composeArgs = (...rest: string[]): string[] => [
     "compose",
     "--project-name",
     project,
-    ...(build.compose_file ? ["--file", resolve(options.worktree, build.compose_file)] : []),
+    ...(composeFile ? ["--file", composeFile] : []),
     "--file",
     overlay,
     ...rest,
@@ -258,7 +306,7 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
             timeoutMs: 60_000,
           });
           const file = join(options.logsDir, `${name}.log`);
-          await writeFile(file, stdout, "utf8");
+          await writeFile(file, mask(stdout), "utf8");
           logs.push(file);
         } catch {
           // A service that never started has no logs.
@@ -274,6 +322,12 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
     }
     for (const child of children.values()) child.kill("SIGTERM");
     children.clear();
+    // Process logs were streamed as written; mask them now that the process is gone.
+    for (const [name] of processes) {
+      const file = join(options.logsDir, `${name}.log`);
+      const text = await readFile(file, "utf8").catch(() => undefined);
+      if (text !== undefined) await writeFile(file, mask(text), "utf8");
+    }
     await Promise.all(envFiles.map((f) => rm(f, { force: true })));
     return { logs };
   };
@@ -317,10 +371,18 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
       }
       // Volumes declared by the project get labels too, so cleanup can find them (REQ-WS-02/AC1).
       let volumes: Record<string, unknown> = {};
-      if (build.compose_file) {
-        const base = parse(await readFile(resolve(options.worktree, build.compose_file), "utf8")) as {
-          volumes?: Record<string, unknown>;
-        } | null;
+      if (composeFile) {
+        let base: { volumes?: Record<string, unknown> } | null;
+        try {
+          base = parse(await readFile(composeFile, "utf8")) as typeof base;
+        } catch {
+          // No parser detail: it could quote file content into results and reports.
+          throw new BuildStartError(
+            "BUILD_START_FAILED",
+            `${build.compose_file ?? ""} is not valid YAML.`,
+            {},
+          );
+        }
         volumes = Object.fromEntries(Object.keys(base?.volumes ?? {}).map((v) => [v, { labels }]));
       }
       const writeOverlay = (withEnvFiles: boolean): Promise<void> =>
@@ -343,6 +405,30 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
           { encoding: "utf8", mode: 0o600 },
         );
       await writeOverlay(true);
+      // The compose file belongs to the change under test: check its effective model first.
+      const model = await exec("docker", composeArgs("config", "--format", "json"), {
+        cwd: options.worktree,
+        timeoutMs: 120_000,
+      }).catch(() => {
+        throw new BuildStartError("BUILD_START_FAILED", "docker compose config failed.", {});
+      });
+      let parsedModel: unknown;
+      try {
+        parsedModel = JSON.parse(model.stdout) as unknown;
+      } catch {
+        throw new BuildStartError("BUILD_START_FAILED", "docker compose config did not return JSON.", {});
+      }
+      const unsafe = checkComposeModel(parsedModel, await rootsOf([options.worktree, options.qaDir]));
+      if (unsafe.length > 0) {
+        await Promise.all(envFiles.map((f) => rm(f, { force: true })));
+        throw new BuildStartError(
+          "BUILD_START_FAILED",
+          `The compose file was rejected: ${unsafe.join("; ")}.`,
+          {
+            problems: unsafe,
+          },
+        );
+      }
       composeStarted = true;
       try {
         await exec("docker", composeArgs("up", "--detach", "--build"), {
@@ -384,8 +470,7 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
       const child = spawn(cmd ?? "", args, {
         cwd: resolve(options.worktree, s.cwd ?? "."),
         env: {
-          PATH: process.env["PATH"] ?? "",
-          HOME: process.env["HOME"] ?? "",
+          ...baseEnv(),
           PORT: String(port),
           ...vars,
         },
@@ -409,6 +494,7 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
               (
                 await fetch(`http://127.0.0.1:${String(port)}${health.http}`, {
                   signal: AbortSignal.timeout(2000),
+                  redirect: "manual",
                 })
               ).status < 400
             );
@@ -468,10 +554,10 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
         timeoutMs: 120_000,
         env: { ...vars, BASE_URL: baseUrl, QAJITSU_RUN: runId, QAJITSU_TICKET: ticket },
       }).catch(async (error: unknown) => {
-        await writeFile(seedLog, stderrOf(error), "utf8");
+        await writeFile(seedLog, mask(stderrOf(error)), "utf8");
         throw new BuildStartError("BUILD_START_FAILED", `Seed hook ${build.seed ?? ""} failed.`, {});
       });
-      await writeFile(seedLog, `${output.stdout}${output.stderr}`, "utf8");
+      await writeFile(seedLog, mask(`${output.stdout}${output.stderr}`), "utf8");
     }
     return {
       baseUrl,

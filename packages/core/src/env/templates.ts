@@ -79,13 +79,23 @@ export async function resolveServiceEnv(
 }
 
 /**
- * Serialises variables as a `.env` file (quoted, newlines escaped).
+ * Serialises variables as a `.env` file. Values are single-quoted so Docker Compose takes them
+ * literally: no `${...}` interpolation of the host environment, `$` in secrets survives.
  *
  * @param vars - Variables.
+ * @throws {ConfigError} `VARIABLE_VALUE_UNSUPPORTED` for a value with `'`, a newline or a carriage return.
  */
 export function toDotenv(vars: Readonly<Record<string, string>>): string {
   return Object.entries(vars)
-    .map(([k, v]) => `${k}="${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")}"`)
+    .map(([k, v]) => {
+      if (/['\r\n]/.test(v))
+        throw new ConfigError(
+          "VARIABLE_VALUE_UNSUPPORTED",
+          `${k}: values with a single quote or a line break cannot be passed through an env file.`,
+          { name: k },
+        );
+      return `${k}='${v}'`;
+    })
     .join("\n")
     .concat("\n");
 }
