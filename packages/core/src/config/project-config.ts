@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ConfigError } from "../errors.js";
+import { BuildSchema, CleanupSchema, ServiceSchema } from "./services.js";
 
 const SecretRef = z.string().regex(/^secret:\/\/[a-z0-9-]+\/.+$/, "Expected a secret:// reference");
 
@@ -132,6 +133,11 @@ export const ProjectConfigSchema = z.strictObject({
         }
       }
     }),
+  /** Services started by `--build` (REQ-ENV-03, REQ-CFG-02, REQ-ENV-05). */
+  services: z.record(z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/), ServiceSchema).default({}),
+  build: BuildSchema.optional(),
+  /** Cleanup policy and retention (REQ-WS-03). */
+  cleanup: CleanupSchema.default({ policy: "on_success", keep_last: 10, max_age_days: 30 }),
   /** Web runner (REQ-EXEC-05, REQ-EVD-06). */
   web: z
     .strictObject({
@@ -148,8 +154,10 @@ export const ProjectConfigSchema = z.strictObject({
       max_attachment_mb: z.number().positive().max(2048).default(10),
       /** Skip the confirmation preview (CI); recorded in run.json (REQ-VER-10/AC2). */
       auto: z.boolean().default(false),
+      /** Hosts Jira may redirect attachment downloads to; fetched without credentials (qj pull). */
+      media_hosts: z.array(z.string().regex(/^[a-z0-9.-]+$/)).default(["media.atlassian.com"]),
     })
-    .default({ max_attachment_mb: 10, auto: false }),
+    .default({ max_attachment_mb: 10, auto: false, media_hosts: ["media.atlassian.com"] }),
   workspace: z
     .strictObject({
       /** Root of run folders; default `~/.qa-runs`, never the project repository (REQ-WS-01/AC4). */
@@ -210,8 +218,23 @@ export type ProjectConfig = z.infer<typeof ProjectConfigSchema>;
 export function parseProjectConfig(raw: unknown, source = ".qa/qa.project.yaml"): ProjectConfig {
   const result = ProjectConfigSchema.safeParse(raw);
   if (result.success) {
+    const build = result.data.build;
+    const buildIssues: string[] = [];
+    if (build) {
+      if (!(build.repo in result.data.repos))
+        buildIssues.push(`build.repo: unknown repository '${build.repo}'`);
+      if (!(build.base_service in result.data.services))
+        buildIssues.push(`build.base_service: unknown service '${build.base_service}'`);
+      if (
+        Object.values(result.data.services).some((s) => s.kind === "compose") &&
+        build.compose_file === undefined
+      ) {
+        buildIssues.push("build.compose_file: required when a service has kind: compose");
+      }
+    }
     const providers = result.data.models.providers;
     const missingHosts = [
+      ...buildIssues,
       ...Object.entries(result.data.repos)
         .filter(([, repo]) => !(repo.host in result.data.code_hosts))
         .map(([alias, repo]) => `repos.${alias}.host: unknown code host '${repo.host}'`),

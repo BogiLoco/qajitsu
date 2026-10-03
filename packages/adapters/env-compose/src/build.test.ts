@@ -1,0 +1,295 @@
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile, cp } from "node:fs/promises";
+import { createServer, type Server } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseProjectConfig } from "@qajitsu/core";
+import { afterEach, describe, expect, it } from "vitest";
+import { parse } from "yaml";
+import { labelsFor, projectName, startBuildEnvironment, type CommandExec } from "./build.js";
+
+const PASSWORD = "fictional-demo-password";
+const dirs: string[] = [];
+afterEach(async () => {
+  await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
+});
+
+const workspace = async () => {
+  const root = await mkdtemp(join(tmpdir(), "qj-build-"));
+  dirs.push(root);
+  const worktree = join(root, "repos", "shop");
+  await mkdir(worktree, { recursive: true });
+  await cp(
+    fileURLToPath(new URL("../../../../examples/demo-shop/api", import.meta.url)),
+    join(worktree, "api"),
+    { recursive: true },
+  );
+  await writeFile(
+    join(worktree, "docker-compose.yml"),
+    "services:\n  db:\n    image: postgres:16\nvolumes:\n  data: {}\n",
+  );
+  const qaDir = join(root, ".qa");
+  await mkdir(join(qaDir, "stubs", "payments"), { recursive: true });
+  await mkdir(join(qaDir, "hooks"), { recursive: true });
+  return { root, worktree, qaDir, envDir: join(root, "run", "env"), logsDir: join(root, "run", "logs") };
+};
+
+const base = {
+  project: "demo",
+  jira: { type: "file", tickets_dir: "t", project_key: "DEMO" },
+  code_hosts: { local: { type: "local", root: "~/git" } },
+  repos: { shop: { host: "local", path: "demo-org/demo-shop" } },
+};
+const apiService = {
+  kind: "process",
+  command: ["node", "api/server.mjs", "--port", "{{port}}"],
+  env: { DEMO_USER_PASSWORD: { secret: "secret://env/DEMO_USER_PASSWORD" }, DEMO_SHA: "abc1234" },
+  health: { http: "/health", timeout_s: 20 },
+};
+
+describe("--build environment (REQ-ENV-03, REQ-ENV-04, REQ-CFG-05, REQ-WS-02)", () => {
+  it("REQ-ENV-03/AC2 + REQ-CTX-04/AC4: runs a managed process from the worktree with a dynamic port, logs and health check", async () => {
+    const ws = await workspace();
+    const config = parseProjectConfig({
+      ...base,
+      services: { api: apiService },
+      build: { repo: "shop", base_service: "api" },
+    });
+    const env = await startBuildEnvironment({
+      ticket: "DEMO-1",
+      runId: "20261003-1046-aaaa",
+      config,
+      qaDir: ws.qaDir,
+      worktree: ws.worktree,
+      envDir: ws.envDir,
+      logsDir: ws.logsDir,
+      resolveSecret: () => Promise.resolve(PASSWORD),
+    });
+    try {
+      expect(env.baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+      expect(await (await fetch(`${env.baseUrl}/version`)).json()).toEqual({ sha: "abc1234" });
+      const login = await fetch(`${env.baseUrl}/auth/login`, {
+        method: "POST",
+        body: JSON.stringify({ username: "standard", password: PASSWORD }),
+      });
+      expect(login.status).toBe(200);
+    } finally {
+      const { logs } = await env.stop();
+      expect(logs.map((l) => l.split("/").at(-1))).toEqual(["api.log"]);
+    }
+    expect(await readFile(join(ws.logsDir, "api.log"), "utf8")).toContain("demo-shop API on");
+  });
+
+  it("REQ-ENV-03/AC3: two builds run in parallel without port clashes", async () => {
+    const a = await workspace();
+    const b = await workspace();
+    const config = parseProjectConfig({
+      ...base,
+      services: { api: apiService },
+      build: { repo: "shop", base_service: "api" },
+    });
+    const start = (w: typeof a, run: string) =>
+      startBuildEnvironment({
+        ticket: "DEMO-1",
+        runId: run,
+        config,
+        qaDir: w.qaDir,
+        worktree: w.worktree,
+        envDir: w.envDir,
+        logsDir: w.logsDir,
+        resolveSecret: () => Promise.resolve(PASSWORD),
+      });
+    const [x, y] = await Promise.all([start(a, "20261003-1046-aaaa"), start(b, "20261003-1046-bbbb")]);
+    try {
+      expect(x.baseUrl).not.toBe(y.baseUrl);
+    } finally {
+      await x.stop();
+      await y.stop();
+    }
+  });
+
+  it("REQ-ENV-04/AC3: a service that never becomes ready fails the start with its logs", async () => {
+    const ws = await workspace();
+    const config = parseProjectConfig({
+      ...base,
+      services: {
+        api: {
+          kind: "process",
+          command: ["node", "-e", "console.log('booting'); setTimeout(() => {}, 60000)"],
+          health: { http: "/health", timeout_s: 1 },
+        },
+      },
+      build: { repo: "shop", base_service: "api" },
+    });
+    const error = await startBuildEnvironment({
+      ticket: "DEMO-1",
+      runId: "20261003-1046-aaaa",
+      config,
+      qaDir: ws.qaDir,
+      worktree: ws.worktree,
+      envDir: ws.envDir,
+      logsDir: ws.logsDir,
+      resolveSecret: () => Promise.resolve(""),
+      sleep: () => new Promise((r) => setTimeout(r, 50)),
+    }).catch((e: unknown) => e);
+    expect(error).toMatchObject({
+      code: "BUILD_START_FAILED",
+      context: { service: "api", logs: [join(ws.logsDir, "api.log")] },
+    });
+  });
+
+  it("REQ-ENV-04/AC2: the seed hook runs after readiness with BASE_URL", async () => {
+    const ws = await workspace();
+    await writeFile(
+      join(ws.qaDir, "hooks", "seed.mjs"),
+      `import { writeFileSync } from "node:fs"; writeFileSync(${JSON.stringify(join(ws.root, "seeded.txt"))}, process.env.BASE_URL);`,
+    );
+    const config = parseProjectConfig({
+      ...base,
+      services: { api: apiService },
+      build: { repo: "shop", base_service: "api", seed: "hooks/seed.mjs" },
+    });
+    const env = await startBuildEnvironment({
+      ticket: "DEMO-1",
+      runId: "20261003-1046-aaaa",
+      config,
+      qaDir: ws.qaDir,
+      worktree: ws.worktree,
+      envDir: ws.envDir,
+      logsDir: ws.logsDir,
+      resolveSecret: () => Promise.resolve(PASSWORD),
+    });
+    await env.stop();
+    expect(await readFile(join(ws.root, "seeded.txt"), "utf8")).toBe(env.baseUrl);
+  });
+
+  it("REQ-ENV-03/AC1 + REQ-WS-02 + REQ-CFG-05 + REQ-ENV-05: compose overlay with labels, dynamic ports, 0600 env files deleted after start, stubs listed", async () => {
+    const ws = await workspace();
+    const config = parseProjectConfig({
+      ...base,
+      services: {
+        api: apiService,
+        db: {
+          kind: "compose",
+          port: 5432,
+          env: { POSTGRES_PASSWORD: { secret: "secret://env/DB_PASSWORD" } },
+          health: { port: true, timeout_s: 1 },
+        },
+        payments: {
+          kind: "stub",
+          engine: "wiremock",
+          mappings: "stubs/payments",
+          health: { port: true, timeout_s: 1 },
+        },
+      },
+      build: { repo: "shop", base_service: "api", compose_file: "docker-compose.yml" },
+    });
+    const calls: string[][] = [];
+    const envFileModes: number[] = [];
+    let overlay: unknown;
+    const listeners = await Promise.all(
+      [0, 1].map(
+        () =>
+          new Promise<Server>((r) => {
+            const s = createServer();
+            s.listen(0, "127.0.0.1", () => {
+              r(s);
+            });
+          }),
+      ),
+    );
+    const ports = listeners.map((l) => (l.address() as { port: number }).port);
+    const exec: CommandExec = async (cmd, args) => {
+      calls.push([cmd, ...args]);
+      if (args.includes("up")) {
+        overlay = parse(await readFile(join(ws.envDir, "compose.overlay.yml"), "utf8"));
+        for (const f of (await readdir(ws.envDir)).filter((n) => n.endsWith(".env")))
+          envFileModes.push((await stat(join(ws.envDir, f))).mode & 0o777);
+      }
+      if (args.includes("port"))
+        return { stdout: `127.0.0.1:${String(args.includes("db") ? ports[0] : ports[1])}\n`, stderr: "" };
+      if (args.includes("logs")) return { stdout: "service log line\n", stderr: "" };
+      return { stdout: "", stderr: "" };
+    };
+    const env = await startBuildEnvironment({
+      ticket: "DEMO-1",
+      runId: "20261003-1046-aaaa",
+      config,
+      qaDir: ws.qaDir,
+      worktree: ws.worktree,
+      envDir: ws.envDir,
+      logsDir: ws.logsDir,
+      resolveSecret: (r) => Promise.resolve(r.endsWith("DB_PASSWORD") ? "db-secret-123456" : PASSWORD),
+      exec,
+    });
+    try {
+      expect(projectName("DEMO-1", "20261003-1046-aaaa")).toBe("qj-demo-1-aaaa");
+      expect(calls.find((c) => c.includes("up"))).toEqual([
+        "docker",
+        "compose",
+        "--project-name",
+        "qj-demo-1-aaaa",
+        "--file",
+        join(ws.worktree, "docker-compose.yml"),
+        "--file",
+        join(ws.envDir, "compose.overlay.yml"),
+        "up",
+        "--detach",
+        "--build",
+      ]);
+      const o = overlay as {
+        services: Record<
+          string,
+          { ports: string[]; labels: Record<string, string>; image?: string; env_file: string[] }
+        >;
+        networks: { default: { labels: unknown } };
+        volumes: { data: { labels: unknown } };
+      };
+      expect(o.services["db"]).toMatchObject({
+        ports: ["127.0.0.1::5432"],
+        labels: labelsFor("DEMO-1", "20261003-1046-aaaa"),
+      });
+      expect(o.services["payments"]?.image).toMatch(/^wiremock\//);
+      expect(o.networks.default.labels).toEqual(labelsFor("DEMO-1", "20261003-1046-aaaa"));
+      expect(o.volumes.data.labels).toEqual(labelsFor("DEMO-1", "20261003-1046-aaaa"));
+      expect(envFileModes).toEqual([0o600, 0o600]);
+      expect((await readdir(ws.envDir)).filter((n) => n.endsWith(".env"))).toEqual([]);
+      expect(JSON.stringify(overlay)).not.toContain("db-secret-123456");
+      expect(env.stubs).toEqual(["payments (wiremock)"]);
+      expect(env.services["db"]?.url).toBe(`http://127.0.0.1:${String(ports[0])}`);
+    } finally {
+      await env.stop();
+      for (const l of listeners) l.close();
+    }
+    expect(calls.at(-1)).toEqual([
+      "docker",
+      "compose",
+      "--project-name",
+      "qj-demo-1-aaaa",
+      "--file",
+      join(ws.worktree, "docker-compose.yml"),
+      "--file",
+      join(ws.envDir, "compose.overlay.yml"),
+      "down",
+      "--volumes",
+      "--remove-orphans",
+    ]);
+    expect(await readFile(join(ws.logsDir, "db.log"), "utf8")).toBe("service log line\n");
+  });
+
+  it("refuses a run without build configuration", async () => {
+    const ws = await workspace();
+    await expect(
+      startBuildEnvironment({
+        ticket: "DEMO-1",
+        runId: "20261003-1046-aaaa",
+        config: parseProjectConfig(base),
+        qaDir: ws.qaDir,
+        worktree: ws.worktree,
+        envDir: ws.envDir,
+        logsDir: ws.logsDir,
+        resolveSecret: () => Promise.resolve(""),
+      }),
+    ).rejects.toMatchObject({ code: "BUILD_NOT_CONFIGURED" });
+  });
+});

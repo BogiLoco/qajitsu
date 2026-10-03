@@ -152,6 +152,9 @@ importers:
       '@qajitsu/core':
         specifier: workspace:*
         version: link:../../core
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.1
 
   packages/adapters/env-remote:
     dependencies:
