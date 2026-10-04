@@ -14,6 +14,8 @@ export interface HttpRequest {
   readonly anonymousCrossOriginRedirect?: boolean | undefined;
   /** Hosts (or parent domains) an anonymous redirect may go to; required with the option above. */
   readonly anonymousRedirectHosts?: readonly string[] | undefined;
+  /** `bytes()` stops reading and fails beyond this many bytes (large CI artifacts, attachments). */
+  readonly maxBytes?: number | undefined;
 }
 
 /** HTTP client shared by adapters: typed errors, rate-limit retries, Zod-parsed JSON. */
@@ -198,7 +200,29 @@ export function createHttpClient(options: {
       return (await send(path, request)).text();
     },
     async bytes(path, request) {
-      return new Uint8Array(await (await send(path, request)).arrayBuffer());
+      const response = await send(path, request);
+      const limit = request?.maxBytes;
+      if (limit === undefined) return new Uint8Array(await response.arrayBuffer());
+      const tooLarge = () =>
+        new AdapterError(`${service}_RESPONSE_TOO_LARGE`, `Response is larger than ${String(limit)} bytes.`, {
+          limit,
+        });
+      if (Number(response.headers.get("content-length") ?? 0) > limit) throw tooLarge();
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      const reader = response.body?.getReader();
+      for (;;) {
+        const next = await reader?.read();
+        if (!next || next.done) break;
+        const chunk = next.value as Uint8Array;
+        total += chunk.byteLength;
+        if (total > limit) {
+          await reader?.cancel();
+          throw tooLarge();
+        }
+        chunks.push(chunk);
+      }
+      return new Uint8Array(Buffer.concat(chunks));
     },
   };
 }

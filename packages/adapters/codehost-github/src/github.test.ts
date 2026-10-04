@@ -232,3 +232,43 @@ describe("GitHub listing limits", () => {
     expect(deps.logger.entries.some((e) => e.level === "warn" && e.message.includes("truncated"))).toBe(true);
   });
 });
+
+describe("GitHub Actions artifacts (REQ-ENV-06/AC1)", () => {
+  const sha = "a".repeat(40);
+  it("REQ-ENV-06/AC1: downloads the named artifact of a successful run for exactly this SHA; storage gets no token", async () => {
+    const { host, requests } = build({
+      extra: [
+        {
+          match: new RegExp(`^/repos/example-org/shop-web/actions/runs\\?head_sha=${sha}&status=success`),
+          reply: jsonReply({ workflow_runs: [{ id: 11 }, { id: 12 }] }),
+        },
+        {
+          match: /^\/repos\/example-org\/shop-web\/actions\/runs\/11\/artifacts/,
+          reply: jsonReply({ artifacts: [{ id: 5, name: "app-debug", expired: true }] }),
+        },
+        {
+          match: /^\/repos\/example-org\/shop-web\/actions\/runs\/12\/artifacts/,
+          reply: jsonReply({
+            artifacts: [
+              { id: 7, name: "app-debug", expired: false },
+              { id: 8, name: "other", expired: false },
+            ],
+          }),
+        },
+        {
+          match: /^\/repos\/example-org\/shop-web\/actions\/artifacts\/7\/zip$/,
+          reply: () => new Response(new Uint8Array([80, 75, 3, 4])),
+        },
+      ],
+    });
+    const bytes = await host.downloadArtifact?.("example-org/shop-web", sha, "app-debug");
+    expect([...(bytes ?? [])]).toEqual([80, 75, 3, 4]);
+    expect(requests.at(-1)?.url.pathname).toBe("/repos/example-org/shop-web/actions/artifacts/7/zip");
+    await expect(host.downloadArtifact?.("example-org/shop-web", sha, "missing")).rejects.toMatchObject({
+      code: "GITHUB_ARTIFACT_NOT_FOUND",
+    });
+    await expect(host.downloadArtifact?.("example-org/shop-web", "HEAD", "x")).rejects.toMatchObject({
+      code: "GITHUB_SHA_INVALID",
+    });
+  });
+});

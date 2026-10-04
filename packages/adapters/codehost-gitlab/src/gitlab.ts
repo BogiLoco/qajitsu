@@ -268,6 +268,52 @@ export function createGitLabCodeHost(
         }));
     },
 
+    /**
+     * Downloads the artifacts archive of a successful job named `name` from a successful pipeline of
+     * exactly this commit (REQ-ENV-06/AC1).
+     *
+     * @throws {AdapterError} `GITLAB_ARTIFACT_NOT_FOUND`.
+     */
+    async downloadArtifact(
+      repo: string,
+      sha: string,
+      name: string,
+      signal?: AbortSignal,
+    ): Promise<Uint8Array> {
+      const base = project(repo);
+      if (!/^[0-9a-f]{7,64}$/.test(sha))
+        throw new AdapterError("GITLAB_SHA_INVALID", "Expected a commit SHA.", {});
+      const pipelines = await http.json(
+        `${base}/pipelines?sha=${sha}&status=success&per_page=20`,
+        z.array(z.object({ id: z.number().int() })),
+        { signal },
+      );
+      for (const pipeline of pipelines) {
+        const jobs = await http.json(
+          `${base}/pipelines/${String(pipeline.id)}/jobs?scope[]=success&per_page=100`,
+          z.array(
+            z.object({
+              id: z.number().int(),
+              name: z.string(),
+              artifacts_file: z.object({ filename: z.string() }).nullish(),
+            }),
+          ),
+          { signal },
+        );
+        const job = jobs.find((j) => j.name === name && j.artifacts_file);
+        if (job)
+          return http.bytes(`${base}/jobs/${String(job.id)}/artifacts`, { signal, maxBytes: 500_000_000 });
+      }
+      throw new AdapterError(
+        "GITLAB_ARTIFACT_NOT_FOUND",
+        `No artifacts of job '${name}' in a successful pipeline of ${sha.slice(0, 12)}.`,
+        {
+          repo,
+          name,
+        },
+      );
+    },
+
     async cloneUrl(repo: string): Promise<string> {
       project(repo);
       const url = new URL(`${web.origin}/${repo}.git`);

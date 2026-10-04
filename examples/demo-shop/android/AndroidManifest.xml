@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- demo-shop Android app for QAJitsu's mobile self-test (stage 8, DEMO-6, BUG-08). Fictional. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.qajitsu.demoshop">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
+  <uses-permission android:name="android.permission.INTERNET" />
+  <application android:label="demo-shop" android:usesCleartextTraffic="true">
+    <activity android:name=".CartActivity" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="demoshop" android:host="cart" />
+      </intent-filter>
+    </activity>
+    <activity android:name=".CheckoutActivity" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="demoshop" android:host="checkout" />
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>

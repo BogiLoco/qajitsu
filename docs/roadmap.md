@@ -169,9 +169,9 @@ and `qj bench` reports detection and false-FAILED rates per model.
 
 <!-- prettier-ignore-start -->
 <!-- req-stage:8 -->
-- [REQ-ENV-06](requirements/environment.md#req-env-06--mobile-apps-and-devices) Mobile apps and devices (must, accepted, AC 0/3)
-- [REQ-EXEC-06](requirements/execution.md#req-exec-06--mobile-testing-android-and-ios) Mobile testing (Android and iOS) (must, accepted, AC 0/3)
-- [REQ-EVD-03](requirements/evidence.md#req-evd-03--mobile-evidence) Mobile evidence (must, accepted, AC 0/3)
+- [REQ-ENV-06](requirements/environment.md#req-env-06--mobile-apps-and-devices) Mobile apps and devices (must, implemented, AC 3/3)
+- [REQ-EXEC-06](requirements/execution.md#req-exec-06--mobile-testing-android-and-ios) Mobile testing (Android and iOS) (must, implemented, AC 3/3)
+- [REQ-EVD-03](requirements/evidence.md#req-evd-03--mobile-evidence) Mobile evidence (must, implemented, AC 3/3)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 

@@ -4,6 +4,7 @@ import { checkHealth, compareDeployedSha, loginAccounts, readDeployedSha } from 
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
 import {
   createSandboxExecutor,
+  type BrowserFactory,
   loadContractValidator,
   runCases,
   type AttemptExecutor,
@@ -27,11 +28,12 @@ import {
 } from "@qajitsu/core";
 import { createMasker } from "@qajitsu/steps";
 import { formatSpecProblems } from "@qajitsu/verifier";
-import type { RuntimePorts } from "../adapters.js";
+import { buildAdapters, type RuntimePorts } from "../adapters.js";
 import { openSession, type ModelPorts, type RunSession } from "../session.js";
 import type { CommandIO } from "./fetch.js";
 import { computeVerdict, writeReports } from "./verdict.js";
 import { auditRun, runCanary } from "./checks.js";
+import { prepareMobile, type PreparedMobile } from "./mobile.js";
 import {
   blockAfterStartFailure,
   effectiveConfig,
@@ -58,6 +60,10 @@ export interface RunOptions {
 /** Ports `run` needs beyond the common ones; the executor is replaceable in tests. */
 export interface RunPorts {
   readonly executor?: AttemptExecutor;
+  /** Executor of mobile cases for a device factory (replaced in tests with a fake device). */
+  readonly mobileExecutor?: (device: BrowserFactory) => AttemptExecutor;
+  /** Device for mobile cases (replaced in tests); default: emulator/farm from the mobile config. */
+  readonly mobileDevice?: () => Promise<PreparedMobile>;
   /** Runs docker and other commands of `--build` (replaced in tests). */
   readonly buildExec?: CommandExec;
   /** Source of SIGINT/SIGTERM and the exit function (default: the process; replaced in tests). */
@@ -134,14 +140,19 @@ export async function runRun(
   // REQ-CFG-05/AC2: an interrupt still stops the environment and deletes the generated .env files.
   // Listening with `on`: a second Ctrl+C during a long `docker compose up` must not skip the cleanup.
   let interrupted = false;
+  const deviceStops: (() => Promise<void>)[] = [];
   const onSignal = (): void => {
     if (interrupted) return;
     interrupted = true;
-    void (stopOnInterrupt?.() ?? Promise.resolve()).finally(() => {
-      void (release?.() ?? Promise.resolve()).finally(() => {
-        (ports.exit ?? ((code: number) => process.exit(code)))(130);
+    // Devices first (emulator, Appium), then the built environment and its .env files.
+    const devices = Promise.all(deviceStops.map((s) => s().catch(() => undefined)));
+    void devices
+      .then(() => stopOnInterrupt?.() ?? Promise.resolve())
+      .finally(() => {
+        void (release?.() ?? Promise.resolve()).finally(() => {
+          (ports.exit ?? ((code: number) => process.exit(code)))(130);
+        });
       });
-    });
   };
   const signals = ports.signals ?? process;
   signals.on("SIGINT", onSignal);
@@ -261,7 +272,10 @@ export async function runRun(
           io.writeError(`Warning: ${message}\n`);
         }
       }
-      const pending = await executeCases(session, plan, env, io, ports, results);
+      const pending = await executeCases(session, plan, env, io, ports, results, {
+        build: options.build === true,
+        onDevice: (stop) => deviceStops.push(stop),
+      });
       if (pending.length > 0)
         io.write(`Rejected spec files (not in the approved plan or misplaced): ${pending.join(", ")}\n`);
       // REQ-VER-06: the independent auditor reviews what PASSED; it can only downgrade.
@@ -329,6 +343,10 @@ async function executeCases(
   io: CommandIO,
   ports: RuntimePorts & ModelPorts & RunPorts,
   results: Map<string, CaseResultFile>,
+  run: { readonly build: boolean; readonly onDevice: (stop: () => Promise<void>) => void } = {
+    build: false,
+    onDevice: () => undefined,
+  },
 ): Promise<string[]> {
   const { ws, events, project, masker } = session;
   const specsDir = ws.path("specs");
@@ -421,11 +439,13 @@ async function executeCases(
     events,
     now: ports.now,
   };
+  const evidence = createLocalEvidenceStore(ws.path("evidence"));
+  const isMobile = (id: string) => plan.cases.find((c) => c.id === id)?.type === "mobile";
   const ran = await runCases({
     ...base,
-    plan: { ...plan, cases: plan.cases.filter((c) => !blocked.has(c.id)) },
+    plan: { ...plan, cases: plan.cases.filter((c) => !blocked.has(c.id) && c.type !== "mobile") },
     specs,
-    evidence: createLocalEvidenceStore(ws.path("evidence")),
+    evidence,
     resultsDir: ws.path("results"),
     retries: project.config.environments.retries,
     workers: project.config.environments.workers,
@@ -469,6 +489,58 @@ async function executeCases(
   // REQ-VER-09: the canary re-runs one PASSED case with an inverted expectation; it must fail.
   if (project.config.verification.canary) await runCanary(session, plan, ran, specs, base);
   for (const [id, r] of ran) results.set(id, r);
+  // REQ-EXEC-06/AC3: mobile cases run one after another on one device, after the others.
+  const mobileCases = plan.cases.filter((c) => c.type === "mobile" && !blocked.has(c.id) && specs.has(c.id));
+  if (mobileCases.length > 0) {
+    const { codeHosts } = buildAdapters(
+      project,
+      {
+        fetch: ports.fetch,
+        logger: session.logger,
+        now: ports.now,
+        resolveSecret: (r) => session.resolveSecret(r),
+        registerSecret: (v) => {
+          masker.register(v);
+        },
+      },
+      ports,
+    );
+    events.emit("run", SYSTEM, "mobile.prepare", { cases: mobileCases.map((c) => c.id) });
+    const device = await (ports.mobileDevice?.() ??
+      prepareMobile(session, env.baseUrl, codeHosts, ports.env["APPIUM_HOME"], { allowBuild: run.build }));
+    if (!device.ok) {
+      // REQ-ENV-06/AC3: a platform that is not available here is reported, never silently skipped.
+      io.writeError(`Mobile cases are BLOCKED: ${device.reason}\n`);
+      await writeBlocked(
+        session,
+        mobileCases.map((c) => c.id),
+        `mobile device not available: ${device.reason}`,
+        results,
+      );
+    } else {
+      // Ctrl+C during mobile cases still stops the emulator and the Appium server.
+      run.onDevice(device.stop);
+      try {
+        const mobileRan = await runCases({
+          ...base,
+          executor:
+            ports.mobileExecutor?.(device.factory) ?? createSandboxExecutor({ browser: device.factory }),
+          plan: { ...plan, cases: mobileCases },
+          specs: new Map([...specs].filter(([id]) => isMobile(id))),
+          evidence,
+          resultsDir: ws.path("results"),
+          retries: project.config.environments.retries,
+          workers: 1,
+        });
+        for (const [id, r] of mobileRan) {
+          results.set(id, r);
+          ran.set(id, r);
+        }
+      } finally {
+        await device.stop();
+      }
+    }
+  }
   events.emit("run", RUNNER, "cases.done", { cases: ran.size });
   return rejected.map((f) => f.slice(ws.dir.length + 1));
 }

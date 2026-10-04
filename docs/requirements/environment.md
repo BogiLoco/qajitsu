@@ -74,16 +74,16 @@ QAJitsu warns when the environment does not run the code being tested.
 
 ### REQ-ENV-06 · Mobile apps and devices
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 8
 - Related: REQ-EXEC-06, REQ-CTX-02
 
 **Acceptance criteria**
 
-- [ ] AC1: App binaries (APK/IPA) are taken from CI artifacts for the change SHA (GitHub Actions, GitLab CI); building from source is optional.
-- [ ] AC2: Android emulators are started and stopped by QAJitsu.
-- [ ] AC3: iOS requires macOS or a device farm (BrowserStack, Sauce Labs, AWS Device Farm) as an EnvProvider; the limitation is reported clearly when unavailable.
+- [x] AC1: App binaries (APK/IPA) are taken from CI artifacts for the change SHA (GitHub Actions, GitLab CI); building from source is optional.
+- [x] AC2: Android emulators are started and stopped by QAJitsu.
+- [x] AC3: iOS requires macOS or a device farm (BrowserStack, Sauce Labs, AWS Device Farm) as an EnvProvider; the limitation is reported clearly when unavailable.
 
 ### REQ-ENV-07 · Default environment selection
 

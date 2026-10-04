@@ -1,0 +1,42 @@
+{
+  "summary": "Android cart survives back navigation from checkout (DEMO-6).",
+  "cases": [
+    {
+      "id": "TC-01",
+      "title": "Back from checkout keeps the cart",
+      "type": "mobile",
+      "priority": "high",
+      "source": [
+        { "kind": "ac", "id": "AC1" },
+        { "kind": "ac", "id": "AC2" }
+      ],
+      "steps": [
+        {
+          "id": "S1",
+          "action": "Add one item to the cart",
+          "expect": {
+            "description": "Cart shows one item",
+            "elements": { "testid:cart-count": { "text": "Cart: 1 item" } }
+          }
+        },
+        {
+          "id": "S2",
+          "action": "Open checkout",
+          "expect": {
+            "description": "Checkout screen",
+            "elements": { "testid:checkout-title": { "visible": true } }
+          }
+        },
+        {
+          "id": "S3",
+          "action": "Press the Android back button",
+          "expect": {
+            "description": "Cart still shows one item",
+            "elements": { "testid:cart-count": { "text": "Cart: 1 item" } }
+          }
+        }
+      ],
+      "evidence": ["screenshot", "video", "log"]
+    }
+  ]
+}

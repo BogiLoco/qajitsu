@@ -26,3 +26,9 @@ CLAUDE.local.md
 **/.qa/qa.local.yaml
 bench/results/
 **/bench-results/
+
+# Appium drivers (stage 8, installed by `appium driver install`)
+.appium/
+
+# demo Android app build output (stage 8)
+examples/demo-shop/android/build/

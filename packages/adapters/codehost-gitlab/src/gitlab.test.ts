@@ -15,7 +15,18 @@ const TOKEN = "gitlab-token-value";
 const P = "\\/api\\/v4\\/projects\\/shop%2Fplatform%2Fbackend";
 const r = (suffix: string) => new RegExp(`^${P}${suffix}`);
 
+const SHA = "b".repeat(40);
 const routes: Route[] = [
+  { match: r(`\\/pipelines\\?sha=${SHA}&status=success`), reply: jsonReply([{ id: 31 }, { id: 32 }]) },
+  {
+    match: r("\\/pipelines\\/31\\/jobs"),
+    reply: jsonReply([{ id: 1, name: "android", artifacts_file: null }]),
+  },
+  {
+    match: r("\\/pipelines\\/32\\/jobs"),
+    reply: jsonReply([{ id: 2, name: "android", artifacts_file: { filename: "artifacts.zip" } }]),
+  },
+  { match: r("\\/jobs\\/2\\/artifacts$"), reply: () => new Response(new Uint8Array([80, 75])) },
   { match: r("\\/merge_requests\\?state=all"), reply: jsonReply(fixture("gitlab/merge-requests-list.json")) },
   {
     match: r("\\/merge_requests\\/7\\/diffs"),
@@ -121,5 +132,22 @@ describe("GitLab code host (REQ-CTX-02)", () => {
     );
     await host.resolveChange({ repo: "a/b", kind: "mr", id: "7" });
     expect(fake.requests[0]?.url.origin).toBe("https://gitlab.com");
+  });
+});
+
+describe("GitLab CI artifacts (REQ-ENV-06/AC1)", () => {
+  it("REQ-ENV-06/AC1: downloads the artifacts of the named successful job for exactly this SHA", async () => {
+    const { host, requests } = build();
+    expect([...((await host.downloadArtifact?.("shop/platform/backend", SHA, "android")) ?? [])]).toEqual([
+      80, 75,
+    ]);
+    expect(requests.at(-1)?.url.pathname).toBe("/api/v4/projects/shop%2Fplatform%2Fbackend/jobs/2/artifacts");
+    expect(requests.at(-1)?.headers["private-token"]).toBe(TOKEN);
+    await expect(host.downloadArtifact?.("shop/platform/backend", SHA, "ios")).rejects.toMatchObject({
+      code: "GITLAB_ARTIFACT_NOT_FOUND",
+    });
+    await expect(host.downloadArtifact?.("shop/platform/backend", "main", "x")).rejects.toMatchObject({
+      code: "GITLAB_SHA_INVALID",
+    });
   });
 });

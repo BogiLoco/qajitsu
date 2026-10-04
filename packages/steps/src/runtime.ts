@@ -355,6 +355,9 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         await d.goto(url.toString());
         return;
       }
+      case "back":
+        await d.back();
+        return;
       case "as":
         if (!(operation.alias in options.accounts))
           throw new Error(`Unknown account alias '${operation.alias}'`);
@@ -483,6 +486,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       select: (selector, value) => uiOp({ op: "select", selector, value }),
       press: (selector, value) => uiOp({ op: "press", selector, value }),
       waitFor: (selector, state = "visible") => uiOp({ op: "waitFor", selector, state }),
+      back: () => uiOp({ op: "back" }),
       as: (alias) => uiOp({ op: "as", alias }),
     },
     step: async (stepId, fn) => {

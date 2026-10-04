@@ -242,6 +242,54 @@ export function createGitHubCodeHost(
       }));
     },
 
+    /**
+     * Downloads a GitHub Actions artifact (zip) built for exactly this commit (REQ-ENV-06/AC1): the
+     * newest successful workflow run with `head_sha` that has a non-expired artifact of that name. The
+     * archive URL redirects to GitHub's blob storage, which is fetched without our token.
+     *
+     * @throws {AdapterError} `GITHUB_ARTIFACT_NOT_FOUND`.
+     */
+    async downloadArtifact(
+      repo: string,
+      sha: string,
+      name: string,
+      signal?: AbortSignal,
+    ): Promise<Uint8Array> {
+      checkRepo(repo);
+      if (!/^[0-9a-f]{7,64}$/.test(sha))
+        throw new AdapterError("GITHUB_SHA_INVALID", "Expected a commit SHA.", {});
+      const runs = await http.json(
+        `/repos/${repo}/actions/runs?head_sha=${sha}&status=success&per_page=20`,
+        z.object({ workflow_runs: z.array(z.object({ id: z.number().int() })) }),
+        { signal },
+      );
+      for (const run of runs.workflow_runs) {
+        const { artifacts } = await http.json(
+          `/repos/${repo}/actions/runs/${String(run.id)}/artifacts?per_page=100`,
+          z.object({
+            artifacts: z.array(z.object({ id: z.number().int(), name: z.string(), expired: z.boolean() })),
+          }),
+          { signal },
+        );
+        const hit = artifacts.find((a) => a.name === name && !a.expired);
+        if (hit)
+          return http.bytes(`/repos/${repo}/actions/artifacts/${String(hit.id)}/zip`, {
+            signal,
+            anonymousCrossOriginRedirect: true,
+            anonymousRedirectHosts: ["blob.core.windows.net", "actions.githubusercontent.com"],
+            maxBytes: 500_000_000,
+          });
+      }
+      throw new AdapterError(
+        "GITHUB_ARTIFACT_NOT_FOUND",
+        `No artifact '${name}' from a successful run of ${sha.slice(0, 12)}.`,
+        {
+          repo,
+          name,
+        },
+      );
+    },
+
     async cloneUrl(repo: string): Promise<string> {
       const url = new URL(`${web.origin}/${checkRepo(repo)}.git`);
       url.username = "x-access-token";

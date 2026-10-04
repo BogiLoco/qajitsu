@@ -73,16 +73,16 @@ The author agent writes test files for approved cases only. Exploring the app th
 
 ### REQ-EXEC-06 · Mobile testing (Android and iOS)
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 8
 - Related: REQ-ENV-06, REQ-EVD-03
 
 **Acceptance criteria**
 
-- [ ] AC1: Runner on WebdriverIO + Appium: UiAutomator2 (Android) and XCUITest (iOS).
-- [ ] AC2: Android first; iOS on macOS or a device farm.
-- [ ] AC3: Mobile cases run sequentially per device.
+- [x] AC1: Runner on WebdriverIO + Appium: UiAutomator2 (Android) and XCUITest (iOS).
+- [x] AC2: Android first; iOS on macOS or a device farm.
+- [x] AC3: Mobile cases run sequentially per device.
 
 ### REQ-EXEC-07 · Mixed cases
 

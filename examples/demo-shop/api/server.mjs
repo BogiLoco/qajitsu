@@ -16,6 +16,7 @@ export const BUG_FLAGS = [
   "BUG_CHECKOUT_BUTTON_DISABLED",
   "BUG_PRICE_FORMAT_LOCALE",
   "BUG_SILENT_500_TOAST",
+  "BUG_ANDROID_BACK_EMPTIES_CART",
 ];
 
 const PRODUCTS = [
@@ -91,6 +92,9 @@ export function createShop(options) {
     if (route === "GET /health") return json(res, 200, { status: "ok" });
     if (route === "GET /version") return json(res, 200, { sha: options.sha ?? "unknown" });
     if (route === "GET /products") return json(res, 200, PRODUCTS);
+    // Read by the Android app at start (stage 8); only the app's own behaviour flag is exposed.
+    if (route === "GET /app-config")
+      return json(res, 200, { backEmptiesCart: bugs.BUG_ANDROID_BACK_EMPTIES_CART });
     if (route === "POST /auth/login") {
       const input = await body(req);
       const known =

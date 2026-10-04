@@ -91,6 +91,7 @@ async function start(m: StartMessage): Promise<void> {
         rpc({ op: "ui", operation: { op: "press", selector, value: String(value) } }),
       waitFor: (selector: string, state = "visible") =>
         rpc({ op: "ui", operation: { op: "waitFor", selector, state } }),
+      back: () => rpc({ op: "ui", operation: { op: "back" } }),
       as: (alias: string) => rpc({ op: "ui", operation: { op: "as", alias } }),
     },
     step: async (stepId: string, fn: () => unknown): Promise<void> => {

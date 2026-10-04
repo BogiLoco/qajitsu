@@ -13,6 +13,8 @@ export interface UiDriver {
   readonly select: (selector: UiSelector, value: string) => Promise<void>;
   readonly press: (selector: UiSelector, key: string) => Promise<void>;
   readonly waitFor: (selector: UiSelector, state: "visible" | "hidden") => Promise<void>;
+  /** Browser history back; on Android the system back button (REQ-EXEC-06). */
+  readonly back: () => Promise<void>;
   /** Visible text of the page body. */
   readonly pageText: () => Promise<string>;
   /** Current URL. */
@@ -34,6 +36,8 @@ export interface UiClient {
   readonly select: (selector: UiSelector, value: string) => Promise<void>;
   readonly press: (selector: UiSelector, key: string) => Promise<void>;
   readonly waitFor: (selector: UiSelector, state?: "visible" | "hidden") => Promise<void>;
+  /** Goes back: browser history, or the Android back button in mobile cases. */
+  readonly back: () => Promise<void>;
   /** Opens the app as an account alias, e.g. `user:standard`. */
   readonly as: (alias: string) => Promise<void>;
 }
@@ -44,6 +48,7 @@ export type UiOperation =
   | { readonly op: "click" | "check" | "uncheck"; readonly selector: UiSelector }
   | { readonly op: "fill" | "select" | "press"; readonly selector: UiSelector; readonly value: string }
   | { readonly op: "waitFor"; readonly selector: UiSelector; readonly state: "visible" | "hidden" }
+  | { readonly op: "back" }
   | { readonly op: "as"; readonly alias: string };
 
 const SELECTOR = /^(testid|role|label|text|css):.+$/;

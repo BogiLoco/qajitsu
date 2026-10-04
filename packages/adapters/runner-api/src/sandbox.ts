@@ -53,6 +53,7 @@ const UiOperationSchema = z.discriminatedUnion("op", [
     value: z.string().max(10_000),
   }),
   z.strictObject({ op: z.literal("waitFor"), selector: Selector, state: z.enum(["visible", "hidden"]) }),
+  z.strictObject({ op: z.literal("back") }),
   z.strictObject({ op: z.literal("as"), alias: z.string().max(200) }),
 ]);
 

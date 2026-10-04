@@ -40,7 +40,7 @@ models:
   roles:
     default: local/gemma4:e2b
 
-test_types: [api, web]
+test_types: [api, web, mobile]
 
 # `qj run DEMO-1 --build` (stage 6): the API is built from the fetched worktree of `shop` with Docker Compose.
 services:
@@ -70,3 +70,20 @@ cleanup:
   policy: on_success
   keep_last: 10
   max_age_days: 30
+
+# Stage 8: the Android app (DEMO-6) is built from the worktree and tested on an emulator QAJitsu starts.
+# Needs a JDK, the Android SDK (emulator, platforms;android-34, build-tools;34.0.0, the system image below)
+# and Appium with the uiautomator2 driver (see docs/guides/mobile.md).
+mobile:
+  recording: retain-on-failure
+  # Appium installed in the QAJitsu repository (pnpm install) with its drivers in .appium/.
+  appium: { bin: ../../../node_modules/.bin/appium, home: ../../../.appium }
+  android:
+    app:
+      { source: build, repo: shop, command: [node, android/build.mjs], output: android/build/demo-shop.apk }
+    app_id: dev.qajitsu.demoshop
+    activity: .CartActivity
+    deep_link_scheme: demoshop
+    intent_args: "--es api_url {{base_url}}"
+    emulator:
+      { avd: qajitsu-demo, system_image: "system-images;android-34;google_apis;arm64-v8a", headless: true }

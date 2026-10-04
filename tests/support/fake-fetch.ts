@@ -58,7 +58,7 @@ export function createFakeFetch(routes: readonly Route[]): {
       headers,
       ...(typeof init.body === "string" ? { body: init.body } : {}),
       ...(init.body instanceof FormData
-        ? { files: [...init.body.values()].map((v) => (typeof v === "string" ? v : (v as File).name)) }
+        ? { files: [...init.body.values()].map((v) => (typeof v === "string" ? v : v.name)) }
         : {}),
     };
     requests.push(request);

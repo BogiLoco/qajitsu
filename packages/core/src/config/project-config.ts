@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ConfigError } from "../errors.js";
+import { MobileSchema } from "./mobile.js";
 import { BuildSchema, CleanupSchema, ServiceSchema } from "./services.js";
 
 const SecretRef = z.string().regex(/^secret:\/\/[a-z0-9-]+\/.+$/, "Expected a secret:// reference");
@@ -152,6 +153,8 @@ export const ProjectConfigSchema = z.strictObject({
       canary: z.boolean().default(false),
     })
     .default({ auditor: "optional", auditor_max_images: 12, canary: false }),
+  /** Mobile runner, devices and app binaries (REQ-EXEC-06, REQ-ENV-06, REQ-EVD-03). */
+  mobile: MobileSchema.optional(),
   /** Web runner (REQ-EXEC-05, REQ-EVD-06). */
   web: z
     .strictObject({

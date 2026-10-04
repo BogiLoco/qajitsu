@@ -164,3 +164,37 @@ describe("http client (REQ-GEN-02)", () => {
     expect(calls.filter((c) => c.url.startsWith("https://media.example.org"))).toHaveLength(1);
   });
 });
+
+describe("byte limits (REQ-ENV-06/AC1, REQ-PUB-02)", () => {
+  it("bytes() fails beyond maxBytes, by header or while streaming", async () => {
+    const big = new Uint8Array(1000);
+    const http = createHttpClient({
+      service: "CI",
+      baseUrl: "https://ci.example.com",
+      headers: () => Promise.resolve({}),
+      fetch: (input) =>
+        Promise.resolve(
+          (input instanceof Request ? input.url : input.toString()).endsWith("/declared")
+            ? new Response(big, { headers: { "content-length": "1000" } })
+            : new Response(
+                new ReadableStream({
+                  start(c) {
+                    c.enqueue(big);
+                    c.enqueue(big);
+                    c.close();
+                  },
+                }),
+              ),
+        ),
+      sleep: () => Promise.resolve(),
+    });
+    await expect(http.bytes("/declared", { maxBytes: 500 })).rejects.toMatchObject({
+      code: "CI_RESPONSE_TOO_LARGE",
+    });
+    await expect(http.bytes("/streamed", { maxBytes: 1500 })).rejects.toMatchObject({
+      code: "CI_RESPONSE_TOO_LARGE",
+    });
+    expect((await http.bytes("/streamed", { maxBytes: 5000 })).length).toBe(2000);
+    expect((await http.bytes("/declared")).length).toBe(1000);
+  });
+});

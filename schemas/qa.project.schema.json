@@ -482,6 +482,343 @@
       },
       "additionalProperties": false
     },
+    "mobile": {
+      "type": "object",
+      "properties": {
+        "appium": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "bin": {
+              "type": "string",
+              "minLength": 1
+            },
+            "home": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "recording": {
+          "default": "retain-on-failure",
+          "type": "string",
+          "enum": [
+            "retain-on-failure",
+            "always",
+            "off"
+          ]
+        },
+        "action_timeout_ms": {
+          "default": 10000,
+          "type": "integer",
+          "minimum": 500,
+          "maximum": 120000
+        },
+        "android": {
+          "type": "object",
+          "properties": {
+            "app": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "type": "string",
+                      "const": "ci"
+                    },
+                    "repo": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_-]{0,39}$"
+                    },
+                    "artifact": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "file": {
+                      "type": "string",
+                      "pattern": "^(?!\\/)(?!.*\\.\\.)[\\w./*-]+$"
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "repo",
+                    "artifact",
+                    "file"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "type": "string",
+                      "const": "path"
+                    },
+                    "repo": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_-]{0,39}$"
+                    },
+                    "path": {
+                      "type": "string",
+                      "pattern": "^(?!\\/)(?!.*\\.\\.)[\\w./*-]+$"
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "repo",
+                    "path"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "type": "string",
+                      "const": "build"
+                    },
+                    "repo": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_-]{0,39}$"
+                    },
+                    "command": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "output": {
+                      "type": "string",
+                      "pattern": "^(?!\\/)(?!.*\\.\\.)[\\w./*-]+$"
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "repo",
+                    "command",
+                    "output"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "app_id": {
+              "type": "string",
+              "pattern": "^[a-zA-Z][\\w.]*$"
+            },
+            "deep_link_scheme": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9+.-]*$"
+            },
+            "activity": {
+              "type": "string",
+              "pattern": "^\\.?[A-Za-z][\\w.]*$"
+            },
+            "intent_args": {
+              "type": "string",
+              "maxLength": 500,
+              "pattern": "^[\\w\\s.:/{}=,-]*$"
+            },
+            "emulator": {
+              "type": "object",
+              "properties": {
+                "avd": {
+                  "default": "qajitsu",
+                  "type": "string",
+                  "pattern": "^[\\w.-]+$"
+                },
+                "system_image": {
+                  "type": "string",
+                  "pattern": "^system-images;[\\w.;-]+$"
+                },
+                "headless": {
+                  "default": true,
+                  "type": "boolean"
+                },
+                "boot_timeout_s": {
+                  "default": 300,
+                  "type": "integer",
+                  "minimum": 30,
+                  "maximum": 1800
+                }
+              },
+              "required": [
+                "system_image"
+              ],
+              "additionalProperties": false
+            },
+            "sdk_root": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "app",
+            "app_id"
+          ],
+          "additionalProperties": false
+        },
+        "ios": {
+          "type": "object",
+          "properties": {
+            "app": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "type": "string",
+                      "const": "ci"
+                    },
+                    "repo": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_-]{0,39}$"
+                    },
+                    "artifact": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "file": {
+                      "type": "string",
+                      "pattern": "^(?!\\/)(?!.*\\.\\.)[\\w./*-]+$"
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "repo",
+                    "artifact",
+                    "file"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "type": "string",
+                      "const": "path"
+                    },
+                    "repo": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_-]{0,39}$"
+                    },
+                    "path": {
+                      "type": "string",
+                      "pattern": "^(?!\\/)(?!.*\\.\\.)[\\w./*-]+$"
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "repo",
+                    "path"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "type": "string",
+                      "const": "build"
+                    },
+                    "repo": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_-]{0,39}$"
+                    },
+                    "command": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "output": {
+                      "type": "string",
+                      "pattern": "^(?!\\/)(?!.*\\.\\.)[\\w./*-]+$"
+                    }
+                  },
+                  "required": [
+                    "source",
+                    "repo",
+                    "command",
+                    "output"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "bundle_id": {
+              "type": "string",
+              "pattern": "^[a-zA-Z][\\w.-]*$"
+            },
+            "deep_link_scheme": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9+.-]*$"
+            },
+            "farm": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string",
+                  "enum": [
+                    "browserstack",
+                    "saucelabs"
+                  ]
+                },
+                "app": {
+                  "type": "string",
+                  "pattern": "^(bs:\\/\\/[\\w-]+|storage:[\\w=.:-]+)$"
+                },
+                "vendor_recording": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "username": {
+                  "type": "string",
+                  "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+                },
+                "access_key": {
+                  "type": "string",
+                  "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+                },
+                "device": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "os_version": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "provider",
+                "app",
+                "username",
+                "access_key",
+                "device",
+                "os_version"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "bundle_id"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "web": {
       "default": {
         "browser": "chromium",

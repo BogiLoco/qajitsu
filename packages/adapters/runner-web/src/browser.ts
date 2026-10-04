@@ -159,6 +159,9 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
         },
         press: (s, k) => locate(p, s).press(k),
         waitFor: (s, state) => locate(p, s).waitFor({ state }),
+        back: async () => {
+          await p.goBack();
+        },
         pageText: () => p.locator("body").innerText(),
         url: () => p.url(),
         property: async (s, property: UiProperty) => {

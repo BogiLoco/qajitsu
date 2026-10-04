@@ -25,8 +25,12 @@ if (existsSync(repo)) rmSync(repo, { recursive: true, force: true });
 mkdirSync(repo, { recursive: true });
 execFileSync("git", ["init", "-q", "-b", "main", repo]);
 
-for (const entry of ["README.md", "BUGS.md", "api", "web", "docker-compose.yml", "package.json"]) {
-  if (existsSync(join(shop, entry))) cpSync(join(shop, entry), join(repo, entry), { recursive: true });
+for (const entry of ["README.md", "BUGS.md", "api", "android", "docker-compose.yml", "package.json"]) {
+  if (existsSync(join(shop, entry)))
+    cpSync(join(shop, entry), join(repo, entry), {
+      recursive: true,
+      filter: (src) => !/\/android\/build(\/|$)/.test(src),
+    });
 }
 writeFileSync(join(repo, "CHANGELOG.md"), "# demo-shop\n");
 git("add", "-A");

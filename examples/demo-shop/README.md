@@ -13,7 +13,7 @@ If QAJitsu ever reports PASSED for a seeded bug, the trust layer is broken.
 | `.qa/qa.project.yaml`, `tickets/` fixtures, `scripts/setup-demo-repo.mjs`    | 1     | present |
 | REST API (products, cart, orders, auth) with seeded API bugs, Docker Compose | 3     | present |
 | Web UI with seeded UI bugs                                                   | 5     | planned |
-| Mobile build (Android)                                                       | 8     | planned |
+| Android app (`android/`, DEMO-6, BUG-08)                                     | 8     | present |
 
 ## Stage 1 demo
 
@@ -54,6 +54,17 @@ node ../../packages/cli/dist/bin.js clean DEMO-1
 ```
 
 `docker-compose.dev.yml` starts the API manually on port 3000; QAJitsu never uses it.
+
+## Stage 8 demo (Android app on an emulator)
+
+Setup: [docs/guides/mobile.md](../../docs/guides/mobile.md). Then, after fetch, plan and approve of DEMO-6
+(`qj fetch DEMO-6 --ref shop=main`):
+
+```sh
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17
+node ../../packages/cli/dist/bin.js run DEMO-6 --build                                         # PASSED
+node ../../packages/cli/dist/bin.js run DEMO-6 --build --set api.BUG_ANDROID_BACK_EMPTIES_CART=1   # new run: FAILED
+```
 
 ## Layout (target)
 

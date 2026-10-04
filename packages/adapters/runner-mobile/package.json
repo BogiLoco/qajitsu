@@ -18,6 +18,9 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@qajitsu/core": "workspace:*"
+    "@qajitsu/adapter-runner-api": "workspace:*",
+    "@qajitsu/core": "workspace:*",
+    "@qajitsu/steps": "workspace:*",
+    "webdriverio": "^9.32.0"
   }
 }

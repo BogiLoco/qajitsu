@@ -30,16 +30,16 @@ What proof QAJitsu collects per test type and how results are summarised.
 
 ### REQ-EVD-03 · Mobile evidence
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 8
 - Related: REQ-EXEC-06
 
 **Acceptance criteria**
 
-- [ ] AC1: Screenshot after every step.
-- [ ] AC2: Screen recording per case, kept on failure by default.
-- [ ] AC3: Device logs (logcat or syslog) and page source on failure.
+- [x] AC1: Screenshot after every step.
+- [x] AC2: Screen recording per case, kept on failure by default.
+- [x] AC3: Device logs (logcat or syslog) and page source on failure.
 
 ### REQ-EVD-04 · Test matrix
 

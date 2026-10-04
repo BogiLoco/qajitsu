@@ -29,6 +29,10 @@ export async function createCliProject(
       new URL("../../examples/demo-shop/docker-compose.yml", import.meta.url),
       join(repo, "docker-compose.yml"),
     );
+    await cp(new URL("../../examples/demo-shop/android", import.meta.url), join(repo, "android"), {
+      recursive: true,
+      filter: (src) => !/\/android\/build(\/|$)/.test(src),
+    });
   }
   await g("add", ".");
   await g("commit", "-qm", "init");

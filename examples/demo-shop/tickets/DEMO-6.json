@@ -1,0 +1,21 @@
+{
+  "key": "DEMO-6",
+  "type": "Story",
+  "status": "Ready for QA",
+  "summary": "Android app: checkout keeps the cart",
+  "description": "In the Android app shoppers add items to the cart and open the checkout screen. Going back from checkout returns to the cart without changing it.",
+  "acceptanceCriteria": [
+    "After adding one item the cart shows Cart: 1 item.",
+    "Pressing the Android back button on the checkout screen returns to the cart, which still shows Cart: 1 item."
+  ],
+  "labels": ["checkout", "android"],
+  "components": ["shop-android"],
+  "attachments": [],
+  "comments": [
+    {
+      "author": "mobile-dev",
+      "created": "2026-09-30T10:00:00Z",
+      "body": "Accessibility ids: add-item, open-checkout, checkout-title, cart-count."
+    }
+  ]
+}
