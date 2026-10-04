@@ -78,3 +78,20 @@ What proof QAJitsu collects per test type and how results are summarised.
 
 - [x] AC1: Video `retain-on-failure` by default, `always` configurable.
 - [x] AC2: Videos compressed with ffmpeg before upload to fit Jira attachment limits.
+
+### REQ-EVD-07 · Passive observations during tests
+
+- Status: proposed
+- Priority: should
+- Stage: later
+- Related: INV-1, INV-6, REQ-EXEC-04, REQ-EXEC-05
+
+Cheap automatic checks computed by code, not by an LLM, collected while the planned cases run.
+
+**Acceptance criteria**
+
+- [ ] AC1: Every API response seen during a run, including calls without a `verify()`, is validated against the project's OpenAPI document; mismatches are recorded.
+- [ ] AC2: Web runs record browser console errors and network responses with status 4xx/5xx.
+- [ ] AC3: Accessibility is checked with axe-core on every visited screen; violations are recorded with the rule and element.
+- [ ] AC4: Observations appear in the report and Jira comment as a separate section; they never change a case status or the counts.
+- [ ] AC5: Each check can be turned off or given an ignore list in project config.

@@ -133,3 +133,83 @@ The author agent writes test files for approved cases only. Exploring the app th
 
 - [x] AC1: API and web cases run in parallel with a configurable worker count.
 - [ ] AC2: Mobile cases run sequentially per device; several devices may run in parallel.
+
+### REQ-EXEC-11 · Human-in-the-loop steps
+
+- Status: proposed
+- Priority: should
+- Stage: later
+- Related: INV-1, INV-2, INV-8, REQ-VER-01, REQ-VER-04, REQ-EVD-01
+
+Some steps cannot be automated: an SMS or 2FA code, a physical device, a printout, a captcha. The plan marks such a
+step as manual; the run pauses, a tester performs it and records the outcome, and the run continues. A manual tester
+gets value from day one even when not everything can be automated. Needs an ADR: the step outcome comes from a
+person, not from the runner.
+
+**Acceptance criteria**
+
+- [ ] AC1: The planner may mark a step `manual: true` with instructions; only steps of the approved plan can be manual.
+- [ ] AC2: At a manual step the run pauses and asks the tester for the outcome (passed or failed), an optional note and an optional screenshot or file, in the terminal or through a pending-step file in CI.
+- [ ] AC3: The step result records `source: manual`, the person's identity and a timestamp; the attachment goes through masking and into the evidence manifest with its SHA-256.
+- [ ] AC4: Agents cannot answer a manual step; a tool call that tries is denied by the guard and journaled.
+- [ ] AC5: A manual step reported failed makes the case FAILED; no answer within the configured timeout makes it BLOCKED, never PASSED.
+- [ ] AC6: Matrix, report and Jira comment mark cases with manual steps and name who performed them.
+- [ ] AC7: Codes and secrets entered by the tester are never written to the journal, logs or evidence.
+
+### REQ-EXEC-12 · Visual regression
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: INV-1, INV-4, REQ-EXEC-05, REQ-EVD-01
+
+**Acceptance criteria**
+
+- [ ] AC1: A web or mobile step can compare a screenshot against an approved baseline stored in the project (`.qa/baselines/`), with a configurable threshold and masked regions.
+- [ ] AC2: A difference above the threshold makes the case FAILED with the baseline, the actual image and a diff image as evidence.
+- [ ] AC3: A missing baseline never yields PASSED: the case is NEEDS_REVIEW and the new image is proposed as the baseline.
+- [ ] AC4: Baselines are updated only by an explicit human command (`qj baseline accept`), never by an agent or the healer.
+
+### REQ-EXEC-13 · Browser and viewport matrix
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: REQ-EXEC-05, REQ-EXEC-10
+
+**Acceptance criteria**
+
+- [ ] AC1: Project config lists browsers (Chromium, Firefox, WebKit) and viewports; web cases run for each combination.
+- [ ] AC2: The matrix and report show a status per case and combination; a case is PASSED only if every combination passed.
+- [ ] AC3: An unavailable browser makes its combinations BLOCKED with the reason.
+
+### REQ-EXEC-14 · Locale testing
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: INV-4, REQ-EXEC-05, REQ-PLAN-02
+
+**Acceptance criteria**
+
+- [ ] AC1: Project config lists locales and time zones; a case can run per locale.
+- [ ] AC2: Expected number, date and currency formats come from the plan per locale (`plan.expect(...)`), never from the agent.
+- [ ] AC3: The report shows a status per case and locale.
+
+### REQ-EXEC-15 · Exploratory sessions
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: INV-1, INV-2, INV-10, REQ-EXEC-01, REQ-VER-04, REQ-OBS-07
+
+An agent receives a session goal ("check the cart around the change"), explores the application and records the
+session. It reports observations for a human to assess, never statuses.
+
+**Acceptance criteria**
+
+- [ ] AC1: `qj explore <TICKET> --goal "<text>" --time-box <minutes>` runs a session on an allowlisted environment.
+- [ ] AC2: Every action is journaled and the session is recorded (video, screenshots, network); evidence is written by the trusted parent, not the agent.
+- [ ] AC3: Output is a list of observations with steps to reproduce and evidence references; the session produces no test statuses.
+- [ ] AC4: A person can turn an observation into a draft plan case; it runs only after plan approval.
+- [ ] AC5: The time box and step budget are enforced by code; when reached the session stops and keeps what it recorded.

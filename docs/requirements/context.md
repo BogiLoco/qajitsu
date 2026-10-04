@@ -100,7 +100,7 @@ QAJitsu reads the project's existing test repository to follow its conventions a
 - [ ] AC1: The tests repository is declared in config (`repos.<alias>.role: tests`) and checked out like any other repo.
 - [ ] AC2: The planner lists existing cases that already cover parts of the ticket.
 - [ ] AC3: The author reuses existing helpers and page objects when present.
-- [ ] AC4: Optionally (opt-in), new approved cases are proposed as a PR/MR to the tests repository.
+- [ ] AC4: Optionally (opt-in), new approved cases are proposed as a PR/MR to the tests repository (see REQ-PUB-08).
 
 ### REQ-CTX-07 · Project knowledge for agents
 
@@ -115,3 +115,17 @@ Teams can give agents domain knowledge that is not in the code.
 
 - [x] AC1: Markdown files in `.qa/knowledge/` (glossary, conventions, test account descriptions by alias) are provided to analyst and planner.
 - [x] AC2: Knowledge files never contain secrets; the secret scan runs over them.
+
+### REQ-CTX-08 · Import existing manual test cases
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: REQ-CTX-01, REQ-PLAN-03, REQ-PUB-05
+
+**Acceptance criteria**
+
+- [ ] AC1: Manual test cases linked to the ticket can be read from Xray, Zephyr Scale, TestRail or an Excel/CSV file.
+- [ ] AC2: They are given to the planner as an additional source; plan cases based on them cite the imported case id.
+- [ ] AC3: Imported text is treated as untrusted data and never as instructions.
+- [ ] AC4: An unreachable source is reported and planning continues without it.

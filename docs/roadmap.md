@@ -212,7 +212,21 @@ the evidence bundle as pipeline artifacts.
 
 <!-- prettier-ignore-start -->
 <!-- req-stage:later -->
+- [REQ-CTX-08](requirements/context.md#req-ctx-08--import-existing-manual-test-cases) Import existing manual test cases (could, proposed, AC 0/4)
+- [REQ-PLAN-08](requirements/plan.md#req-plan-08--test-depth-and-budget) Test depth and budget (should, proposed, AC 0/3)
+- [REQ-ENV-08](requirements/environment.md#req-env-08--message-capture-email-sms-and-webhooks) Message capture: email, SMS and webhooks (should, proposed, AC 0/5)
+- [REQ-EXEC-11](requirements/execution.md#req-exec-11--human-in-the-loop-steps) Human-in-the-loop steps (should, proposed, AC 0/7)
+- [REQ-EXEC-12](requirements/execution.md#req-exec-12--visual-regression) Visual regression (could, proposed, AC 0/4)
+- [REQ-EXEC-13](requirements/execution.md#req-exec-13--browser-and-viewport-matrix) Browser and viewport matrix (could, proposed, AC 0/3)
+- [REQ-EXEC-14](requirements/execution.md#req-exec-14--locale-testing) Locale testing (could, proposed, AC 0/3)
+- [REQ-EXEC-15](requirements/execution.md#req-exec-15--exploratory-sessions) Exploratory sessions (could, proposed, AC 0/5)
+- [REQ-VER-11](requirements/verification.md#req-ver-11--bug-fix-verification-fails-before-passes-after) Bug fix verification: fails before, passes after (should, proposed, AC 0/4)
+- [REQ-VER-12](requirements/verification.md#req-ver-12--failure-triage-hints) Failure triage hints (should, proposed, AC 0/4)
+- [REQ-EVD-07](requirements/evidence.md#req-evd-07--passive-observations-during-tests) Passive observations during tests (should, proposed, AC 0/5)
 - [REQ-PUB-05](requirements/publishing.md#req-pub-05--optional-integrations) Optional integrations (could, proposed, AC 0/4)
+- [REQ-PUB-07](requirements/publishing.md#req-pub-07--bug-reports-from-failed-cases) Bug reports from failed cases (should, proposed, AC 0/5)
+- [REQ-PUB-08](requirements/publishing.md#req-pub-08--promote-ticket-cases-to-the-regression-suite) Promote ticket cases to the regression suite (should, proposed, AC 0/4)
+- [REQ-PUB-09](requirements/publishing.md#req-pub-09--release-readiness-report) Release readiness report (could, proposed, AC 0/4)
 - [REQ-OBS-08](requirements/observability.md#req-obs-08--map-as-planner-input) Map as planner input (could, proposed, AC 0/1)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->

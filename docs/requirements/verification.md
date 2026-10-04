@@ -133,3 +133,37 @@ Nothing leaves the machine unless every gate passes.
 
 - [x] AC1: The final matrix and comment are shown for confirmation before publishing (default on).
 - [x] AC2: `--auto-publish` or CI configuration may skip the preview; the choice is recorded in `run.json`.
+
+### REQ-VER-11 · Bug fix verification: fails before, passes after
+
+- Status: proposed
+- Priority: should
+- Stage: later
+- Related: INV-1, INV-3, REQ-ENV-03, REQ-CTX-01, REQ-VER-02
+
+For a ticket of type Bug, QAJitsu first reproduces the defect on the version before the fix (the test must fail),
+then runs the same test on the version with the fix (it must pass). Strong evidence that the fix works.
+
+**Acceptance criteria**
+
+- [ ] AC1: For Bug tickets the plan marks reproduction cases; `qj run --fix-check` runs them on the base commit and on the fix commit, each built from its own worktree.
+- [ ] AC2: The same approved spec runs on both versions; the spec hash is recorded for both runs.
+- [ ] AC3: The fix is verified only if the case is FAILED before and PASSED after; any other combination (passed before, failed after, BLOCKED or FLAKY on either side) is reported as not verified with the reason.
+- [ ] AC4: The report and Jira comment show both results side by side with their evidence.
+
+### REQ-VER-12 · Failure triage hints
+
+- Status: proposed
+- Priority: should
+- Stage: later
+- Related: INV-1, INV-5, INV-6, REQ-VER-06
+
+For every FAILED case an agent suggests the likely cause, to cut noise when reviewing results. The status stays FAILED;
+the label is only a hint.
+
+**Acceptance criteria**
+
+- [ ] AC1: Each FAILED case gets a hint: `product-bug`, `test-bug`, `environment` or `data`, with a short justification citing evidence (step, request, screenshot, log).
+- [ ] AC2: The hint never changes the status; a hint that cites no existing evidence is dropped.
+- [ ] AC3: Matrix, report and Jira comment show the hint visibly as a suggestion, separate from the computed status and counts.
+- [ ] AC4: A model error or invalid output leaves the case without a hint; the run continues.

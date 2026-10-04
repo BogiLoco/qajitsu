@@ -107,3 +107,16 @@ Besides the terminal, plans can be approved where the team already works.
 - [x] AC2: In CI: plan posted to the PR/MR and Jira; approval via protected environment (GitHub), manual job (GitLab) or `/qa approve` comment; `/qa revise <text>` triggers a new version.
 - [ ] AC3: Later: approval in Jira by comment and in a small web UI.
 - [x] AC4: New plans are never approved automatically.
+
+### REQ-PLAN-08 · Test depth and budget
+
+- Status: proposed
+- Priority: should
+- Stage: later
+- Related: REQ-PLAN-02, REQ-LLM-07, REQ-CI-05
+
+**Acceptance criteria**
+
+- [ ] AC1: `qj plan --depth smoke|standard|full` selects cases by risk; the plan records the depth and why each case is in or out.
+- [ ] AC2: Before a run QAJitsu shows an estimate of time and model cost based on case count, types and past runs.
+- [ ] AC3: A configured budget (time or cost) stops further cases when reached; cases not run are NOT_RUN with the reason.
