@@ -1,0 +1,38 @@
+// QAJitsu on Jenkins with the Docker image (REQ-CI-01/AC3). Parameters give the manual trigger (REQ-CI-02/AC3);
+// the `input` step is the approval channel: the plan is shown, a person approves, then the run starts.
+pipeline {
+  agent { docker { image 'ghcr.io/your-org/qajitsu:latest'; args '--entrypoint=' } }
+  parameters {
+    string(name: 'TICKET', description: 'Jira ticket key')
+    string(name: 'ENV', defaultValue: '', description: 'Environment profile')
+  }
+  environment {
+    QAJITSU_WORKSPACE = "${WORKSPACE}/.qa-runs"
+    JIRA_TOKEN = credentials('jira-token')
+    GITHUB_TOKEN = credentials('github-token')
+  }
+  options { timeout(time: 90, unit: 'MINUTES') }
+  stages {
+    stage('Plan') {
+      steps { sh 'qajitsu-ci.sh plan "$TICKET"' }
+    }
+    stage('Approve') {
+      steps {
+        script {
+          // Only members of the `qa-approvers` group may approve (configure it in Jenkins).
+          def who = input(message: "Approve the QAJitsu plan for ${params.TICKET}?", submitter: 'qa-approvers', submitterParameter: 'APPROVER')
+          env.QA_APPROVER = "jenkins:${who}"
+        }
+      }
+    }
+    stage('Run') {
+      steps { sh 'QA_ENV="$ENV" qajitsu-ci.sh run "$TICKET"' }
+    }
+  }
+  post {
+    always {
+      junit allowEmptyResults: true, testResults: 'qa-artifacts/junit.xml'
+      archiveArtifacts allowEmptyArchive: true, artifacts: 'qa-artifacts/**'
+    }
+  }
+}

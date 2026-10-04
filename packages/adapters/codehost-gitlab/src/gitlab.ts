@@ -326,6 +326,62 @@ export function createGitLabCodeHost(
       );
     },
 
+    async upsertComment(target, body, marker, signal) {
+      const base = project(target.repo);
+      if (!/^\d+$/.test(target.id)) throw new AdapterError("GITLAB_MR_INVALID", "Expected an MR iid.", {});
+      const notes = await http.json(
+        `${base}/merge_requests/${target.id}/notes?per_page=100&sort=asc`,
+        z.array(
+          z.object({
+            id: z.number().int(),
+            body: z.string().default(""),
+            author: z.object({ id: z.number().int() }).optional(),
+          }),
+        ),
+        { signal },
+      );
+      // Only a note written by our own identity is updated: anyone can paste the marker into theirs.
+      const me = await http.json("/user", z.object({ id: z.number().int() }), { signal }).then(
+        (u) => u.id,
+        () => undefined,
+      );
+      const mine = notes.find((n) => n.body.includes(marker) && me !== undefined && n.author?.id === me);
+      const request = {
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ body }),
+        signal,
+      };
+      await (mine
+        ? http.json(`${base}/merge_requests/${target.id}/notes/${String(mine.id)}`, z.object({}).loose(), {
+            ...request,
+            method: "PUT",
+          })
+        : http.json(`${base}/merge_requests/${target.id}/notes`, z.object({}).loose(), {
+            ...request,
+            method: "POST",
+          }));
+      return {};
+    },
+
+    async setCommitStatus(repo, sha, status, signal) {
+      if (!/^[0-9a-f]{40}$/.test(sha))
+        throw new AdapterError("GITLAB_SHA_INVALID", "Expected a full commit SHA.", {});
+      const state = { pending: "pending", success: "success", failure: "failed", error: "failed" }[
+        status.state
+      ];
+      await http.json(`${project(repo)}/statuses/${sha}`, z.object({}).loose(), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          state,
+          name: status.context,
+          description: status.description.slice(0, 255),
+          ...(status.targetUrl ? { target_url: status.targetUrl } : {}),
+        }),
+        signal,
+      });
+    },
+
     async cloneUrl(repo: string): Promise<string> {
       project(repo);
       const url = new URL(`${web.origin}/${repo}.git`);

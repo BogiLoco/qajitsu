@@ -18,9 +18,14 @@ import {
   QajitsuError,
   approvePlan,
   diffPlans,
+  checkJournal,
+  openRunWorkspace,
+  parseEventLines,
+  readRunIndex,
   formatPlanDiff,
   parsePlan,
   readPlan,
+  sha256,
   writePlanVersion,
   type Analysis,
   type Plan,
@@ -287,6 +292,13 @@ export interface ApproveOptions {
   readonly run?: string | undefined;
   readonly version?: string | undefined;
   readonly confirmOpenQuestions?: boolean | undefined;
+  /** Who approves, e.g. the reviewer of a GitHub protected environment or a `/qa approve` comment (CI). */
+  readonly approver?: string | undefined;
+  /**
+   * Reuse the plan approved in this earlier run of the ticket (new commits, same ticket) when the ticket
+   * did not change since; otherwise refused (REQ-CI-03/AC4). Never approves a new plan.
+   */
+  readonly reuseFrom?: string | undefined;
 }
 
 /**
@@ -303,6 +315,15 @@ export async function runApprove(
   const masker = createMasker();
   try {
     const session = await openSession(rawKey, options.run, io.cwd, ports, masker);
+    const approver = options.approver ?? review.user;
+    if (options.reuseFrom !== undefined) {
+      const reused = await reuseApprovedPlan(session, options.reuseFrom, approver, ports.now);
+      io.write(
+        `Reused plan v${String(reused.version)} approved in run ${reused.from}; sha256 ${reused.sha256}\n`,
+      );
+      await anchorJournal(session);
+      return 0;
+    }
     const version = options.version === undefined ? undefined : Number(options.version);
     const { plan } = await readPlan(session.ws, version);
     const issues = checkPlanSources(plan, sourceContext(await buildChangeContext(session.ws)));
@@ -312,12 +333,12 @@ export async function runApprove(
       });
     }
     const approval = await approvePlan(session.ws, {
-      approver: review.user,
+      approver,
       now: ports.now,
       ...(version === undefined ? {} : { version }),
       confirmOpenQuestions: options.confirmOpenQuestions === true,
     });
-    session.events.emit("approve", { kind: "user", name: review.user }, "plan.approved", { ...approval });
+    session.events.emit("approve", { kind: "user", name: approver }, "plan.approved", { ...approval });
     io.write(
       `Approved plan v${String(approval.version)} of ${session.ws.ticket} run ${session.ws.runId}\nsha256 ${approval.sha256}\n${join(session.ws.dir, "plan", "plan.approved.yaml")}\n`,
     );
@@ -330,4 +351,84 @@ export async function runApprove(
     io.writeError(formatError(error, (t) => masker.maskText(t)));
     return 3;
   }
+}
+
+/**
+ * Copies the plan approved in an earlier run of the same ticket into this run and approves it again with
+ * the same bytes (REQ-CI-03/AC4): only when the ticket snapshot is identical, and only a plan that a person
+ * approved before. The SHA-256 must match the original approval.
+ *
+ * @throws {ConfigError} `REUSE_NOT_APPROVED`, `TICKET_CHANGED`, `REUSE_HASH_MISMATCH`.
+ */
+async function reuseApprovedPlan(
+  session: RunSession,
+  sourceRunId: string,
+  approver: string,
+  now: () => Date,
+): Promise<{ version: number; sha256: string; from: string }> {
+  const { ws } = session;
+  // `latest`: the newest earlier run of the ticket that a person approved.
+  if (sourceRunId === "latest") {
+    const runs = (await readRunIndex(ws.root, ws.ticket)).runs.filter((r) => r.runId !== ws.runId).reverse();
+    let found: string | undefined;
+    for (const r of runs) {
+      const candidate = await openRunWorkspace(ws.root, ws.ticket, r.runId).catch(() => undefined);
+      if (candidate?.record.data["approval"] !== undefined) {
+        found = r.runId;
+        break;
+      }
+    }
+    if (found === undefined)
+      throw new ConfigError("REUSE_NOT_APPROVED", `No earlier run of ${ws.ticket} has an approved plan.`, {});
+    sourceRunId = found;
+  }
+  const source = await openRunWorkspace(ws.root, ws.ticket, sourceRunId);
+  const original = source.record.data["approval"] as
+    { version: number; sha256: string; approver: string } | undefined;
+  if (!original) throw new ConfigError("REUSE_NOT_APPROVED", `Run ${sourceRunId} has no approved plan.`, {});
+  // The approval must be in the source run's intact journal, not only in its run.json.
+  const journal = await readFile(source.path("journal", "events.jsonl"), "utf8").catch(() => "");
+  const check = checkJournal(
+    journal,
+    source.record.data["journal"] as { lines: number; tail: string } | undefined,
+  );
+  const recorded = parseEventLines(journal).events.some((e) => {
+    const d = (e.details ?? {}) as { sha256?: unknown; approver?: unknown };
+    return (
+      (e.event === "plan.approved" || e.event === "plan.reused") &&
+      d.sha256 === original.sha256 &&
+      d.approver === original.approver
+    );
+  });
+  if (check.legacy || check.problems.length > 0 || !recorded)
+    throw new ConfigError(
+      "REUSE_NOT_APPROVED",
+      `The approval in run ${sourceRunId} is not backed by its journal; approve again.`,
+      {},
+    );
+  const ticketNow = await readFile(ws.path("ticket", "ticket.json"), "utf8");
+  const ticketThen = await readFile(source.path("ticket", "ticket.json"), "utf8");
+  if (sha256(ticketNow) !== sha256(ticketThen))
+    throw new ConfigError(
+      "TICKET_CHANGED",
+      "The ticket changed since the plan was approved; plan and approve again.",
+      {},
+    );
+  for (const ext of ["yaml", "md"]) {
+    const name = `plan.v${String(original.version)}.${ext}`;
+    await copyFile(source.path("plan", name), ws.path("plan", name));
+  }
+  const approval = await approvePlan(ws, {
+    approver: `${approver} (reusing ${original.approver}, run ${sourceRunId})`,
+    now,
+    version: original.version,
+    confirmOpenQuestions: true,
+  });
+  if (approval.sha256 !== original.sha256)
+    throw new ConfigError("REUSE_HASH_MISMATCH", "The copied plan differs from the approved one.", {});
+  session.events.emit("approve", { kind: "user", name: approver }, "plan.reused", {
+    from: sourceRunId,
+    ...approval,
+  });
+  return { version: approval.version, sha256: approval.sha256, from: sourceRunId };
 }

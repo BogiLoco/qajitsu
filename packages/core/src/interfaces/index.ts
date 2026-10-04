@@ -1,5 +1,12 @@
 export type { AdapterDeps, Logger } from "./common.js";
-export type { ChangeLocator, ChangeRef, CodeHost, ReviewComment } from "./code-host.js";
+export type {
+  ChangeLocator,
+  ChangeRef,
+  ChangeTarget,
+  CodeHost,
+  CommitStatus,
+  ReviewComment,
+} from "./code-host.js";
 export type { EnvProvider, EnvironmentHandle, EnvironmentRequest } from "./env-provider.js";
 export type { EvidenceEntry, EvidenceStore } from "./evidence-store.js";
 export type { ModelCapabilities, ModelProvider } from "./model-provider.js";

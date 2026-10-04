@@ -18,7 +18,10 @@ export interface LoadedProject {
  * @param cwd - Starting folder.
  * @throws {ConfigError} `CONFIG_NOT_FOUND`, `CONFIG_YAML_INVALID` or `CONFIG_INVALID`.
  */
-export async function loadProject(cwd: string): Promise<LoadedProject> {
+export async function loadProject(
+  cwd: string,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): Promise<LoadedProject> {
   let dir = resolve(cwd);
   for (;;) {
     const file = join(dir, ".qa", "qa.project.yaml");
@@ -33,7 +36,17 @@ export async function loadProject(cwd: string): Promise<LoadedProject> {
           cause: error instanceof Error ? error.message.split("\n")[0] : String(error),
         });
       }
-      return { config: parseProjectConfig(raw, file), qaDir: join(dir, ".qa"), projectDir: dir };
+      const config = parseProjectConfig(raw, file);
+      // Run-level override (configuration layer 5): CI jobs share run folders through artifacts here.
+      const workspace = env["QAJITSU_WORKSPACE"];
+      return {
+        config:
+          workspace === undefined || workspace === ""
+            ? config
+            : { ...config, workspace: { ...config.workspace, root: workspace } },
+        qaDir: join(dir, ".qa"),
+        projectDir: dir,
+      };
     } catch (error) {
       if (!(error instanceof Error) || (error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }

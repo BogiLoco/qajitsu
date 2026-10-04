@@ -43,9 +43,10 @@ QAJitsu plugs into any project through configuration; differences between projec
 
 ### REQ-GEN-04 · Claude Code plugin interface
 
-- Status: proposed
+- Status: accepted
 - Priority: could
 - Stage: 9
+- Note: accepted on 2026-10-04 by the owner.
 - Related: REQ-GEN-05
 
 **Acceptance criteria**

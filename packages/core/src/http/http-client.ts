@@ -3,7 +3,7 @@ import { AdapterError } from "../errors.js";
 
 /** Options of one HTTP request made by an adapter. */
 export interface HttpRequest {
-  readonly method?: "GET" | "POST" | "PUT" | "DELETE";
+  readonly method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   readonly headers?: Readonly<Record<string, string>>;
   readonly body?: string | Uint8Array | FormData;
   readonly signal?: AbortSignal | undefined;

@@ -17,6 +17,8 @@ import { runAuditVerify } from "./commands/audit.js";
 import { runTelemetryExport } from "./commands/telemetry.js";
 import { runMetrics } from "./commands/metrics.js";
 import { runInit } from "./commands/init.js";
+import { runExport } from "./commands/export.js";
+import { runCiComment, runCiDetect, runCiPublishPlan } from "./commands/ci.js";
 import { loadProject } from "./project.js";
 import type { ModelPorts } from "./session.js";
 import { formatDoctor, runDoctor } from "./doctor.js";
@@ -162,8 +164,19 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--run <id>", "run id (default: latest run of the ticket)")
     .option("--version <n>", "plan version (default: latest)")
     .option("--confirm-open-questions", "approve although the plan has open questions")
-    .action((ticket: string, options: { run?: string; version?: string; confirmOpenQuestions?: boolean }) =>
-      withPorts((ports) => runApprove(ticket, options, commandIO, ports, review))(),
+    .option("--approver <name>", "who approves (CI: the reviewer or the /qa approve author)")
+    .option("--reuse-from <run>", "reuse the plan approved in this earlier run if the ticket did not change")
+    .action(
+      (
+        ticket: string,
+        options: {
+          run?: string;
+          version?: string;
+          confirmOpenQuestions?: boolean;
+          approver?: string;
+          reuseFrom?: string;
+        },
+      ) => withPorts((ports) => runApprove(ticket, options, commandIO, ports, review))(),
     );
 
   program
@@ -308,6 +321,43 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--out <file>", "write to a file atomically, e.g. for the node_exporter textfile collector")
     .action((options: { format?: string; out?: string }) =>
       withPorts((ports) => runMetrics(options, commandIO, ports))(),
+    );
+
+  program
+    .command("export")
+    .description("Write pipeline artifacts of a run: report.html, junit.xml, matrix and the evidence zip")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .requiredOption("--out <dir>", "artifact folder, e.g. qa-artifacts")
+    .action((ticket: string, options: { run?: string; out: string }) =>
+      withPorts((ports) => runExport(ticket, options, commandIO, ports))(),
+    );
+
+  const ci = program.command("ci").description("Pipeline helpers (GitHub Actions, GitLab CI, Jenkins)");
+  ci.command("detect")
+    .description(
+      "Work out the trigger: labelled PR/MR, /qa comment, manual run or Jira; writes $GITHUB_OUTPUT",
+    )
+    .option("--label <name>", "PR/MR label that starts QAJitsu", "qa-agent")
+    .option("--paths <glob...>", "only when a changed file matches one of these globs")
+    .option("--format <format>", "json (default) or env (shell-safe export lines)")
+    .action((options: { label?: string; paths?: string[]; format?: string }) =>
+      withPorts((ports) => runCiDetect(options, commandIO, ports))(),
+    );
+  ci.command("comment")
+    .description("Post the plan or the results to the PR/MR (one updatable comment) and set the status check")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .requiredOption("--change <url>", "PR/MR URL")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .action((ticket: string, options: { run?: string; change: string }) =>
+      withPorts((ports) => runCiComment(ticket, options, commandIO, ports))(),
+    );
+  ci.command("publish-plan")
+    .description("Post the latest plan version to the Jira ticket (one updatable comment)")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .action((ticket: string, options: { run?: string }) =>
+      withPorts((ports) => runCiPublishPlan(ticket, options, commandIO, ports))(),
     );
 
   program

@@ -31,12 +31,13 @@ environments:
 models:
   providers:
     # Local model through Ollama, so the demo needs no API key. Capabilities as reported by
-    # `ollama show gemma4:e2b` (131072 context, tools, vision); 65536 is the context QAJitsu uses.
+    # `ollama show gemma4:e2b` (131072 context, tools, vision). The full context lets the model take the author
+    # role (needs 128k); it needs more memory than a smaller context.
     local:
       type: ollama
       base_url: http://localhost:11434
       models:
-        gemma4:e2b: { tools: true, structured_output: true, vision: true, context_window: 65536 }
+        gemma4:e2b: { tools: true, structured_output: true, vision: true, context_window: 131072 }
   roles:
     default: local/gemma4:e2b
 

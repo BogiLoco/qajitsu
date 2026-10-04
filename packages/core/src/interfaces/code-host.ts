@@ -37,6 +37,23 @@ export interface ReviewComment {
 }
 
 /** Access to a code host: GitHub and GitLab, cloud and self-hosted (REQ-CTX-02). */
+/** A pull or merge request to comment on (REQ-CI-04/AC4). */
+export interface ChangeTarget {
+  readonly repo: string;
+  readonly kind: "pr" | "mr";
+  /** PR number or MR iid. */
+  readonly id: string;
+}
+
+/** A commit status check shown on the PR/MR (REQ-CI-04/AC4). */
+export interface CommitStatus {
+  readonly state: "pending" | "success" | "failure" | "error";
+  /** Check name, e.g. `qajitsu/DEMO-1`. */
+  readonly context: string;
+  readonly description: string;
+  readonly targetUrl?: string | undefined;
+}
+
 export interface CodeHost {
   /** Host type, e.g. `github`. */
   readonly type: string;
@@ -55,6 +72,18 @@ export interface CodeHost {
   getReviewComments(change: ChangeRef, signal?: AbortSignal): Promise<readonly ReviewComment[]>;
   /** Authenticated clone URL; never logged (REQ-CFG-06). */
   cloneUrl(repo: string): Promise<string>;
+  /**
+   * Creates or updates the QAJitsu comment on a PR/MR: the comment containing `marker` is edited, so
+   * re-runs do not pile up comments (REQ-CI-03/AC1, REQ-CI-04/AC4).
+   */
+  upsertComment?(
+    target: ChangeTarget,
+    body: string,
+    marker: string,
+    signal?: AbortSignal,
+  ): Promise<{ readonly url?: string | undefined }>;
+  /** Sets a commit status check on `sha` (REQ-CI-04/AC4). */
+  setCommitStatus?(repo: string, sha: string, status: CommitStatus, signal?: AbortSignal): Promise<void>;
   /** Cheap access check for `qajitsu doctor --online` (REQ-GEN-03/AC2); never returns secrets. */
   check?(signal?: AbortSignal): Promise<{ readonly ok: boolean; readonly detail: string }>;
   /** Downloads a CI artifact, e.g. an APK for a commit (REQ-ENV-06). */

@@ -94,7 +94,7 @@ Approval freezes the plan; only approved cases can execute.
 
 ### REQ-PLAN-07 · Approval channels
 
-- Status: accepted
+- Status: in-progress
 - Priority: should
 - Stage: 10
 - Related: REQ-CI-03
@@ -103,7 +103,7 @@ Besides the terminal, plans can be approved where the team already works.
 
 **Acceptance criteria**
 
-- [ ] AC1: Terminal approval (stage 2).
-- [ ] AC2: In CI: plan posted to the PR/MR and Jira; approval via protected environment (GitHub), manual job (GitLab) or `/qa approve` comment; `/qa revise <text>` triggers a new version.
+- [x] AC1: Terminal approval (stage 2).
+- [x] AC2: In CI: plan posted to the PR/MR and Jira; approval via protected environment (GitHub), manual job (GitLab) or `/qa approve` comment; `/qa revise <text>` triggers a new version.
 - [ ] AC3: Later: approval in Jira by comment and in a small web UI.
-- [ ] AC4: New plans are never approved automatically.
+- [x] AC4: New plans are never approved automatically.

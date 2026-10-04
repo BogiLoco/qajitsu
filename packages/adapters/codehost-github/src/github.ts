@@ -56,6 +56,12 @@ const probe = async (call: () => Promise<unknown>, ok: string): Promise<{ ok: bo
   }
 };
 
+const IssueCommentSchema = z.object({
+  id: z.number().int(),
+  body: z.string().default(""),
+  user: z.object({ login: z.string(), type: z.string().optional() }).nullable().default(null),
+});
+
 /**
  * Creates the GitHub CodeHost for github.com or GitHub Enterprise Server (REQ-CTX-02).
  *
@@ -303,6 +309,56 @@ export function createGitHubCodeHost(
           name,
         },
       );
+    },
+
+    async upsertComment(target, body, marker, signal) {
+      const repo = checkRepo(target.repo);
+      if (!/^\d+$/.test(target.id)) throw new AdapterError("GITHUB_PR_INVALID", "Expected a PR number.", {});
+      const comments = await pages(`/repos/${repo}/issues/${target.id}/comments`, IssueCommentSchema, signal);
+      // Only a comment written by our own identity is updated: anyone can paste the marker into theirs.
+      const me = await http.json("/user", z.object({ login: z.string() }), { signal }).then(
+        (u) => u.login,
+        () => undefined,
+      );
+      const mine = comments.find(
+        (c) => c.body.includes(marker) && (me === undefined ? c.user?.type === "Bot" : c.user?.login === me),
+      );
+      const json = { "content-type": "application/json" };
+      const saved = mine
+        ? await http.json(
+            `/repos/${repo}/issues/comments/${String(mine.id)}`,
+            z.object({ html_url: z.string() }),
+            {
+              method: "PATCH",
+              headers: json,
+              body: JSON.stringify({ body }),
+              signal,
+            },
+          )
+        : await http.json(`/repos/${repo}/issues/${target.id}/comments`, z.object({ html_url: z.string() }), {
+            method: "POST",
+            headers: json,
+            body: JSON.stringify({ body }),
+            signal,
+          });
+      return { url: saved.html_url };
+    },
+
+    async setCommitStatus(repo, sha, status, signal) {
+      checkRepo(repo);
+      if (!/^[0-9a-f]{40}$/.test(sha))
+        throw new AdapterError("GITHUB_SHA_INVALID", "Expected a full commit SHA.", {});
+      await http.json(`/repos/${repo}/statuses/${sha}`, z.object({}).loose(), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          state: status.state,
+          context: status.context,
+          description: status.description.slice(0, 140),
+          ...(status.targetUrl ? { target_url: status.targetUrl } : {}),
+        }),
+        signal,
+      });
     },
 
     async cloneUrl(repo: string): Promise<string> {

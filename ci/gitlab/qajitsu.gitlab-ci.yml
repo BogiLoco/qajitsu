@@ -1,0 +1,64 @@
+# QAJitsu GitLab CI template (REQ-CI-01/AC2). In your .gitlab-ci.yml:
+#
+#   include:
+#     - remote: https://raw.githubusercontent.com/your-org/qajitsu/main/ci/gitlab/qajitsu.gitlab-ci.yml
+#   stages: [qa-plan, qa-run]
+#   qa-plan: { extends: .qa-plan }
+#   qa-run: { extends: .qa-run }
+#
+# A merge request labelled `qa-agent` (or a pipeline started with QA_TICKET, e.g. by a Jira automation calling the
+# pipeline trigger API with QA_TRIGGER=jira) plans; the plan is posted to the MR and Jira; a person starts the
+# manual `qa-run` job, which is the approval (REQ-CI-03/AC3). Secrets: CI/CD variables (masked, protected).
+
+variables:
+  QAJITSU_IMAGE: ghcr.io/your-org/qajitsu:latest
+  QAJITSU_WORKSPACE: $CI_PROJECT_DIR/.qa-runs
+  QA_LABEL: qa-agent
+
+.qa-base:
+  image: $QAJITSU_IMAGE
+  variables:
+    QJ: qajitsu
+  before_script:
+    - set -o pipefail
+    # Shell-safe `export KEY='value'` lines; values are validated and quoted by qajitsu.
+    - detected="$(qajitsu ci detect --label "$QA_LABEL" --format env)"
+    - eval "$detected"
+    - if [ "$QA_RUN" != "true" ]; then echo "QAJitsu not triggered"; exit 0; fi
+  cache:
+    # Git mirrors and browsers between pipelines (REQ-CI-05/AC2).
+    key: qajitsu-$CI_COMMIT_REF_SLUG
+    paths: [.qa-cache/]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_LABELS =~ /(^|,)qa-agent(,|$)/
+    - if: $QA_TICKET
+
+.qa-plan:
+  extends: .qa-base
+  stage: qa-plan
+  timeout: 30m
+  script:
+    - qajitsu-ci.sh plan "$QA_TICKET"
+  artifacts:
+    when: always
+    paths: [.qa-runs/]
+    expire_in: 7 days
+
+.qa-run:
+  extends: .qa-base
+  stage: qa-run
+  timeout: 1h
+  # The person who starts this job approves the plan; QAJitsu never approves a new plan by itself.
+  when: manual
+  allow_failure: false
+  variables:
+    QA_APPROVER: gitlab:$GITLAB_USER_LOGIN
+  script:
+    - qajitsu-ci.sh run "$QA_TICKET"
+  artifacts:
+    when: always
+    paths: [qa-artifacts/]
+    reports:
+      junit: qa-artifacts/junit.xml
+    expose_as: QAJitsu report
+    expire_in: 30 days

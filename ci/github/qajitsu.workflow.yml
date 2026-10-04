@@ -1,0 +1,129 @@
+# Example workflow (REQ-CI-01/AC1, REQ-CI-02, REQ-CI-03): copy to .github/workflows/qajitsu.yml in your repository.
+# Flow: a PR labelled `qa-agent` → plan job posts the plan to the PR and Jira → a reviewer approves through the
+# protected environment `qa-approval` (or comments `/qa approve v<N>`) → run job tests the PR head, publishes
+# artifacts and the status check. `/qa revise <text>` writes a new plan version. New commits reuse the approved plan
+# only if the ticket did not change. Pin `your-org/qajitsu/ci/github` to a release tag or commit, not a branch.
+name: QAJitsu
+on:
+  pull_request:
+    types: [labeled, synchronize]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      ticket: { description: "Jira ticket key", required: true }
+      env: { description: "Environment profile", required: false }
+      mode: { description: "plan, run or full", required: false, default: plan }
+  repository_dispatch:
+    types: [qajitsu] # Jira automation: POST /repos/<org>/<repo>/dispatches {"event_type":"qajitsu","client_payload":{"ticket":"SHOP-482"}}
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  statuses: write
+  actions: read
+
+env:
+  # Secrets come from the CI secret store (REQ-CI-05/AC3); the env secret provider reads them.
+  JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+  JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  # One cache line per pull request (or manual run): never shared between PRs.
+  QA_CACHE_KEY: qajitsu-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.qa.outputs.run }}
+      ticket: ${{ steps.qa.outputs.ticket }}
+      mode: ${{ steps.qa.outputs.mode }}
+      change: ${{ steps.qa.outputs.change }}
+      command: ${{ steps.qa.outputs.command }}
+      version: ${{ steps.qa.outputs.version }}
+      instruction: ${{ steps.qa.outputs.instruction }}
+      user: ${{ steps.qa.outputs.user }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: qa
+        uses: your-org/qajitsu/ci/github@v1
+        with: { command: detect }
+
+  plan:
+    needs: detect
+    if: needs.detect.outputs.run == 'true' && (needs.detect.outputs.mode == 'plan' || needs.detect.outputs.mode == 'full') && github.event.action != 'synchronize'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      QAJITSU_WORKSPACE: ${{ runner.temp }}/qa-runs # outside the checkout: the PR cannot plant run folders
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          {
+            ref: "${{ github.event.pull_request.head.sha || format('refs/pull/{0}/head', github.event.issue.number || 0) }}",
+          }
+      - uses: actions/cache/restore@v4
+        with:
+          {
+            path: "${{ runner.temp }}/qa-runs",
+            key: "${{ env.QA_CACHE_KEY }}-${{ github.run_id }}",
+            restore-keys: "${{ env.QA_CACHE_KEY }}-",
+          }
+      - uses: your-org/qajitsu/ci/github@v1
+        with:
+          command: plan
+          ticket: ${{ needs.detect.outputs.ticket }}
+          change: ${{ needs.detect.outputs.change }}
+          revise: ${{ needs.detect.outputs.command == 'revise' && needs.detect.outputs.instruction || '' }}
+      - uses: actions/cache/save@v4
+        with: { path: "${{ runner.temp }}/qa-runs", key: "${{ env.QA_CACHE_KEY }}-${{ github.run_id }}" }
+
+  run:
+    needs: [detect, plan]
+    # A label run waits for the protected environment; `/qa approve v<N>` or new commits run directly.
+    if: always() && needs.detect.outputs.run == 'true' && (needs.plan.result == 'success' || needs.detect.outputs.command == 'approve' || github.event.action == 'synchronize')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: ${{ needs.detect.outputs.command == 'approve' && 'qa' || 'qa-approval' }}
+    env:
+      QAJITSU_WORKSPACE: ${{ runner.temp }}/qa-runs
+    steps:
+      # Test exactly the PR head the status check is reported on.
+      - uses: actions/checkout@v5
+        with:
+          {
+            ref: "${{ github.event.pull_request.head.sha || format('refs/pull/{0}/head', github.event.issue.number || 0) }}",
+          }
+      - uses: actions/cache/restore@v4
+        with:
+          {
+            path: "${{ runner.temp }}/qa-runs",
+            key: "${{ env.QA_CACHE_KEY }}-${{ github.run_id }}",
+            restore-keys: "${{ env.QA_CACHE_KEY }}-",
+          }
+      # The person who approved the `qa-approval` environment, not whoever pushed or labelled.
+      - id: approver
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMENT_USER: ${{ needs.detect.outputs.user }}
+          COMMAND: ${{ needs.detect.outputs.command }}
+        run: |
+          if [ "$COMMAND" = "approve" ]; then echo "name=github:$COMMENT_USER" >> "$GITHUB_OUTPUT"; exit 0; fi
+          who=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/approvals" --jq '[.[] | select(.state=="approved")] | last | .user.login // empty')
+          echo "name=${who:+environment:qa-approval:$who}" >> "$GITHUB_OUTPUT"
+      - uses: your-org/qajitsu/ci/github@v1
+        with:
+          command: run
+          ticket: ${{ needs.detect.outputs.ticket }}
+          change: ${{ needs.detect.outputs.change }}
+          approver: ${{ steps.approver.outputs.name }}
+          version: ${{ needs.detect.outputs.version }}
+          reuse: ${{ github.event.action == 'synchronize' }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: "qajitsu-${{ needs.detect.outputs.ticket }}", path: qa-artifacts/ }
+      - uses: actions/cache/save@v4
+        if: always()
+        with: { path: "${{ runner.temp }}/qa-runs", key: "${{ env.QA_CACHE_KEY }}-${{ github.run_id }}-done" }

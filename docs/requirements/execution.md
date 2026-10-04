@@ -60,14 +60,15 @@ The author agent writes test files for approved cases only. Exploring the app th
 
 ### REQ-EXEC-05 · Web UI testing
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 5
-- Related: REQ-EVD-02
+- Related: REQ-EVD-02, ADR-0004
+- Note: AC1 reworded on 2026-10-04 (owner decision): Playwright Test was replaced by Playwright driven by the trusted parent, so an agent-written spec cannot judge its own result.
 
 **Acceptance criteria**
 
-- [ ] AC1: Runner on Playwright Test (Chromium by default; Firefox and WebKit configurable).
+- [x] AC1: Runner on Playwright (`playwright-core`) driven by the trusted parent process (ADR-0004): specs run in the sandbox and only send `ui.*` operations; Chromium by default, Firefox and WebKit configurable (`web.browser`).
 - [x] AC2: `data-testid` and accessible-role selectors preferred; CSS-class selectors flagged in review.
 - [x] AC3: Screenshot after each step, video and trace kept on failure.
 

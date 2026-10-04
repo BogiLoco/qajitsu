@@ -163,3 +163,48 @@ describe("doctor access check (REQ-GEN-03/AC2)", () => {
     expect((await build({ unauthorized: true }).host.check?.())?.ok).toBe(false);
   });
 });
+
+describe("MR note and commit status (REQ-CI-04/AC4)", () => {
+  it("REQ-CI-04/AC4: posts or updates the QAJitsu note and maps failure to failed", async () => {
+    const sha = "d".repeat(40);
+    let notes: { id: number; body: string; author: { id: number } }[] = [
+      { id: 4, body: "<!-- qj --> spoof", author: { id: 99 } },
+    ];
+    const fake = createFakeFetch([
+      { match: r("\\/merge_requests\\/7\\/notes\\?"), reply: () => new Response(JSON.stringify(notes)) },
+      { method: "POST", match: r("\\/merge_requests\\/7\\/notes$"), reply: jsonReply({ id: 5 }) },
+      { match: /^\/api\/v4\/user$/, reply: jsonReply({ id: 7 }) },
+      { method: "PUT", match: r("\\/merge_requests\\/7\\/notes\\/5$"), reply: jsonReply({ id: 5 }) },
+      { method: "POST", match: r(`\\/statuses\\/${sha}$`), reply: jsonReply({ id: 1 }) },
+    ]);
+    const host = createGitLabCodeHost(
+      { alias: "gitlab", baseUrl: "https://gitlab.example.com", token: "secret://env/GITLAB_TOKEN" },
+      testDeps(fake.fetch, { "secret://env/GITLAB_TOKEN": TOKEN }),
+    );
+    const target = { repo: "shop/platform/backend", kind: "mr" as const, id: "7" };
+    await host.upsertComment?.(target, "<!-- qj --> a", "<!-- qj -->");
+    notes = [...notes, { id: 5, body: "<!-- qj --> a", author: { id: 7 } }];
+    await host.upsertComment?.(target, "<!-- qj --> b", "<!-- qj -->");
+    expect(fake.requests.filter((q) => q.method !== "GET").map((q) => q.method)).toEqual(["POST", "PUT"]);
+    await host.setCommitStatus?.("shop/platform/backend", sha, {
+      state: "failure",
+      context: "qajitsu/DEMO-1",
+      description: "1 FAILED",
+    });
+    expect(JSON.parse(fake.requests.at(-1)?.body ?? "{}")).toEqual({
+      state: "failed",
+      name: "qajitsu/DEMO-1",
+      description: "1 FAILED",
+    });
+    await expect(
+      host.setCommitStatus?.("shop/platform/backend", "x", {
+        state: "success",
+        context: "c",
+        description: "d",
+      }),
+    ).rejects.toMatchObject({ code: "GITLAB_SHA_INVALID" });
+    await expect(host.upsertComment?.({ ...target, id: "y" }, "b", "m")).rejects.toMatchObject({
+      code: "GITLAB_MR_INVALID",
+    });
+  });
+});

@@ -74,7 +74,11 @@ export const createBuildProject = async (
     `base_url: http://localhost:3000\nhealth_path: /health\naccounts:\n  user:standard: { username: standard, password: secret://env/DEMO_USER_PASSWORD }\nlogin:\n  path: /auth/login\n  body: { username: "{{username}}", password: "{{password}}" }\n  token_path: token\n`,
   );
   let seq = 0;
-  const run = async (args: string[], script: Turn[] = [{ text: "{}" }]) => {
+  const run = async (
+    args: string[],
+    script: Turn[] = [{ text: "{}" }],
+    extra: { readonly env?: Readonly<Record<string, string>> } = {},
+  ) => {
     let out = "";
     let err = "";
     let exitCode = 0;
@@ -87,7 +91,7 @@ export const createBuildProject = async (
       setExitCode: (c) => (exitCode = c),
       user: "qa-lead",
       ports: {
-        env: { DEMO_USER_PASSWORD: PASSWORD },
+        env: { DEMO_USER_PASSWORD: PASSWORD, ...extra.env },
         home,
         now: options.now ?? (() => new Date()),
         random: () => ((seq += 7) % 36) / 36,

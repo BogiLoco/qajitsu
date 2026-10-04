@@ -1,0 +1,103 @@
+# qajitsu-action (REQ-CI-01/AC1): `uses: <org>/qajitsu/ci/github@<ref>` with `command: plan` or `command: run`.
+name: QAJitsu
+description: Plan, approve and run QA tests for a Jira ticket with QAJitsu; posts the plan and results to the PR.
+inputs:
+  command:
+    description: "plan, run or detect"
+    required: true
+  ticket:
+    description: Jira ticket key (from `detect`)
+    required: false
+  change:
+    description: PR URL for the comment and status check
+    required: false
+  approver:
+    description: Who approved the plan (required for `run` unless `reuse` is true)
+    required: false
+  version:
+    description: Plan version the reviewer approved (/qa approve v<N>)
+    required: false
+  reuse:
+    description: Reuse the latest approved plan if the ticket did not change
+    required: false
+    default: "false"
+  revise:
+    description: Reviewer instruction for a new plan version (/qa revise)
+    required: false
+  env:
+    description: Environment profile
+    required: false
+  build:
+    description: Build the application from the worktree (--build)
+    required: false
+    default: "false"
+  label:
+    description: PR label that starts QAJitsu
+    required: false
+    default: qa-agent
+  working-directory:
+    description: Folder with .qa/
+    required: false
+    default: .
+outputs:
+  run:
+    description: "true when QAJitsu should run (detect)"
+    value: ${{ steps.detect.outputs.run }}
+  ticket:
+    value: ${{ steps.detect.outputs.ticket }}
+    description: Ticket key (detect)
+  mode:
+    value: ${{ steps.detect.outputs.mode }}
+    description: plan, run or full (detect)
+  change:
+    value: ${{ steps.detect.outputs.change }}
+    description: PR URL (detect)
+  command:
+    value: ${{ steps.detect.outputs.command }}
+    description: approve or revise from a /qa comment (detect)
+  version:
+    value: ${{ steps.detect.outputs.version }}
+    description: Plan version named in /qa approve v<N> (detect)
+  instruction:
+    value: ${{ steps.detect.outputs.instruction }}
+    description: Text after /qa revise (detect)
+  user:
+    value: ${{ steps.detect.outputs.user }}
+    description: Author of the /qa comment (detect)
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v5
+      with:
+        node-version: 22
+    - name: Install QAJitsu
+      shell: bash
+      run: |
+        cd "$GITHUB_ACTION_PATH/../.."
+        corepack enable
+        pnpm install --frozen-lockfile
+        pnpm build
+        pnpm --filter @qajitsu/cli exec playwright-core install --with-deps chromium
+        echo "QJ=node $GITHUB_ACTION_PATH/../../packages/cli/dist/bin.js" >> "$GITHUB_ENV"
+    - id: detect
+      if: inputs.command == 'detect'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        QA_LABEL: ${{ inputs.label }}
+      run: $QJ ci detect --label "$QA_LABEL"
+    - if: inputs.command == 'plan' || inputs.command == 'run'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        QA_CHANGE: ${{ inputs.change }}
+        QA_APPROVER: ${{ inputs.approver }}
+        QA_REUSE: ${{ inputs.reuse }}
+        QA_REVISE: ${{ inputs.revise }}
+        QA_ENV: ${{ inputs.env }}
+        QA_BUILD: ${{ inputs.build }}
+        QA_VERSION: ${{ inputs.version }}
+        # Inputs reach the shell only through the environment, never through ${{ }} in the script.
+        QA_COMMAND: ${{ inputs.command }}
+        QA_TICKET: ${{ inputs.ticket }}
+      run: bash "$GITHUB_ACTION_PATH/../qajitsu-ci.sh" "$QA_COMMAND" "$QA_TICKET"

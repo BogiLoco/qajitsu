@@ -58,7 +58,7 @@ const MIME: Record<string, string> = {
  *
  * @throws {GateFailedError} `PUBLISH_GATES_FAILED` when an entry contains a registered secret.
  */
-async function buildEvidenceZip(session: RunSession, v: RunVerdict): Promise<PublishAttachment> {
+export async function buildEvidenceZip(session: RunSession, v: RunVerdict): Promise<PublishAttachment> {
   const { ws, masker } = session;
   const paths = [
     // Playwright traces stay local: they hold network headers (session tokens) inside compressed data.
@@ -67,6 +67,7 @@ async function buildEvidenceZip(session: RunSession, v: RunVerdict): Promise<Pub
     "report/report.html",
     "report/matrix.md",
     "report/matrix.csv",
+    "report/junit.xml",
   ];
   const entries = await Promise.all(
     paths.map(async (p) => ({ name: p, data: new Uint8Array(await readFile(join(ws.dir, p))) })),
@@ -129,7 +130,7 @@ function commentModel(
   };
 }
 
-function publisherFor(session: RunSession, ports: RuntimePorts): Publisher {
+export function publisherFor(session: RunSession, ports: RuntimePorts): Publisher {
   const { project, ws, masker, logger } = session;
   const jira = project.config.jira;
   if (jira.type === "file") return createFilePublisher(ws.path("report", "published"));

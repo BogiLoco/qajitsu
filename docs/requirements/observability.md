@@ -79,9 +79,10 @@ Built by code from the journal, never drawn by an agent.
 
 ### REQ-OBS-07 · Application map across runs
 
-- Status: proposed
+- Status: accepted
 - Priority: could
 - Stage: 9
+- Note: accepted on 2026-10-04 by the owner.
 - Related: REQ-OBS-06
 
 **Acceptance criteria**

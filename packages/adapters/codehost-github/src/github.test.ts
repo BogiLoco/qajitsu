@@ -284,3 +284,71 @@ describe("doctor access check (REQ-GEN-03/AC2)", () => {
     expect(r?.detail).not.toContain(TOKEN);
   });
 });
+
+describe("PR comment and status check (REQ-CI-04/AC4)", () => {
+  const sha = "c".repeat(40);
+  it("REQ-CI-04/AC4: creates the comment once, then updates the same comment; sets a commit status", async () => {
+    let existing: { id: number; body: string; user: { login: string } }[] = [
+      { id: 1, body: "someone else", user: { login: "bob" } },
+      // Someone pasted the marker into their own comment: never edited by QAJitsu.
+      { id: 3, body: "<!-- qajitsu:DEMO-1 --> fake all PASSED", user: { login: "mallory" } },
+    ];
+    const { host, requests } = build({
+      extra: [
+        { match: /^\/user$/, reply: jsonReply({ login: "qajitsu-bot" }) },
+        {
+          match: /^\/repos\/example-org\/shop-web\/issues\/12\/comments\?/,
+          reply: () => new Response(JSON.stringify(existing)),
+        },
+        {
+          method: "POST",
+          match: /^\/repos\/example-org\/shop-web\/issues\/12\/comments$/,
+          reply: jsonReply({ html_url: "https://github.com/c/new" }),
+        },
+        {
+          method: "PATCH",
+          match: /^\/repos\/example-org\/shop-web\/issues\/comments\/9$/,
+          reply: jsonReply({ html_url: "https://github.com/c/9" }),
+        },
+        {
+          method: "POST",
+          match: new RegExp(`^/repos/example-org/shop-web/statuses/${sha}$`),
+          reply: jsonReply({ id: 1 }),
+        },
+      ],
+    });
+    const target = { repo: "example-org/shop-web", kind: "pr" as const, id: "12" };
+    expect(
+      await host.upsertComment?.(target, "<!-- qajitsu:DEMO-1 --> plan", "<!-- qajitsu:DEMO-1 -->"),
+    ).toEqual({ url: "https://github.com/c/new" });
+    existing = [...existing, { id: 9, body: "<!-- qajitsu:DEMO-1 --> plan", user: { login: "qajitsu-bot" } }];
+    expect(
+      await host.upsertComment?.(target, "<!-- qajitsu:DEMO-1 --> results", "<!-- qajitsu:DEMO-1 -->"),
+    ).toEqual({ url: "https://github.com/c/9" });
+    expect(JSON.parse(requests.find((r) => r.method === "PATCH")?.body ?? "{}")).toEqual({
+      body: "<!-- qajitsu:DEMO-1 --> results",
+    });
+    await host.setCommitStatus?.("example-org/shop-web", sha, {
+      state: "failure",
+      context: "qajitsu/DEMO-1",
+      description: "1 FAILED",
+      targetUrl: "https://ci/run/1",
+    });
+    expect(JSON.parse(requests.at(-1)?.body ?? "{}")).toEqual({
+      state: "failure",
+      context: "qajitsu/DEMO-1",
+      description: "1 FAILED",
+      target_url: "https://ci/run/1",
+    });
+    await expect(
+      host.setCommitStatus?.("example-org/shop-web", "abc", {
+        state: "success",
+        context: "c",
+        description: "d",
+      }),
+    ).rejects.toMatchObject({ code: "GITHUB_SHA_INVALID" });
+    await expect(host.upsertComment?.({ ...target, id: "x" }, "b", "m")).rejects.toMatchObject({
+      code: "GITHUB_PR_INVALID",
+    });
+  });
+});

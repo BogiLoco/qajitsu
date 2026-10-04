@@ -24,6 +24,7 @@ import {
   renderMatrixCsv,
   renderMatrixMarkdown,
   renderMatrixXlsx,
+  renderJUnit,
   renderReportHtml,
   type MatrixRow,
   type ReportAttempt,
@@ -69,6 +70,8 @@ export interface RunVerdict {
   readonly failed: readonly GateResult[];
   /** Auditor and canary notes and downgrades (REQ-VER-06, REQ-VER-09). */
   readonly checks: readonly string[];
+  /** JUnit XML for pipelines (REQ-CI-04/AC2), masked. */
+  readonly junit: string;
 }
 
 /**
@@ -365,6 +368,29 @@ export async function computeVerdict(
     ok: verdict.ok,
     failed: verdict.failed,
     checks: checkNotes,
+    junit: masker.maskText(
+      renderJUnit(
+        { ticket: ws.ticket, runId: ws.runId },
+        cases.map((c) => {
+          const p = plan.cases.find((x) => x.id === c.caseId);
+          return {
+            caseId: c.caseId,
+            title: p?.title ?? c.caseId,
+            type: p?.type ?? "api",
+            status: c.status,
+            durationMs: results.get(c.caseId)?.attempts.reduce((n, a) => n + (a.durationMs ?? 0), 0),
+            // Masked before XML escaping: an escaped secret (&amp;, &quot;) would no longer match the masker.
+            failures: c.failures.map((f) => ({
+              ...f,
+              expected: masker.maskJson(f.expected),
+              actual: masker.maskJson(f.actual),
+            })),
+            error: c.error === undefined ? undefined : masker.maskText(c.error),
+            reportPath: "report/report.html",
+          };
+        }),
+      ),
+    ),
   };
 }
 
@@ -399,6 +425,7 @@ export async function writeReports(session: RunSession, v: RunVerdict): Promise<
   await writeFile(ws.path("report", "matrix.csv"), v.csv, "utf8");
   await writeFile(ws.path("report", "matrix.xlsx"), renderMatrixXlsx(v.rows));
   await writeFile(ws.path("report", "report.html"), v.html, "utf8");
+  await writeFile(ws.path("report", "junit.xml"), v.junit, "utf8");
   await writeFile(ws.path("report", "graph.json"), `${JSON.stringify(v.graph, null, 2)}\n`, "utf8");
   await writeFile(
     ws.path("report", "gates.json"),

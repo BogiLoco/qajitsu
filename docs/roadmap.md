@@ -117,7 +117,7 @@ without touching assertions, `qj logs` and the report timeline show what happene
 
 <!-- prettier-ignore-start -->
 <!-- req-stage:5 -->
-- [REQ-EXEC-05](requirements/execution.md#req-exec-05--web-ui-testing) Web UI testing (must, in-progress, AC 2/3)
+- [REQ-EXEC-05](requirements/execution.md#req-exec-05--web-ui-testing) Web UI testing (must, implemented, AC 3/3)
 - [REQ-EXEC-07](requirements/execution.md#req-exec-07--mixed-cases) Mixed cases (should, implemented, AC 1/1)
 - [REQ-EXEC-09](requirements/execution.md#req-exec-09--healer-limited-to-selectors-and-waits) Healer limited to selectors and waits (must, implemented, AC 3/3)
 - [REQ-EXEC-10](requirements/execution.md#req-exec-10--parallelism) Parallelism (should, in-progress, AC 1/2)
@@ -185,9 +185,9 @@ documentation site and the Claude Code plugin are available.
 - [REQ-OBS-03](requirements/observability.md#req-obs-03--opentelemetry-export) OpenTelemetry export (should, implemented, AC 2/2)
 - [REQ-OBS-04](requirements/observability.md#req-obs-04--metrics-dashboards-and-alerts) Metrics, dashboards and alerts (could, implemented, AC 2/2)
 - [REQ-OBS-05](requirements/observability.md#req-obs-05--tamper-evident-audit-log) Tamper-evident audit log (should, implemented, AC 2/2)
-- [REQ-OBS-07](requirements/observability.md#req-obs-07--application-map-across-runs) Application map across runs (could, proposed, AC 0/2)
+- [REQ-OBS-07](requirements/observability.md#req-obs-07--application-map-across-runs) Application map across runs (could, accepted, AC 0/2)
 - [REQ-GEN-03](requirements/generic.md#req-gen-03--init-and-doctor) `init` and `doctor` (must, implemented, AC 3/3)
-- [REQ-GEN-04](requirements/generic.md#req-gen-04--claude-code-plugin-interface) Claude Code plugin interface (could, proposed, AC 0/1)
+- [REQ-GEN-04](requirements/generic.md#req-gen-04--claude-code-plugin-interface) Claude Code plugin interface (could, accepted, AC 0/1)
 - [REQ-NFR-07](requirements/non-functional.md#req-nfr-07--platforms) Platforms (should, implemented, AC 2/2)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
@@ -199,12 +199,12 @@ the evidence bundle as pipeline artifacts.
 
 <!-- prettier-ignore-start -->
 <!-- req-stage:10 -->
-- [REQ-PLAN-07](requirements/plan.md#req-plan-07--approval-channels) Approval channels (should, accepted, AC 0/4)
-- [REQ-CI-01](requirements/ci-cd.md#req-ci-01--ready-made-integrations) Ready-made integrations (must, accepted, AC 0/3)
-- [REQ-CI-02](requirements/ci-cd.md#req-ci-02--triggers) Triggers (should, accepted, AC 0/3)
-- [REQ-CI-03](requirements/ci-cd.md#req-ci-03--plan-approval-inside-the-pipeline) Plan approval inside the pipeline (must, accepted, AC 0/4)
-- [REQ-CI-04](requirements/ci-cd.md#req-ci-04--outputs-for-pipelines) Outputs for pipelines (must, in-progress, AC 1/4)
-- [REQ-CI-05](requirements/ci-cd.md#req-ci-05--gradual-rollout-and-cost-control) Gradual rollout and cost control (should, accepted, AC 0/3)
+- [REQ-PLAN-07](requirements/plan.md#req-plan-07--approval-channels) Approval channels (should, in-progress, AC 3/4)
+- [REQ-CI-01](requirements/ci-cd.md#req-ci-01--ready-made-integrations) Ready-made integrations (must, implemented, AC 3/3)
+- [REQ-CI-02](requirements/ci-cd.md#req-ci-02--triggers) Triggers (should, implemented, AC 3/3)
+- [REQ-CI-03](requirements/ci-cd.md#req-ci-03--plan-approval-inside-the-pipeline) Plan approval inside the pipeline (must, implemented, AC 4/4)
+- [REQ-CI-04](requirements/ci-cd.md#req-ci-04--outputs-for-pipelines) Outputs for pipelines (must, implemented, AC 4/4)
+- [REQ-CI-05](requirements/ci-cd.md#req-ci-05--gradual-rollout-and-cost-control) Gradual rollout and cost control (should, implemented, AC 3/3)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 

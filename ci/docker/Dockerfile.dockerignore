@@ -1,0 +1,18 @@
+# Build context filter for ci/docker/Dockerfile: no local secrets, run data or build output in the image.
+.git
+.env
+.env.*
+**/.env
+**/.env.*
+node_modules
+**/node_modules
+**/dist
+coverage
+.qa-runs
+.qa-cache
+qa-artifacts
+bench-results
+**/bench-results
+.appium
+docs-site
+examples/demo-shop/android/build

@@ -10,3 +10,4 @@ export { zip, unzip, crc32 } from "./zip.js";
 export * from "./html.js";
 export * from "./jira-comment.js";
 export * from "./graph.js";
+export * from "./junit.js";
