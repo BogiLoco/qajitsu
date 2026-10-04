@@ -30,6 +30,8 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # The web runner's unit tests drive a real Chromium.
+      - run: pnpm --filter @qajitsu/cli exec playwright-core install --with-deps chromium
       - run: pnpm verify
       - run: pnpm build
       # REQ-NFR-03/AC2: API reference (TypeDoc); every export needs TSDoc.
