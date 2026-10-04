@@ -21,6 +21,20 @@ const analysis = JSON.stringify({
 const specFixture = (ticket: string, id: string): string =>
   fileURLToPath(new URL(`../../fixtures/specs/${ticket.toLowerCase()}/${id}.spec.ts`, import.meta.url));
 
+/**
+ * Model turns of a whole `qj test` flow: analysis, the plan draft and one spec per planned case (the
+ * fixture specs), in plan order.
+ */
+export const flowScript = (ticket: string): Turn[] => {
+  const draft = draftOf(ticket);
+  const ids = (JSON.parse(draft) as { cases: { id: string }[] }).cases.map((c) => c.id);
+  return [
+    { text: analysis },
+    { text: draft },
+    ...ids.map((id) => ({ text: "```ts\n" + readFileSync(specFixture(ticket, id), "utf8") + "```" })),
+  ];
+};
+
 /** In-process executor for CLI tests (the sandbox has its own e2e tests). */
 export const inProcessExecutor: AttemptExecutor = async (input) => {
   const { transport, dispose } = await createPlaywrightTransport({ timeoutMs: 5000 });

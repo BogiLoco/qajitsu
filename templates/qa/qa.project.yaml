@@ -71,7 +71,37 @@ models:
 
 test_types: [api, web]
 
-# Planned sections, added to the schema in later stages:
-# services:  variable schema and env templates per service      (REQ-CFG-02, stage 6)
-# cleanup:   retention per outcome                               (REQ-WS-03, stage 6)
-# publish:   Jira comment and attachment options                 (REQ-PUB-01, stage 4)
+# Optional sections (uncomment what you need). Full schema: schemas/qa.project.schema.json; a complete working
+# example: examples/demo-shop/.qa/qa.project.yaml.
+#
+# `qj run --build` / `qj env up`: services built from a fetched worktree (REQ-ENV-03, REQ-CFG-02, docs/cli/build-and-runs.md)
+# services:
+#   api:
+#     kind: compose            # compose | process | stub
+#     port: 3000
+#     env:
+#       DB_PASSWORD: { secret: secret://env/DB_PASSWORD }
+#       FEATURE_X: { value: "0", overridable: true }   # --set api.FEATURE_X=1
+#     health: { http: /health, timeout_s: 180 }
+# build: { repo: backend, compose_file: docker-compose.yml, base_service: api, profile: local, seed: hooks/seed.mjs }
+#
+# Retention of runs and runtime resources (REQ-WS-03)
+# cleanup: { policy: on_success, keep_last: 10, max_age_days: 30 }
+#
+# Auditor and canary (REQ-VER-06, REQ-VER-09)
+# verification: { auditor: optional, auditor_max_images: 12, canary: false }
+#
+# Android and iOS (REQ-ENV-06, docs/guides/mobile.md)
+# mobile: { recording: retain-on-failure, android: { app: { source: build, repo: app, command: [./gradlew, assembleDebug], output: app/build/outputs/apk/debug/app-debug.apk }, app_id: com.example.app } }
+#
+# Browser options (REQ-EXEC-05)
+# web: { browser: chromium, video: retain-on-failure, headless: true, action_timeout_ms: 5000 }
+#
+# Jira comment and attachments (REQ-PUB-01, REQ-PUB-02, REQ-VER-10)
+# publish: { max_attachment_mb: 10, auto: false, media_hosts: [media.atlassian.com] }
+#
+# OpenTelemetry export (REQ-OBS-03, docs/guides/observability.md)
+# telemetry: { otlp: { endpoint: http://localhost:4318, service_name: qajitsu, include_details: false } }
+#
+# Retention of archived journals (REQ-OBS-05)
+# audit: { retention_days: 365 }

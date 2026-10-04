@@ -55,7 +55,7 @@ QAJitsu plugs into any project through configuration; differences between projec
 
 ### REQ-GEN-05 · Command line
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 1
 - Related: REQ-CI-04
@@ -65,5 +65,5 @@ The CLI `qajitsu` (alias `qj`) is the primary interface. Commands arrive with th
 **Acceptance criteria**
 
 - [x] AC1: `--version`, `doctor` (stage 1).
-- [ ] AC2: `fetch` (1); `plan`, `approve` (2); `run`, `test`, `env check|render|up` (3–6); `evidence`, `logs` (5); `runs`, `resume`, `clean`, `gc` (6); `bench` (7); `init`, `pull` (9).
-- [ ] AC3: Every command documents its exit codes in `docs/cli/`.
+- [x] AC2: `fetch` (1); `plan`, `approve` (2); `run`, `test`, `env check|render|up` (3–6); `evidence`, `logs` (5); `runs`, `resume`, `clean`, `gc` (6); `bench` (7); `init`, `pull` (9).
+- [x] AC3: Every command documents its exit codes in `docs/cli/`.

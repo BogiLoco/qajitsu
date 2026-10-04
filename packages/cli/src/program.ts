@@ -10,8 +10,9 @@ import { runLogs } from "./commands/logs.js";
 import { runPublish } from "./commands/publish.js";
 import { runPull } from "./commands/pull.js";
 import { runRun, type RunPorts } from "./commands/run.js";
+import { runTest } from "./commands/test-flow.js";
 import { runClean, runGc, runResume, runRuns } from "./commands/runs.js";
-import { runEnvCheck, runEnvRender } from "./commands/env.js";
+import { runEnvCheck, runEnvRender, runEnvUp } from "./commands/env.js";
 import { runBench } from "./commands/bench.js";
 import { runAuditVerify } from "./commands/audit.js";
 import { runTelemetryExport } from "./commands/telemetry.js";
@@ -232,7 +233,46 @@ export function createProgram(version: string, io: ProgramIO): Command {
       ) => withPorts((ports) => runRun(ticket, options, commandIO, ports))(),
     );
 
-  const env = program.command("env").description("Check or render the environment configuration");
+  program
+    .command("test")
+    .description("The whole flow in one command: fetch, plan with review, run and publish after the preview")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--pr <url>", "use this GitHub pull request (repeatable)", collect, [])
+    .option("--mr <url>", "use this GitLab merge request (repeatable)", collect, [])
+    .option("--ref <[repo=]ref>", "use this branch, tag or SHA (repeatable)", collect, [])
+    .option(
+      "--env <profile|url>",
+      "environment profile from .qa/envs or a URL (default: environments.default)",
+    )
+    .option("--build", "build the application from the fetched worktrees")
+    .option("--keep", "with --build: keep containers and worktrees after the run")
+    .option(
+      "--set <service.VAR=value>",
+      "with --build: override an overridable service variable",
+      collect,
+      [],
+    )
+    .option("--dry-run", "stop after the run; do not publish")
+    .action(
+      (
+        ticket: string,
+        options: {
+          pr: string[];
+          mr: string[];
+          ref: string[];
+          env?: string;
+          build?: boolean;
+          keep?: boolean;
+          set: string[];
+          dryRun?: boolean;
+        },
+      ) =>
+        withPorts((ports) =>
+          runTest(ticket, options, commandIO, ports, { review, compressVideo: io.compressVideo }),
+        )(),
+    );
+
+  const env = program.command("env").description("Check, render or start the environment");
   env
     .command("check")
     .description("List every missing or invalid variable of the environment and --build configuration")
@@ -245,6 +285,17 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--run <id>", "run id (default: latest run of the ticket)")
     .action((ticket: string, options: { run?: string }) =>
       withPorts((ports) => runEnvRender(ticket, options, commandIO, ports))(),
+    );
+
+  env
+    .command("up")
+    .description("Start the application from a fetched run's worktree, without agents or tests")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .option("--set <service.VAR=value>", "override an overridable service variable (repeatable)", collect, [])
+    .option("--detach", "leave the containers running; remove them with qajitsu clean")
+    .action((ticket: string, options: { run?: string; set: string[]; detach?: boolean }) =>
+      withPorts((ports) => runEnvUp(ticket, options, commandIO, ports))(),
     );
 
   program

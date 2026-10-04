@@ -31,7 +31,7 @@ Quality bars for the codebase and the project itself.
 
 ### REQ-NFR-03 · Documentation
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 1
 - Related: REQ-GEN-05
@@ -40,7 +40,7 @@ Quality bars for the codebase and the project itself.
 
 - [x] AC1: Requirements catalogue in `docs/requirements/` is the source of truth; ADRs record decisions.
 - [x] AC2: TSDoc on every export; API docs generated (TypeDoc) by stage 9.
-- [ ] AC3: CLI, configuration and adapter reference pages kept in sync with code.
+- [x] AC3: CLI, configuration and adapter reference pages kept in sync with code.
 
 ### REQ-NFR-04 · Framework self-test
 
