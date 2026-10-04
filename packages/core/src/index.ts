@@ -28,3 +28,4 @@ export * from "./config/services.js";
 export * from "./env/templates.js";
 export * from "./env/check.js";
 export * from "./config/mobile.js";
+export * from "./telemetry/otlp.js";

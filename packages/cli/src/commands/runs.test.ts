@@ -161,3 +161,39 @@ describe("qajitsu env (REQ-CFG-04, REQ-CFG-05)", () => {
     expect((await run(["env", "render", "DEMO-9"])).exitCode).toBe(3);
   });
 });
+
+describe("audit log (REQ-OBS-05)", () => {
+  it("REQ-OBS-05/AC1+AC2: audit verify checks the chain, finds tampering, and gc archives journals under their own retention", async () => {
+    let day = 0;
+    const { run, home } = await setup(
+      `${apiService()}\ncleanup: { keep_last: 1, max_age_days: 365 }\naudit: { retention_days: 30 }`,
+      {
+        now: () => new Date(Date.UTC(2026, 9, 1 + day)),
+      },
+    );
+    expect((await run(["fetch", "DEMO-1"])).exitCode).toBe(0);
+    const first = (await index(home)).latest ?? "";
+    const ok = await run(["audit", "verify", "DEMO-1"]);
+    expect(ok.exitCode).toBe(0);
+    expect(ok.out).toMatch(/✔ DEMO-1\/.+: \d+ entries, chain intact/);
+    // Tampering with one journal line breaks the chain from there.
+    const journal = join(home, "runs", "DEMO-1", first, "journal", "events.jsonl");
+    const lines = (await readFile(journal, "utf8")).trim().split("\n");
+    await writeFile(journal, `${[lines[0], ...lines.slice(2)].join("\n")}\n`);
+    const broken = await run(["audit", "verify", "DEMO-1", "--run", first]);
+    expect(broken.exitCode).toBe(1);
+    expect(broken.out).toContain("line 2: does not match the previous line");
+    await writeFile(journal, `${lines.join("\n")}\n`);
+    // gc removes the old run but keeps its journal in .audit/ until the audit retention passes.
+    day = 1;
+    expect((await run(["fetch", "DEMO-1"])).exitCode).toBe(0);
+    expect((await run(["gc"])).out).toContain("removed DEMO-1/");
+    const archived = await run(["audit", "verify", "DEMO-1", "--all"]);
+    expect(archived.out).toContain(`✔ DEMO-1/${first}`);
+    expect(await readdir(join(home, "runs", ".audit", "DEMO-1"))).toEqual([`${first}.events.jsonl`]);
+    day = 60;
+    expect((await run(["gc"])).out).toContain("archived journal(s) past audit retention removed");
+    expect((await run(["audit", "verify", "--file", "missing.jsonl"])).exitCode).toBe(1);
+    expect((await run(["audit", "verify"])).exitCode).toBe(3);
+  }, 120_000);
+});

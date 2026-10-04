@@ -1,0 +1,38 @@
+# Example Prometheus alerting rules for QAJitsu (REQ-OBS-04/AC2). Metrics come from
+# `qajitsu metrics --out /var/lib/node_exporter/textfile_collector/qajitsu.prom` (run it from cron or after
+# every run in CI) or from the OTLP export through an OpenTelemetry Collector (`qajitsu.*` metrics).
+groups:
+  - name: qajitsu
+    rules:
+      - alert: QajitsuRunStuck
+        expr: max by (ticket, run) (qajitsu_run_running_seconds) > 3600
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Run {{ $labels.run }} of {{ $labels.ticket }} has been running for over an hour"
+
+      - alert: QajitsuCostSpike
+        expr: sum(increase(qajitsu_cost_usd[1h])) > 3 * sum(increase(qajitsu_cost_usd[1h] offset 1d))
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "Model cost in the last hour is three times yesterday's"
+
+      - alert: QajitsuBlockedSeries
+        expr: sum by (environment) (qajitsu_blocked) - sum by (environment) (qajitsu_blocked offset 2h) >= 5
+        labels: { severity: warning }
+        annotations:
+          summary: "Five or more BLOCKED cases on {{ $labels.environment }} in two hours (environment or test data?)"
+
+      - alert: QajitsuAccessDenied
+        expr: increase(qajitsu_guard_denied{code="URL_NOT_ALLOWED"}[15m]) > 0
+        labels: { severity: critical }
+        annotations:
+          summary: "An agent tried to reach a host outside the allowlist (possible prompt injection)"
+
+      - alert: QajitsuFalseFailedRate
+        expr: qajitsu_false_failed_ratio > 0.1
+        for: 1d
+        labels: { severity: info }
+        annotations:
+          summary: "More than 10% of clean benchmark runs report FAILED: check the model or the specs"

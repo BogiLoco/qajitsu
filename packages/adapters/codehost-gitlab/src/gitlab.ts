@@ -78,6 +78,16 @@ export function toUnifiedDiff(files: readonly z.infer<typeof FileDiffSchema>[]):
     .concat(files.length > 0 ? "\n" : "");
 }
 
+/** Turns an access probe into a doctor result; the error code only, never response bodies or tokens. */
+const probe = async (call: () => Promise<unknown>, ok: string): Promise<{ ok: boolean; detail: string }> => {
+  try {
+    await call();
+    return { ok: true, detail: ok };
+  } catch (error) {
+    return { ok: false, detail: error instanceof AdapterError ? error.code : "unreachable" };
+  }
+};
+
 /**
  * Creates the GitLab CodeHost for gitlab.com or GitLab self-managed (REQ-CTX-02).
  *
@@ -149,6 +159,8 @@ export function createGitLabCodeHost(
 
   return {
     type: "gitlab",
+    check: (signal) =>
+      probe(() => http.json("/user", z.object({}).loose(), { signal }), "GitLab reachable, token accepted"),
     async findChangesForTicket(key: TicketKey, repos: readonly string[], signal?: AbortSignal) {
       const found: ChangeRef[] = [];
       for (const repo of repos) {

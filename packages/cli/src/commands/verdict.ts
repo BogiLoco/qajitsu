@@ -8,6 +8,8 @@ import {
   loadApprovedPlan,
   parseEventLines,
   sha256,
+  checkJournal,
+  journalAnchor,
   type CaseResultFile,
   type EvidenceEntry,
   type Plan,
@@ -229,9 +231,13 @@ export async function computeVerdict(
   const graph = buildTransitionGraph(graphCases, await routeRules(session));
 
   // REQ-OBS-02/AC2: timeline with links to the evidence of the moment.
-  const { events } = parseEventLines(
-    await readFile(ws.path("journal", "events.jsonl"), "utf8").catch(() => ""),
+  const journalText = await readFile(ws.path("journal", "events.jsonl"), "utf8").catch(() => "");
+  // REQ-OBS-05: chain intact, journal present, and not shorter than the anchor recorded in run.json.
+  const journalCheck = checkJournal(
+    journalText,
+    ws.record.data["journal"] as { lines: number; tail: string } | undefined,
   );
+  const { events } = parseEventLines(journalText);
   const timeline = events
     .filter((e) => !["tool_result", "model.usage"].includes(e.event))
     .map((e) => {
@@ -334,6 +340,12 @@ export async function computeVerdict(
     },
     { gate: "results-valid", ok: malformed.length === 0, problems: malformed },
     { gate: "checks-intact", ok: integrity.length === 0, problems: integrity },
+    // REQ-OBS-05: the journal published with the results must be the one that was written.
+    {
+      gate: "journal-intact",
+      ok: journalCheck.problems.length === 0,
+      problems: journalCheck.problems.map((p) => `journal/events.jsonl: ${p}`),
+    },
   ];
   const verdict = combineGates(gates);
   return {
@@ -393,4 +405,13 @@ export async function writeReports(session: RunSession, v: RunVerdict): Promise<
     `${JSON.stringify({ ok: v.ok, gates: v.gates }, null, 2)}\n`,
     "utf8",
   );
+}
+
+/**
+ * Records the journal's line count and tail hash in `run.json` at the end of a command (REQ-OBS-05),
+ * so a journal cut short or rewritten afterwards fails the `journal-intact` gate.
+ */
+export async function anchorJournal(session: RunSession): Promise<void> {
+  const text = await readFile(session.ws.path("journal", "events.jsonl"), "utf8").catch(() => "");
+  await session.ws.update({ data: { ...session.ws.record.data, journal: journalAnchor(text) } });
 }

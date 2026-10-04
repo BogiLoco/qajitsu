@@ -1,5 +1,6 @@
-import { lstat, readdir, rm } from "node:fs/promises";
+import { copyFile, lstat, mkdir, readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { ConfigError } from "../errors.js";
 import { RunIdSchema, TicketKeySchema, type TicketKey } from "../identifiers.js";
 import { readRunIndex, updateRunIndex, type RunIndex, type RunWorkspace } from "./run-workspace.js";
 
@@ -90,4 +91,61 @@ export async function listTickets(root: string): Promise<TicketKey[]> {
     if (index && index.runs.length > 0) out.push(ticket.data);
   }
   return out;
+}
+
+/** Folder of archived journals under the workspace root (REQ-OBS-05/AC2). */
+export const AUDIT_DIR = ".audit";
+
+/**
+ * Copies a run's journal to `<root>/.audit/<ticket>/<run>.events.jsonl` before the run is deleted, so the
+ * audit log outlives workspace retention (REQ-OBS-05/AC2).
+ *
+ * @returns The archive path, or undefined when the run has no journal.
+ * @throws When the copy fails; the caller must then keep the run.
+ */
+export async function archiveJournal(
+  root: string,
+  ticket: TicketKey,
+  runId: string,
+): Promise<string | undefined> {
+  const id = RunIdSchema.parse(runId);
+  const source = join(root, ticket, id, "journal", "events.jsonl");
+  if ((await lstat(source).catch(() => undefined))?.isFile() !== true) return undefined;
+  const dir = join(root, AUDIT_DIR, ticket);
+  await mkdir(dir, { recursive: true });
+  for (const d of [join(root, AUDIT_DIR), dir])
+    if ((await lstat(d)).isSymbolicLink())
+      throw new ConfigError(
+        "AUDIT_ARCHIVE_UNSAFE",
+        `${d} is a symbolic link; the journal was not archived.`,
+        {},
+      );
+  // Written next to the target and renamed: a planted symlink at the target is replaced, never followed.
+  const target = join(dir, `${id}.events.jsonl`);
+  const tmp = `${target}.tmp-${String(process.pid)}`;
+  await copyFile(source, tmp);
+  await rename(tmp, target);
+  return target;
+}
+
+/**
+ * Removes archived journals older than the audit retention (by file modification time).
+ *
+ * @returns Removed archive paths.
+ */
+export async function pruneAuditArchive(root: string, retentionDays: number, now: Date): Promise<string[]> {
+  const removed: string[] = [];
+  const cutoff = now.getTime() - retentionDays * 86_400_000;
+  for (const ticket of await readdir(join(root, AUDIT_DIR)).catch(() => [])) {
+    if (!TicketKeySchema.safeParse(ticket).success) continue;
+    for (const file of await readdir(join(root, AUDIT_DIR, ticket)).catch(() => [])) {
+      const path = join(root, AUDIT_DIR, ticket, file);
+      const info = await lstat(path);
+      if (info.isFile() && file.endsWith(".events.jsonl") && info.mtimeMs < cutoff) {
+        await rm(path, { force: true });
+        removed.push(path);
+      }
+    }
+  }
+  return removed;
 }

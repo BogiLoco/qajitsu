@@ -30,4 +30,6 @@ export interface Ticket {
 /** Source of tickets: Jira Cloud first, Jira Data Center and others later (REQ-CTX-01, REQ-GEN-02). */
 export interface TicketSource {
   getTicket(key: TicketKey, signal?: AbortSignal): Promise<Ticket>;
+  /** Cheap access check for `qajitsu doctor --online` (REQ-GEN-03/AC2); never returns secrets. */
+  check?(signal?: AbortSignal): Promise<{ readonly ok: boolean; readonly detail: string }>;
 }

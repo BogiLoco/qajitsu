@@ -55,3 +55,20 @@ docs/                requirements, roadmap, architecture, ADRs
 scripts/             repo tooling (requirements checker)
 .claude/             Claude Code rules, agents, skills, hooks
 ```
+
+## Platforms (REQ-NFR-07)
+
+Linux and macOS are supported and tested in CI on both. Windows is best effort: use WSL 2 (Ubuntu), where
+QAJitsu behaves as on Linux. The sandboxed runner needs Node.js 22.12 or newer; `--build` needs Docker;
+mobile needs the Android SDK (any of the three) or a Mac with Xcode or a device farm for iOS.
+
+## Onboarding a project
+
+```sh
+cd your-repo
+qajitsu init            # detects the git host, compose services, OpenAPI and test types; asks for Jira
+qajitsu doctor --online # secrets, Docker, mobile tooling, Jira and code host access
+```
+
+`doctor` runs the tools the configuration names (`docker`, `mobile.appium.bin`, `xcrun`) with `--version`;
+review `.qa/` of a repository you do not trust before running it.

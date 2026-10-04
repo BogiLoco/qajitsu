@@ -32,3 +32,6 @@ bench/results/
 
 # demo Android app build output (stage 8)
 examples/demo-shop/android/build/
+
+# Generated documentation site (pnpm docs)
+docs-site/

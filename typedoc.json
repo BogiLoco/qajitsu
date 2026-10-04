@@ -1,0 +1,28 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "QAJitsu",
+  "entryPointStrategy": "resolve",
+  "entryPoints": ["packages/*/src/index.ts", "packages/adapters/*/src/index.ts"],
+  "tsconfig": "tsconfig.json",
+  "out": "docs-site",
+  "readme": "README.md",
+  "projectDocuments": [
+    "docs/guides/*.md",
+    "docs/cli/*.md",
+    "docs/architecture/*.md",
+    "docs/roadmap.md",
+    "docs/STATUS.md"
+  ],
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "excludeExternals": true,
+  "treatWarningsAsErrors": false,
+  "validation": {
+    "notExported": false,
+    "invalidLink": false,
+    "notDocumented": true
+  },
+  "skipErrorChecking": true,
+  "disableSources": true,
+  "requiredToBeDocumented": ["Function", "Class", "Interface", "TypeAlias", "Variable", "Enum"]
+}

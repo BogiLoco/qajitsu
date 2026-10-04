@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { AdapterError, TicketKeySchema, type Ticket, type TicketKey, type TicketSource } from "@qajitsu/core";
 import { z } from "zod";
@@ -44,6 +44,13 @@ const FileTicketSchema = z.object({
  */
 export function createFileTicketSource(dir: string): TicketSource {
   return {
+    async check() {
+      const ok = await stat(dir).then(
+        (st) => st.isDirectory(),
+        () => false,
+      );
+      return { ok, detail: ok ? `ticket files in ${dir}` : `${dir} not found` };
+    },
     async getTicket(key: TicketKey, signal?: AbortSignal): Promise<Ticket> {
       const safeKey = TicketKeySchema.parse(key);
       signal?.throwIfAborted();

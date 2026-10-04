@@ -26,6 +26,8 @@ import {
   type Plan,
 } from "@qajitsu/core";
 import { createMasker } from "@qajitsu/steps";
+import { exportRunTelemetry } from "./telemetry.js";
+import { anchorJournal } from "./verdict.js";
 import { checkPlanSources, formatSourceIssues } from "@qajitsu/verifier";
 import { parse } from "yaml";
 import type { RuntimePorts } from "../adapters.js";
@@ -319,6 +321,10 @@ export async function runApprove(
     io.write(
       `Approved plan v${String(approval.version)} of ${session.ws.ticket} run ${session.ws.runId}\nsha256 ${approval.sha256}\n${join(session.ws.dir, "plan", "plan.approved.yaml")}\n`,
     );
+    // REQ-OBS-03: export what this command added to the journal; telemetry never changes the result.
+    await anchorJournal(session);
+    const telemetry = await exportRunTelemetry(session, ports.fetch);
+    if (telemetry?.error !== undefined) io.writeError(`Telemetry export failed: ${telemetry.error}\n`);
     return 0;
   } catch (error) {
     io.writeError(formatError(error, (t) => masker.maskText(t)));

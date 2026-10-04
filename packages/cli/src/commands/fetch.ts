@@ -6,6 +6,7 @@ import {
   createRunWorkspace,
   fetchContext,
   fileSink,
+  journalTailHash,
   resolveWorkspaceRoot,
 } from "@qajitsu/core";
 import { createMasker } from "@qajitsu/steps";
@@ -60,6 +61,8 @@ export async function runFetch(
       ticket: key.data,
       run: ws.runId,
       write: fileSink(ws.path("journal", "events.jsonl")),
+      // REQ-OBS-05: every process continues the journal's hash chain.
+      tail: () => journalTailHash(ws.path("journal", "events.jsonl")),
       now: ports.now,
       mask,
     });

@@ -203,3 +203,14 @@ describe("Jira Data Center ticket source (REQ-PUB-03, REQ-CTX-01)", () => {
     });
   });
 });
+
+describe("doctor access check (REQ-GEN-03/AC2)", () => {
+  it("REQ-GEN-03/AC2: Jira /myself accepts the token; file sources check their folder", async () => {
+    const { source } = cloud([{ match: /^\/rest\/api\/3\/myself$/, reply: jsonReply({ accountId: "x" }) }]);
+    expect(await source.check?.()).toEqual({ ok: true, detail: "Jira Cloud reachable, token accepted" });
+    const failing = cloud([{ match: /^\/rest\/api\/3\/myself$/, reply: jsonReply({}, 401) }]);
+    expect((await failing.source.check?.())?.ok).toBe(false);
+    const { createFileTicketSource } = await import("./file-source.js");
+    expect((await createFileTicketSource("/definitely/missing").check?.())?.ok).toBe(false);
+  });
+});

@@ -420,6 +420,63 @@
       ],
       "additionalProperties": false
     },
+    "telemetry": {
+      "type": "object",
+      "properties": {
+        "otlp": {
+          "type": "object",
+          "properties": {
+            "endpoint": {
+              "type": "string",
+              "format": "uri"
+            },
+            "headers": {
+              "default": {},
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9-]+$"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "service_name": {
+              "default": "qajitsu",
+              "type": "string",
+              "minLength": 1
+            },
+            "include_details": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "endpoint"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "otlp"
+      ],
+      "additionalProperties": false
+    },
+    "audit": {
+      "default": {
+        "retention_days": 365
+      },
+      "type": "object",
+      "properties": {
+        "retention_days": {
+          "default": 365,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3650
+        }
+      },
+      "additionalProperties": false
+    },
     "cleanup": {
       "default": {
         "policy": "on_success",

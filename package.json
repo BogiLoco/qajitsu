@@ -25,7 +25,7 @@
     "req:index": "node scripts/requirements.mjs index",
     "verify": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test:coverage && pnpm test:hooks && pnpm req:check",
     "bench": "pnpm build && cd examples/demo-shop && node ../../packages/cli/dist/bin.js bench",
-    "docs": "node scripts/not-yet.mjs docs \"roadmap stage 9 (REQ-NFR-03)\"",
+    "docs": "typedoc",
     "qajitsu": "node packages/cli/dist/bin.js",
     "changeset": "changeset",
     "req:list": "node scripts/requirements.mjs list"
@@ -52,6 +52,7 @@
     "eslint": "^10.12.0",
     "globals": "^17.13.0",
     "prettier": "^3.9.9",
+    "typedoc": "^0.28.20",
     "typescript": "catalog:",
     "typescript-eslint": "^8.71.0",
     "vitest": "catalog:",

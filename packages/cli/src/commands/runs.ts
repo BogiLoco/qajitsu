@@ -6,6 +6,8 @@ import {
   QajitsuError,
   TicketKeySchema,
   acquireRunLock,
+  archiveJournal,
+  pruneAuditArchive,
   cleanRunFiles,
   deleteRun,
   expiredRuns,
@@ -220,11 +222,24 @@ export async function runGc(
           io.write(`would remove ${ticket}/${runId}\n`);
           continue;
         }
-        const cleaned = await cleanOne(root, ticket, runId, ports.buildExec, () =>
-          deleteRun(root, ticket, runId),
-        );
-        io.write(cleaned.endsWith("skipped") ? `${ticket}/${cleaned}\n` : `removed ${ticket}/${runId}\n`);
+        try {
+          const cleaned = await cleanOne(root, ticket, runId, ports.buildExec, async () => {
+            // REQ-OBS-05/AC2: the journal outlives the run under the audit retention; no archive, no delete.
+            await archiveJournal(root, ticket, runId);
+            await deleteRun(root, ticket, runId);
+          });
+          io.write(cleaned.endsWith("skipped") ? `${ticket}/${cleaned}\n` : `removed ${ticket}/${runId}\n`);
+        } catch (error) {
+          io.writeError(
+            `${ticket}/${runId}: kept, its journal could not be archived (${error instanceof Error ? error.message : String(error)})\n`,
+          );
+        }
       }
+    }
+    if (options.dryRun !== true) {
+      const pruned = await pruneAuditArchive(root, project.config.audit.retention_days, ports.now());
+      if (pruned.length > 0)
+        io.write(`${String(pruned.length)} archived journal(s) past audit retention removed\n`);
     }
     io.write(
       `${String(count)} run(s) ${options.dryRun === true ? "selected" : "processed"} under ${join(root)}\n`,

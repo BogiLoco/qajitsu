@@ -151,3 +151,15 @@ describe("GitLab CI artifacts (REQ-ENV-06/AC1)", () => {
     });
   });
 });
+
+describe("doctor access check (REQ-GEN-03/AC2)", () => {
+  it("REQ-GEN-03/AC2: /user answers for a valid token", async () => {
+    const fake = createFakeFetch([{ match: /^\/api\/v4\/user$/, reply: jsonReply({ id: 1 }) }]);
+    const host = createGitLabCodeHost(
+      { alias: "gitlab", baseUrl: "https://gitlab.example.com", token: "secret://env/GITLAB_TOKEN" },
+      testDeps(fake.fetch, { "secret://env/GITLAB_TOKEN": TOKEN }),
+    );
+    expect(await host.check?.()).toEqual({ ok: true, detail: "GitLab reachable, token accepted" });
+    expect((await build({ unauthorized: true }).host.check?.())?.ok).toBe(false);
+  });
+});

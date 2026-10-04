@@ -46,6 +46,16 @@ export const GITHUB_MAX_PAGES = 3;
 
 const REPO = /^(?!\.\.?\/)[\w.-]+\/(?!\.\.?$)[\w.-]+$/;
 
+/** Turns an access probe into a doctor result; the error code only, never response bodies or tokens. */
+const probe = async (call: () => Promise<unknown>, ok: string): Promise<{ ok: boolean; detail: string }> => {
+  try {
+    await call();
+    return { ok: true, detail: ok };
+  } catch (error) {
+    return { ok: false, detail: error instanceof AdapterError ? error.code : "unreachable" };
+  }
+};
+
 /**
  * Creates the GitHub CodeHost for github.com or GitHub Enterprise Server (REQ-CTX-02).
  *
@@ -140,6 +150,11 @@ export function createGitHubCodeHost(
 
   return {
     type: "github",
+    check: (signal) =>
+      probe(
+        () => http.json("/rate_limit", z.object({}).loose(), { signal }),
+        "GitHub reachable, credentials accepted",
+      ),
     async findChangesForTicket(key: TicketKey, repos: readonly string[], signal?: AbortSignal) {
       const found: ChangeRef[] = [];
       for (const repo of repos.map(checkRepo)) {

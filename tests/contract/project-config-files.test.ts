@@ -40,3 +40,13 @@ describe("benchmark stays out of PR CI (REQ-LLM-06/AC3)", () => {
     }
   });
 });
+
+describe("platforms (REQ-NFR-07)", () => {
+  it("REQ-NFR-07/AC2: CI runs verify and e2e on Linux and macOS", () => {
+    const ci = parse(read(".github/workflows/ci.yml")) as {
+      jobs: Record<string, { strategy?: { matrix?: { os?: string[] } } }>;
+    };
+    for (const job of ["verify", "e2e"])
+      expect(ci.jobs[job]?.strategy?.matrix?.os).toEqual(["ubuntu-latest", "macos-latest"]);
+  });
+});

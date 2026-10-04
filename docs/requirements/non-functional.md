@@ -39,7 +39,7 @@ Quality bars for the codebase and the project itself.
 **Acceptance criteria**
 
 - [x] AC1: Requirements catalogue in `docs/requirements/` is the source of truth; ADRs record decisions.
-- [ ] AC2: TSDoc on every export; API docs generated (TypeDoc) by stage 9.
+- [x] AC2: TSDoc on every export; API docs generated (TypeDoc) by stage 9.
 - [ ] AC3: CLI, configuration and adapter reference pages kept in sync with code.
 
 ### REQ-NFR-04 · Framework self-test
@@ -83,15 +83,15 @@ Quality bars for the codebase and the project itself.
 
 ### REQ-NFR-07 · Platforms
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: 9
 - Related: REQ-ENV-06
 
 **Acceptance criteria**
 
-- [ ] AC1: Linux and macOS supported; Windows best effort (WSL recommended).
-- [ ] AC2: CI matrix covers Linux and macOS.
+- [x] AC1: Linux and macOS supported; Windows best effort (WSL recommended).
+- [x] AC2: CI matrix covers Linux and macOS.
 
 ### REQ-NFR-08 · AI-assisted development setup
 

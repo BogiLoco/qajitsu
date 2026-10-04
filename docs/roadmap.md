@@ -32,7 +32,7 @@ Monorepo, tooling, core types, the guard and the status model; fetching a ticket
 - [REQ-GEN-05](requirements/generic.md#req-gen-05--command-line) Command line (must, in-progress, AC 1/3)
 - [REQ-NFR-01](requirements/non-functional.md#req-nfr-01--code-standards) Code standards (must, implemented, AC 3/3)
 - [REQ-NFR-02](requirements/non-functional.md#req-nfr-02--test-first-and-test-levels) Test-first and test levels (must, implemented, AC 4/4)
-- [REQ-NFR-03](requirements/non-functional.md#req-nfr-03--documentation) Documentation (must, in-progress, AC 1/3)
+- [REQ-NFR-03](requirements/non-functional.md#req-nfr-03--documentation) Documentation (must, in-progress, AC 2/3)
 - [REQ-NFR-05](requirements/non-functional.md#req-nfr-05--security-baseline) Security baseline (must, in-progress, AC 3/4)
 - [REQ-NFR-06](requirements/non-functional.md#req-nfr-06--open-source-and-contributor-experience) Open source and contributor experience (must, in-progress, AC 1/3)
 - [REQ-NFR-08](requirements/non-functional.md#req-nfr-08--ai-assisted-development-setup) AI-assisted development setup (should, implemented, AC 3/3)
@@ -182,13 +182,13 @@ documentation site and the Claude Code plugin are available.
 
 <!-- prettier-ignore-start -->
 <!-- req-stage:9 -->
-- [REQ-OBS-03](requirements/observability.md#req-obs-03--opentelemetry-export) OpenTelemetry export (should, accepted, AC 0/2)
-- [REQ-OBS-04](requirements/observability.md#req-obs-04--metrics-dashboards-and-alerts) Metrics, dashboards and alerts (could, accepted, AC 0/2)
-- [REQ-OBS-05](requirements/observability.md#req-obs-05--tamper-evident-audit-log) Tamper-evident audit log (should, accepted, AC 0/2)
+- [REQ-OBS-03](requirements/observability.md#req-obs-03--opentelemetry-export) OpenTelemetry export (should, implemented, AC 2/2)
+- [REQ-OBS-04](requirements/observability.md#req-obs-04--metrics-dashboards-and-alerts) Metrics, dashboards and alerts (could, implemented, AC 2/2)
+- [REQ-OBS-05](requirements/observability.md#req-obs-05--tamper-evident-audit-log) Tamper-evident audit log (should, implemented, AC 2/2)
 - [REQ-OBS-07](requirements/observability.md#req-obs-07--application-map-across-runs) Application map across runs (could, proposed, AC 0/2)
-- [REQ-GEN-03](requirements/generic.md#req-gen-03--init-and-doctor) `init` and `doctor` (must, in-progress, AC 1/3)
+- [REQ-GEN-03](requirements/generic.md#req-gen-03--init-and-doctor) `init` and `doctor` (must, implemented, AC 3/3)
 - [REQ-GEN-04](requirements/generic.md#req-gen-04--claude-code-plugin-interface) Claude Code plugin interface (could, proposed, AC 0/1)
-- [REQ-NFR-07](requirements/non-functional.md#req-nfr-07--platforms) Platforms (should, accepted, AC 0/2)
+- [REQ-NFR-07](requirements/non-functional.md#req-nfr-07--platforms) Platforms (should, implemented, AC 2/2)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 

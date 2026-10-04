@@ -5,7 +5,14 @@ import tseslint from "typescript-eslint";
 
 export default defineConfig(
   {
-    ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**", ".qa-runs/**"],
+    ignores: [
+      "**/dist/**",
+      "**/coverage/**",
+      "**/node_modules/**",
+      ".qa-runs/**",
+      "docs-site/**",
+      ".appium/**",
+    ],
   },
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,

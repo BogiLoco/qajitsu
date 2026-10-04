@@ -13,9 +13,14 @@ import { runRun, type RunPorts } from "./commands/run.js";
 import { runClean, runGc, runResume, runRuns } from "./commands/runs.js";
 import { runEnvCheck, runEnvRender } from "./commands/env.js";
 import { runBench } from "./commands/bench.js";
+import { runAuditVerify } from "./commands/audit.js";
+import { runTelemetryExport } from "./commands/telemetry.js";
+import { runMetrics } from "./commands/metrics.js";
+import { runInit } from "./commands/init.js";
 import { loadProject } from "./project.js";
 import type { ModelPorts } from "./session.js";
 import { formatDoctor, runDoctor } from "./doctor.js";
+import { projectChecks } from "./doctor-project.js";
 
 /** Output and environment ports, injected for tests. */
 export interface ProgramIO {
@@ -70,14 +75,51 @@ export function createProgram(version: string, io: ProgramIO): Command {
   const review = { user: io.user ?? "unknown", openEditor: io.openEditor };
 
   program
+    .command("init")
+    .description("Create .qa/ for this repository (detects git host, compose services, OpenAPI, test types)")
+    .option("--yes", "do not ask; use detected values and flags")
+    .option("--force", "replace an existing .qa/qa.project.yaml")
+    .option("--jira-url <url>", "Jira base URL (empty: tickets from files)")
+    .option("--project-key <key>", "Jira project key")
+    .option("--env-url <url>", "URL of the test environment")
+    .action(
+      async (options: {
+        yes?: boolean;
+        force?: boolean;
+        jiraUrl?: string;
+        projectKey?: string;
+        envUrl?: string;
+      }) => {
+        io.setExitCode(await runInit(options, commandIO));
+      },
+    );
+
+  program
     .command("doctor")
     .description("Check that this machine and project are ready for QAJitsu")
     .option("--models", "probe the configured model of every role (makes real model calls)")
-    .action(async (options: { models?: boolean }) => {
+    .option("--online", "check access to Jira and every code host (makes real requests)")
+    .action(async (options: { models?: boolean; online?: boolean }) => {
       const checks = runDoctor({
         nodeVersion: io.nodeVersion,
         hasProjectConfig: existsSync(join(io.cwd, ".qa", "qa.project.yaml")),
       });
+      if (checks.every((c) => c.ok) && io.ports) {
+        // REQ-GEN-03/AC2: secrets, Docker, Android/Appium and, with --online, Jira and code hosts.
+        try {
+          checks.push(
+            ...(await projectChecks(await loadProject(io.cwd), io.ports, {
+              online: options.online === true,
+            })),
+          );
+        } catch (error) {
+          checks.push({
+            name: "project config",
+            ok: false,
+            detail: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
       io.write(`${formatDoctor(checks)}\n`);
       let ok = checks.every((c) => c.ok);
       if (options.models === true && io.ports) {
@@ -233,6 +275,39 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--out <dir>", "where the JSON report goes (default: <project>/bench-results)")
     .action((options: { model: string; role?: string; cases?: string; out?: string }) =>
       withPorts((ports) => runBench(options, commandIO, ports, review))(),
+    );
+
+  program
+    .command("audit")
+    .description("Audit log tools")
+    .command("verify")
+    .description("Check the hash chain of run journals (also archived ones)")
+    .argument("[ticket]", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .option("--all", "every run of the ticket")
+    .option("--file <journal>", "verify this journal file instead")
+    .action((ticket: string | undefined, options: { run?: string; all?: boolean; file?: string }) =>
+      withPorts((ports) => runAuditVerify(ticket, options, commandIO, ports))(),
+    );
+
+  program
+    .command("telemetry")
+    .description("OpenTelemetry tools")
+    .command("export")
+    .description("Send journal events not exported yet as OTLP traces, logs and metrics")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .action((ticket: string, options: { run?: string }) =>
+      withPorts((ports) => runTelemetryExport(ticket, options, commandIO, ports))(),
+    );
+
+  program
+    .command("metrics")
+    .description("Metrics over every run (Prometheus text or JSON) for dashboards and alerts")
+    .option("--format <format>", "prometheus (default) or json")
+    .option("--out <file>", "write to a file atomically, e.g. for the node_exporter textfile collector")
+    .action((options: { format?: string; out?: string }) =>
+      withPorts((ports) => runMetrics(options, commandIO, ports))(),
     );
 
   program

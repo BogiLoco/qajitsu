@@ -88,6 +88,16 @@ export const DEV_PANEL_APPLICATIONS = ["GitHub", "GitLab"] as const;
 
 const linkKind = (url: string): "pr" | "mr" => (url.includes("/merge_requests/") ? "mr" : "pr");
 
+/** Turns an access probe into a doctor result; the error code only, never response bodies or tokens. */
+const probe = async (call: () => Promise<unknown>, ok: string): Promise<{ ok: boolean; detail: string }> => {
+  try {
+    await call();
+    return { ok: true, detail: ok };
+  } catch (error) {
+    return { ok: false, detail: error instanceof AdapterError ? error.code : "unreachable" };
+  }
+};
+
 /**
  * Creates the Jira Cloud TicketSource (REST v3; REQ-CTX-01). The development panel uses the
  * internal `dev-status` API; when it is unavailable the ticket is still returned and discovery
@@ -163,6 +173,11 @@ export function createJiraCloudTicketSource(
   };
 
   return {
+    check: (signal) =>
+      probe(
+        () => http.json(`${api}/myself`, z.object({}).loose(), { signal }),
+        `Jira ${dc ? "Data Center" : "Cloud"} reachable, token accepted`,
+      ),
     async getTicket(key: TicketKey, signal?: AbortSignal): Promise<Ticket> {
       const safeKey = TicketKeySchema.parse(key);
       const fields = [

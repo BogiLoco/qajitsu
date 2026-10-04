@@ -1,3 +1,4 @@
+import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -45,6 +46,13 @@ export function createLocalCodeHost(
     (await git(repo, ["symbolic-ref", "--short", "HEAD"])).trim();
 
   return {
+    async check() {
+      const ok = await stat(config.root).then(
+        (st) => st.isDirectory(),
+        () => false,
+      );
+      return { ok, detail: ok ? `repositories under ${config.root}` : `${config.root} not found` };
+    },
     type: "local",
     async findChangesForTicket(key: TicketKey, repos: readonly string[]) {
       const found: ChangeRef[] = [];

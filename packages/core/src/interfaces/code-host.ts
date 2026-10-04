@@ -55,6 +55,8 @@ export interface CodeHost {
   getReviewComments(change: ChangeRef, signal?: AbortSignal): Promise<readonly ReviewComment[]>;
   /** Authenticated clone URL; never logged (REQ-CFG-06). */
   cloneUrl(repo: string): Promise<string>;
+  /** Cheap access check for `qajitsu doctor --online` (REQ-GEN-03/AC2); never returns secrets. */
+  check?(signal?: AbortSignal): Promise<{ readonly ok: boolean; readonly detail: string }>;
   /** Downloads a CI artifact, e.g. an APK for a commit (REQ-ENV-06). */
   downloadArtifact?(repo: string, sha: string, name: string, signal?: AbortSignal): Promise<Uint8Array>;
 }

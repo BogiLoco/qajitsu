@@ -28,39 +28,39 @@ Users can see what the tester did and when, and teams can monitor QAJitsu over t
 
 ### REQ-OBS-03 · OpenTelemetry export
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: 9
 - Related: REQ-OBS-04
 
 **Acceptance criteria**
 
-- [ ] AC1: Run = trace, stage = span, tool call = child span; logs and metrics exported over OTLP.
-- [ ] AC2: Works with Grafana (Tempo, Loki, Prometheus), ELK and Datadog; optional Langfuse for prompts and model costs.
+- [x] AC1: Run = trace, stage = span, tool call = child span; logs and metrics exported over OTLP.
+- [x] AC2: Works with Grafana (Tempo, Loki, Prometheus), ELK and Datadog; optional Langfuse for prompts and model costs.
 
 ### REQ-OBS-04 · Metrics, dashboards and alerts
 
-- Status: accepted
+- Status: implemented
 - Priority: could
 - Stage: 9
 - Related: REQ-OBS-03
 
 **Acceptance criteria**
 
-- [ ] AC1: Metrics: runs, status distribution, BLOCKED reasons, duration and cost per ticket, plan acceptance without changes, false-FAILED rate.
-- [ ] AC2: Example alerts: stuck run, cost spike, BLOCKED series per environment, denied access outside the allowlist.
+- [x] AC1: Metrics: runs, status distribution, BLOCKED reasons, duration and cost per ticket, plan acceptance without changes, false-FAILED rate.
+- [x] AC2: Example alerts: stuck run, cost spike, BLOCKED series per environment, denied access outside the allowlist.
 
 ### REQ-OBS-05 · Tamper-evident audit log
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: 9
 - Related: REQ-WS-03
 
 **Acceptance criteria**
 
-- [ ] AC1: Each journal entry includes the hash of the previous entry (hash chain); verification command reports breaks.
-- [ ] AC2: Audit log retention is configured separately from workspace cleanup.
+- [x] AC1: Each journal entry includes the hash of the previous entry (hash chain); verification command reports breaks.
+- [x] AC2: Audit log retention is configured separately from workspace cleanup.
 
 ### REQ-OBS-06 · Transition graph per run
 

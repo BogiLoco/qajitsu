@@ -272,3 +272,15 @@ describe("GitHub Actions artifacts (REQ-ENV-06/AC1)", () => {
     });
   });
 });
+
+describe("doctor access check (REQ-GEN-03/AC2)", () => {
+  it("REQ-GEN-03/AC2: reports accepted credentials or the error code, never the token", async () => {
+    const ok = build({ extra: [{ match: /^\/rate_limit$/, reply: jsonReply({ resources: {} }) }] });
+    expect(await ok.host.check?.()).toEqual({ ok: true, detail: "GitHub reachable, credentials accepted" });
+    const denied = build({ unauthorized: true });
+    const r = await denied.host.check?.();
+    expect(r?.ok).toBe(false);
+    expect(r?.detail).toMatch(/^GITHUB_/);
+    expect(r?.detail).not.toContain(TOKEN);
+  });
+});

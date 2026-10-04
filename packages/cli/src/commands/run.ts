@@ -31,9 +31,10 @@ import { formatSpecProblems } from "@qajitsu/verifier";
 import { buildAdapters, type RuntimePorts } from "../adapters.js";
 import { openSession, type ModelPorts, type RunSession } from "../session.js";
 import type { CommandIO } from "./fetch.js";
-import { computeVerdict, writeReports } from "./verdict.js";
+import { anchorJournal, computeVerdict, writeReports } from "./verdict.js";
 import { auditRun, runCanary } from "./checks.js";
 import { prepareMobile, type PreparedMobile } from "./mobile.js";
+import { exportRunTelemetry } from "./telemetry.js";
 import {
   blockAfterStartFailure,
   effectiveConfig,
@@ -308,6 +309,10 @@ export async function runRun(
       checkpoints: [...ws.record.checkpoints, { stage: "run", at: ports.now().toISOString() }],
     });
     events.emit("run", SYSTEM, "stage.end", { statuses, gatesOk: verdict.ok });
+    // REQ-OBS-03: export what this command added to the journal; telemetry never changes the result.
+    await anchorJournal(session);
+    const telemetry = await exportRunTelemetry(session, ports.fetch);
+    if (telemetry?.error !== undefined) io.writeError(`Telemetry export failed: ${telemetry.error}\n`);
     io.write(`${verdict.matrixMd}\n`);
     io.write(`Report: ${ws.path("report", "report.html")}\n`);
     if (!verdict.ok) {

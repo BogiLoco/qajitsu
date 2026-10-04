@@ -30,7 +30,7 @@ QAJitsu plugs into any project through configuration; differences between projec
 
 ### REQ-GEN-03 · `init` and `doctor`
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 9
 - Related: REQ-LLM-03, REQ-CFG-04
@@ -38,8 +38,8 @@ QAJitsu plugs into any project through configuration; differences between projec
 **Acceptance criteria**
 
 - [x] AC1: `qajitsu doctor` checks Node.js and project configuration (stage 1).
-- [ ] AC2: `doctor` grows with stages: Jira and code host access, Docker, emulators, secrets, model capabilities.
-- [ ] AC3: `qajitsu init` creates `.qa/` interactively, detecting `docker-compose.yml`, repos and test types.
+- [x] AC2: `doctor` grows with stages: Jira and code host access, Docker, emulators, secrets, model capabilities.
+- [x] AC3: `qajitsu init` creates `.qa/` interactively, detecting `docker-compose.yml`, repos and test types.
 
 ### REQ-GEN-04 · Claude Code plugin interface
 

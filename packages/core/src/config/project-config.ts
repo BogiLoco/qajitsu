@@ -137,6 +137,33 @@ export const ProjectConfigSchema = z.strictObject({
   /** Services started by `--build` (REQ-ENV-03, REQ-CFG-02, REQ-ENV-05). */
   services: z.record(z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/), ServiceSchema).default({}),
   build: BuildSchema.optional(),
+  /** OpenTelemetry export of every run (REQ-OBS-03): traces, logs and metrics over OTLP/HTTP JSON. */
+  telemetry: z
+    .strictObject({
+      otlp: z.strictObject({
+        /** Collector base URL, e.g. `http://localhost:4318`; `/v1/traces`, `/v1/logs`, `/v1/metrics` are appended. */
+        endpoint: z.url().refine((u) => {
+          const url = new URL(u);
+          return url.protocol === "https:" || ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname);
+        }, "Use https for a collector that is not on this machine"),
+        /** Extra headers; values may be `secret://` references (API keys of Grafana Cloud, Datadog, Langfuse). */
+        headers: z.record(z.string().regex(/^[A-Za-z0-9-]+$/), z.string()).default({}),
+        service_name: z.string().min(1).default("qajitsu"),
+        /**
+         * Send full event details (tool arguments and results, error messages, ticket and plan data).
+         * Default false: only identifiers, codes, counts and statuses leave the machine.
+         */
+        include_details: z.boolean().default(false),
+      }),
+    })
+    .optional(),
+  /** Audit log retention, separate from workspace cleanup (REQ-OBS-05/AC2). */
+  audit: z
+    .strictObject({
+      /** Days a deleted run's journal is kept in `<workspace root>/.audit/`. */
+      retention_days: z.number().int().min(1).max(3650).default(365),
+    })
+    .default({ retention_days: 365 }),
   /** Cleanup policy and retention (REQ-WS-03). */
   cleanup: CleanupSchema.default({ policy: "on_success", keep_last: 10, max_age_days: 30 }),
   /** Extra checks after the runner's verdict; they can only downgrade (REQ-VER-06, REQ-VER-09). */

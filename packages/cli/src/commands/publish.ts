@@ -22,7 +22,8 @@ import { gateNoSecrets } from "@qajitsu/verifier";
 import type { RuntimePorts } from "../adapters.js";
 import { openSession, type ModelPorts, type RunSession } from "../session.js";
 import type { CommandIO } from "./fetch.js";
-import { computeVerdict, writeReports, type RunVerdict } from "./verdict.js";
+import { exportRunTelemetry } from "./telemetry.js";
+import { anchorJournal, computeVerdict, writeReports, type RunVerdict } from "./verdict.js";
 
 /** Options of `qajitsu publish`. */
 export interface PublishOptions {
@@ -321,6 +322,10 @@ export async function runPublish(
       `${result.updated ? "Updated" : "Published"} ${ws.ticket} comment ${result.commentId}${result.url ? `: ${result.url}` : ""}\n`,
     );
     for (const s of result.skipped) io.write(`  not attached: ${s.name} (${s.reason})\n`);
+    // REQ-OBS-03: export what this command added to the journal; telemetry never changes the result.
+    await anchorJournal(session);
+    const telemetry = await exportRunTelemetry(session, ports.fetch);
+    if (telemetry?.error !== undefined) io.writeError(`Telemetry export failed: ${telemetry.error}\n`);
     return 0;
   } catch (error) {
     const code = error instanceof QajitsuError ? ` [${error.code}]` : "";
