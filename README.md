@@ -71,42 +71,11 @@ checks (auditor, canary) can only make a result worse, never better.
 
 ## 1. How it works
 
-```mermaid
-flowchart TB
-    subgraph PLAN["① Plan: what to test"]
-        direction LR
-        fetch["<b>qj fetch</b><br/>ticket + code change<br/>at its exact commit"]
-        plan["🤖 <b>qj plan</b><br/>analyst + planner<br/>every case cites a source"]
-        review{{"👤 <b>you review</b><br/>accept · revise · edit"}}
-        fetch --> plan --> review
-        review -. "revise → v2, v3" .-> plan
-    end
-    subgraph RUN["② Run: test it, judged by code"]
-        direction LR
-        freeze["🔒 <b>plan frozen</b><br/>SHA-256"]
-        author["🤖 <b>qj run</b><br/>author writes specs<br/>checked by code"]
-        runner["⚙️ <b>sandboxed run</b><br/>--env or --build<br/>evidence recorded"]
-        verdict["⚖️ <b>verdict by code</b><br/>auditor + canary<br/>can only downgrade"]
-        freeze --> author --> runner --> verdict
-    end
-    subgraph REPORT["③ Report: show it"]
-        direction LR
-        evidence["📊 <b>qj evidence</b><br/>report · screenshots<br/>videos · traces"]
-        publish["👤 <b>qj publish</b><br/>you confirm the preview<br/>→ Jira"]
-        evidence --> publish
-    end
-    PLAN == "accepted plan" ==> RUN
-    RUN == "results + evidence" ==> REPORT
+<p align="center">
+  <img src="docs/assets/qajitsu-flow.png" alt="QAJitsu flow: plan (fetch, plan, review), run (frozen plan, author, sandboxed run, verdict by code), report (evidence, publish)" width="900">
+</p>
 
-    classDef human fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
-    classDef agent fill:#ede9fe,stroke:#7c3aed,color:#3b0764,stroke-width:2px
-    classDef code fill:#e0e7ff,stroke:#1f2a5c,color:#1f2a5c,stroke-width:2px
-    classDef stage fill:#ffffff,stroke:#94a3b8,color:#1f2a5c,stroke-dasharray:4 4
-    class review,publish human
-    class plan,author agent
-    class fetch,freeze,runner,verdict,evidence code
-    class PLAN,RUN,REPORT stage
-```
+<sub>Diagram source: <a href="docs/assets/qajitsu-flow.mmd">docs/assets/qajitsu-flow.mmd</a>, re-render with <code>node scripts/render-diagrams.mjs</code>.</sub>
 
 <p align="center"><sub>🟩 you decide &nbsp;·&nbsp; 🟪 AI agents propose &nbsp;·&nbsp; 🟦 deterministic code executes and judges</sub></p>
 
