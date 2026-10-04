@@ -4,7 +4,7 @@ The layer that keeps results honest. Background: ADR-0002 and the architecture i
 
 ### REQ-VER-01 · Status model
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 1
 - Related: INV-1, REQ-CI-04
@@ -12,7 +12,7 @@ The layer that keeps results honest. Background: ADR-0002 and the architecture i
 **Acceptance criteria**
 
 - [x] AC1: Exactly six statuses: PASSED, FAILED, FLAKY, BLOCKED, NOT_RUN, NEEDS_REVIEW, defined in `@qajitsu/core`.
-- [ ] AC2: Each status has a documented meaning in `docs/architecture/overview.md` and in user docs.
+- [x] AC2: Each status has a documented meaning in `docs/architecture/overview.md` and in user docs.
 - [x] AC3: Adding or changing a status requires an ADR (breaking change).
 
 ### REQ-VER-02 · Verdict from runner output only

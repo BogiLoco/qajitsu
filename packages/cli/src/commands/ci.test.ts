@@ -289,7 +289,7 @@ describe("qajitsu ci and pipeline outputs (REQ-CI-03, REQ-CI-04)", () => {
 });
 
 describe("PR/MR comment content (REQ-CI-03/AC1, REQ-CI-04/AC4)", () => {
-  it("REQ-CI-03/AC1 + REQ-CI-04/AC4: a waiting plan asks for /qa approve; results show the matrix and map to a status", async () => {
+  it("REQ-CI-03/AC1 + REQ-CI-04/AC4 + REQ-PUB-05/AC4: a waiting plan asks for /qa approve; results show the matrix and map to a status", async () => {
     const { openSession } = await import("../session.js");
     const { ciSummary } = await import("./ci.js");
     const p = await createBuildProject();

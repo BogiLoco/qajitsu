@@ -77,7 +77,7 @@ const attempt = async (
 };
 
 describe("web runner (REQ-EXEC-05, REQ-EXEC-07, REQ-EVD-02)", () => {
-  it("REQ-EXEC-05/AC3 + REQ-EVD-02/AC1+AC3: a passing web case has a screenshot per step, HAR and console log, no video", async () => {
+  it("REQ-EXEC-05/AC3 + REQ-EVD-02/AC1+AC3 + REQ-NFR-04/AC1: a passing web case (BUG-05 off) has a screenshot per step, HAR and console log, no video", async () => {
     const { record, token } = await attempt("DEMO-4", "TC-01");
     expect(record.outcome).toBe("passed");
     expect(record.assertions.map((a) => [a.field, a.actual])).toEqual([
@@ -89,7 +89,7 @@ describe("web runner (REQ-EXEC-05, REQ-EXEC-07, REQ-EVD-02)", () => {
     expect(har).not.toContain(token);
   });
 
-  it("REQ-NFR-04: BUG-05 (checkout button stays disabled) is FAILED with full-page screenshot, DOM, video and trace", async () => {
+  it("REQ-NFR-04/AC1: BUG-05 (checkout button stays disabled) is FAILED with full-page screenshot, DOM, video and trace", async () => {
     const { record } = await attempt("DEMO-4", "TC-01", "BUG_CHECKOUT_BUTTON_DISABLED");
     expect(record.outcome).toBe("failed");
     expect(record.assertions[1]).toMatchObject({ actual: false, expected: true, pass: false });
@@ -105,7 +105,7 @@ describe("web runner (REQ-EXEC-05, REQ-EXEC-07, REQ-EVD-02)", () => {
     ]);
   });
 
-  it("REQ-NFR-04: BUG-06 (price format) is FAILED; without it PASSED", async () => {
+  it("REQ-NFR-04/AC1: BUG-06 (price format) is FAILED; without it PASSED", async () => {
     expect((await attempt("DEMO-4", "TC-02")).record.outcome).toBe("passed");
     const { record } = await attempt("DEMO-4", "TC-02", "BUG_PRICE_FORMAT_LOCALE");
     expect(record.outcome).toBe("failed");
@@ -115,7 +115,7 @@ describe("web runner (REQ-EXEC-05, REQ-EXEC-07, REQ-EVD-02)", () => {
     });
   });
 
-  it("REQ-EXEC-07 + REQ-NFR-04: the mixed case catches BUG-07 through the API although the UI shows success", async () => {
+  it("REQ-EXEC-07 + REQ-NFR-04/AC1: the mixed case catches BUG-07 through the API although the UI shows success", async () => {
     expect((await attempt("DEMO-5", "TC-01")).record.outcome).toBe("passed");
     const { record } = await attempt("DEMO-5", "TC-01", "BUG_SILENT_500_TOAST");
     expect(record.outcome).toBe("failed");

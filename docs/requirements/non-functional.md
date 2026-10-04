@@ -44,14 +44,14 @@ Quality bars for the codebase and the project itself.
 
 ### REQ-NFR-04 · Framework self-test
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 3
 - Related: REQ-LLM-06
 
 **Acceptance criteria**
 
-- [ ] AC1: `examples/demo-shop` with seeded bugs behind flags; each must end FAILED, and PASSED without its flag.
+- [x] AC1: `examples/demo-shop` with seeded bugs behind flags; each must end FAILED, and PASSED without its flag.
 - [x] AC2: Adversarial tests block merges.
 
 ### REQ-NFR-05 · Security baseline

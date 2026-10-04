@@ -82,8 +82,18 @@ Zod and repaired up to three times, then the stage fails (REQ-LLM-04). Models ar
 
 ## Statuses and exit codes
 
-`PASSED`, `FAILED`, `FLAKY`, `BLOCKED`, `NOT_RUN`, `NEEDS_REVIEW` (REQ-VER-01). Unknown never becomes PASSED: missing
-evidence, a crashed runner or a broken environment give `BLOCKED`. Exit codes: `0` all passed, `1` any failed,
+Six statuses (REQ-VER-01), all computed by code from runner output:
+
+| Status         | Meaning                                                                                                 |
+| -------------- | ------------------------------------------------------------------------------------------------------- |
+| `PASSED`       | every step ran, every planned expectation was verified and matched, evidence complete, no doubt raised  |
+| `FAILED`       | an expected value from the plan did not match the actual one: a finding                                 |
+| `FLAKY`        | failed first, passed on a retry                                                                         |
+| `BLOCKED`      | could not be tested: environment down, app not started, no valid spec, device unavailable, budget spent |
+| `NOT_RUN`      | in the approved plan but not executed                                                                   |
+| `NEEDS_REVIEW` | ran, but a person must look: healed spec, missing evidence, auditor or canary doubt                     |
+
+Unknown never becomes PASSED: missing evidence, a crashed runner or a broken environment give `BLOCKED`. Exit codes: `0` all passed, `1` any failed,
 `2` otherwise not all passed, `3` framework or configuration error (REQ-CI-04).
 
 ## Where to go next

@@ -23,7 +23,7 @@ Monorepo, tooling, core types, the guard and the status model; fetching a ticket
 - [REQ-CTX-04](requirements/context.md#req-ctx-04--repositories-always-fetched-at-the-changes-version) Repositories always fetched at the change's version (must, implemented, AC 4/4)
 - [REQ-CFG-03](requirements/config-secrets.md#req-cfg-03--secret-providers) Secret providers (must, in-progress, AC 2/3)
 - [REQ-WS-01](requirements/workspace.md#req-ws-01--folder-per-ticket-and-run-id) Folder per ticket and run id (must, implemented, AC 4/4)
-- [REQ-VER-01](requirements/verification.md#req-ver-01--status-model) Status model (must, in-progress, AC 2/3)
+- [REQ-VER-01](requirements/verification.md#req-ver-01--status-model) Status model (must, implemented, AC 3/3)
 - [REQ-VER-03](requirements/verification.md#req-ver-03--write-bans-for-agents) Write bans for agents (must, in-progress, AC 2/3)
 - [REQ-VER-04](requirements/verification.md#req-ver-04--tool-call-journal) Tool-call journal (must, implemented, AC 2/2)
 - [REQ-OBS-01](requirements/observability.md#req-obs-01--structured-event-log-per-run) Structured event log per run (must, implemented, AC 2/2)
@@ -91,7 +91,7 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 - [REQ-EVD-01](requirements/evidence.md#req-evd-01--api-evidence) API evidence (must, implemented, AC 3/3)
 - [REQ-EVD-04](requirements/evidence.md#req-evd-04--test-matrix) Test matrix (must, implemented, AC 3/3)
 - [REQ-EVD-05](requirements/evidence.md#req-evd-05--report-formats) Report formats (must, implemented, AC 3/3)
-- [REQ-NFR-04](requirements/non-functional.md#req-nfr-04--framework-self-test) Framework self-test (must, in-progress, AC 1/2)
+- [REQ-NFR-04](requirements/non-functional.md#req-nfr-04--framework-self-test) Framework self-test (must, implemented, AC 2/2)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 
@@ -223,7 +223,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-VER-11](requirements/verification.md#req-ver-11--bug-fix-verification-fails-before-passes-after) Bug fix verification: fails before, passes after (should, proposed, AC 0/4)
 - [REQ-VER-12](requirements/verification.md#req-ver-12--failure-triage-hints) Failure triage hints (should, proposed, AC 0/4)
 - [REQ-EVD-07](requirements/evidence.md#req-evd-07--passive-observations-during-tests) Passive observations during tests (should, proposed, AC 0/5)
-- [REQ-PUB-05](requirements/publishing.md#req-pub-05--optional-integrations) Optional integrations (could, proposed, AC 0/4)
+- [REQ-PUB-05](requirements/publishing.md#req-pub-05--optional-integrations) Optional integrations (could, in-progress, AC 1/4)
 - [REQ-PUB-07](requirements/publishing.md#req-pub-07--bug-reports-from-failed-cases) Bug reports from failed cases (should, proposed, AC 0/5)
 - [REQ-PUB-08](requirements/publishing.md#req-pub-08--promote-ticket-cases-to-the-regression-suite) Promote ticket cases to the regression suite (should, proposed, AC 0/4)
 - [REQ-PUB-09](requirements/publishing.md#req-pub-09--release-readiness-report) Release readiness report (could, proposed, AC 0/4)

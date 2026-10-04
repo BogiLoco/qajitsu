@@ -139,7 +139,7 @@ describe.skipIf(!available)("Android app on an emulator (stage 8)", () => {
     expect(record.evidence.map((e) => e.name)).toEqual(["S1.png", "S2.png", "S3.png", "logcat.log"]);
   }, 300_000);
 
-  it("REQ-NFR-04 + REQ-EVD-03/AC2+AC3: BUG-08 is FAILED with screen recording, logcat and page source", async () => {
+  it("REQ-NFR-04/AC1 + REQ-EVD-03/AC2+AC3: BUG-08 is FAILED with screen recording, logcat and page source", async () => {
     const record = await attempt("BUG_ANDROID_BACK_EMPTIES_CART");
     expect(record.outcome).toBe("failed");
     expect(record.assertions[2]).toMatchObject({
@@ -226,7 +226,7 @@ describe.skipIf(!available)("qj run DEMO-6 --build on an Android emulator (stage
     );
   }, 900_000);
 
-  it("REQ-NFR-04: BUG-08 is FAILED with screen recording and page source", async () => {
+  it("REQ-NFR-04/AC1: BUG-08 is FAILED with screen recording and page source", async () => {
     const { result, statuses, evidence } = await runDemo6(["--set", "api.BUG_ANDROID_BACK_EMPTIES_CART=1"]);
     expect(result.exitCode).toBe(1);
     expect(statuses).toEqual({ "TC-01": "FAILED" });

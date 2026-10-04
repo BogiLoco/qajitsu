@@ -55,7 +55,7 @@ How results and evidence reach Jira and the people who need them.
 
 ### REQ-PUB-05 · Optional integrations
 
-- Status: proposed
+- Status: in-progress
 - Priority: could
 - Stage: later
 - Related: REQ-CI-04
@@ -65,7 +65,7 @@ How results and evidence reach Jira and the people who need them.
 - [ ] AC1: Import results into Xray or Zephyr Scale.
 - [ ] AC2: Draft bug tickets for FAILED cases, created only after user confirmation.
 - [ ] AC3: Transition the ticket status after a run (configurable).
-- [ ] AC4: Short result comment on the PR/MR.
+- [x] AC4: Short result comment on the PR/MR.
 
 ### REQ-PUB-06 · Failure videos and evidence for the user
 
