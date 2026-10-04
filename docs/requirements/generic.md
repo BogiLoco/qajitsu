@@ -43,7 +43,7 @@ QAJitsu plugs into any project through configuration; differences between projec
 
 ### REQ-GEN-04 · Claude Code plugin interface
 
-- Status: accepted
+- Status: implemented
 - Priority: could
 - Stage: 9
 - Note: accepted on 2026-10-04 by the owner.
@@ -51,7 +51,7 @@ QAJitsu plugs into any project through configuration; differences between projec
 
 **Acceptance criteria**
 
-- [ ] AC1: The same core exposed as a Claude Code plugin with skills `/qa-plan`, `/qa-run`, `/qa-evidence` for chat-driven use.
+- [x] AC1: The same core exposed as a Claude Code plugin with skills `/qa-plan`, `/qa-run`, `/qa-evidence` for chat-driven use.
 
 ### REQ-GEN-05 · Command line
 

@@ -49,6 +49,7 @@ Users can see what the tester did and when, and teams can monitor QAJitsu over t
 
 - [x] AC1: Metrics: runs, status distribution, BLOCKED reasons, duration and cost per ticket, plan acceptance without changes, false-FAILED rate.
 - [x] AC2: Example alerts: stuck run, cost spike, BLOCKED series per environment, denied access outside the allowlist.
+- [x] AC3: A Grafana dashboard (runs, statuses, tokens and cost, guard denials, logs, traces) is provisioned with a local stack (OpenTelemetry Collector, Tempo, Loki, Prometheus, Grafana) in `ops/grafana/`.
 
 ### REQ-OBS-05 · Tamper-evident audit log
 
@@ -79,7 +80,7 @@ Built by code from the journal, never drawn by an agent.
 
 ### REQ-OBS-07 · Application map across runs
 
-- Status: accepted
+- Status: implemented
 - Priority: could
 - Stage: 9
 - Note: accepted on 2026-10-04 by the owner.
@@ -87,8 +88,8 @@ Built by code from the journal, never drawn by an agent.
 
 **Acceptance criteria**
 
-- [ ] AC1: Per-run graphs aggregate into a project map showing tested and never-tested transitions.
-- [ ] AC2: The map is exported as JSON and rendered in a static page.
+- [x] AC1: Per-run graphs aggregate into a project map showing tested and never-tested transitions.
+- [x] AC2: The map is exported as JSON and rendered in a static page.
 
 ### REQ-OBS-08 · Map as planner input
 

@@ -16,7 +16,7 @@ Roadmap stages 1–3 work end to end on the demo-shop: `qj fetch` → `qj plan` 
 
 Live numbers: `pnpm req:list -- --status in-progress` and the index in [requirements/README.md](requirements/README.md).
 
-Next steps: REQ-OBS-07 (application map), REQ-GEN-04 (Claude Code plugin), Grafana dashboards; REQ-PLAN-07/AC3 (approval in Jira and a web UI) stays for later.
+Also: `qj map` (application map across runs), the Claude Code plugin (`/qa-plan`, `/qa-run`, `/qa-evidence`) and a Grafana stack with the QAJitsu dashboard (`ops/grafana`). Later: REQ-PLAN-07/AC3 (approval in Jira and a web UI), iOS on a real device, a run with a cloud model.
 
 Open from stage 9: REQ-OBS-07 (application map) and REQ-GEN-04 (Claude Code plugin) are `proposed` and need a decision; OTLP backends were verified with a test collector, not with live Grafana, ELK or Datadog instances.
 

@@ -11,3 +11,4 @@ export * from "./html.js";
 export * from "./jira-comment.js";
 export * from "./graph.js";
 export * from "./junit.js";
+export * from "./app-map.js";

@@ -18,6 +18,7 @@ import { runTelemetryExport } from "./commands/telemetry.js";
 import { runMetrics } from "./commands/metrics.js";
 import { runInit } from "./commands/init.js";
 import { runExport } from "./commands/export.js";
+import { runMap } from "./commands/map.js";
 import { runCiComment, runCiDetect, runCiPublishPlan } from "./commands/ci.js";
 import { loadProject } from "./project.js";
 import type { ModelPorts } from "./session.js";
@@ -358,6 +359,17 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--run <id>", "run id (default: latest run of the ticket)")
     .action((ticket: string, options: { run?: string }) =>
       withPorts((ports) => runCiPublishPlan(ticket, options, commandIO, ports))(),
+    );
+
+  program
+    .command("map")
+    .description(
+      "Application map over every run: tested and never-tested screens and endpoints (map.json, map.html)",
+    )
+    .option("--out <dir>", "output folder (default: <project>/qa-map)")
+    .option("--openapi <file>", "OpenAPI document of the known endpoints (default: from the newest worktree)")
+    .action((options: { out?: string; openapi?: string }) =>
+      withPorts((ports) => runMap(options, commandIO, ports))(),
     );
 
   program

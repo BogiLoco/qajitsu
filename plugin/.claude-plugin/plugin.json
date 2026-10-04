@@ -1,0 +1,7 @@
+{
+  "name": "qajitsu",
+  "version": "0.1.0",
+  "description": "Chat-driven QAJitsu: plan tests for a Jira ticket, run them and read the evidence from Claude Code (REQ-GEN-04).",
+  "author": { "name": "QAJitsu" },
+  "keywords": ["qa", "testing", "jira", "playwright", "appium"]
+}

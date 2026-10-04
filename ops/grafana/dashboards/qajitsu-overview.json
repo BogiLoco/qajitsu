@@ -1,0 +1,225 @@
+{
+  "uid": "qajitsu-overview",
+  "title": "QAJitsu overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "tags": ["qajitsu"],
+  "templating": {
+    "list": [
+      {
+        "name": "ticket",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(qajitsu_cases, qajitsu_ticket)",
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "refresh": 2
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Cases by status (latest run per ticket)",
+      "type": "barchart",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (qajitsu_status) (last_over_time(qajitsu_cases{qajitsu_ticket=~\"$ticket\"}[$__range]))",
+          "instant": true,
+          "legendFormat": "{{qajitsu_status}}"
+        }
+      ],
+      "description": "Final statuses computed by QAJitsu from runner output (FAILED stays FAILED)."
+    },
+    {
+      "id": 2,
+      "title": "FAILED and BLOCKED by ticket",
+      "type": "table",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (qajitsu_ticket, qajitsu_status) (last_over_time(qajitsu_cases{qajitsu_status=~\"FAILED|BLOCKED|NEEDS_REVIEW\",qajitsu_ticket=~\"$ticket\"}[$__range]))",
+          "instant": true,
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Model tokens",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (qajitsu_ticket) (increase(qajitsu_model_tokens{qajitsu_ticket=~\"$ticket\"}[1h]))",
+          "legendFormat": "{{qajitsu_ticket}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Model cost (USD)",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 8,
+        "y": 8,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (qajitsu_ticket) (increase(qajitsu_model_cost{qajitsu_ticket=~\"$ticket\"}[1h]))",
+          "legendFormat": "{{qajitsu_ticket}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "Guard denials (agents stopped)",
+      "type": "stat",
+      "gridPos": {
+        "x": 16,
+        "y": 8,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(qajitsu_guard_denied[$__range]))"
+        }
+      ],
+      "description": "Tool calls the guard refused: writes to results/evidence, hosts outside the allowlist. Any non-zero value deserves a look."
+    },
+    {
+      "id": 6,
+      "title": "Runs (traces)",
+      "type": "table",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "query": "{ resource.service.name = \"qajitsu\" && name =~ \"qajitsu .*\" }",
+          "limit": 50
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Warnings and errors (journal)",
+      "type": "logs",
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 24,
+        "h": 10
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{service_name=\"qajitsu\"} | severity_text = \"WARN\""
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "qajitsu",
+  "owner": {
+    "name": "QAJitsu"
+  },
+  "description": "QAJitsu: agentic QA for Jira tickets, driven from Claude Code.",
+  "plugins": [
+    {
+      "name": "qajitsu",
+      "source": "./plugin",
+      "description": "Plan, run and inspect QAJitsu tests for a Jira ticket from a Claude Code chat."
+    }
+  ]
+}

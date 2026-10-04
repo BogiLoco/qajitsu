@@ -29,6 +29,18 @@ known secret value and nothing is sent on a hit. Remote collectors must use `htt
 Every command (`approve`, `run`, `publish`) exports what it added to the journal; `qajitsu telemetry export
 <TICKET>` sends anything left (backfill, a collector that was down).
 
+### Grafana in one command (REQ-OBS-04/AC3)
+
+`docker compose -f ops/grafana/docker-compose.yml up -d` starts a collector, Tempo, Loki, Prometheus and Grafana
+with the **QAJitsu overview** dashboard (http://127.0.0.1:3000). Set `telemetry.otlp.endpoint:
+http://127.0.0.1:4318` and every run appears there. Details: [ops/grafana/README.md](../../ops/grafana/README.md).
+
+## Application map (REQ-OBS-07)
+
+`qajitsu map [--openapi <file>]` aggregates the transition graphs of every run into `qa-map/map.json` and
+`qa-map/map.html`: which screens and endpoints were tested, how each transition last ended, and which known
+screens (`.qa/routes.yaml`) and API operations (OpenAPI) no test ever reached.
+
 ### Backends (REQ-OBS-03/AC2)
 
 Point `endpoint` at an OpenTelemetry Collector and fan out from there:

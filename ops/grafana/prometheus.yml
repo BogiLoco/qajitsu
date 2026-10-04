@@ -1,0 +1,4 @@
+global: { scrape_interval: 15s }
+# Metrics arrive by remote write from the collector. To also load `qajitsu metrics` output, run a node_exporter
+# with the textfile collector and add it here as a scrape target.
+scrape_configs: []

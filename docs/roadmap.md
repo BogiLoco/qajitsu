@@ -183,11 +183,11 @@ documentation site and the Claude Code plugin are available.
 <!-- prettier-ignore-start -->
 <!-- req-stage:9 -->
 - [REQ-OBS-03](requirements/observability.md#req-obs-03--opentelemetry-export) OpenTelemetry export (should, implemented, AC 2/2)
-- [REQ-OBS-04](requirements/observability.md#req-obs-04--metrics-dashboards-and-alerts) Metrics, dashboards and alerts (could, implemented, AC 2/2)
+- [REQ-OBS-04](requirements/observability.md#req-obs-04--metrics-dashboards-and-alerts) Metrics, dashboards and alerts (could, implemented, AC 3/3)
 - [REQ-OBS-05](requirements/observability.md#req-obs-05--tamper-evident-audit-log) Tamper-evident audit log (should, implemented, AC 2/2)
-- [REQ-OBS-07](requirements/observability.md#req-obs-07--application-map-across-runs) Application map across runs (could, accepted, AC 0/2)
+- [REQ-OBS-07](requirements/observability.md#req-obs-07--application-map-across-runs) Application map across runs (could, implemented, AC 2/2)
 - [REQ-GEN-03](requirements/generic.md#req-gen-03--init-and-doctor) `init` and `doctor` (must, implemented, AC 3/3)
-- [REQ-GEN-04](requirements/generic.md#req-gen-04--claude-code-plugin-interface) Claude Code plugin interface (could, accepted, AC 0/1)
+- [REQ-GEN-04](requirements/generic.md#req-gen-04--claude-code-plugin-interface) Claude Code plugin interface (could, implemented, AC 1/1)
 - [REQ-NFR-07](requirements/non-functional.md#req-nfr-07--platforms) Platforms (should, implemented, AC 2/2)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
