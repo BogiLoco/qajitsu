@@ -1,11 +1,50 @@
-# QAJitsu
+<p align="center">
+  <img src="docs/assets/qajitsu-logo.jpg" alt="QAJitsu: a robot in a white gi with a black belt pins a grumpy software bug to the mat" width="300">
+</p>
 
-**Agentic QA that cannot lie.** Give QAJitsu a Jira ticket. It reads the ticket and the code that changed
-(GitHub, GitLab or a local repository), proposes a test plan for you to approve, runs API, web and mobile tests,
-collects evidence (requests and responses, screenshots, videos, logs) and posts a computed test matrix back to Jira.
+<h3 align="center">The Ancient Art of Agentic QA</h3>
 
-> Status: all ten roadmap stages are implemented
-> ([docs/STATUS.md](docs/STATUS.md)).
+<p align="center">
+  <em>AI that tests your tickets, and cannot lie about the result.</em><br>
+  Jira ticket in → a test plan you approve → API, web and mobile tests → evidence and a verified result back in Jira.
+</p>
+
+<p align="center">
+  <a href="#2-installation-and-first-setup">Install</a> ·
+  <a href="#3-the-flow-step-by-step">The flow</a> ·
+  <a href="#4-command-reference">Commands</a> ·
+  <a href="#10-try-it-on-the-demo-shop">Try the demo</a> ·
+  <a href="docs/guides/ci-cd.md">CI/CD</a>
+</p>
+
+<p align="center">
+  <img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-1f2a5c">
+  <img alt="Node.js 22+" src="https://img.shields.io/badge/node-22%2B-22c55e">
+  <img alt="Tests: API, web, Android" src="https://img.shields.io/badge/tests-API%20%C2%B7%20web%20%C2%B7%20Android-1f2a5c">
+  <img alt="Models: Claude, GPT, Gemini, Ollama" src="https://img.shields.io/badge/models-Claude%20%C2%B7%20GPT%20%C2%B7%20Gemini%20%C2%B7%20Ollama-22c55e">
+</p>
+
+---
+
+**Give QAJitsu a Jira ticket.** It reads the ticket and the code that changed (GitHub, GitLab or a local repository),
+proposes a test plan for you to approve, runs API, web and mobile tests, collects evidence (requests and responses,
+screenshots, videos, logs) and posts a computed test matrix back to Jira.
+
+|                                | Why it is different                                                                                                                 |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| 🥋 **AI plans, code judges**   | Agents analyse the change and write the tests; a deterministic runner decides PASSED or FAILED. No model can mark a test as passed. |
+| ✅ **You stay in charge**      | Nothing runs before you approve the plan, and nothing reaches Jira before you see the preview.                                      |
+| 🔍 **Evidence for every step** | Requests and responses, screenshots, videos, traces and logs, hashed in a manifest and linked from the report.                      |
+| 🐞 **Proven on seeded bugs**   | A demo shop with eight hidden bugs: each one must end FAILED, and PASSED without it.                                                |
+
+```sh
+qj fetch SHOP-482          # ticket + the code change, at its exact commit
+qj plan SHOP-482           # agents write a plan with a source for every case; you accept it
+qj run SHOP-482 --build    # tests run against the app built from that commit
+qj publish SHOP-482        # after your preview: the matrix and evidence go to Jira
+```
+
+> Status: all ten roadmap stages are implemented ([docs/STATUS.md](docs/STATUS.md)).
 
 The one idea behind everything: **agents plan and write tests; deterministic code executes and judges.** An AI model
 never decides whether a test passed. A FAILED test stays FAILED, missing evidence is never PASSED, and the extra
