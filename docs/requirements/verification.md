@@ -68,16 +68,16 @@ The layer that keeps results honest. Background: ADR-0002 and the architecture i
 
 ### REQ-VER-06 · Independent auditor
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 7
 - Related: INV-5, REQ-LLM-02
 
 **Acceptance criteria**
 
-- [ ] AC1: A separate agent with fresh context receives the approved plan, raw results and evidence (including images).
+- [x] AC1: A separate agent with fresh context receives the approved plan, raw results and evidence (including images).
 - [x] AC2: Its findings can only downgrade PASSED to NEEDS_REVIEW.
-- [ ] AC3: By default the auditor uses a different model than the author.
+- [x] AC3: By default the auditor uses a different model than the author.
 
 ### REQ-VER-07 · Publish gates
 
@@ -112,15 +112,15 @@ Nothing leaves the machine unless every gate passes.
 
 ### REQ-VER-09 · Canary check
 
-- Status: accepted
+- Status: implemented
 - Priority: could
 - Stage: 7
 - Related: REQ-VER-02
 
 **Acceptance criteria**
 
-- [ ] AC1: Optionally, one step per run is executed with an inverted expectation; it must fail.
-- [ ] AC2: If the canary passes, the whole run becomes NEEDS_REVIEW.
+- [x] AC1: Optionally, one step per run is executed with an inverted expectation; it must fail.
+- [x] AC2: If the canary passes, the whole run becomes NEEDS_REVIEW.
 
 ### REQ-VER-10 · Human preview before publishing
 

@@ -1,4 +1,5 @@
-# Benchmark cases for `qajitsu bench` (REQ-LLM-06). Bug ids refer to examples/demo-shop/BUGS.md.
+# Benchmark cases for `qajitsu bench` (REQ-LLM-06): each case is a fresh run (fetch, plan, approve,
+# run --build with the flags switched on through --set api.<FLAG>=1). Bug ids refer to examples/demo-shop/BUGS.md.
 version: 1
 cases:
   - id: bench-cart-rounding
@@ -11,10 +12,12 @@ cases:
     expect: { detects: BUG-04 }
   - id: bench-negative-quantity
     ticket: DEMO-2
+    ref: shop=main
     flags: [BUG_ORDER_ACCEPTS_NEGATIVE_QTY]
     expect: { detects: BUG-02 }
   - id: bench-expired-token
     ticket: DEMO-3
+    ref: shop=main
     flags: [BUG_AUTH_EXPIRED_TOKEN_OK]
     expect: { detects: BUG-03 }
   - id: bench-clean-cart

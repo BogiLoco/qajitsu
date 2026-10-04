@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { plannedFields } from "./expectations.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AssertionRecord, CaseResultFile, EvidenceEntry, Plan, TestStatus } from "@qajitsu/core";
@@ -103,9 +104,11 @@ export function evaluateCases(
     const first = attempts[0];
     const last = attempts.at(-1);
     // PASSED needs, for every plan step, intact evidence and at least one assertion (REQ-VER-07/AC3).
+    // ... and every planned expectation verified, so no spec passes by leaving the check out (REQ-LLM-05/AC2).
     const evidenceComplete =
       evidenceForEveryStep(stepIds, attemptEvidence(first, planCase.id, manifest), manifestCheck.broken) &&
-      stepIds.every((id) => first?.assertions.some((a) => a.stepId === id) === true);
+      stepIds.every((id) => first?.assertions.some((a) => a.stepId === id) === true) &&
+      unverifiedExpectations(planCase, first).length === 0;
     const status = computeStatus({ caseId: planCase.id, attempts }, { evidenceComplete });
     const stepsPassed = stepIds.filter((id) => {
       const a = last?.assertions.filter((x) => x.stepId === id) ?? [];
@@ -123,6 +126,18 @@ export function evaluateCases(
       evidence: attemptEvidence(last, planCase.id, manifest),
     };
   });
+}
+
+/** Planned expectations (`S1 fields.total`) the attempt recorded no assertion for. */
+export function unverifiedExpectations(
+  planCase: Plan["cases"][number] | undefined,
+  attempt: CaseResultFile["attempts"][number] | undefined,
+): string[] {
+  return (planCase?.steps ?? []).flatMap((step) =>
+    plannedFields(step.expect)
+      .filter((field) => attempt?.assertions.some((a) => a.stepId === step.id && a.field === field) !== true)
+      .map((field) => `${step.id} ${field}`),
+  );
 }
 
 /** Every PASSED has at least one executed `verify()` and evidence for every step (REQ-VER-07/AC3). */
@@ -145,6 +160,12 @@ export function gatePassedIsProven(
       if (first && first.assertions.length > 0 && !first.assertions.some((a) => a.stepId === step.id)) {
         problems.push(`${c.caseId}: PASSED without a verify() for ${step.id}`);
       }
+    }
+    for (const missing of unverifiedExpectations(
+      plan.cases.find((p) => p.id === c.caseId),
+      first,
+    )) {
+      problems.push(`${c.caseId}: PASSED without a verify() of ${missing}`);
     }
   }
   return { gate: "passed-is-proven", ok: problems.length === 0, problems };

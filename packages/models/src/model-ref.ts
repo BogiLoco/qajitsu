@@ -37,11 +37,29 @@ export function parseModelRef(reference: string): ModelRef {
 }
 
 /**
- * Resolves the model for a role from `models.roles`, falling back to the `default` entry.
+ * Resolves the model for a role from `models.roles`, falling back to the `default` entry. An auditor
+ * without its own entry gets the first declared model that is not the author's, so that the check is
+ * independent by default (REQ-VER-06/AC3); with only one model it shares the author's. The fallback stays
+ * within providers some role already uses: evidence never goes to a provider nobody assigned a role to.
  *
+ * @param roles - `models.roles`.
+ * @param role - Role to resolve.
+ * @param declared - Every declared `<provider>/<model>` in configuration order.
  * @throws {ConfigError} `MODEL_ROLE_UNASSIGNED` when neither the role nor `default` is configured.
  */
-export function resolveRoleModel(roles: Readonly<Record<string, string>>, role: ModelRole): ModelRef {
+export function resolveRoleModel(
+  roles: Readonly<Record<string, string>>,
+  role: ModelRole,
+  declared: readonly string[] = [],
+): ModelRef {
+  if (role === "auditor" && roles["auditor"] === undefined) {
+    const author = roles["author"] ?? roles["default"];
+    const used = new Set(Object.values(roles).map((r) => r.split("/")[0]));
+    const other = declared.find(
+      (ref) => ref !== author && ModelRefSchema.safeParse(ref).success && used.has(ref.split("/")[0]),
+    );
+    if (other !== undefined) return parseModelRef(other);
+  }
   const reference = roles[role] ?? roles["default"];
   if (reference === undefined) {
     throw new ConfigError("MODEL_ROLE_UNASSIGNED", `No model configured for role '${role}' and no default`, {

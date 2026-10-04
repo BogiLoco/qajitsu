@@ -2,6 +2,8 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { readManifest } from "@qajitsu/adapter-evidence-local";
 import {
   APPROVED_PLAN_FILE,
+  AuditRecordSchema,
+  CanaryRecordSchema,
   CaseResultFileSchema,
   loadApprovedPlan,
   parseEventLines,
@@ -25,6 +27,7 @@ import {
   type ReportAttempt,
 } from "@qajitsu/report";
 import {
+  applyVerificationChecks,
   checkManifest,
   combineGates,
   evaluateRun,
@@ -33,6 +36,7 @@ import {
   type GateResult,
 } from "@qajitsu/verifier";
 import { parse } from "yaml";
+import type { z } from "zod";
 import type { RunSession } from "../session.js";
 
 /** Environment facts recorded in `run.json` by `qj run`. */
@@ -61,6 +65,8 @@ export interface RunVerdict {
   readonly gates: readonly GateResult[];
   readonly ok: boolean;
   readonly failed: readonly GateResult[];
+  /** Auditor and canary notes and downgrades (REQ-VER-06, REQ-VER-09). */
+  readonly checks: readonly string[];
 }
 
 /**
@@ -71,7 +77,14 @@ export interface RunVerdict {
  * @param session - Open run session.
  * @param now - Clock for the report date.
  */
-export async function computeVerdict(session: RunSession, now: () => Date): Promise<RunVerdict> {
+export async function computeVerdict(
+  session: RunSession,
+  now: () => Date,
+  options: {
+    /** True while the run itself computes statuses before its checks ran (auditor input). */
+    readonly checksPending?: boolean;
+  } = {},
+): Promise<RunVerdict> {
   const { ws, masker } = session;
   const { plan, approval } = await loadApprovedPlan(ws);
   const environment = (ws.record.data["environment"] as RunEnvironment | undefined) ?? {
@@ -102,7 +115,67 @@ export async function computeVerdict(session: RunSession, now: () => Date): Prom
     approvedSha256: approval.sha256,
     currentSha256: currentSha,
   });
-  const cases = evaluated.cases;
+  // REQ-VER-06, REQ-VER-09: the auditor and the canary can only move PASSED to NEEDS_REVIEW.
+  // Records are hashed into run.json when written; a missing, unreadable or changed record fails
+  // closed when the configuration says the check runs and something PASSED.
+  const hashes = (ws.record.data["checks"] ?? {}) as Record<string, string | undefined>;
+  const anyPassed = evaluated.cases.some((c) => c.status === "PASSED");
+  const verification = session.project.config.verification;
+  const integrity: string[] = [];
+  const readChecked = async <T>(
+    name: string,
+    schema: z.ZodType<T>,
+    expected: boolean,
+  ): Promise<T | undefined> => {
+    const text = await readFile(ws.path("checks", name), "utf8").catch(() => undefined);
+    if (text === undefined) {
+      if (expected && anyPassed && options.checksPending !== true)
+        integrity.push(`checks/${name} is missing`);
+      return undefined;
+    }
+    if (hashes[name] !== sha256(text)) {
+      integrity.push(`checks/${name} does not match the hash recorded in run.json`);
+      return undefined;
+    }
+    let raw: unknown;
+    try {
+      raw = JSON.parse(text);
+    } catch {
+      integrity.push(`checks/${name} is not valid JSON`);
+      return undefined;
+    }
+    const parsed = schema.safeParse(raw);
+    if (!parsed.success) integrity.push(`checks/${name} is not a valid record`);
+    return parsed.success ? parsed.data : undefined;
+  };
+  const audit = await readChecked("audit.json", AuditRecordSchema, verification.auditor !== "off");
+  const canary = await readChecked("canary.json", CanaryRecordSchema, verification.canary);
+  const checked = applyVerificationChecks(evaluated.cases, audit, canary, integrity);
+  const cases = evaluated.cases.map((c, i) => ({ ...c, status: checked[i]?.status ?? c.status }));
+  const checkNotes = [
+    ...(audit?.status === "done"
+      ? [
+          `Auditor ${audit.model}: ${String(audit.findings.filter((f) => f.weak).length)} of ${String(audit.findings.length)} PASSED case(s) flagged.${audit.sameModelAsAuthor ? " Warning: the auditor used the author's model (configure models.roles.auditor or a second model)." : ""}`,
+        ]
+      : audit?.status === "failed"
+        ? [`Auditor did not complete (${audit.mode}): ${audit.error}`]
+        : []),
+    ...integrity.map((p) => `Verification record problem: ${p}`),
+    ...(canary?.status === "skipped"
+      ? ["Canary skipped: no PASSED case with a structured expectation."]
+      : []),
+    ...(canary?.status === "error" ? [`Canary could not run: ${canary.detail}`] : []),
+    ...(canary?.status === "ran"
+      ? [
+          canary.caught
+            ? `Canary: ${canary.caseId} ${canary.stepId} ${canary.field} failed with an inverted expectation, as it must.`
+            : `Canary: ${canary.caseId} ${canary.stepId} ${canary.field} PASSED with an inverted expectation; every PASSED is NEEDS_REVIEW.`,
+        ]
+      : []),
+    ...checked
+      .filter((c) => c.downgradedBy)
+      .map((c) => `${c.caseId} → NEEDS_REVIEW (${c.downgradedBy ?? ""})`),
+  ].map((n) => masker.maskText(n));
   const rows: MatrixRow[] = cases.map((c) => {
     const p = plan.cases.find((x) => x.id === c.caseId);
     return {
@@ -166,8 +239,11 @@ export async function computeVerdict(session: RunSession, now: () => Date): Prom
       const caseId = typeof d["caseId"] === "string" ? d["caseId"] : undefined;
       const attempt = typeof d["attempt"] === "number" ? d["attempt"] : undefined;
       const step = typeof d["step"] === "string" ? d["step"] : undefined;
+      // Canary events are not attempts of the case: no link to the case's evidence.
       const prefix =
-        caseId && attempt !== undefined && step ? `${caseId}/attempt-${String(attempt)}/${step}` : undefined;
+        caseId && attempt !== undefined && step && e.stage !== "canary"
+          ? `${caseId}/attempt-${String(attempt)}/${step}`
+          : undefined;
       const evidencePath = prefix
         ? (
             manifest.find((x) => x.path === `${prefix}.png`) ??
@@ -224,6 +300,7 @@ export async function computeVerdict(session: RunSession, now: () => Date): Prom
       gates: g,
       timeline,
       graphSvg: graph.edges.length > 0 ? renderGraphSvg(graph) : undefined,
+      checks: checkNotes,
     });
   const secretGate = gateNoSecrets(
     [
@@ -256,6 +333,7 @@ export async function computeVerdict(session: RunSession, now: () => Date): Prom
       problems: unlisted.map((p) => `evidence/${p}: not in the manifest`),
     },
     { gate: "results-valid", ok: malformed.length === 0, problems: malformed },
+    { gate: "checks-intact", ok: integrity.length === 0, problems: integrity },
   ];
   const verdict = combineGates(gates);
   return {
@@ -274,6 +352,7 @@ export async function computeVerdict(session: RunSession, now: () => Date): Prom
     gates,
     ok: verdict.ok,
     failed: verdict.failed,
+    checks: checkNotes,
   };
 }
 

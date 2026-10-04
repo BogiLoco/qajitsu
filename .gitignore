@@ -25,3 +25,4 @@ CLAUDE.local.md
 # Personal project overrides and local results
 **/.qa/qa.local.yaml
 bench/results/
+**/bench-results/

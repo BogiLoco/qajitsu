@@ -452,6 +452,36 @@
       },
       "additionalProperties": false
     },
+    "verification": {
+      "default": {
+        "auditor": "optional",
+        "auditor_max_images": 12,
+        "canary": false
+      },
+      "type": "object",
+      "properties": {
+        "auditor": {
+          "default": "optional",
+          "type": "string",
+          "enum": [
+            "optional",
+            "required",
+            "off"
+          ]
+        },
+        "auditor_max_images": {
+          "default": 12,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 50
+        },
+        "canary": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
     "web": {
       "default": {
         "browser": "chromium",

@@ -57,28 +57,28 @@ QAJitsu works with any capable model: cloud APIs, company gateways and local mod
 
 ### REQ-LLM-05 · Local models used honestly
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: 7
 - Related: REQ-LLM-06
 
 **Acceptance criteria**
 
-- [ ] AC1: Documentation recommends local models for summary and classification roles and states limits for author/healer roles.
-- [ ] AC2: Weaker models lead to more BLOCKED, never to false PASSED (guaranteed by REQ-VER-*).
+- [x] AC1: Documentation recommends local models for summary and classification roles and states limits for author/healer roles.
+- [x] AC2: Weaker models lead to more BLOCKED, never to false PASSED (guaranteed by REQ-VER-*).
 
 ### REQ-LLM-06 · Model benchmark
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: 7
 - Related: REQ-NFR-04
 
 **Acceptance criteria**
 
-- [ ] AC1: `qajitsu bench --model <ref> [--role <role>]` runs demo-shop seeded-bug cases with real models.
-- [ ] AC2: Reports detection rate, false FAILED, BLOCKED rate, plan acceptance, time and cost.
-- [ ] AC3: Never part of PR CI; nightly or on demand only.
+- [x] AC1: `qajitsu bench --model <ref> [--role <role>]` runs demo-shop seeded-bug cases with real models.
+- [x] AC2: Reports detection rate, false FAILED, BLOCKED rate, plan acceptance, time and cost.
+- [x] AC3: Never part of PR CI; nightly or on demand only.
 
 ### REQ-LLM-07 · Cost and token tracking
 

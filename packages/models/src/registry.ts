@@ -117,6 +117,15 @@ export function createModelRegistry(options: {
 
   return {
     resolve: (reference) => resolveRef(parseModelRef(reference)),
-    forRole: (role) => resolveRef(resolveRoleModel(config.roles, role)),
+    forRole: (role) =>
+      resolveRef(
+        resolveRoleModel(
+          config.roles,
+          role,
+          Object.entries(config.providers).flatMap(([alias, p]) =>
+            Object.keys(p.models).map((m) => `${alias}/${m}`),
+          ),
+        ),
+      ),
   };
 }

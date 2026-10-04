@@ -99,6 +99,18 @@ describe("static checks of generated specs (REQ-EXEC-03)", () => {
     expect(messages(src).join("\n")).toContain(expected);
   });
 
+  it("REQ-LLM-05/AC2: every planned expectation needs its own verify(); leaving one out is blocked", () => {
+    const tc1 = readFileSync(
+      new URL("../../../fixtures/specs/demo-1/TC-01.spec.ts", import.meta.url),
+      "utf8",
+    );
+    expect(checkSpecSource(tc1, "TC-01", plan)).toEqual([]);
+    const lazy = tc1.replace(/\s*verify\("S1", "fields\.total"[^\n]*\n/, "\n");
+    expect(checkSpecSource(lazy, "TC-01", plan).map((p) => [p.check, p.message])).toEqual([
+      ["coverage", 'expectation S1 fields.total has no verify("S1", "fields.total", ...) call'],
+    ]);
+  });
+
   it("requires the caseId and run exports", () => {
     expect(messages(good.replace('"TC-02";', '"TC-01";'))).toContain(
       'lint: export const caseId must be "TC-02"',

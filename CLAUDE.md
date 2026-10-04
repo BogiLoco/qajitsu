@@ -36,7 +36,8 @@ The non-negotiable invariants live in `.claude/rules/architecture-invariants.md`
 | `pnpm req:list -- --stage N`        | Requirements of a stage (also `--status in-progress`)                                                                                |
 | `pnpm build` / `pnpm qajitsu <cmd>` | Build packages to `dist/` / run the built CLI                                                                                        |
 | `pnpm format`                       | Prettier write                                                                                                                       |
-| `pnpm bench`, `pnpm docs`           | Not implemented yet (stages 7 and 9); they print a notice                                                                            |
+| `pnpm bench -- --model <ref>`       | Benchmark a model on the demo-shop seeded bugs (real model calls; never in PR CI)                                                    |
+| `pnpm docs`                         | Not implemented yet (stage 9); it prints a notice                                                                                    |
 
 ## Repository map
 

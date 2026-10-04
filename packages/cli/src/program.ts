@@ -12,6 +12,7 @@ import { runPull } from "./commands/pull.js";
 import { runRun, type RunPorts } from "./commands/run.js";
 import { runClean, runGc, runResume, runRuns } from "./commands/runs.js";
 import { runEnvCheck, runEnvRender } from "./commands/env.js";
+import { runBench } from "./commands/bench.js";
 import { loadProject } from "./project.js";
 import type { ModelPorts } from "./session.js";
 import { formatDoctor, runDoctor } from "./doctor.js";
@@ -221,6 +222,17 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--all", "every run of the ticket")
     .action((ticket: string, options: { run?: string; all?: boolean }) =>
       withPorts((ports) => runClean(ticket, options, commandIO, ports))(),
+    );
+
+  program
+    .command("bench")
+    .description("Benchmark a model on the seeded-bug cases (real model calls; never in PR CI)")
+    .requiredOption("--model <ref>", "model reference <provider>/<model>")
+    .option("--role <role>", "only this role uses the model (default: every role)")
+    .option("--cases <file>", "benchmark cases (default: .qa/bench.yaml)")
+    .option("--out <dir>", "where the JSON report goes (default: <project>/bench-results)")
+    .action((options: { model: string; role?: string; cases?: string; out?: string }) =>
+      withPorts((ports) => runBench(options, commandIO, ports, review))(),
     );
 
   program

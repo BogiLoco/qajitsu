@@ -127,6 +127,12 @@ export interface StructuredRun<T extends z.ZodType> {
   readonly usage: UsageTracker;
   readonly maxSteps?: number;
   readonly signal?: AbortSignal;
+  /** Images shown with the prompt (screenshots for the auditor); dropped for models without vision. */
+  readonly images?: readonly {
+    readonly name: string;
+    readonly data: Uint8Array;
+    readonly mediaType: string;
+  }[];
 }
 
 /**
@@ -146,7 +152,21 @@ export async function runStructuredAgent<T extends z.ZodType>(
     run.tools && run.guard && run.model.profile.tools
       ? guardTools(run.tools, run.guard, run.signal)
       : undefined;
-  let messages: ModelMessage[] = [{ role: "user", content: run.prompt }];
+  const images = run.model.profile.vision ? (run.images ?? []) : [];
+  let messages: ModelMessage[] = [
+    images.length === 0
+      ? { role: "user", content: run.prompt }
+      : {
+          role: "user",
+          content: [
+            { type: "text", text: run.prompt },
+            ...images.flatMap((img) => [
+              { type: "text" as const, text: `Image ${img.name}:` },
+              { type: "image" as const, image: img.data, mediaType: img.mediaType },
+            ]),
+          ],
+        },
+  ];
   let lastErrors: readonly string[] = [];
   let constrainedAvailable = run.model.profile.structuredOutput;
   for (let attempt = 1; attempt <= MAX_OUTPUT_ATTEMPTS; attempt += 1) {

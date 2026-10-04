@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { plannedFields } from "./expectations.js";
 import { dirname, join } from "node:path";
 import type { Plan } from "@qajitsu/core";
 import ts from "typescript";
@@ -76,6 +77,7 @@ export function checkSpecSource(source: string, caseId: string, plan: Plan): Spe
   let exportsRun = false;
   const stepCalls = new Map<string, number>();
   const verifiedSteps = new Set<string>();
+  const verifiedFields = new Set<string>();
   const add = (check: SpecProblem["check"], message: string, node?: ts.Node): void => {
     problems.push({ check, message, ...(node ? { line: lineOf(sf, node) } : {}) });
   };
@@ -176,6 +178,7 @@ export function checkSpecSource(source: string, caseId: string, plan: Plan): Spe
           const stepId = first.text;
           const field = node.arguments[1].text;
           verifiedSteps.add(stepId);
+          verifiedFields.add(`${stepId}.${field}`);
           const expected = node.arguments[3];
           const ok =
             expected !== undefined &&
@@ -207,6 +210,10 @@ export function checkSpecSource(source: string, caseId: string, plan: Plan): Spe
     if (count > 1) add("coverage", `step("${step.id}") appears ${String(count)} times`);
     if (!verifiedSteps.has(step.id))
       add("coverage", `plan step ${step.id} has no verify("${step.id}", ...) call`);
+    // Every planned expectation is verified; leaving one out would let the spec pass whatever it is.
+    for (const field of plannedFields(step.expect))
+      if (verifiedSteps.has(step.id) && !verifiedFields.has(`${step.id}.${field}`))
+        add("coverage", `expectation ${step.id} ${field} has no verify("${step.id}", "${field}", ...) call`);
   }
   for (const id of stepCalls.keys()) {
     if (!planCase.steps.some((s) => s.id === id)) add("coverage", `step("${id}") is not a step of ${caseId}`);

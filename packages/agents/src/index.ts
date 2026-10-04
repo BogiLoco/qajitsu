@@ -15,3 +15,4 @@ export * from "./roles-run.js";
 export * from "./probe.js";
 export * from "./author.js";
 export * from "./healer.js";
+export * from "./auditor.js";

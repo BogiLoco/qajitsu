@@ -156,10 +156,10 @@ and `qj bench` reports detection and false-FAILED rates per model.
 
 <!-- prettier-ignore-start -->
 <!-- req-stage:7 -->
-- [REQ-VER-06](requirements/verification.md#req-ver-06--independent-auditor) Independent auditor (must, in-progress, AC 1/3)
-- [REQ-VER-09](requirements/verification.md#req-ver-09--canary-check) Canary check (could, accepted, AC 0/2)
-- [REQ-LLM-05](requirements/models.md#req-llm-05--local-models-used-honestly) Local models used honestly (should, accepted, AC 0/2)
-- [REQ-LLM-06](requirements/models.md#req-llm-06--model-benchmark) Model benchmark (should, accepted, AC 0/3)
+- [REQ-VER-06](requirements/verification.md#req-ver-06--independent-auditor) Independent auditor (must, implemented, AC 3/3)
+- [REQ-VER-09](requirements/verification.md#req-ver-09--canary-check) Canary check (could, implemented, AC 2/2)
+- [REQ-LLM-05](requirements/models.md#req-llm-05--local-models-used-honestly) Local models used honestly (should, implemented, AC 2/2)
+- [REQ-LLM-06](requirements/models.md#req-llm-06--model-benchmark) Model benchmark (should, implemented, AC 3/3)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 

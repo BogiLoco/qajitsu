@@ -31,6 +31,7 @@ import type { RuntimePorts } from "../adapters.js";
 import { openSession, type ModelPorts, type RunSession } from "../session.js";
 import type { CommandIO } from "./fetch.js";
 import { computeVerdict, writeReports } from "./verdict.js";
+import { auditRun, runCanary } from "./checks.js";
 import {
   blockAfterStartFailure,
   effectiveConfig,
@@ -263,6 +264,10 @@ export async function runRun(
       const pending = await executeCases(session, plan, env, io, ports, results);
       if (pending.length > 0)
         io.write(`Rejected spec files (not in the approved plan or misplaced): ${pending.join(", ")}\n`);
+      // REQ-VER-06: the independent auditor reviews what PASSED; it can only downgrade.
+      const audit = await auditRun(session, ports.now);
+      if (audit?.status === "failed")
+        io.writeError(`Auditor did not complete (${audit.mode}): ${audit.error}\n`);
     }
 
     // Statuses, gates and reports: computed by code only, from the files on disk (invariants 1, 6, 7).
@@ -400,12 +405,8 @@ async function executeCases(
     events.emit("run", SYSTEM, "contract.loaded", { repo: alias, file: repo.openapi });
     break;
   }
-  const ran = await runCases({
-    plan: { ...plan, cases: plan.cases.filter((c) => !blocked.has(c.id)) },
-    specs,
+  const base = {
     executor,
-    evidence: createLocalEvidenceStore(ws.path("evidence")),
-    resultsDir: ws.path("results"),
     baseUrl: env.baseUrl,
     allowedOrigins: [env.origin],
     login: () =>
@@ -416,6 +417,16 @@ async function executeCases(
           masker.register(v);
         },
       }),
+    contract,
+    events,
+    now: ports.now,
+  };
+  const ran = await runCases({
+    ...base,
+    plan: { ...plan, cases: plan.cases.filter((c) => !blocked.has(c.id)) },
+    specs,
+    evidence: createLocalEvidenceStore(ws.path("evidence")),
+    resultsDir: ws.path("results"),
     retries: project.config.environments.retries,
     workers: project.config.environments.workers,
     // REQ-EXEC-09: web cases that could not run get at most two healed attempts.
@@ -454,10 +465,9 @@ async function executeCases(
       });
       return file;
     },
-    contract,
-    events,
-    now: ports.now,
   });
+  // REQ-VER-09: the canary re-runs one PASSED case with an inverted expectation; it must fail.
+  if (project.config.verification.canary) await runCanary(session, plan, ran, specs, base);
   for (const [id, r] of ran) results.set(id, r);
   events.emit("run", RUNNER, "cases.done", { cases: ran.size });
   return rejected.map((f) => f.slice(ws.dir.length + 1));

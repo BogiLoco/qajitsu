@@ -24,7 +24,7 @@
     "req:check": "node scripts/requirements.mjs check",
     "req:index": "node scripts/requirements.mjs index",
     "verify": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test:coverage && pnpm test:hooks && pnpm req:check",
-    "bench": "node scripts/not-yet.mjs bench \"roadmap stage 7 (REQ-LLM-06)\"",
+    "bench": "pnpm build && cd examples/demo-shop && node ../../packages/cli/dist/bin.js bench",
     "docs": "node scripts/not-yet.mjs docs \"roadmap stage 9 (REQ-NFR-03)\"",
     "qajitsu": "node packages/cli/dist/bin.js",
     "changeset": "changeset",

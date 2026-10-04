@@ -138,6 +138,20 @@ export const ProjectConfigSchema = z.strictObject({
   build: BuildSchema.optional(),
   /** Cleanup policy and retention (REQ-WS-03). */
   cleanup: CleanupSchema.default({ policy: "on_success", keep_last: 10, max_age_days: 30 }),
+  /** Extra checks after the runner's verdict; they can only downgrade (REQ-VER-06, REQ-VER-09). */
+  verification: z
+    .strictObject({
+      /**
+       * Independent auditor of PASSED results (REQ-VER-06). `optional`: an auditor failure is reported
+       * and statuses stay; `required`: an auditor failure turns every PASSED into NEEDS_REVIEW; `off`.
+       */
+      auditor: z.enum(["optional", "required", "off"]).default("optional"),
+      /** Screenshots the auditor sees per run (vision models only). */
+      auditor_max_images: z.number().int().min(0).max(50).default(12),
+      /** Run one step with an inverted expectation; if it passes, the run becomes NEEDS_REVIEW (REQ-VER-09). */
+      canary: z.boolean().default(false),
+    })
+    .default({ auditor: "optional", auditor_max_images: 12, canary: false }),
   /** Web runner (REQ-EXEC-05, REQ-EVD-06). */
   web: z
     .strictObject({

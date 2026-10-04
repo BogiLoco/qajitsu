@@ -32,3 +32,37 @@ describe("resolveRoleModel (REQ-LLM-02)", () => {
     expect(() => resolveRoleModel({}, "auditor")).toThrow(/auditor/);
   });
 });
+
+describe("auditor model (REQ-VER-06/AC3)", () => {
+  it("REQ-VER-06/AC3: by default the auditor uses a declared model other than the author's", () => {
+    const declared = ["company/strong", "company/second", "local/gemma4:e2b"];
+    expect(resolveRoleModel({ default: "company/strong" }, "auditor", declared)).toEqual({
+      provider: "company",
+      model: "second",
+    });
+    // A provider no role uses never receives evidence: here only the author's model is left.
+    expect(
+      resolveRoleModel({ default: "company/strong" }, "auditor", ["company/strong", "local/gemma4:e2b"]),
+    ).toEqual({
+      provider: "company",
+      model: "strong",
+    });
+    expect(
+      resolveRoleModel({ default: "local/gemma4:e2b", author: "company/strong" }, "auditor", declared),
+    ).toEqual({
+      provider: "company",
+      model: "second",
+    });
+    // An explicit auditor entry wins; a single declared model is shared.
+    expect(
+      resolveRoleModel({ default: "company/strong", auditor: "company/strong" }, "auditor", declared),
+    ).toEqual({
+      provider: "company",
+      model: "strong",
+    });
+    expect(resolveRoleModel({ default: "company/strong" }, "auditor", ["company/strong"])).toEqual({
+      provider: "company",
+      model: "strong",
+    });
+  });
+});

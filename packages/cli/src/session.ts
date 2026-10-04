@@ -32,6 +32,31 @@ export interface RunSession {
 /** Ports for model access that tests can replace (mock providers by alias). */
 export interface ModelPorts {
   readonly extraModels?: Readonly<Record<string, (model: string) => ResolvedModel["model"]>>;
+  /**
+   * Run-level model override (configuration layer 5): `qajitsu bench --model <ref> [--role <role>]`.
+   * Without a role the model takes every role except an unconfigured auditor, which keeps choosing
+   * another model (REQ-VER-06/AC3).
+   */
+  readonly modelOverride?: { readonly ref: string; readonly role?: string | undefined };
+}
+
+/**
+ * Applies a run-level model override to the loaded project.
+ *
+ * @param project - Loaded project.
+ * @param override - Model reference and optional role.
+ */
+export function withModelOverride(
+  project: LoadedProject,
+  override: ModelPorts["modelOverride"],
+): LoadedProject {
+  if (!override) return project;
+  const roles = { ...project.config.models.roles };
+  if (override.role !== undefined) roles[override.role] = override.ref;
+  else
+    for (const role of ["default", "analyst", "planner", "author", "healer", "summary"])
+      roles[role] = override.ref;
+  return { ...project, config: { ...project.config, models: { ...project.config.models, roles } } };
 }
 
 /**
@@ -54,7 +79,7 @@ export async function openSession(
       {},
     );
   }
-  const project = await loadProject(cwd);
+  const project = withModelOverride(await loadProject(cwd), ports.modelOverride);
   const root = resolveWorkspaceRoot({
     configured: project.config.workspace.root,
     home: ports.home,

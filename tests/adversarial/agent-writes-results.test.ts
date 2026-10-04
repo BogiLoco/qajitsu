@@ -49,6 +49,14 @@ describe("invariant 2: agents never write results or evidence (REQ-VER-03)", () 
       { tool: "write_file", input: { path: "../20261003-0900-aaaa/results/TC-01.json" } },
     ],
     ["calls an invented status tool", { tool: "mark_passed", input: { caseId: "TC-01" } }],
+    [
+      "clears the auditor's findings (REQ-VER-06)",
+      { tool: "write_file", input: { path: "checks/audit.json", content: '{"findings":[]}' } },
+    ],
+    [
+      "marks the canary as caught (REQ-VER-09)",
+      { tool: "move_file", input: { path: "specs/x.json", to: "Checks/canary.json" } },
+    ],
   ])("blocks an agent that %s and journals the attempt", (_label, call) => {
     const { guard, journal } = authorGuard();
     const decision = guard.check(call);

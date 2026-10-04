@@ -37,6 +37,8 @@ export const DEFAULT_PROTECTED_PATHS: readonly string[] = [
   // Plan versions are written by QAJitsu from validated planner output, never by agent tools.
   "plan/",
   "journal/",
+  // Auditor and canary records: written by the orchestrator, they can only downgrade (REQ-VER-06, REQ-VER-09).
+  "checks/",
   "run.json",
 ];
 

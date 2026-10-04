@@ -27,6 +27,9 @@ describe("evaluateToolCall (REQ-VER-03)", () => {
     "evidence/manifest.json",
     "plan/plan.approved.yaml",
     "journal/events.jsonl",
+    // REQ-VER-06, REQ-VER-09: auditor and canary records are written by code only.
+    "checks/audit.json",
+    "checks/canary.json",
     "run.json",
     "results",
   ])("denies writing protected path %s", (path) => {

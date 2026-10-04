@@ -202,6 +202,9 @@ describe("run evaluation (REQ-VER-02, REQ-VER-05, REQ-VER-07)", () => {
       "TC-04: PASSED without an executed verify()",
       "TC-04: PASSED without evidence for S1",
       "TC-04: PASSED without evidence for S2",
+      // REQ-LLM-05/AC2: every planned expectation needs its own verify().
+      "TC-04: PASSED without a verify() of S1 status",
+      "TC-04: PASSED without a verify() of S2 status",
     ]);
   });
 
@@ -275,6 +278,16 @@ describe("run evaluation (REQ-VER-02, REQ-VER-05, REQ-VER-07)", () => {
       attempts: [{ ...first, assertions: [ok("S1")] }],
     });
     expect(evaluateCases(plan, onlyS1, manifest, check)[0]?.status).toBe("NEEDS_REVIEW");
+    // REQ-LLM-05/AC2: a step verified only partly (a planned field left out) is never PASSED.
+    const partial = {
+      ...plan,
+      cases: plan.cases.map((c, i) =>
+        i === 0
+          ? { ...c, steps: c.steps.map((st) => ({ ...st, expect: { ...st.expect, fields: { total: 1 } } })) }
+          : c,
+      ),
+    };
+    expect(evaluateCases(partial, results, manifest, check)[0]?.status).toBe("NEEDS_REVIEW");
     const fake = [
       {
         caseId: "TC-01",
@@ -289,6 +302,7 @@ describe("run evaluation (REQ-VER-02, REQ-VER-05, REQ-VER-07)", () => {
     ];
     expect(gatePassedIsProven(plan, fake, onlyS1, manifest, check).problems).toEqual([
       "TC-01: PASSED without a verify() for S2",
+      "TC-01: PASSED without a verify() of S2 status",
     ]);
     const ghost = [{ ...fake[0]!, caseId: "TC-99" }];
     expect(gatePassedIsProven(plan, ghost, new Map(), manifest, check).problems).toEqual([

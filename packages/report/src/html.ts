@@ -40,6 +40,8 @@ export interface ReportInput {
     readonly stubs?: readonly string[] | undefined;
   };
   readonly repos: Readonly<Record<string, string>>;
+  /** Auditor and canary notes (REQ-VER-06, REQ-VER-09). */
+  readonly checks?: readonly string[] | undefined;
   readonly gates: readonly {
     readonly gate: string;
     readonly ok: boolean;
@@ -180,6 +182,7 @@ section{border-top:1px solid #d0d7de;margin-top:16px}img,video{max-width:100%}
 <h2>Summary</h2><p>${esc(input.summary).replace(/\n/g, "<br>")}</p>
 <h2>Matrix</h2><table><tr><th>TC</th><th>Title</th><th>Requirement</th><th>Type</th><th>Status</th><th>Steps OK</th><th>Evidence</th></tr>${matrix}</table>
 <h2>Publish gates</h2><ul>${gates}</ul>
+${input.checks && input.checks.length > 0 ? `<h2>Verification checks</h2><ul>${input.checks.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
 ${input.graphSvg ? `<h2>Transition graph</h2><div class="graph">${input.graphSvg}</div>` : ""}
 ${timeline ? `<h2>Timeline</h2><table class="timeline"><tr><th>Time</th><th>Stage</th><th>Actor</th><th>Event</th><th>Details</th></tr>${timeline}</table>` : ""}
 <h2>Cases</h2>${cases}

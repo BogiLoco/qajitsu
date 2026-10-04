@@ -29,3 +29,14 @@ describe("shipped .qa configuration files (REQ-GEN-01)", () => {
     expect(TicketKeySchema.parse(ticket.key)).toBe("DEMO-1");
   });
 });
+
+describe("benchmark stays out of PR CI (REQ-LLM-06/AC3)", () => {
+  it("REQ-LLM-06/AC3: no CI workflow runs qajitsu bench or pnpm bench", async () => {
+    const { readdir, readFile } = await import("node:fs/promises");
+    const dir = new URL("../../.github/workflows/", import.meta.url);
+    for (const f of await readdir(dir)) {
+      const text = await readFile(new URL(f, dir), "utf8");
+      expect(text, f).not.toMatch(/\b(pnpm|qajitsu|qj|bin\.js)\s+bench\b/);
+    }
+  });
+});

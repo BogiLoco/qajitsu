@@ -22,6 +22,7 @@ export * from "./context/fetch-context.js";
 export * from "./plan/schemas.js";
 export * from "./plan/plan-store.js";
 export * from "./results.js";
+export * from "./checks.js";
 export * from "./config/env-profile.js";
 export * from "./config/services.js";
 export * from "./env/templates.js";

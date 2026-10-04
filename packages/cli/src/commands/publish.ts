@@ -173,6 +173,13 @@ export async function runPublish(
     const { ws, events, project } = session;
     if (ws.record.data["results"] === undefined)
       throw new ConfigError("RUN_NOT_EXECUTED", "This run has no results yet; run 'qajitsu run' first.", {});
+    // Benchmark runs have seeded bugs on, an overridden model and an automatic approval: never published.
+    if (ws.record.data["bench"] !== undefined)
+      throw new ConfigError(
+        "BENCH_RUN_NOT_PUBLISHABLE",
+        `Run ${ws.runId} is a benchmark run and is never published.`,
+        {},
+      );
     const verdict = await computeVerdict(session, ports.now);
     await writeReports(session, verdict);
     if (!verdict.ok) {
