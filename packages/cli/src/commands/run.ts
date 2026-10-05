@@ -33,6 +33,7 @@ import { openSession, type ModelPorts, type RunSession } from "../session.js";
 import type { CommandIO } from "./fetch.js";
 import { anchorJournal, computeVerdict, writeReports } from "./verdict.js";
 import { auditRun, runCanary } from "./checks.js";
+import { runRunHook, type HookExec } from "./hooks.js";
 import { prepareMobile, type PreparedMobile } from "./mobile.js";
 import { exportRunTelemetry } from "./telemetry.js";
 import {
@@ -73,6 +74,8 @@ export interface RunPorts {
     off(event: "SIGINT" | "SIGTERM", listener: () => void): unknown;
   };
   readonly exit?: (code: number) => void;
+  /** Runs setup and teardown hooks (replaced in tests). */
+  readonly hookExec?: HookExec;
 }
 
 const RUNNER = { kind: "runner", name: "api" } as const;
@@ -238,6 +241,7 @@ export async function runRun(
       },
     });
 
+    let teardownDue = false;
     if (prepared.failure) {
       // REQ-ENV-04/AC3: the application did not start; every case is BLOCKED with the service logs.
       io.writeError(
@@ -273,21 +277,42 @@ export async function runRun(
           io.writeError(`Warning: ${message}\n`);
         }
       }
-      const pending = await executeCases(session, plan, env, io, ports, results, {
-        build: options.build === true,
-        onDevice: (stop) => deviceStops.push(stop),
-      });
-      if (pending.length > 0)
-        io.write(`Rejected spec files (not in the approved plan or misplaced): ${pending.join(", ")}\n`);
-      // REQ-VER-06: the independent auditor reviews what PASSED; it can only downgrade.
-      const audit = await auditRun(session, ports.now);
-      if (audit?.status === "failed")
-        io.writeError(`Auditor did not complete (${audit.mode}): ${audit.error}\n`);
+      // REQ-GEN-01/AC2: the project's setup hook prepares data; if it fails nothing can be tested.
+      const setup = await runRunHook(session, "setup", env, ports.hookExec);
+      if (!setup.ok) {
+        io.writeError(
+          `Setup hook ${setup.script ?? ""} failed; every case is BLOCKED. Log: ${setup.log ?? ""}\n`,
+        );
+        await blockAfterStartFailure(
+          session,
+          plan.cases.map((c) => c.id),
+          { message: `setup hook ${setup.script ?? ""} failed`, logs: setup.log ? [setup.log] : [] },
+          results,
+        );
+      } else {
+        const pending = await executeCases(session, plan, env, io, ports, results, {
+          build: options.build === true,
+          onDevice: (stop) => deviceStops.push(stop),
+        });
+        if (pending.length > 0)
+          io.write(`Rejected spec files (not in the approved plan or misplaced): ${pending.join(", ")}\n`);
+        // REQ-VER-06: the independent auditor reviews what PASSED; it can only downgrade.
+        const audit = await auditRun(session, ports.now);
+        if (audit?.status === "failed")
+          io.writeError(`Auditor did not complete (${audit.mode}): ${audit.error}\n`);
+      }
+      teardownDue = true;
     }
 
     // Statuses, gates and reports: computed by code only, from the files on disk (invariants 1, 6, 7).
     const verdict = await computeVerdict(session, ports.now);
     await writeReports(session, verdict);
+    // Teardown runs after the verdict and the reports exist, so it cannot influence them; a failure is a warning.
+    if (teardownDue) {
+      const teardown = await runRunHook(session, "teardown", env, ports.hookExec);
+      if (!teardown.ok)
+        io.writeError(`Warning: teardown hook ${teardown.script ?? ""} failed. Log: ${teardown.log ?? ""}\n`);
+    }
     const statuses = Object.fromEntries(verdict.cases.map((c) => [c.caseId, c.status]));
     // REQ-WS-03: cleanup policy; service logs land in logs/ before containers go.
     stopOnInterrupt = undefined;
@@ -324,8 +349,12 @@ export async function runRun(
     return !verdict.ok && code === 0 ? 2 : code;
   } catch (error) {
     const code = error instanceof QajitsuError ? ` [${error.code}]` : "";
+    const issues =
+      error instanceof QajitsuError && Array.isArray(error.context["issues"])
+        ? (error.context["issues"] as unknown[]).map((i) => `  - ${String(i)}\n`).join("")
+        : "";
     io.writeError(
-      masker.maskText(`Error${code}: ${error instanceof Error ? error.message : String(error)}\n`),
+      masker.maskText(`Error${code}: ${error instanceof Error ? error.message : String(error)}\n${issues}`),
     );
     await stopOnInterrupt?.().catch(() => undefined);
     return 3;
@@ -435,6 +464,7 @@ async function executeCases(
     login: () =>
       loginAccounts(env, {
         fetch: ports.fetch,
+        qaDir: project.qaDir,
         resolveSecret: (r) => session.resolveSecret(r),
         registerSecret: (v) => {
           masker.register(v);
@@ -445,7 +475,6 @@ async function executeCases(
     now: ports.now,
   };
   const evidence = createLocalEvidenceStore(ws.path("evidence"));
-  const isMobile = (id: string) => plan.cases.find((c) => c.id === id)?.type === "mobile";
   const ran = await runCases({
     ...base,
     plan: { ...plan, cases: plan.cases.filter((c) => !blocked.has(c.id) && c.type !== "mobile") },
@@ -494,7 +523,7 @@ async function executeCases(
   // REQ-VER-09: the canary re-runs one PASSED case with an inverted expectation; it must fail.
   if (project.config.verification.canary) await runCanary(session, plan, ran, specs, base);
   for (const [id, r] of ran) results.set(id, r);
-  // REQ-EXEC-06/AC3: mobile cases run one after another on one device, after the others.
+  // REQ-EXEC-06/AC3, REQ-EXEC-10/AC2: mobile cases run after the others, one at a time per device.
   const mobileCases = plan.cases.filter((c) => c.type === "mobile" && !blocked.has(c.id) && specs.has(c.id));
   if (mobileCases.length > 0) {
     const { codeHosts } = buildAdapters(
@@ -526,21 +555,32 @@ async function executeCases(
       // Ctrl+C during mobile cases still stops the emulator and the Appium server.
       run.onDevice(device.stop);
       try {
-        const mobileRan = await runCases({
-          ...base,
-          executor:
-            ports.mobileExecutor?.(device.factory) ?? createSandboxExecutor({ browser: device.factory }),
-          plan: { ...plan, cases: mobileCases },
-          specs: new Map([...specs].filter(([id]) => isMobile(id))),
-          evidence,
-          resultsDir: ws.path("results"),
-          retries: project.config.environments.retries,
-          workers: 1,
-        });
-        for (const [id, r] of mobileRan) {
-          results.set(id, r);
-          ran.set(id, r);
-        }
+        // REQ-EXEC-10/AC2: cases split round-robin among the devices; one case at a time per device.
+        const groups = device.factories.map((factory, d) => ({
+          factory,
+          cases: mobileCases.filter((_, i) => i % device.factories.length === d),
+        }));
+        const perDevice = await Promise.all(
+          groups
+            .filter((g) => g.cases.length > 0)
+            .map((g) =>
+              runCases({
+                ...base,
+                executor: ports.mobileExecutor?.(g.factory) ?? createSandboxExecutor({ browser: g.factory }),
+                plan: { ...plan, cases: g.cases },
+                specs: new Map([...specs].filter(([id]) => g.cases.some((c) => c.id === id))),
+                evidence,
+                resultsDir: ws.path("results"),
+                retries: project.config.environments.retries,
+                workers: 1,
+              }),
+            ),
+        );
+        for (const mobileRan of perDevice)
+          for (const [id, r] of mobileRan) {
+            results.set(id, r);
+            ran.set(id, r);
+          }
       } finally {
         await device.stop();
       }

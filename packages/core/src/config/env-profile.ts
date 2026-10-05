@@ -8,7 +8,7 @@ import type { ProjectConfig } from "./project-config.js";
 const SecretOrText = z.string().min(1);
 
 /** How the framework logs an account in (REQ-CFG-07/AC2); `{{username}}`/`{{password}}` are substituted. */
-const LoginSchema = z.strictObject({
+const HttpLoginSchema = z.strictObject({
   method: z.enum(["POST", "PUT"]).default("POST"),
   path: z.string().startsWith("/"),
   body: z.record(z.string(), z.unknown()),
@@ -17,6 +17,21 @@ const LoginSchema = z.strictObject({
   header: z.string().default("authorization"),
   scheme: z.string().default("Bearer"),
 });
+
+/**
+ * A login helper from `.qa/auth/` for logins a single request cannot do (SSO, cookies, several steps;
+ * REQ-GEN-01/AC2). The trusted parent runs it per alias with `BASE_URL`, `QAJITSU_ALIAS`,
+ * `QAJITSU_USERNAME` and `QAJITSU_PASSWORD`; it prints `{ "headers": {...}, "session"?: "..." }`.
+ */
+const ScriptLoginSchema = z.strictObject({
+  script: z
+    .string()
+    .regex(/^auth\/[\w.-]+(\/[\w.-]+)*$/, "Login scripts live in .qa/auth/")
+    .refine((p) => !p.split("/").includes(".."), "Login scripts live in .qa/auth/"),
+  timeout_s: z.number().int().min(1).max(300).default(30),
+});
+
+const LoginSchema = z.union([HttpLoginSchema, ScriptLoginSchema]);
 
 /** Schema of `.qa/envs/<profile>.yaml` (REQ-ENV-01). */
 export const EnvProfileSchema = z.strictObject({

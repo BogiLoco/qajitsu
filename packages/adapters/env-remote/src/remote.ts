@@ -1,3 +1,6 @@
+import { execFile } from "node:child_process";
+import { resolve, sep } from "node:path";
+import { z } from "zod";
 import { AdapterError, type ResolvedEnvironment } from "@qajitsu/core";
 
 const allowed = (env: ResolvedEnvironment, url: URL): void => {
@@ -108,6 +111,10 @@ export async function loginAccounts(
     readonly fetch: typeof globalThis.fetch;
     readonly resolveSecret: (reference: string) => Promise<string>;
     readonly registerSecret: (value: string) => void;
+    /** The project's `.qa/` folder; login scripts are resolved under `.qa/auth/`. */
+    readonly qaDir?: string;
+    /** Runs a login script (replaced in tests); default: `execFile` with an argument array. */
+    readonly runScript?: ScriptRunner;
   },
 ): Promise<{
   accounts: Record<string, Record<string, string>>;
@@ -130,6 +137,18 @@ export async function loginAccounts(
         "Accounts need a login definition in the environment profile.",
         { alias },
       );
+    if ("script" in login) {
+      const result = await scriptLogin(login, alias, username, password, env, deps);
+      for (const value of [...Object.values(result.headers), ...(result.session ? [result.session] : [])]) {
+        deps.registerSecret(value);
+        secrets.push(value);
+      }
+      accounts[alias] = Object.fromEntries(
+        Object.entries(result.headers).map(([name, value]) => [name.toLowerCase(), value]),
+      );
+      if (result.session !== undefined) sessions[alias] = result.session;
+      continue;
+    }
     let res: Response;
     try {
       res = await call(env, deps.fetch, login.path, {
@@ -161,4 +180,85 @@ export async function loginAccounts(
     sessions[alias] = token;
   }
   return { accounts, secrets, sessions };
+}
+
+/** Runs a login script: command, arguments, environment and timeout; resolves with its stdout. */
+export type ScriptRunner = (
+  command: string,
+  args: readonly string[],
+  options: {
+    readonly env: Readonly<Record<string, string>>;
+    readonly cwd: string;
+    readonly timeoutMs: number;
+  },
+) => Promise<string>;
+
+const runWithExecFile: ScriptRunner = (command, args, options) =>
+  new Promise((resolvePromise, reject) => {
+    execFile(
+      command,
+      [...args],
+      {
+        env: { PATH: process.env["PATH"] ?? "", ...options.env },
+        cwd: options.cwd,
+        timeout: options.timeoutMs,
+        maxBuffer: 1024 * 1024,
+      },
+      (error, stdout) => {
+        if (error) reject(new Error("login script failed"));
+        else resolvePromise(stdout);
+      },
+    );
+  });
+
+const ScriptOutputSchema = z.strictObject({
+  headers: z.record(z.string().regex(/^[A-Za-z0-9-]+$/), z.string().min(1)),
+  session: z.string().min(1).optional(),
+});
+
+/**
+ * Logs one alias in with a script from `.qa/auth/` (REQ-GEN-01/AC2). The script's output and errors are
+ * never repeated: they may hold the password or the session.
+ *
+ * @throws {AdapterError} `ENV_LOGIN_FAILED` naming the alias only.
+ */
+async function scriptLogin(
+  login: { readonly script: string; readonly timeout_s: number },
+  alias: string,
+  username: string,
+  password: string,
+  env: ResolvedEnvironment,
+  deps: { readonly qaDir?: string; readonly runScript?: ScriptRunner },
+): Promise<z.infer<typeof ScriptOutputSchema>> {
+  const failed = (why: string): AdapterError =>
+    new AdapterError("ENV_LOGIN_FAILED", `Login script of ${alias} ${why}.`, { alias, script: login.script });
+  if (deps.qaDir === undefined) throw failed("needs the project's .qa/ folder");
+  const authDir = resolve(deps.qaDir, "auth");
+  const file = resolve(deps.qaDir, login.script);
+  if (!file.startsWith(`${authDir}${sep}`)) throw failed("is outside .qa/auth/");
+  const [command, args] = /\.(mjs|cjs|js)$/.test(file) ? [process.execPath, [file]] : [file, []];
+  let stdout: string;
+  try {
+    stdout = await (deps.runScript ?? runWithExecFile)(command, args, {
+      cwd: deps.qaDir,
+      timeoutMs: login.timeout_s * 1000,
+      env: {
+        BASE_URL: env.baseUrl,
+        QAJITSU_ALIAS: alias,
+        QAJITSU_USERNAME: username,
+        QAJITSU_PASSWORD: password,
+      },
+    });
+  } catch {
+    throw failed("failed");
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stdout);
+  } catch {
+    throw failed("printed no JSON");
+  }
+  const result = ScriptOutputSchema.safeParse(parsed);
+  if (!result.success) throw failed("printed an invalid session (expected { headers, session? })");
+  return result.data;
 }

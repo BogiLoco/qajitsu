@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { RunIdSchema, TicketKeySchema, type PublishInput } from "@qajitsu/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { createFakeFetch, jsonReply, testDeps, type Route } from "../../../../tests/support/fake-fetch.js";
+import { publisherContract } from "../../../../tests/contract/publisher.contract.js";
+import { createFilePublisher } from "./file-publisher.js";
 import { createJiraPublisher } from "./jira-publisher.js";
 
 const BASE = "https://jira.example.com";
@@ -58,6 +60,23 @@ const routes = (extra: Route[] = []): Route[] => [
     reply: (r) => jsonReply((r.files ?? []).map((f, i) => ({ id: 500 + i, filename: f })))(r),
   },
 ];
+
+for (const flavor of ["cloud", "datacenter"] as const)
+  publisherContract(`jira ${flavor}`, () =>
+    createJiraPublisher(
+      flavor === "cloud"
+        ? {
+            flavor,
+            baseUrl: BASE,
+            email: "secret://env/JIRA_EMAIL",
+            token: "secret://env/JIRA_TOKEN",
+            maxAttachmentBytes: 1e9,
+          }
+        : { flavor, baseUrl: BASE, token: "secret://env/JIRA_TOKEN", maxAttachmentBytes: 1e9 },
+      testDeps(createFakeFetch(routes()).fetch, secrets),
+    ),
+  );
+publisherContract("file", () => createFilePublisher(join(tmpdir(), "qj-file-publisher-contract")));
 
 describe("Jira publisher (REQ-PUB-01..04)", () => {
   it("REQ-PUB-03/AC1 + REQ-PUB-02/AC1+AC3: Cloud posts an ADF comment and attachments, skipping oversized files", async () => {

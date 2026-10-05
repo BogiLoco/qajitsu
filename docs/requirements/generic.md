@@ -4,7 +4,7 @@ QAJitsu plugs into any project through configuration; differences between projec
 
 ### REQ-GEN-01 · Project onboarding through `.qa/`
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 1
 - Related: REQ-CFG-01, REQ-CTX-07
@@ -12,8 +12,8 @@ QAJitsu plugs into any project through configuration; differences between projec
 **Acceptance criteria**
 
 - [x] AC1: `.qa/qa.project.yaml` validated by a strict schema (unknown keys rejected) with clear error paths.
-- [ ] AC2: Folders: `envs/`, `auth/` (login helpers per alias), `hooks/` (seed, setup, teardown), `knowledge/`, `stubs/`.
-- [ ] AC3: No change to QAJitsu code is needed to onboard a project.
+- [x] AC2: Folders: `envs/`, `auth/` (login helpers per alias), `hooks/` (seed, setup, teardown), `knowledge/`, `stubs/`.
+- [x] AC3: No change to QAJitsu code is needed to onboard a project.
 
 ### REQ-GEN-02 · Adapter interfaces
 

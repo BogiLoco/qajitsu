@@ -3,6 +3,12 @@ import { ConfigError } from "../errors.js";
 import { MobileSchema } from "./mobile.js";
 import { BuildSchema, CleanupSchema, ServiceSchema } from "./services.js";
 
+/** A script in `.qa/hooks/`, relative to `.qa/`. */
+const HookPath = z
+  .string()
+  .regex(/^hooks\/[\w.-]+(\/[\w.-]+)*$/, "Hooks live in .qa/hooks/")
+  .refine((p) => !p.split("/").includes(".."), "Hooks live in .qa/hooks/");
+
 const SecretRef = z.string().regex(/^secret:\/\/[a-z0-9-]+\/.+$/, "Expected a secret:// reference");
 
 /** Alias used as a folder name (repos/<alias>, git cache/<host>): no dots, slashes or leading dashes. */
@@ -240,6 +246,17 @@ export const ProjectConfigSchema = z.strictObject({
       token_budget: z.number().int().positive().optional(),
     })
     .default({ providers: {}, roles: {} }),
+  /**
+   * Scripts from `.qa/hooks/` around every run (REQ-GEN-01/AC2): `setup` after the environment is healthy and
+   * before the cases (a failure makes every case BLOCKED), `teardown` after the cases (a failure is a warning).
+   */
+  hooks: z
+    .strictObject({
+      setup: HookPath.optional(),
+      teardown: HookPath.optional(),
+      timeout_s: z.number().int().min(1).max(1800).default(120),
+    })
+    .default({ timeout_s: 120 }),
   test_types: z
     .array(z.enum(["api", "web", "mobile"]))
     .min(1)

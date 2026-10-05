@@ -151,4 +151,63 @@ describe("provided environment (REQ-ENV-01, REQ-ENV-02, REQ-ENV-07, REQ-CFG-07)"
     expect(compareDeployedSha("def5678", ["abc1234ffff"])).toBe("mismatch");
     expect(compareDeployedSha(undefined, ["abc"])).toBe("unknown");
   });
+
+  describe("login script from .qa/auth/ (REQ-GEN-01/AC2)", () => {
+    const scriptProfile = (script: string) =>
+      `base_url: http://localhost:3000\naccounts:\n  user:standard: { username: standard, password: secret://env/DEMO_USER_PASSWORD }\nlogin: { script: ${script} }\n`;
+    const withScript = async (body: string, script = "auth/login.mjs") => {
+      const { qaDir, config } = await project(scriptProfile(script), {}, ["http://localhost:3000"]);
+      await mkdir(join(qaDir, "auth"));
+      await writeFile(join(qaDir, "auth", "login.mjs"), body);
+      return { qaDir, env: await resolveEnvironment({ config, qaDir }) };
+    };
+    const deps = (qaDir: string, registered: string[]) => ({
+      fetch,
+      qaDir,
+      resolveSecret: () => Promise.resolve(PASSWORD),
+      registerSecret: (v: string) => {
+        registered.push(v);
+      },
+    });
+
+    it("REQ-GEN-01/AC2 + REQ-CFG-07/AC2: the script logs the alias in and its headers become the session; values are masked", async () => {
+      const { qaDir, env } = await withScript(
+        `const { QAJITSU_ALIAS, QAJITSU_USERNAME, QAJITSU_PASSWORD, BASE_URL } = process.env;
+process.stdout.write(JSON.stringify({
+  headers: { cookie: "sid=" + QAJITSU_USERNAME + "-" + QAJITSU_PASSWORD.length },
+  session: "tok-" + QAJITSU_ALIAS + "@" + BASE_URL,
+}));`,
+      );
+      const registered: string[] = [];
+      const result = await loginAccounts(env, deps(qaDir, registered));
+      expect(result.accounts).toEqual({ "user:standard": { cookie: "sid=standard-23" } });
+      expect(result.sessions).toEqual({ "user:standard": "tok-user:standard@http://localhost:3000" });
+      expect(registered).toEqual(
+        expect.arrayContaining(["sid=standard-23", "tok-user:standard@http://localhost:3000"]),
+      );
+      expect(result.secrets).toEqual(expect.arrayContaining([PASSWORD, "sid=standard-23"]));
+    });
+
+    it("REQ-GEN-01/AC2: a failing or malformed script fails the login without its output or the password", async () => {
+      for (const body of [
+        `console.error("bad password ${PASSWORD}"); process.exit(1);`,
+        `process.stdout.write("not json ${PASSWORD}");`,
+        `process.stdout.write(JSON.stringify({ headers: { "bad header": "x" } }));`,
+      ]) {
+        const { qaDir, env } = await withScript(body);
+        const error = await loginAccounts(env, deps(qaDir, [])).catch((e: unknown) => e);
+        expect(error, body).toMatchObject({ code: "ENV_LOGIN_FAILED" });
+        expect(JSON.stringify(error) + String(error)).not.toContain(PASSWORD);
+      }
+    });
+
+    it("REQ-GEN-01/AC2: login scripts must live in .qa/auth/", async () => {
+      for (const script of ["../evil.mjs", "auth/../../evil.mjs", "/tmp/x.mjs", "hooks/login.mjs"]) {
+        const { qaDir, config } = await project(scriptProfile(script), {}, ["http://localhost:3000"]);
+        await expect(resolveEnvironment({ config, qaDir }), script).rejects.toMatchObject({
+          code: "ENV_PROFILE_INVALID",
+        });
+      }
+    });
+  });
 });

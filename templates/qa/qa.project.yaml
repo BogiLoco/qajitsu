@@ -85,6 +85,9 @@ test_types: [api, web]
 #     health: { http: /health, timeout_s: 180 }
 # build: { repo: backend, compose_file: docker-compose.yml, base_service: api, profile: local, seed: hooks/seed.mjs }
 #
+# Scripts from .qa/hooks/ around every run (REQ-GEN-01/AC2): setup before the cases, teardown after them
+# hooks: { setup: hooks/setup.mjs, teardown: hooks/teardown.mjs, timeout_s: 120 }
+#
 # Retention of runs and runtime resources (REQ-WS-03)
 # cleanup: { policy: on_success, keep_last: 10, max_age_days: 30 }
 #

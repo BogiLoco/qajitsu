@@ -40,6 +40,11 @@ export const MobileSchema = z.strictObject({
       home: z.string().min(1).optional(),
     })
     .default({}),
+  /**
+   * Devices used in parallel (REQ-EXEC-10/AC2): mobile cases are split among them and each device runs its
+   * cases one after another. Android starts one emulator per device; a device farm opens one session each.
+   */
+  devices: z.number().int().min(1).max(8).default(1),
   /** Screen recording per case (REQ-EVD-03/AC2). */
   recording: z.enum(["retain-on-failure", "always", "off"]).default("retain-on-failure"),
   action_timeout_ms: z.number().int().min(500).max(120_000).default(10_000),

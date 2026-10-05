@@ -124,7 +124,7 @@ The author agent writes test files for approved cases only. Exploring the app th
 
 ### REQ-EXEC-10 · Parallelism
 
-- Status: in-progress
+- Status: implemented
 - Priority: should
 - Stage: 5
 - Related: REQ-WS-04
@@ -132,7 +132,7 @@ The author agent writes test files for approved cases only. Exploring the app th
 **Acceptance criteria**
 
 - [x] AC1: API and web cases run in parallel with a configurable worker count.
-- [ ] AC2: Mobile cases run sequentially per device; several devices may run in parallel.
+- [x] AC2: Mobile cases run sequentially per device; several devices may run in parallel.
 
 ### REQ-EXEC-11 · Human-in-the-loop steps
 

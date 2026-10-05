@@ -11,7 +11,8 @@ import type { PublishResult, Publisher } from "@qajitsu/core";
 export function createFilePublisher(dir: string): Publisher {
   return {
     id: "file",
-    async publish(input): Promise<PublishResult> {
+    async publish(input, signal): Promise<PublishResult> {
+      signal?.throwIfAborted();
       await mkdir(dir, { recursive: true });
       const commentId = input.previous?.commentId ?? `local-${input.runId}`;
       await writeFile(

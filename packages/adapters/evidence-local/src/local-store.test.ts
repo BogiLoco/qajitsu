@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { evidenceStoreContract } from "../../../../tests/contract/evidence-store.contract.js";
 import { createLocalEvidenceStore, readManifest } from "./local-store.js";
 
 const dirs: string[] = [];
@@ -10,6 +11,19 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
 const bytes = (s: string) => new TextEncoder().encode(s);
+
+const storeDirs = new WeakMap<object, string>();
+evidenceStoreContract(
+  "local",
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), "qj-ev-contract-"));
+    dirs.push(dir);
+    const store = createLocalEvidenceStore(dir);
+    storeDirs.set(store, dir);
+    return store;
+  },
+  async (store, path) => new Uint8Array(await readFile(join(storeDirs.get(store) ?? "", path))),
+);
 
 describe("local evidence store (REQ-VER-05/AC1, invariant 7)", () => {
   it("REQ-VER-05/AC1: writes files and a manifest with SHA-256, size, case and step", async () => {

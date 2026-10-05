@@ -125,7 +125,12 @@ export async function resolveAppBinary(
 
 /** A device ready for mobile cases, or the reason they are BLOCKED. */
 export type PreparedMobile =
-  | { readonly ok: true; readonly factory: BrowserFactory; readonly stop: () => Promise<void> }
+  | {
+      readonly ok: true;
+      /** One factory per device; cases are split among them (REQ-EXEC-10/AC2). */
+      readonly factories: readonly BrowserFactory[];
+      readonly stop: () => Promise<void>;
+    }
   | { readonly ok: false; readonly reason: string };
 
 const freePort = (): Promise<number> =>
@@ -176,42 +181,63 @@ export async function prepareMobile(
       if (!/^https?:\/\/[\w.-]+(:\d+)?(\/[\w./-]*)?$/.test(launchUrl))
         return { ok: false, reason: "the environment URL cannot be passed to the app launch safely" };
       const app = await resolveAppBinary(session, android.app, codeHosts, project.config);
-      let emulator: RunningEmulator | undefined;
+      if (mobile.devices > 1 && !android.emulator)
+        return {
+          ok: false,
+          reason: "mobile.devices > 1 needs mobile.android.emulator (QAJitsu starts one emulator per device)",
+        };
+      // Started one after another: each emulator picks a console port the ones before it do not use.
+      const emulators: RunningEmulator[] = [];
       if (android.emulator) {
-        emulator = await startAndroidEmulator({
-          sdkRoot: androidSdkRoot(android.sdk_root),
-          avd: android.emulator.avd,
-          systemImage: android.emulator.system_image,
-          headless: android.emulator.headless,
-          bootTimeoutMs: android.emulator.boot_timeout_s * 1000,
-        });
-        stops.push(() => emulator?.stop() ?? Promise.resolve());
+        for (let i = 0; i < mobile.devices; i++) {
+          const emulator = await startAndroidEmulator({
+            sdkRoot: androidSdkRoot(android.sdk_root),
+            avd: android.emulator.avd,
+            systemImage: android.emulator.system_image,
+            headless: android.emulator.headless,
+            bootTimeoutMs: android.emulator.boot_timeout_s * 1000,
+            readOnly: mobile.devices > 1,
+          });
+          emulators.push(emulator);
+          stops.push(() => emulator.stop());
+        }
       }
       const appium = await appiumServer(mobile, project.qaDir, appiumHome, androidSdkRoot(android.sdk_root));
       if (appium.stop) stops.push(appium.stop);
-      const factory = createAppiumDeviceFactory({
-        platform: "android",
-        connect: (caps) => connectAppium(appium.url, caps),
-        capabilities: {
-          platformName: "Android",
-          "appium:automationName": "UiAutomator2",
-          "appium:app": app,
-          "appium:appPackage": android.app_id,
-          ...(android.activity ? { "appium:appActivity": android.activity } : {}),
-          ...(emulator ? { "appium:udid": emulator.serial } : {}),
-          ...(android.intent_args
-            ? {
-                "appium:optionalIntentArguments": android.intent_args.replaceAll("{{base_url}}", launchUrl),
-              }
-            : {}),
-          "appium:newCommandTimeout": 120,
-        },
-        recording: mobile.recording,
-        deepLinkScheme: android.deep_link_scheme,
-        appId: android.app_id,
-        actionTimeoutMs: mobile.action_timeout_ms,
-      });
-      return { ok: true, factory, stop };
+      const factories: BrowserFactory[] = [];
+      for (const emulator of emulators.length > 0 ? emulators : [undefined]) {
+        // Parallel UiAutomator2 sessions on one Appium server need their own system port.
+        const systemPort = mobile.devices > 1 ? await freePort() : undefined;
+        factories.push(
+          createAppiumDeviceFactory({
+            platform: "android",
+            connect: (caps) => connectAppium(appium.url, caps),
+            capabilities: {
+              platformName: "Android",
+              "appium:automationName": "UiAutomator2",
+              "appium:app": app,
+              "appium:appPackage": android.app_id,
+              ...(android.activity ? { "appium:appActivity": android.activity } : {}),
+              ...(emulator ? { "appium:udid": emulator.serial } : {}),
+              ...(systemPort === undefined ? {} : { "appium:systemPort": systemPort }),
+              ...(android.intent_args
+                ? {
+                    "appium:optionalIntentArguments": android.intent_args.replaceAll(
+                      "{{base_url}}",
+                      launchUrl,
+                    ),
+                  }
+                : {}),
+              "appium:newCommandTimeout": 120,
+            },
+            recording: mobile.recording,
+            deepLinkScheme: android.deep_link_scheme,
+            appId: android.app_id,
+            actionTimeoutMs: mobile.action_timeout_ms,
+          }),
+        );
+      }
+      return { ok: true, factories, stop };
     }
     const ios = mobile.ios;
     if (!ios) return { ok: false, reason: "mobile cases need mobile.android or mobile.ios" };
@@ -230,18 +256,20 @@ export async function prepareMobile(
       farm.provider === "browserstack"
         ? "https://hub-cloud.browserstack.com/wd/hub"
         : "https://ondemand.us-west-1.saucelabs.com/wd/hub";
-    const factory = createAppiumDeviceFactory({
-      platform: "ios",
-      connect: (caps) => connectAppium(hub, caps, { user, key }),
-      capabilities: farmCapabilities(farm, ios.bundle_id),
-      // The farm credentials are masked in device logs, page source and connection errors.
-      secrets: [user, key],
-      recording: mobile.recording,
-      deepLinkScheme: ios.deep_link_scheme,
-      appId: ios.bundle_id,
-      actionTimeoutMs: mobile.action_timeout_ms,
-    });
-    return { ok: true, factory, stop };
+    const factory = (): BrowserFactory =>
+      createAppiumDeviceFactory({
+        platform: "ios",
+        connect: (caps) => connectAppium(hub, caps, { user, key }),
+        capabilities: farmCapabilities(farm, ios.bundle_id),
+        // The farm credentials are masked in device logs, page source and connection errors.
+        secrets: [user, key],
+        recording: mobile.recording,
+        deepLinkScheme: ios.deep_link_scheme,
+        appId: ios.bundle_id,
+        actionTimeoutMs: mobile.action_timeout_ms,
+      });
+    // One farm session per device.
+    return { ok: true, factories: Array.from({ length: mobile.devices }, factory), stop };
   } catch (error) {
     await stop();
     return {

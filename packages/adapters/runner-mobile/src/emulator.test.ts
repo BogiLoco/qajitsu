@@ -64,6 +64,27 @@ describe("Android emulator (REQ-ENV-06/AC2)", () => {
     expect(child.signals).toEqual(["SIGTERM"]);
   });
 
+  it("REQ-EXEC-10/AC2: a second device of the same AVD starts read-only", async () => {
+    const spawned: string[][] = [];
+    const exec: Exec = (_cmd, args) =>
+      Promise.resolve(args[0] === "-list-avds" ? "qajitsu\n" : args.includes("getprop") ? "1\n" : "");
+    await startAndroidEmulator({
+      sdkRoot: "/sdk",
+      avd: "qajitsu",
+      systemImage: "system-images;android-34;google_apis;arm64-v8a",
+      headless: false,
+      bootTimeoutMs: 60_000,
+      readOnly: true,
+      exec,
+      spawn: (cmd, args) => {
+        spawned.push([cmd.split("/").at(-1) ?? "", ...args]);
+        return fakeChild();
+      },
+      sleep: () => Promise.resolve(),
+    });
+    expect(spawned[0]).toContain("-read-only");
+  });
+
   it("REQ-ENV-06/AC2: an emulator that never boots is stopped and reported", async () => {
     const child = fakeChild();
     const exec: Exec = (_c, args) =>

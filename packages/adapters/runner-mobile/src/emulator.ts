@@ -79,6 +79,8 @@ export interface EmulatorOptions {
   readonly systemImage: string;
   readonly headless: boolean;
   readonly bootTimeoutMs: number;
+  /** Start the AVD read-only, so several emulators of one AVD can run at once (REQ-EXEC-10/AC2). */
+  readonly readOnly?: boolean;
   readonly exec?: Exec;
   readonly spawn?: Spawn;
   readonly sleep?: (ms: number) => Promise<void>;
@@ -130,6 +132,7 @@ export async function startAndroidEmulator(options: EmulatorOptions): Promise<Ru
       "-no-boot-anim",
       "-no-audio",
       ...(options.headless ? ["-no-window"] : []),
+      ...(options.readOnly ? ["-read-only"] : []),
     ],
     env,
   );

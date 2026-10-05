@@ -71,11 +71,13 @@ const fakeApp = (backEmptiesCart: boolean): AppiumClient => {
 
 const device = (bug: boolean): PreparedMobile => ({
   ok: true,
-  factory: createAppiumDeviceFactory({
-    platform: "android",
-    connect: () => Promise.resolve(fakeApp(bug)),
-    capabilities: {},
-  }),
+  factories: [
+    createAppiumDeviceFactory({
+      platform: "android",
+      connect: () => Promise.resolve(fakeApp(bug)),
+      capabilities: {},
+    }),
+  ],
   stop: () => Promise.resolve(),
 });
 const inProcess =
@@ -165,17 +167,19 @@ describe("mobile cases in qj run (REQ-EXEC-06, REQ-EVD-03, REQ-ENV-06)", () => {
     let peak = 0;
     const counted: PreparedMobile = {
       ok: true,
-      factory: createAppiumDeviceFactory({
-        platform: "android",
-        connect: async () => {
-          active += 1;
-          peak = Math.max(peak, active);
-          await new Promise((r) => setTimeout(r, 50));
-          const app = fakeApp(false);
-          return { ...app, deleteSession: () => Promise.resolve((active -= 1)) };
-        },
-        capabilities: {},
-      }),
+      factories: [
+        createAppiumDeviceFactory({
+          platform: "android",
+          connect: async () => {
+            active += 1;
+            peak = Math.max(peak, active);
+            await new Promise((r) => setTimeout(r, 50));
+            const app = fakeApp(false);
+            return { ...app, deleteSession: () => Promise.resolve((active -= 1)) };
+          },
+          capabilities: {},
+        }),
+      ],
       stop: () => Promise.resolve(),
     };
     const p = await createBuildProject(apiService(), {
@@ -213,6 +217,73 @@ describe("mobile cases in qj run (REQ-EXEC-06, REQ-EVD-03, REQ-ENV-06)", () => {
     expect((await p.run(["run", "DEMO-6", "--build"])).exitCode).toBe(0);
     expect(await statuses(dir)).toEqual({ "TC-01": "PASSED", "TC-02": "PASSED" });
     expect(peak).toBe(1);
+  }, 120_000);
+
+  it("REQ-EXEC-10/AC2: with several devices the cases are split among them; each device runs one case at a time", async () => {
+    let total = 0;
+    let peakTotal = 0;
+    const perDevice: number[] = [0, 0];
+    const peakPerDevice: number[] = [0, 0];
+    const casesPerDevice: number[] = [0, 0];
+    const counting = (index: 0 | 1) =>
+      createAppiumDeviceFactory({
+        platform: "android",
+        connect: async () => {
+          total += 1;
+          const onDevice = (perDevice[index] ?? 0) + 1;
+          perDevice[index] = onDevice;
+          casesPerDevice[index] = (casesPerDevice[index] ?? 0) + 1;
+          peakTotal = Math.max(peakTotal, total);
+          peakPerDevice[index] = Math.max(peakPerDevice[index] ?? 0, onDevice);
+          await new Promise((r) => setTimeout(r, 100));
+          const app = fakeApp(false);
+          return {
+            ...app,
+            deleteSession: () => {
+              total -= 1;
+              perDevice[index] = (perDevice[index] ?? 0) - 1;
+              return Promise.resolve();
+            },
+          };
+        },
+        capabilities: {},
+      });
+    const two: PreparedMobile = {
+      ok: true,
+      factories: [counting(0), counting(1)],
+      stop: () => Promise.resolve(),
+    };
+    const p = await createBuildProject(apiService(), {
+      ports: { mobileDevice: () => Promise.resolve(two), mobileExecutor: inProcess },
+    });
+    cleanups.push(p.cleanup);
+    await copyFile(
+      new URL("../../../../examples/demo-shop/tickets/DEMO-6.json", import.meta.url),
+      join(p.project, "tickets", "DEMO-6.json"),
+    );
+    const draft = JSON.parse(await read("fixtures/plans/demo-6-draft.json")) as { cases: { id: string }[] };
+    const ids = ["TC-01", "TC-02", "TC-03", "TC-04"];
+    const fourCases = { ...draft, cases: ids.map((id) => ({ ...draft.cases[0], id })) };
+    const analysis = JSON.stringify({
+      summary: "Android cart.",
+      change_type: ["mobile"],
+      screens: [{ name: "Cart", source: [{ kind: "ac", id: "AC1" }] }],
+      confidence: "high",
+    });
+    await p.run(["fetch", "DEMO-6", "--ref", "shop=main"]);
+    await p.run(["plan", "DEMO-6"], [{ text: analysis }, { text: JSON.stringify(fourCases) }]);
+    await p.run(["approve", "DEMO-6"]);
+    const runId = (await readRunIndex(join(p.home, "runs"), "DEMO-6" as TicketKey)).latest ?? "";
+    const dir = join(p.home, "runs", "DEMO-6", runId);
+    const spec = await read("fixtures/specs/demo-6/TC-01.spec.ts");
+    for (const id of ids) await writeFile(join(dir, "specs", `${id}.spec.ts`), spec.replaceAll("TC-01", id));
+    const result = await p.run(["run", "DEMO-6", "--build"]);
+    expect(result.err).toBe("");
+    expect(result.exitCode).toBe(0);
+    expect(await statuses(dir)).toEqual(Object.fromEntries(ids.map((id) => [id, "PASSED"])));
+    expect(peakPerDevice).toEqual([1, 1]);
+    expect(peakTotal).toBe(2);
+    expect(casesPerDevice).toEqual([2, 2]);
   }, 120_000);
 
   it("REQ-ENV-06/AC3: an unavailable platform makes mobile cases BLOCKED with the reason", async () => {

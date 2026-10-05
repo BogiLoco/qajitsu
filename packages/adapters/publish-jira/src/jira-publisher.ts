@@ -65,6 +65,7 @@ export function createJiraPublisher(
   return {
     id: `jira-${config.flavor}`,
     async publish(input, signal): Promise<PublishResult> {
+      signal?.throwIfAborted();
       const key = TicketKeySchema.parse(input.ticket);
       const json = { "content-type": "application/json" };
       let commentId: string | undefined;

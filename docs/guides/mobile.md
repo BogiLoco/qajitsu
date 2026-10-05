@@ -32,6 +32,7 @@ APPIUM_HOME=$PWD/.appium node_modules/.bin/appium driver install uiautomator2@8.
 test_types: [api, web, mobile]
 mobile:
   recording: retain-on-failure # screen recording per case: always | retain-on-failure | off
+  devices: 1 # devices in parallel; cases are split among them, one case at a time per device
   appium: { bin: ../node_modules/.bin/appium, home: ../.appium } # or url: http://127.0.0.1:4723
   android:
     app: { source: ci, repo: app, artifact: app-debug, file: "*.apk" } # GitHub Actions / GitLab CI of the SHA
@@ -53,6 +54,11 @@ mobile:
         os_version: "17",
       }
 ```
+
+With `devices: N` (up to 8) QAJitsu starts N emulators of the AVD (read-only, so one AVD can run several times),
+gives each its own UiAutomator2 port on one Appium server and splits the mobile cases among them; each device runs
+its cases one after another (REQ-EXEC-10/AC2). A device farm opens N sessions. Without `emulator`, `devices` must
+be 1. Every emulator needs memory: two or three are realistic on a laptop.
 
 App binaries come from CI for exactly the analysed commit (REQ-ENV-06/AC1): the newest successful GitHub
 Actions run or GitLab pipeline of that SHA with the named artifact (GitLab: job name). Downloads go to the
