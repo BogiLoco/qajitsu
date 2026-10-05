@@ -87,6 +87,14 @@ test_types: [api, web]
 #     health: { http: /health, timeout_s: 180 }
 # build: { repo: backend, compose_file: docker-compose.yml, base_service: api, profile: local, seed: hooks/seed.mjs }
 #
+# Secret managers besides env (REQ-CFG-03/AC3); their own tokens come from secret://env/...
+# secrets:
+#   vault: { address: https://vault.example.com, mount: kv, token: secret://env/VAULT_TOKEN }   # secret://vault/ci/qajitsu#JIRA_TOKEN
+#   doppler: { project: shop, config: ci, token: secret://env/DOPPLER_TOKEN }                     # secret://doppler/JIRA_TOKEN
+#   op: {}                                                                                         # secret://op/QA/Jira/token
+#   aws: { region: eu-central-1 }                                                                  # secret://aws/shop/ci/jira#token
+#   gcp: { project: shop-qa }                                                                      # secret://gcp/jira-token
+#
 # Scripts from .qa/hooks/ around every run (REQ-GEN-01/AC2): setup before the cases, teardown after them
 # hooks: { setup: hooks/setup.mjs, teardown: hooks/teardown.mjs, timeout_s: 120 }
 #

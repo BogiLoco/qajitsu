@@ -52,6 +52,9 @@ catalogs:
       specifier: ^4.6.5
       version: 4.6.5
 
+overrides:
+  basic-ftp: ^6.2.2
+
 importers:
 
   .:
@@ -260,7 +263,25 @@ importers:
         specifier: workspace:*
         version: link:../../verifier
 
+  packages/adapters/secrets-cli:
+    dependencies:
+      '@qajitsu/core':
+        specifier: workspace:*
+        version: link:../../core
+
+  packages/adapters/secrets-doppler:
+    dependencies:
+      '@qajitsu/core':
+        specifier: workspace:*
+        version: link:../../core
+
   packages/adapters/secrets-env:
+    dependencies:
+      '@qajitsu/core':
+        specifier: workspace:*
+        version: link:../../core
+
+  packages/adapters/secrets-vault:
     dependencies:
       '@qajitsu/core':
         specifier: workspace:*
@@ -337,9 +358,18 @@ importers:
       '@qajitsu/adapter-runner-web':
         specifier: workspace:*
         version: link:../adapters/runner-web
+      '@qajitsu/adapter-secrets-cli':
+        specifier: workspace:*
+        version: link:../adapters/secrets-cli
+      '@qajitsu/adapter-secrets-doppler':
+        specifier: workspace:*
+        version: link:../adapters/secrets-doppler
       '@qajitsu/adapter-secrets-env':
         specifier: workspace:*
         version: link:../adapters/secrets-env
+      '@qajitsu/adapter-secrets-vault':
+        specifier: workspace:*
+        version: link:../adapters/secrets-vault
       '@qajitsu/adapter-ticket-jira':
         specifier: workspace:*
         version: link:../adapters/ticket-jira
@@ -1367,8 +1397,8 @@ packages:
     resolution: {integrity: sha512-NF+epuEdnUYVlGuhaxbbq+dvJttwLnGY+YixlXlME5KpQ5W3CnXA5cVTneY3SPbPDRkcjMbifrwmFYcClgOZeg==}
     engines: {node: '>= 0.8'}
 
-  basic-ftp@5.3.1:
-    resolution: {integrity: sha512-bopVNp6ugyA150DDuZfPFdt1KZ5a94ZDiwX4hMgZDzF+GttD80lEy8kj98kbyhLXnPvhtIo93mdnLIjpCAeeOw==}
+  basic-ftp@6.2.2:
+    resolution: {integrity: sha512-LIkJcf/F6bTTfvE3k2YcTxrJsLKKVXiEpHZYkQP6JoqTb7khng7c13ckRTDQbqRh5IkehVH3F00sSlAa2F6DwA==}
     engines: {node: '>=10.0.0'}
 
   bl@4.1.0:
@@ -4381,7 +4411,7 @@ snapshots:
     dependencies:
       safe-buffer: 5.1.2
 
-  basic-ftp@5.3.1: {}
+  basic-ftp@6.2.2: {}
 
   bl@4.1.0:
     dependencies:
@@ -5001,7 +5031,7 @@ snapshots:
 
   get-uri@6.0.5:
     dependencies:
-      basic-ftp: 5.3.1
+      basic-ftp: 6.2.2
       data-uri-to-buffer: 6.0.2
       debug: 4.4.3
     transitivePeerDependencies:

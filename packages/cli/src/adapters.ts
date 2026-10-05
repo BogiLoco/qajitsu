@@ -2,7 +2,15 @@ import { join } from "node:path";
 import { createGitHubCodeHost } from "@qajitsu/adapter-codehost-github";
 import { createGitLabCodeHost } from "@qajitsu/adapter-codehost-gitlab";
 import { createLocalCodeHost } from "@qajitsu/adapter-codehost-local";
+import {
+  createAwsSecretProvider,
+  createGcpSecretProvider,
+  createOnePasswordSecretProvider,
+  type SecretCliExec,
+} from "@qajitsu/adapter-secrets-cli";
+import { createDopplerSecretProvider } from "@qajitsu/adapter-secrets-doppler";
 import { createEnvSecretProvider } from "@qajitsu/adapter-secrets-env";
+import { createVaultSecretProvider } from "@qajitsu/adapter-secrets-vault";
 import { createFileTicketSource, createJiraCloudTicketSource } from "@qajitsu/adapter-ticket-jira";
 import {
   ConfigError,
@@ -24,6 +32,8 @@ export interface RuntimePorts {
   readonly random: () => number;
   readonly fetch: typeof globalThis.fetch;
   readonly gitExec: GitExec;
+  /** Runs the `op`, `aws` and `gcloud` CLIs of secret managers (replaced in tests). */
+  readonly secretCliExec?: SecretCliExec;
 }
 
 /** Adapters for one project. */
@@ -37,8 +47,51 @@ export interface ProjectAdapters {
  * `.env.local`; every resolved value is registered with the masker (REQ-CFG-03, invariant 8).
  */
 export function createCliSecretResolver(project: LoadedProject, ports: RuntimePorts, masker: Masker) {
+  const env = createEnvSecretProvider({ env: ports.env, envFile: join(project.projectDir, ".env.local") });
+  // Tokens of secret managers are bootstrap secrets from `env`; they are masked like every other value.
+  const bootstrap = (ref: string) => async (): Promise<string> => {
+    const value = await env.resolve(ref);
+    masker.register(value);
+    return value;
+  };
+  const { vault, doppler, op, aws, gcp } = project.config.secrets;
+  const cli = { env: ports.env, ...(ports.secretCliExec ? { exec: ports.secretCliExec } : {}) };
   return createSecretResolver(
-    [createEnvSecretProvider({ env: ports.env, envFile: join(project.projectDir, ".env.local") })],
+    [
+      env,
+      ...(vault
+        ? [
+            createVaultSecretProvider({
+              address: vault.address,
+              mount: vault.mount,
+              ...(vault.namespace ? { namespace: vault.namespace } : {}),
+              token: bootstrap(vault.token),
+              fetch: ports.fetch,
+            }),
+          ]
+        : []),
+      ...(doppler
+        ? [
+            createDopplerSecretProvider({
+              project: doppler.project,
+              config: doppler.config,
+              token: bootstrap(doppler.token),
+              fetch: ports.fetch,
+            }),
+          ]
+        : []),
+      ...(op ? [createOnePasswordSecretProvider(cli)] : []),
+      ...(aws
+        ? [
+            createAwsSecretProvider({
+              ...cli,
+              region: aws.region,
+              ...(aws.profile ? { profile: aws.profile } : {}),
+            }),
+          ]
+        : []),
+      ...(gcp ? [createGcpSecretProvider({ ...cli, project: gcp.project })] : []),
+    ],
     (value) => {
       masker.register(value);
     },

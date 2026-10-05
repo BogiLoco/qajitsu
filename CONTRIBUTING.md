@@ -5,7 +5,7 @@ test status is high. Everything else should be easy to contribute.
 
 ## Setup
 
-Node.js 22 LTS and pnpm 10 (`corepack enable`). Then `pnpm install && pnpm verify`. Details: [getting started](docs/guides/getting-started.md).
+Node.js 22 LTS and pnpm 10 (`corepack enable`). Then `pnpm install && pnpm verify` (the first run downloads Chromium for the web runner tests; `pnpm demo` shows the whole flow). Details: [getting started](docs/guides/getting-started.md).
 
 ## Workflow
 

@@ -1287,6 +1287,98 @@
       },
       "additionalProperties": false
     },
+    "secrets": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "vault": {
+          "type": "object",
+          "properties": {
+            "address": {
+              "type": "string",
+              "format": "uri"
+            },
+            "mount": {
+              "default": "secret",
+              "type": "string",
+              "pattern": "^[\\w-]+$"
+            },
+            "namespace": {
+              "type": "string",
+              "pattern": "^[\\w/-]+$"
+            },
+            "token": {
+              "type": "string",
+              "pattern": "^secret:\\/\\/env\\/[A-Za-z_][A-Za-z0-9_]*$"
+            }
+          },
+          "required": [
+            "address",
+            "token"
+          ],
+          "additionalProperties": false
+        },
+        "doppler": {
+          "type": "object",
+          "properties": {
+            "project": {
+              "type": "string",
+              "pattern": "^[\\w-]+$"
+            },
+            "config": {
+              "type": "string",
+              "pattern": "^[\\w-]+$"
+            },
+            "token": {
+              "type": "string",
+              "pattern": "^secret:\\/\\/env\\/[A-Za-z_][A-Za-z0-9_]*$"
+            }
+          },
+          "required": [
+            "project",
+            "config",
+            "token"
+          ],
+          "additionalProperties": false
+        },
+        "op": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "aws": {
+          "type": "object",
+          "properties": {
+            "region": {
+              "type": "string",
+              "pattern": "^[a-z]{2}(-[a-z]+)+-\\d$"
+            },
+            "profile": {
+              "type": "string",
+              "pattern": "^[\\w.-]+$"
+            }
+          },
+          "required": [
+            "region"
+          ],
+          "additionalProperties": false
+        },
+        "gcp": {
+          "type": "object",
+          "properties": {
+            "project": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{4,28}[a-z0-9]$"
+            }
+          },
+          "required": [
+            "project"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "mcp": {
       "default": {
         "servers": {}

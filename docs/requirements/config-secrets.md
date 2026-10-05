@@ -31,7 +31,7 @@ Five layers, each overriding the previous: framework defaults, project profile (
 
 ### REQ-CFG-03 · Secret providers
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 1
 - Related: REQ-GEN-02, INV-8
@@ -40,7 +40,7 @@ Five layers, each overriding the previous: framework defaults, project profile (
 
 - [x] AC1: References use `secret://<provider>/<path>`; plain-text secrets in config are rejected by the schema.
 - [x] AC2: Provider `env` (environment and `.env.local`) in stage 1.
-- [ ] AC3: Later providers: 1Password CLI, HashiCorp Vault, AWS/GCP Secret Manager, Doppler.
+- [x] AC3: Later providers: 1Password CLI, HashiCorp Vault, AWS/GCP Secret Manager, Doppler.
 
 ### REQ-CFG-04 · Validate configuration before start
 

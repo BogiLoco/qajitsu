@@ -135,7 +135,19 @@ qj doctor --models     # optional: one real call per configured model role
 ```
 
 Secrets are never written into `.qa/`: the configuration holds references like `secret://env/JIRA_TOKEN`, resolved
-from the environment or `.env.local` and masked everywhere (logs, evidence, reports, Jira).
+from the environment or `.env.local` and masked everywhere (logs, evidence, reports, Jira). Teams with a secret
+manager add it under `secrets:` in `qa.project.yaml` and reference values directly:
+
+| Provider              | Configuration (`secrets:`)                                               | Reference                               |
+| --------------------- | ------------------------------------------------------------------------ | --------------------------------------- |
+| HashiCorp Vault KV v2 | `vault: { address, mount, namespace?, token: secret://env/VAULT_TOKEN }` | `secret://vault/<path>#<field>`         |
+| Doppler               | `doppler: { project, config, token: secret://env/DOPPLER_TOKEN }`        | `secret://doppler/<NAME>`               |
+| 1Password (`op` CLI)  | `op: {}`                                                                 | `secret://op/<vault>/<item>/<field>`    |
+| AWS Secrets Manager   | `aws: { region, profile? }` (AWS CLI and its usual credentials)          | `secret://aws/<secret-id>[#<json-key>]` |
+| Google Secret Manager | `gcp: { project }` (`gcloud` and its login)                              | `secret://gcp/<name>[@<version>]`       |
+
+A secret manager's own token always comes from `secret://env/...`; CLIs run with argument arrays and only their own
+environment variables.
 
 ---
 
@@ -455,6 +467,15 @@ adversarial suite (`pnpm test:adversarial`) simulates lying agents, tampered fil
 
 `examples/demo-shop` is a fictional shop (API, web UI, Android app) with eight seeded bugs that can be switched on
 (`examples/demo-shop/BUGS.md`). With a bug on, the case that targets it must end FAILED.
+
+The quickest look, one command, offline (recorded agent answers, no API key, no Docker; needs port 3000):
+
+```sh
+pnpm demo                                  # fetch, plan, approve, run on the clean app (PASSED) and with BUG-01 (FAILED)
+pnpm demo -- --model ollama/qwen3:32b      # the same with a live model; --keep keeps the runs and their reports
+```
+
+Step by step with a live model:
 
 ```sh
 pnpm build

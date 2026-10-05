@@ -10,6 +10,10 @@ const HookPath = z
   .refine((p) => !p.split("/").includes(".."), "Hooks live in .qa/hooks/");
 
 const SecretRef = z.string().regex(/^secret:\/\/[a-z0-9-]+\/.+$/, "Expected a secret:// reference");
+/** A bootstrap secret of a secret manager: only the `env` provider can hold it (REQ-CFG-03/AC3). */
+const EnvSecretRef = z
+  .string()
+  .regex(/^secret:\/\/env\/[A-Za-z_][A-Za-z0-9_]*$/, "Secret manager tokens come from secret://env/<NAME>");
 
 /** Alias used as a folder name (repos/<alias>, git cache/<host>): no dots, slashes or leading dashes. */
 const Alias = z
@@ -257,6 +261,48 @@ export const ProjectConfigSchema = z.strictObject({
       timeout_s: z.number().int().min(1).max(1800).default(120),
     })
     .default({ timeout_s: 120 }),
+  /**
+   * Secret managers besides `env` (REQ-CFG-03/AC3). Their own tokens are bootstrap secrets and always come from the
+   * `env` provider. References: `secret://vault/<path>#<field>`, `secret://doppler/<NAME>`,
+   * `secret://op/<vault>/<item>/<field>`, `secret://aws/<secret-id>[#<json-key>]`, `secret://gcp/<name>[@<version>]`.
+   */
+  secrets: z
+    .strictObject({
+      vault: z
+        .strictObject({
+          address: z.url(),
+          mount: z
+            .string()
+            .regex(/^[\w-]+$/)
+            .default("secret"),
+          namespace: z
+            .string()
+            .regex(/^[\w/-]+$/)
+            .optional(),
+          token: EnvSecretRef,
+        })
+        .optional(),
+      doppler: z
+        .strictObject({
+          project: z.string().regex(/^[\w-]+$/),
+          config: z.string().regex(/^[\w-]+$/),
+          token: EnvSecretRef,
+        })
+        .optional(),
+      /** 1Password through the `op` CLI (service account or desktop app sign-in). */
+      op: z.strictObject({}).optional(),
+      aws: z
+        .strictObject({
+          region: z.string().regex(/^[a-z]{2}(-[a-z]+)+-\d$/),
+          profile: z
+            .string()
+            .regex(/^[\w.-]+$/)
+            .optional(),
+        })
+        .optional(),
+      gcp: z.strictObject({ project: z.string().regex(/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/) }).optional(),
+    })
+    .default({}),
   /**
    * MCP servers agents may use to explore the application (REQ-EXEC-01): started per stage without a shell, with a
    * minimal environment, outside the run workspace. Only the listed tools are offered, every call goes through the

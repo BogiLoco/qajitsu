@@ -23,12 +23,13 @@
     "test:hooks": "node --test \".claude/hooks/__tests__/*.test.mjs\"",
     "req:check": "node scripts/requirements.mjs check",
     "req:index": "node scripts/requirements.mjs index",
-    "verify": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test:coverage && pnpm test:hooks && pnpm req:check",
+    "verify": "node scripts/ensure-chromium.mjs && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test:coverage && pnpm test:hooks && pnpm req:check",
     "bench": "pnpm build && cd examples/demo-shop && node ../../packages/cli/dist/bin.js bench",
     "docs": "typedoc",
     "qajitsu": "node packages/cli/dist/bin.js",
     "changeset": "changeset",
-    "req:list": "node scripts/requirements.mjs list"
+    "req:list": "node scripts/requirements.mjs list",
+    "demo": "pnpm build && node scripts/demo.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.3",

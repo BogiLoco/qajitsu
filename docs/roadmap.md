@@ -21,7 +21,7 @@ Monorepo, tooling, core types, the guard and the status model; fetching a ticket
 - [REQ-CTX-02](requirements/context.md#req-ctx-02--github-and-gitlab-support) GitHub and GitLab support (must, implemented, AC 4/4)
 - [REQ-CTX-03](requirements/context.md#req-ctx-03--change-discovery-for-a-ticket) Change discovery for a ticket (must, implemented, AC 5/5)
 - [REQ-CTX-04](requirements/context.md#req-ctx-04--repositories-always-fetched-at-the-changes-version) Repositories always fetched at the change's version (must, implemented, AC 4/4)
-- [REQ-CFG-03](requirements/config-secrets.md#req-cfg-03--secret-providers) Secret providers (must, in-progress, AC 2/3)
+- [REQ-CFG-03](requirements/config-secrets.md#req-cfg-03--secret-providers) Secret providers (must, implemented, AC 3/3)
 - [REQ-WS-01](requirements/workspace.md#req-ws-01--folder-per-ticket-and-run-id) Folder per ticket and run id (must, implemented, AC 4/4)
 - [REQ-VER-01](requirements/verification.md#req-ver-01--status-model) Status model (must, implemented, AC 3/3)
 - [REQ-VER-03](requirements/verification.md#req-ver-03--write-bans-for-agents) Write bans for agents (must, implemented, AC 3/3)
@@ -33,8 +33,8 @@ Monorepo, tooling, core types, the guard and the status model; fetching a ticket
 - [REQ-NFR-01](requirements/non-functional.md#req-nfr-01--code-standards) Code standards (must, implemented, AC 3/3)
 - [REQ-NFR-02](requirements/non-functional.md#req-nfr-02--test-first-and-test-levels) Test-first and test levels (must, implemented, AC 4/4)
 - [REQ-NFR-03](requirements/non-functional.md#req-nfr-03--documentation) Documentation (must, implemented, AC 3/3)
-- [REQ-NFR-05](requirements/non-functional.md#req-nfr-05--security-baseline) Security baseline (must, in-progress, AC 3/4)
-- [REQ-NFR-06](requirements/non-functional.md#req-nfr-06--open-source-and-contributor-experience) Open source and contributor experience (must, in-progress, AC 1/3)
+- [REQ-NFR-05](requirements/non-functional.md#req-nfr-05--security-baseline) Security baseline (must, implemented, AC 4/4)
+- [REQ-NFR-06](requirements/non-functional.md#req-nfr-06--open-source-and-contributor-experience) Open source and contributor experience (must, implemented, AC 3/3)
 - [REQ-NFR-08](requirements/non-functional.md#req-nfr-08--ai-assisted-development-setup) AI-assisted development setup (should, implemented, AC 3/3)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
@@ -56,7 +56,7 @@ Analyst and planner agents on several model providers; plan review loop and free
 - [REQ-PLAN-04](requirements/plan.md#req-plan-04--human-review-loop) Human review loop (must, implemented, AC 3/3)
 - [REQ-PLAN-05](requirements/plan.md#req-plan-05--open-questions-instead-of-guessing) Open questions instead of guessing (must, implemented, AC 2/2)
 - [REQ-PLAN-06](requirements/plan.md#req-plan-06--plan-freeze) Plan freeze (must, implemented, AC 4/4)
-- [REQ-LLM-01](requirements/models.md#req-llm-01--multiple-providers) Multiple providers (must, in-progress, AC 4/5)
+- [REQ-LLM-01](requirements/models.md#req-llm-01--multiple-providers) Multiple providers (must, deferred, AC 4/5)
 - [REQ-LLM-02](requirements/models.md#req-llm-02--model-per-role) Model per role (must, implemented, AC 2/2)
 - [REQ-LLM-03](requirements/models.md#req-llm-03--capability-profiles) Capability profiles (must, implemented, AC 3/3)
 - [REQ-LLM-04](requirements/models.md#req-llm-04--structured-output-with-repair) Structured output with repair (must, implemented, AC 3/3)
@@ -104,7 +104,7 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 <!-- req-stage:4 -->
 - [REQ-VER-10](requirements/verification.md#req-ver-10--human-preview-before-publishing) Human preview before publishing (must, implemented, AC 2/2)
 - [REQ-PUB-01](requirements/publishing.md#req-pub-01--jira-comment) Jira comment (must, implemented, AC 4/4)
-- [REQ-PUB-02](requirements/publishing.md#req-pub-02--attachments) Attachments (must, in-progress, AC 2/3)
+- [REQ-PUB-02](requirements/publishing.md#req-pub-02--attachments) Attachments (must, deferred, AC 2/3)
 - [REQ-PUB-03](requirements/publishing.md#req-pub-03--jira-cloud-and-data-center) Jira Cloud and Data Center (should, implemented, AC 2/2)
 - [REQ-PUB-04](requirements/publishing.md#req-pub-04--idempotent-publishing) Idempotent publishing (must, implemented, AC 2/2)
 <!-- /req-stage -->
@@ -199,7 +199,7 @@ the evidence bundle as pipeline artifacts.
 
 <!-- prettier-ignore-start -->
 <!-- req-stage:10 -->
-- [REQ-PLAN-07](requirements/plan.md#req-plan-07--approval-channels) Approval channels (should, in-progress, AC 3/4)
+- [REQ-PLAN-07](requirements/plan.md#req-plan-07--approval-channels) Approval channels (should, deferred, AC 3/4)
 - [REQ-CI-01](requirements/ci-cd.md#req-ci-01--ready-made-integrations) Ready-made integrations (must, implemented, AC 3/3)
 - [REQ-CI-02](requirements/ci-cd.md#req-ci-02--triggers) Triggers (should, implemented, AC 3/3)
 - [REQ-CI-03](requirements/ci-cd.md#req-ci-03--plan-approval-inside-the-pipeline) Plan approval inside the pipeline (must, implemented, AC 4/4)
@@ -223,7 +223,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-VER-11](requirements/verification.md#req-ver-11--bug-fix-verification-fails-before-passes-after) Bug fix verification: fails before, passes after (should, proposed, AC 0/4)
 - [REQ-VER-12](requirements/verification.md#req-ver-12--failure-triage-hints) Failure triage hints (should, proposed, AC 0/4)
 - [REQ-EVD-07](requirements/evidence.md#req-evd-07--passive-observations-during-tests) Passive observations during tests (should, proposed, AC 0/5)
-- [REQ-PUB-05](requirements/publishing.md#req-pub-05--optional-integrations) Optional integrations (could, in-progress, AC 1/4)
+- [REQ-PUB-05](requirements/publishing.md#req-pub-05--optional-integrations) Optional integrations (could, deferred, AC 1/4)
 - [REQ-PUB-07](requirements/publishing.md#req-pub-07--bug-reports-from-failed-cases) Bug reports from failed cases (should, proposed, AC 0/5)
 - [REQ-PUB-08](requirements/publishing.md#req-pub-08--promote-ticket-cases-to-the-regression-suite) Promote ticket cases to the regression suite (should, proposed, AC 0/4)
 - [REQ-PUB-09](requirements/publishing.md#req-pub-09--release-readiness-report) Release readiness report (could, proposed, AC 0/4)

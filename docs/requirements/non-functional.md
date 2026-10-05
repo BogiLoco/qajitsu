@@ -56,7 +56,7 @@ Quality bars for the codebase and the project itself.
 
 ### REQ-NFR-05 · Security baseline
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 1
 - Related: INV-8, INV-10, REQ-CFG-06
@@ -66,11 +66,11 @@ Quality bars for the codebase and the project itself.
 - [x] AC1: No secrets in the repository; Claude Code hooks block writing credential-like content and reading `.env` files.
 - [x] AC2: Ticket, PR and web content is treated as untrusted data in prompts.
 - [x] AC3: Shell execution only with argument arrays; validated identifiers in paths and commands.
-- [ ] AC4: Dependency review in CI.
+- [x] AC4: Dependency review in CI.
 
 ### REQ-NFR-06 · Open source and contributor experience
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 1
 - Related: REQ-NFR-03
@@ -78,8 +78,8 @@ Quality bars for the codebase and the project itself.
 **Acceptance criteria**
 
 - [x] AC1: Apache-2.0 licence, CONTRIBUTING, SECURITY and code of conduct.
-- [ ] AC2: A new contributor gets `pnpm install && pnpm verify` green in under five minutes.
-- [ ] AC3: Demo of the full flow on demo-shop runnable with one command (stage 3).
+- [x] AC2: A new contributor gets `pnpm install && pnpm verify` green in under five minutes.
+- [x] AC3: Demo of the full flow on demo-shop runnable with one command (stage 3).
 
 ### REQ-NFR-07 · Platforms
 

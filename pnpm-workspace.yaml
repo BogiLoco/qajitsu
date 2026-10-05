@@ -18,3 +18,16 @@ catalog:
   vitest: ^5.0.3
   yaml: ^2.9.1
   zod: ^4.6.5
+
+# Security fixes for transitive dependencies (REQ-NFR-05/AC4). Review when the parent packages update.
+overrides:
+  # GHSA-c475-qrg2-pj4r, via webdriverio > @puppeteer/browsers > proxy-agent > get-uri; only ftp:// PAC files use it.
+  basic-ftp: ^6.2.2
+
+auditConfig:
+  ignoreGhsas:
+    # extract-zip has no fixed release. It is reached only through webdriverio > @puppeteer/browsers when WebdriverIO
+    # starts a local driver and downloads a browser; QAJitsu always connects to an Appium server by host and port
+    # (packages/adapters/runner-mobile/src/connect.ts, checked by a test), so that code never runs.
+    - GHSA-jmr9-qjv8-65gv
+    - GHSA-7pqw-9j4j-h8q3

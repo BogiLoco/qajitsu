@@ -30,6 +30,9 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # REQ-NFR-05/AC4: known high vulnerabilities in the installed tree fail the build (exceptions with reasons in
+      # pnpm-workspace.yaml).
+      - run: pnpm audit --audit-level high
       # The web runner's unit tests drive a real Chromium.
       - run: pnpm --filter @qajitsu/cli exec playwright-core install --with-deps chromium
       - run: pnpm verify
@@ -68,9 +71,33 @@ jobs:
       # Builds the packages, then runs every seeded bug (FAILED) and every clean ticket (PASSED). REQ-NFR-02/AC3, REQ-NFR-04/AC1.
       - run: pnpm test:e2e
 
-  dependency-review:
-    if: github.event_name == 'pull_request'
+  # REQ-NFR-06/AC2: a new contributor gets `pnpm install && pnpm verify` green in under five minutes: no caches, a
+  # fresh runner, the commands from CONTRIBUTING.md. Only the Linux system libraries for Chromium are installed first.
+  contributor-setup:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+      - run: npx --yes playwright-core@1.63.0 install-deps chromium
+      - name: pnpm install && pnpm verify (five-minute budget)
+        timeout-minutes: 5
+        run: pnpm install && pnpm verify
+
+  # REQ-NFR-05/AC4: dependencies a pull request adds or changes are reviewed for vulnerabilities and licences
+  # incompatible with Apache-2.0 distribution.
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
       - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          deny-licenses: AGPL-1.0, AGPL-3.0, GPL-2.0, GPL-3.0, SSPL-1.0
+          comment-summary-in-pr: on-failure
