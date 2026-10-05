@@ -18,10 +18,12 @@ How results and evidence reach Jira and the people who need them.
 
 ### REQ-PUB-02 · Attachments
 
-- Status: in-progress
+- Status: deferred
 - Priority: must
 - Stage: 4
 - Related: REQ-EVD-06
+
+Deferred: AC3 (object storage for oversized attachments) is parked; oversized files are skipped and reported.
 
 **Acceptance criteria**
 
@@ -55,10 +57,12 @@ How results and evidence reach Jira and the people who need them.
 
 ### REQ-PUB-05 · Optional integrations
 
-- Status: in-progress
+- Status: deferred
 - Priority: could
 - Stage: later
 - Related: REQ-CI-04
+
+Deferred: AC1-AC3 (Xray/Zephyr import, draft bug tickets, ticket transitions) are parked; AC4 is done. Bug drafts continue in REQ-PUB-07.
 
 **Acceptance criteria**
 

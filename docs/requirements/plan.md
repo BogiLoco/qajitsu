@@ -94,10 +94,12 @@ Approval freezes the plan; only approved cases can execute.
 
 ### REQ-PLAN-07 · Approval channels
 
-- Status: in-progress
+- Status: deferred
 - Priority: should
 - Stage: 10
 - Related: REQ-CI-03
+
+Deferred: AC3 (approval by Jira comment and a small web UI) is parked; terminal and CI approval work.
 
 Besides the terminal, plans can be approved where the team already works.
 

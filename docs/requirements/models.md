@@ -4,10 +4,12 @@ QAJitsu works with any capable model: cloud APIs, company gateways and local mod
 
 ### REQ-LLM-01 · Multiple providers
 
-- Status: in-progress
+- Status: deferred
 - Priority: must
 - Stage: 2
 - Related: ADR-0003, INV-11
+
+Deferred: AC4 (a verified run with a cloud provider) is parked until a cloud key is available; Ollama and the other providers work and stay tested.
 
 **Acceptance criteria**
 
