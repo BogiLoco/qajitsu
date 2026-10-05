@@ -461,6 +461,12 @@ async function executeCases(
         headless: project.config.web.headless,
         actionTimeoutMs: project.config.web.action_timeout_ms,
         webSession: env.profile.web_session,
+        // REQ-EVD-07/AC5: each passive check can be switched off.
+        observations: {
+          console: project.config.observations.console,
+          httpErrors: project.config.observations.http_errors,
+          accessibility: project.config.observations.accessibility,
+        },
       }),
     });
   // The contract is read from the worktree, i.e. from exactly the analysed version of the code.

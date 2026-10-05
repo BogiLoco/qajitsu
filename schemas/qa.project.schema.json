@@ -1287,6 +1287,38 @@
       },
       "additionalProperties": false
     },
+    "observations": {
+      "default": {
+        "console": true,
+        "http_errors": true,
+        "accessibility": true,
+        "ignore": []
+      },
+      "type": "object",
+      "properties": {
+        "console": {
+          "default": true,
+          "type": "boolean"
+        },
+        "http_errors": {
+          "default": true,
+          "type": "boolean"
+        },
+        "accessibility": {
+          "default": true,
+          "type": "boolean"
+        },
+        "ignore": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "secrets": {
       "default": {},
       "type": "object",

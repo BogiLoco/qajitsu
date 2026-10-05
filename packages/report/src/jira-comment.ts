@@ -1,3 +1,4 @@
+import type { RunObservation } from "@qajitsu/core";
 import { countStatuses, summaryLine, type MatrixRow } from "./matrix.js";
 
 /** One failed assertion shown in the comment (REQ-PUB-01/AC3). */
@@ -39,7 +40,22 @@ export interface CommentModel {
   /** Attachment names and notes about files that were not uploaded. */
   readonly attachments: readonly string[];
   readonly notes: readonly string[];
+  /** Passive observations, computed by code, never statuses (REQ-EVD-07/AC4). */
+  readonly observations?: readonly RunObservation[] | undefined;
 }
+
+/** Observations shown in a comment; the rest are in the report. */
+const MAX_COMMENT_OBSERVATIONS = 15;
+const observationLines = (m: CommentModel): string[] => {
+  const all = m.observations ?? [];
+  return [
+    ...all.slice(0, MAX_COMMENT_OBSERVATIONS).map((o) => `${o.caseId} ${o.kind}: ${o.text}`),
+    ...(all.length > MAX_COMMENT_OBSERVATIONS
+      ? [`… and ${String(all.length - MAX_COMMENT_OBSERVATIONS)} more in report.html`]
+      : []),
+  ];
+};
+const OBSERVATIONS_TITLE = "Observations (found by code, not test results)";
 
 const show = (v: unknown): string =>
   typeof v === "string" ? JSON.stringify(v) : JSON.stringify(v) || "undefined";
@@ -129,6 +145,11 @@ export function renderJiraAdf(m: CommentModel): { version: 1; type: "doc"; conte
       ),
     );
   }
+  const observed = observationLines(m);
+  if (observed.length > 0) {
+    content.push(heading(4, OBSERVATIONS_TITLE));
+    content.push(bullets(observed.map((o) => [text(o)])));
+  }
   content.push(heading(4, "Reproduce locally"));
   content.push({ type: "codeBlock", attrs: { language: "shell" }, content: [text(m.reproduce)] });
   if (m.attachments.length > 0 || m.notes.length > 0) {
@@ -179,6 +200,9 @@ export function renderJiraWiki(m: CommentModel): string {
       );
     }
   }
+  const observed = observationLines(m);
+  if (observed.length > 0)
+    lines.push("", `h4. ${OBSERVATIONS_TITLE}`, ...observed.map((o) => `* ${wikiEscape(o)}`));
   lines.push("", "h4. Reproduce locally", `{code:shell}${m.reproduce}{code}`);
   if (m.attachments.length > 0) lines.push(`Attachments: ${m.attachments.map(wikiEscape).join(", ")}`);
   for (const n of m.notes) lines.push(`_${wikiEscape(n)}_`);
@@ -200,6 +224,8 @@ export function renderCommentPreview(m: CommentModel): string {
         `  ${f.caseId} ${f.stepId} ${f.field}: expected ${show(f.expected)}, actual ${show(f.actual)}`,
       );
   }
+  const observed = observationLines(m);
+  if (observed.length > 0) lines.push("", `${OBSERVATIONS_TITLE}:`, ...observed.map((o) => `  ${o}`));
   lines.push(
     "",
     `Reproduce: ${m.reproduce}`,

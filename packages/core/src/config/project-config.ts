@@ -262,6 +262,19 @@ export const ProjectConfigSchema = z.strictObject({
     })
     .default({ timeout_s: 120 }),
   /**
+   * Passive observations while planned cases run (REQ-EVD-07): computed by code, listed in the report and the Jira
+   * comment, never a status. `ignore` drops observations whose text contains one of the strings (a rule id, a URL
+   * part, a console message).
+   */
+  observations: z
+    .strictObject({
+      console: z.boolean().default(true),
+      http_errors: z.boolean().default(true),
+      accessibility: z.boolean().default(true),
+      ignore: z.array(z.string().min(1)).default([]),
+    })
+    .default({ console: true, http_errors: true, accessibility: true, ignore: [] }),
+  /**
    * Secret managers besides `env` (REQ-CFG-03/AC3). Their own tokens are bootstrap secrets and always come from the
    * `env` provider. References: `secret://vault/<path>#<field>`, `secret://doppler/<NAME>`,
    * `secret://op/<vault>/<item>/<field>`, `secret://aws/<secret-id>[#<json-key>]`, `secret://gcp/<name>[@<version>]`.

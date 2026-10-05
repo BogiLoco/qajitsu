@@ -10,7 +10,9 @@ import {
   sha256,
   checkJournal,
   journalAnchor,
+  OBSERVATIONS_FILE,
   type CaseResultFile,
+  type RunObservation,
   type EvidenceEntry,
   type Plan,
   type PlanApproval,
@@ -21,6 +23,7 @@ import {
   type GraphCase,
   type TransitionGraph,
   chooseSummary,
+  collectObservations,
   renderMatrixCsv,
   renderMatrixMarkdown,
   renderMatrixXlsx,
@@ -72,6 +75,8 @@ export interface RunVerdict {
   readonly checks: readonly string[];
   /** JUnit XML for pipelines (REQ-CI-04/AC2), masked. */
   readonly junit: string;
+  /** Passive observations (REQ-EVD-07), masked; never part of a status or a count. */
+  readonly observations: readonly RunObservation[];
 }
 
 /**
@@ -292,6 +297,21 @@ export async function computeVerdict(
         })),
     }));
   }
+  // REQ-EVD-07: observations from the last attempt of every case, computed by code, filtered by the config.
+  const observations = collectObservations(
+    [...results.values()].map((r) => {
+      const last = r.attempts.at(-1);
+      const file = manifest.find(
+        (m) => last?.evidence.includes(m.path) === true && m.path.endsWith(`/${OBSERVATIONS_FILE}`),
+      );
+      return {
+        caseId: r.caseId,
+        assertions: last?.assertions ?? [],
+        observationsFile: file ? evidenceText.get(file.path) : undefined,
+      };
+    }),
+    session.project.config.observations.ignore,
+  ).map((o) => ({ ...o, text: masker.maskText(o.text) }));
   const matrixMd = renderMatrixMarkdown(rows);
   const csv = renderMatrixCsv(rows);
   const html = (g: readonly GateResult[]): string =>
@@ -310,6 +330,7 @@ export async function computeVerdict(
       timeline,
       graphSvg: graph.edges.length > 0 ? renderGraphSvg(graph) : undefined,
       checks: checkNotes,
+      observations,
     });
   const secretGate = gateNoSecrets(
     [
@@ -368,6 +389,7 @@ export async function computeVerdict(
     ok: verdict.ok,
     failed: verdict.failed,
     checks: checkNotes,
+    observations,
     junit: masker.maskText(
       renderJUnit(
         { ticket: ws.ticket, runId: ws.runId },

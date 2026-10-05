@@ -52,7 +52,7 @@ describe("OpenAPI contract (REQ-EXEC-04/AC2)", () => {
     );
   });
 
-  it("violations fail the attempt; passing checks never count as verify()", () => {
+  it("REQ-EXEC-04/AC2 + REQ-EVD-07/AC1: every recorded call is validated, also one without verify(); violations fail the attempt; passing checks never count as verify()", () => {
     const evidence = (body: unknown) => [
       {
         stepId: "S1",

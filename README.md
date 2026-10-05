@@ -415,6 +415,9 @@ test_types: [api, web]
   hook, variables from templates and secrets, cleanup policy. The compose file of the change is checked before it
   starts (no privileged containers, host mounts or public ports). [docs/cli/build-and-runs.md](docs/cli/build-and-runs.md)
 - **OpenAPI contract validation** of every response against the document in the analysed commit.
+- **Passive observations.** While web cases run, QAJitsu records browser console errors, 4xx/5xx responses and
+  axe-core accessibility violations of every visited page. They appear in `report.html` and the Jira comment in
+  their own section and never change a status or a count; switch checks off or ignore entries under `observations:`.
 - **Your existing tests repository.** A repo with `role: tests` is checked out on every fetch. The planner sees its
   test titles and lists in `existing_coverage` what is already covered (each claim checked by code against the real
   file and title); the author gets its selector strategy, page-object selectors and README/CONTRIBUTING conventions.

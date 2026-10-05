@@ -1,5 +1,6 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import type { AttemptInput, BrowserFactory, BrowserSession } from "@qajitsu/adapter-runner-api";
 import {
@@ -10,6 +11,7 @@ import {
   type UiDriver,
   type UiProperty,
 } from "@qajitsu/steps";
+import { OBSERVATIONS_FILE, type PassiveObservations } from "@qajitsu/core";
 import {
   chromium,
   firefox,
@@ -33,6 +35,32 @@ export interface WebRunnerOptions {
   /** Timeout of one UI action (click, fill, wait). */
   readonly actionTimeoutMs?: number;
   readonly viewport?: { readonly width: number; readonly height: number };
+  /** Passive observations (REQ-EVD-07); all on by default. They never change a status. */
+  readonly observations?: {
+    readonly console?: boolean;
+    readonly httpErrors?: boolean;
+    readonly accessibility?: boolean;
+  };
+}
+
+let axeSource: Promise<string> | undefined;
+/** axe-core's browser bundle, read once from the installed package. */
+const loadAxe = (): Promise<string> => {
+  axeSource ??= readFile(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
+  return axeSource;
+};
+
+/** Runs axe-core in the page (CDP evaluation, not affected by the page's CSP) and returns WCAG A/AA violations. */
+async function axeViolations(
+  page: Page,
+): Promise<{ rule: string; impact?: string; help: string; targets: string[] }[]> {
+  await page.evaluate(await loadAxe());
+  const found = await page.evaluate<{ rule: string; impact?: string; help: string; targets: string[] }[]>(
+    `axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] }, resultTypes: ["violations"] })
+      .then((r) => r.violations.map((v) => ({ rule: v.id, impact: v.impact || undefined, help: v.help,
+        targets: v.nodes.slice(0, 5).map((n) => [].concat(n.target).join(" ")) })))`,
+  );
+  return found;
 }
 
 /**
@@ -105,6 +133,8 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
   const timeout = options.actionTimeoutMs ?? 5_000;
   return (input: AttemptInput): BrowserSession => {
     const masker = createMasker({ secrets: input.secrets });
+    const observed: PassiveObservations = { console: [], http: [], accessibility: [] };
+    const audits: Promise<void>[] = [];
     let started:
       { browser: Browser; context: BrowserContext; page: Page; dir: string; console: string[] } | undefined;
 
@@ -145,6 +175,52 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
       const console: string[] = [];
       page.on("console", (m) => console.push(`[${m.type()}] ${m.text()}`));
       page.on("pageerror", (e) => console.push(`[pageerror] ${e.message}`));
+      // REQ-EVD-07: passive observations, recorded by the parent and masked; they never become assertions.
+      const want = options.observations ?? {};
+      const pathOf = (url: string): string => {
+        try {
+          const u = new URL(url);
+          return u.origin === new URL(input.baseUrl).origin
+            ? `${u.pathname}${u.search}`
+            : `${u.origin}${u.pathname}`;
+        } catch {
+          return url;
+        }
+      };
+      if (want.console !== false) {
+        page.on("console", (m) => {
+          if (m.type() === "error")
+            observed.console.push({ level: "error", text: m.text().slice(0, 2000), url: pathOf(page.url()) });
+        });
+        page.on("pageerror", (e) =>
+          observed.console.push({
+            level: "pageerror",
+            text: e.message.slice(0, 2000),
+            url: pathOf(page.url()),
+          }),
+        );
+      }
+      if (want.httpErrors !== false)
+        page.on("response", (r) => {
+          if (r.status() >= 400)
+            observed.http.push({ method: r.request().method(), url: pathOf(r.url()), status: r.status() });
+        });
+      if (want.accessibility !== false) {
+        const audited = new Set<string>();
+        page.on("load", () => {
+          const where = pathOf(page.url());
+          if (audited.has(where) || where.startsWith("about:")) return;
+          audited.add(where);
+          audits.push(
+            axeViolations(page).then(
+              (found) => {
+                for (const v of found) observed.accessibility.push({ ...v, url: where });
+              },
+              () => undefined,
+            ),
+          );
+        });
+      }
       started = { browser, context, page, dir, console };
       const p = page;
       return {
@@ -213,6 +289,8 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
         if (!started) return [];
         const { browser, context, page, dir, console } = started;
         const items: EvidenceItem[] = [];
+        // Audits of the last pages finish before the browser closes.
+        await Promise.all(audits);
         const keepTrace = failed;
         if (keepTrace) await context.tracing.stop({ path: join(dir, "trace.zip") });
         else await context.tracing.stop();
@@ -250,6 +328,13 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
             name: "console.log",
             content: masker.maskText(`${console.join("\n")}\n`),
           });
+          if (observed.console.length + observed.http.length + observed.accessibility.length > 0)
+            items.push({
+              stepId: "case",
+              kind: "log",
+              name: OBSERVATIONS_FILE,
+              content: masker.maskText(`${JSON.stringify(observed, null, 2)}\n`),
+            });
         } finally {
           await rm(dir, { recursive: true, force: true });
         }

@@ -222,7 +222,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-EXEC-15](requirements/execution.md#req-exec-15--exploratory-sessions) Exploratory sessions (could, implemented, AC 6/6)
 - [REQ-VER-11](requirements/verification.md#req-ver-11--bug-fix-verification-fails-before-passes-after) Bug fix verification: fails before, passes after (should, proposed, AC 0/4)
 - [REQ-VER-12](requirements/verification.md#req-ver-12--failure-triage-hints) Failure triage hints (should, proposed, AC 0/4)
-- [REQ-EVD-07](requirements/evidence.md#req-evd-07--passive-observations-during-tests) Passive observations during tests (should, proposed, AC 0/5)
+- [REQ-EVD-07](requirements/evidence.md#req-evd-07--passive-observations-during-tests) Passive observations during tests (should, implemented, AC 5/5)
 - [REQ-PUB-05](requirements/publishing.md#req-pub-05--optional-integrations) Optional integrations (could, deferred, AC 1/4)
 - [REQ-PUB-07](requirements/publishing.md#req-pub-07--bug-reports-from-failed-cases) Bug reports from failed cases (should, proposed, AC 0/5)
 - [REQ-PUB-08](requirements/publishing.md#req-pub-08--promote-ticket-cases-to-the-regression-suite) Promote ticket cases to the regression suite (should, proposed, AC 0/4)

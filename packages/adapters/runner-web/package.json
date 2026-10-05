@@ -20,6 +20,7 @@
   "dependencies": {
     "@qajitsu/adapter-runner-api": "workspace:*",
     "@qajitsu/steps": "workspace:*",
+    "axe-core": "catalog:",
     "playwright-core": "^1.63.0"
   },
   "devDependencies": {

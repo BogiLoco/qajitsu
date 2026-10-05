@@ -87,6 +87,9 @@ test_types: [api, web]
 #     health: { http: /health, timeout_s: 180 }
 # build: { repo: backend, compose_file: docker-compose.yml, base_service: api, profile: local, seed: hooks/seed.mjs }
 #
+# Passive observations while planned cases run (REQ-EVD-07): listed in the report and the Jira comment, never statuses.
+# observations: { console: true, http_errors: true, accessibility: true, ignore: [favicon.ico, color-contrast] }
+#
 # Secret managers besides env (REQ-CFG-03/AC3); their own tokens come from secret://env/...
 # secrets:
 #   vault: { address: https://vault.example.com, mount: kv, token: secret://env/VAULT_TOKEN }   # secret://vault/ci/qajitsu#JIRA_TOKEN

@@ -64,7 +64,13 @@ export const inProcessWebExecutor: AttemptExecutor = async (input) => {
  * A demo-shop project with a running demo-shop, ready for `fetch → plan → approve → run` through the
  * CLI program (no network beyond localhost, scripted models). Call `cleanup` in afterEach.
  */
-export async function createDemoPipeline(options: { flag?: string; ticket?: string } = {}) {
+export async function createDemoPipeline(
+  options: {
+    flag?: string;
+    ticket?: string;
+    wrapExecutor?: (executor: AttemptExecutor) => AttemptExecutor;
+  } = {},
+) {
   const ticket = options.ticket ?? "DEMO-1";
   const web = ticket === "DEMO-4" || ticket === "DEMO-5";
   const shop = await startShop({
@@ -121,7 +127,9 @@ export async function createDemoPipeline(options: { flag?: string; ticket?: stri
         fetch: opts.fetch ?? globalThis.fetch,
         gitExec,
         extraModels: { mock: () => model.mock },
-        executor: web ? inProcessWebExecutor : inProcessExecutor,
+        executor: (options.wrapExecutor ?? ((e: AttemptExecutor) => e))(
+          web ? inProcessWebExecutor : inProcessExecutor,
+        ),
       },
     })
       .exitOverride()

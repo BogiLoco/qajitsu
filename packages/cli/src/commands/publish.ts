@@ -127,6 +127,7 @@ function commentModel(
     reproduce: `qajitsu evidence ${ws.ticket} --run ${ws.runId} --failed`,
     attachments: attachments.map((a) => a.name),
     notes,
+    observations: v.observations,
   };
 }
 

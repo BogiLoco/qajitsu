@@ -1,4 +1,4 @@
-import type { AssertionRecord, Plan, TestStatus } from "@qajitsu/core";
+import type { AssertionRecord, Plan, RunObservation, TestStatus } from "@qajitsu/core";
 import { countStatuses, type MatrixRow } from "./matrix.js";
 
 /** One evidence file shown in the report, referenced by hash (REQ-VER-05/AC2). */
@@ -42,6 +42,8 @@ export interface ReportInput {
   readonly repos: Readonly<Record<string, string>>;
   /** Auditor and canary notes (REQ-VER-06, REQ-VER-09). */
   readonly checks?: readonly string[] | undefined;
+  /** Passive observations, computed by code, never statuses (REQ-EVD-07/AC4). */
+  readonly observations?: readonly RunObservation[] | undefined;
   readonly gates: readonly {
     readonly gate: string;
     readonly ok: boolean;
@@ -180,6 +182,13 @@ section{border-top:1px solid #d0d7de;margin-top:16px}img,video{max-width:100%}
 <p class="muted">Run ${esc(input.runId)} · ${esc(input.generatedAt)} · environment ${esc(input.environment.name)} (${esc(input.environment.baseUrl)})${input.environment.deployedSha ? ` · deployed <code>${esc(input.environment.deployedSha)}</code>` : ""}${input.environment.stubs?.length ? ` · <strong>stubbed (not real):</strong> ${esc(input.environment.stubs.join(", "))}` : ""}<br>Code: ${repos || "–"} · plan sha256 <code>${esc(input.planSha256.slice(0, 16))}…</code></p>
 <div class="tiles">${tiles}</div>
 <h2>Summary</h2><p>${esc(input.summary).replace(/\n/g, "<br>")}</p>
+${
+  input.observations && input.observations.length > 0
+    ? `<h2>Observations (${String(input.observations.length)}, not test results)</h2>
+<p class="muted">Found by code while the planned steps ran: contract mismatches, console errors, 4xx/5xx responses and accessibility violations. They do not change any status or count.</p>
+<table><tr><th>TC</th><th>Kind</th><th>Observation</th></tr>${input.observations.map((o) => `<tr><td>${esc(o.caseId)}</td><td>${esc(o.kind)}</td><td>${esc(o.text)}</td></tr>`).join("")}</table>`
+    : ""
+}
 <h2>Matrix</h2><table><tr><th>TC</th><th>Title</th><th>Requirement</th><th>Type</th><th>Status</th><th>Steps OK</th><th>Evidence</th></tr>${matrix}</table>
 <h2>Publish gates</h2><ul>${gates}</ul>
 ${input.checks && input.checks.length > 0 ? `<h2>Verification checks</h2><ul>${input.checks.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
