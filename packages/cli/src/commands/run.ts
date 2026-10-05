@@ -104,7 +104,13 @@ async function writeBlocked(
   }
 }
 
-async function chooseEnvironment(
+/**
+ * The environment of a command: `--env`, else `environments.default`; interactive sessions are asked when neither
+ * is set (REQ-ENV-07).
+ *
+ * @throws {ConfigError} `ENV_NOT_SELECTED` and the allowlist and production errors of `resolveEnvironment`.
+ */
+export async function chooseEnvironment(
   session: RunSession,
   io: CommandIO,
   env: string | undefined,

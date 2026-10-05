@@ -30,6 +30,9 @@ describe("evaluateToolCall (REQ-VER-03)", () => {
     // REQ-VER-06, REQ-VER-09: auditor and canary records are written by code only.
     "checks/audit.json",
     "checks/canary.json",
+    // REQ-EXEC-15/AC2: exploratory sessions are recorded by the trusted parent only.
+    "explore/S01/session.json",
+    "explore/S01/evidence/A01.png",
     "run.json",
     "results",
   ])("denies writing protected path %s", (path) => {

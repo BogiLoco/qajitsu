@@ -39,6 +39,8 @@ export const DEFAULT_PROTECTED_PATHS: readonly string[] = [
   "journal/",
   // Auditor and canary records: written by the orchestrator, they can only downgrade (REQ-VER-06, REQ-VER-09).
   "checks/",
+  // Exploratory sessions: actions, observations and recordings are written by the trusted parent (REQ-EXEC-15/AC2).
+  "explore/",
   "run.json",
 ];
 

@@ -46,6 +46,7 @@ describe("doctor --models (REQ-LLM-03/AC2)", () => {
       "author",
       "healer",
       "auditor",
+      "explorer",
       "summary",
     ]);
   });

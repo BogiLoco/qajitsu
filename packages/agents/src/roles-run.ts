@@ -135,6 +135,7 @@ export function sourceContext(context: ChangeContext): SourceContext {
     diffs: Object.fromEntries(context.repos.map((r) => [r.alias, indexDiff(r.diff)])),
     comments: Object.fromEntries(context.repos.map((r) => [r.alias, r.comments])),
     tests: Object.fromEntries(context.testsRepos.map((t) => [t.alias, t.index.tests])),
+    observations: Object.fromEntries(context.explorations.map((e) => [e.session, e.observations])),
   };
 }
 

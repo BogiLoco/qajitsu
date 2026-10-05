@@ -13,6 +13,7 @@ import { runRun, type RunPorts } from "./commands/run.js";
 import { runTest } from "./commands/test-flow.js";
 import { runClean, runGc, runResume, runRuns } from "./commands/runs.js";
 import { runEnvCheck, runEnvRender, runEnvUp } from "./commands/env.js";
+import { runExplore, runExplorePromote } from "./commands/explore.js";
 import { runBench } from "./commands/bench.js";
 import { runAuditVerify } from "./commands/audit.js";
 import { runTelemetryExport } from "./commands/telemetry.js";
@@ -270,6 +271,37 @@ export function createProgram(version: string, io: ProgramIO): Command {
         withPorts((ports) =>
           runTest(ticket, options, commandIO, ports, { review, compressVideo: io.compressVideo }),
         )(),
+    );
+
+  const explore = program
+    .command("explore")
+    .description(
+      "Exploratory session: an agent explores the app towards a goal; observations and a review report, no statuses",
+    )
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--goal <text>", 'what to explore, e.g. "checkout around the terms change"')
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .option(
+      "--env <profile|url>",
+      "environment profile from .qa/envs or a URL (default: environments.default)",
+    )
+    .option("--time-box <minutes>", "stop after this many minutes (default 10)")
+    .option("--max-steps <n>", "stop after this many browser actions (default 40)")
+    .action(
+      (
+        ticket: string,
+        options: { goal: string; run?: string; env?: string; timeBox?: string; maxSteps?: string },
+      ) => withPorts((ports) => runExplore(ticket, options, commandIO, ports))(),
+    );
+  explore
+    .command("promote")
+    .description("Turn an observation into a draft case in a new plan version (runs only after approval)")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .requiredOption("--session <id>", "exploratory session, e.g. S01")
+    .requiredOption("--observation <id>", "observation, e.g. O1")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .action((ticket: string, options: { session: string; observation: string; run?: string }) =>
+      withPorts((ports) => runExplorePromote(ticket, options, commandIO, ports))(),
     );
 
   const env = program.command("env").description("Check, render or start the environment");

@@ -26,7 +26,9 @@ const commands = (): { path: string; options: string[] }[] => {
     for (const sub of c.commands) {
       const here = [...path, sub.name()];
       if (sub.commands.length > 0) walk(sub, here);
-      else out.push({ path: here.join(" "), options: sub.options.map((o) => o.long ?? "").filter(Boolean) });
+      // A command with its own arguments is documented too, also when it has subcommands (`explore`).
+      if (sub.commands.length === 0 || sub.registeredArguments.length > 0)
+        out.push({ path: here.join(" "), options: sub.options.map((o) => o.long ?? "").filter(Boolean) });
     }
   };
   walk(program, []);

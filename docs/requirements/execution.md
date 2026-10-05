@@ -198,18 +198,19 @@ person, not from the runner.
 
 ### REQ-EXEC-15 · Exploratory sessions
 
-- Status: proposed
+- Status: implemented
 - Priority: could
 - Stage: later
-- Related: INV-1, INV-2, INV-10, REQ-EXEC-01, REQ-VER-04, REQ-OBS-07
+- Related: INV-1, INV-2, INV-7, INV-10, REQ-EXEC-01, REQ-VER-04, REQ-OBS-07, ADR-0004
 
 An agent receives a session goal ("check the cart around the change"), explores the application and records the
 session. It reports observations for a human to assess, never statuses.
 
 **Acceptance criteria**
 
-- [ ] AC1: `qj explore <TICKET> --goal "<text>" --time-box <minutes>` runs a session on an allowlisted environment.
-- [ ] AC2: Every action is journaled and the session is recorded (video, screenshots, network); evidence is written by the trusted parent, not the agent.
-- [ ] AC3: Output is a list of observations with steps to reproduce and evidence references; the session produces no test statuses.
-- [ ] AC4: A person can turn an observation into a draft plan case; it runs only after plan approval.
-- [ ] AC5: The time box and step budget are enforced by code; when reached the session stops and keeps what it recorded.
+- [x] AC1: `qj explore <TICKET> --goal "<text>" --time-box <minutes>` runs a session on an allowlisted environment.
+- [x] AC2: Every action is journaled and the session is recorded (video, screenshots, network); evidence is written by the trusted parent, not the agent.
+- [x] AC3: Output is a list of observations with steps to reproduce and evidence references; the session produces no test statuses.
+- [x] AC4: A person can turn an observation into a draft plan case; it runs only after plan approval.
+- [x] AC5: The time box and step budget are enforced by code; when reached the session stops and keeps what it recorded.
+- [x] AC6: Each session ends with a report for human review (`report.md`, `report.html`): goal, how it ended, the observations with the screenshots of their steps, the action timeline, and the video, trace, network and console files; observations are proposals for a person, never statuses.

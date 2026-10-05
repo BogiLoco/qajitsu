@@ -39,6 +39,8 @@ export interface SourceContext {
   readonly diffs: Readonly<Record<string, DiffIndex>>;
   /** Review comments per repository alias. */
   readonly comments: Readonly<Record<string, readonly ReviewComment[]>>;
+  /** Observation ids per exploratory session of the run (REQ-EXEC-15/AC4). */
+  readonly observations?: Readonly<Record<string, readonly string[]>>;
   /** Tests per tests-repository alias, from the code index of its worktree (REQ-CTX-06). */
   readonly tests?: Readonly<
     Record<string, readonly { readonly file: string; readonly titles: readonly string[] }[]>
@@ -110,6 +112,10 @@ export function checkSource(source: SourceRef, context: SourceContext): string |
       return source.index < (context.comments[source.repo]?.length ?? 0)
         ? undefined
         : `review comment #${String(source.index)} does not exist in ${source.repo}`;
+    case "observation":
+      return context.observations?.[source.session]?.includes(source.id) === true
+        ? undefined
+        : `observation ${source.id} does not exist in exploratory session ${source.session}`;
   }
 }
 

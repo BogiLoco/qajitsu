@@ -55,7 +55,7 @@ export function withModelOverride(
   const roles = { ...project.config.models.roles };
   if (override.role !== undefined) roles[override.role] = override.ref;
   else
-    for (const role of ["default", "analyst", "planner", "author", "healer", "summary"])
+    for (const role of ["default", "analyst", "planner", "author", "healer", "explorer", "summary"])
       roles[role] = override.ref;
   return { ...project, config: { ...project.config, models: { ...project.config.models, roles } } };
 }

@@ -140,6 +140,29 @@
                     "index"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "observation"
+                    },
+                    "session": {
+                      "type": "string",
+                      "pattern": "^S\\d{2,3}$"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^O\\d{1,3}$"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "session",
+                    "id"
+                  ],
+                  "additionalProperties": false
                 }
               ]
             }

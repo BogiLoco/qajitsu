@@ -2,7 +2,7 @@ import type { ModelCapabilities } from "@qajitsu/core";
 
 /** Definition of one agent role: what it does, which tools it gets and what its model must support. */
 export interface AgentRoleDefinition {
-  readonly role: "analyst" | "planner" | "author" | "healer" | "auditor";
+  readonly role: "analyst" | "planner" | "author" | "healer" | "auditor" | "explorer";
   readonly purpose: string;
   /** Tool names allowed for this role; everything else is denied by the guard (REQ-VER-03). */
   readonly tools: readonly string[];
@@ -50,6 +50,24 @@ export const AGENT_ROLES: readonly AgentRoleDefinition[] = [
     tools: ["read_file", "list_files", "view_image"],
     requires: { tools: true, structuredOutput: true, vision: true, contextWindow: 128_000 },
     requirements: ["REQ-VER-06"],
+  },
+  {
+    role: "explorer",
+    purpose:
+      "Explore the application towards a session goal through browser actions the trusted parent performs and records; report observations, never statuses.",
+    tools: [
+      "explore_look",
+      "explore_goto",
+      "explore_click",
+      "explore_fill",
+      "explore_select",
+      "explore_press",
+      "explore_back",
+      "explore_login_as",
+      "record_observation",
+    ],
+    requires: { tools: true, structuredOutput: true, contextWindow: 64_000 },
+    requirements: ["REQ-EXEC-15"],
   },
 ];
 

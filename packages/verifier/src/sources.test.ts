@@ -157,3 +157,16 @@ describe("existing coverage claims (REQ-CTX-06/AC2)", () => {
     ]);
   });
 });
+
+describe("observations as sources (REQ-EXEC-15/AC4)", () => {
+  it("REQ-EXEC-15/AC4: a case may cite an observation of an exploratory session of the run, and only one that exists", () => {
+    const withSessions: SourceContext = { ...context, observations: { S01: ["O1", "O2"] } };
+    expect(checkSource({ kind: "observation", session: "S01", id: "O2" }, withSessions)).toBeUndefined();
+    expect(checkSource({ kind: "observation", session: "S01", id: "O9" }, withSessions)).toBe(
+      "observation O9 does not exist in exploratory session S01",
+    );
+    expect(checkSource({ kind: "observation", session: "S02", id: "O1" }, context)).toBe(
+      "observation O1 does not exist in exploratory session S02",
+    );
+  });
+});

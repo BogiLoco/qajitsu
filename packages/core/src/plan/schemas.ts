@@ -23,6 +23,12 @@ export const SourceRefSchema = z.discriminatedUnion("kind", [
     repo: z.string().min(1),
     index: z.number().int().nonnegative(),
   }),
+  /** An observation of an exploratory session of this run (REQ-EXEC-15/AC4). */
+  z.strictObject({
+    kind: z.literal("observation"),
+    session: z.string().regex(/^S\d{2,3}$/),
+    id: z.string().regex(/^O\d{1,3}$/),
+  }),
 ]);
 
 /** A grounded source reference. */

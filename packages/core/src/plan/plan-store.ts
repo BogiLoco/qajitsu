@@ -91,6 +91,8 @@ const formatSource = (s: SourceRef): string => {
       return `${s.repo}:${s.file}${s.lines ? `#L${s.lines}` : ""}`;
     case "comment":
       return `${s.repo} review comment #${String(s.index)}`;
+    case "observation":
+      return `exploratory session ${s.session} ${s.id}`;
   }
 };
 

@@ -107,6 +107,34 @@ Publishes the results comment and attachments to the ticket after a confirmed pr
 
 Exit codes: `0` published, `2` preview declined, `3` refused by the gates or failed.
 
+## Exploratory testing
+
+### `qajitsu explore <ticket>`
+
+An exploratory session (REQ-EXEC-15): the explorer agent explores the application towards a goal through browser
+actions that QAJitsu performs and records (a screenshot after each action, video, trace, network and console, all in
+the evidence manifest). It reports observations with steps to reproduce for a person to assess, never statuses, and
+writes `explore/<session>/report.html` and `report.md` for review. Needs a fetched run (`qajitsu fetch`).
+
+- `--goal <text>`: what to explore (required), e.g. "checkout around the terms change"
+- `--run <id>`: run id (default: latest run of the ticket)
+- `--env <profile|url>`: environment profile from `.qa/envs` or a URL (default: `environments.default`)
+- `--time-box <minutes>`: stop after this many minutes (default 10), enforced by code
+- `--max-steps <n>`: stop after this many browser actions (default 40), enforced by code
+
+Exit codes: `0` the session ran (whatever it observed), `2` the environment is not healthy, `3` errors.
+
+### `qajitsu explore promote <ticket>`
+
+Turns an observation into a draft web case in a new plan version, with the observation as its source and the recorded
+actions as steps. It runs only after the plan is approved.
+
+- `--session <id>`: exploratory session, e.g. `S01` (required)
+- `--observation <id>`: observation, e.g. `O1` (required)
+- `--run <id>`: run id (default: latest run of the ticket)
+
+Exit codes: `0` plan version written, `3` unknown session or observation, approved plan, or other errors.
+
 ## Results and evidence
 
 ### `qajitsu evidence <ticket>`

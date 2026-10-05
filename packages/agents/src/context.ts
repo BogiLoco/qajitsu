@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   ConfigError,
+  ExploreSessionSchema,
   readTicketSnapshot,
   type ChangeRef,
   type ReviewComment,
@@ -103,6 +104,8 @@ export interface ChangeContext {
   readonly knowledge: readonly { readonly name: string; readonly text: string }[];
   /** Tests repositories of the run with their code index (REQ-CTX-06); not part of the change. */
   readonly testsRepos: readonly { readonly alias: string; readonly index: TestsRepoIndex }[];
+  /** Observation ids of the run's exploratory sessions; plan cases may cite them (REQ-EXEC-15/AC4). */
+  readonly explorations: readonly { readonly session: string; readonly observations: readonly string[] }[];
 }
 
 /**
@@ -175,7 +178,15 @@ export async function buildChangeContext(
       diffInlined: kept.length <= DIFF_INLINE_LIMIT,
     });
   }
-  return { ticket, repos, knowledge, testsRepos };
+  const explorations: { session: string; observations: string[] }[] = [];
+  for (const session of (await readdir(ws.path("explore")).catch(() => [] as string[])).sort()) {
+    const parsed = ExploreSessionSchema.safeParse(
+      JSON.parse(await readFile(ws.path("explore", session, "session.json"), "utf8").catch(() => "null")),
+    );
+    if (parsed.success)
+      explorations.push({ session: parsed.data.id, observations: parsed.data.observations.map((o) => o.id) });
+  }
+  return { ticket, repos, knowledge, testsRepos, explorations };
 }
 
 /**

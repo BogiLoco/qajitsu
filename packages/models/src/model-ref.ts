@@ -2,7 +2,15 @@ import { ConfigError } from "@qajitsu/core";
 import { z } from "zod";
 
 /** Agent roles that need a model (REQ-LLM-02). */
-export const MODEL_ROLES = ["analyst", "planner", "author", "healer", "auditor", "summary"] as const;
+export const MODEL_ROLES = [
+  "analyst",
+  "planner",
+  "author",
+  "healer",
+  "auditor",
+  "explorer",
+  "summary",
+] as const;
 
 /** A role that is assigned a model in `models.roles`. */
 export type ModelRole = (typeof MODEL_ROLES)[number];
