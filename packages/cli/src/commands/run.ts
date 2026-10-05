@@ -1,6 +1,6 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { checkHealth, compareDeployedSha, loginAccounts, readDeployedSha } from "@qajitsu/adapter-env-remote";
+import { compareDeployedSha, createRemoteEnvProvider, loginAccounts } from "@qajitsu/adapter-env-remote";
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
 import {
   createSandboxExecutor,
@@ -215,11 +215,14 @@ export async function runRun(
           buildBaseUrl: built?.baseUrl ?? "http://127.0.0.1:9",
         })
       : await chooseEnvironment(session, io, options.env);
-    const health = prepared.failure
-      ? { ok: false, detail: prepared.failure.message }
-      : await checkHealth(env, ports.fetch);
+    // REQ-ENV-01/AC1, REQ-ENV-02: health and deployed version through the EnvProvider seam (ADR-0005); a built
+    // environment is checked on the profile's health path too, its version is the worktree's.
+    const reached = prepared.failure
+      ? undefined
+      : await createRemoteEnvProvider(env, ports.fetch, { readVersion: !built }).start();
+    const health = reached?.health ?? { ok: false, detail: prepared.failure?.message ?? "not started" };
     events.emit("run", SYSTEM, "env.health", { env: env.name, ok: health.ok, detail: health.detail });
-    const deployedSha = health.ok && !built ? await readDeployedSha(env, ports.fetch) : undefined;
+    const deployedSha = reached?.deployedSha;
     const analysed = Object.values(ws.record.repos).map((r) => r.sha);
     // A built environment runs exactly the fetched worktree (REQ-CTX-04/AC4).
     const versionCheck = built ? "built-from-worktree" : compareDeployedSha(deployedSha, analysed);

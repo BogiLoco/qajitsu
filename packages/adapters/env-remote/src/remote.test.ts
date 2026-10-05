@@ -4,7 +4,14 @@ import { join } from "node:path";
 import { parseProjectConfig, resolveEnvironment } from "@qajitsu/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { startShop } from "../../../../examples/demo-shop/api/server.mjs";
-import { checkHealth, compareDeployedSha, loginAccounts, readDeployedSha } from "./remote.js";
+import { envProviderContract } from "../../../../tests/contract/env-provider.contract.js";
+import {
+  checkHealth,
+  compareDeployedSha,
+  createRemoteEnvProvider,
+  loginAccounts,
+  readDeployedSha,
+} from "./remote.js";
 
 const PASSWORD = "fictional-demo-password";
 const cleanups: (() => Promise<void>)[] = [];
@@ -27,6 +34,22 @@ const project = async (profile: string, extra: Record<string, unknown> = {}, all
 
 const profileFor = (url: string, more = "") =>
   `base_url: ${url}\nversion_path: /version\naccounts:\n  user:standard: { username: standard, password: secret://env/DEMO_USER_PASSWORD }\nlogin:\n  path: /auth/login\n  body: { username: "{{username}}", password: "{{password}}" }\n  token_path: token\n${more}`;
+
+envProviderContract(
+  "remote",
+  async () => {
+    const shop = await startShop({ env: { DEMO_USER_PASSWORD: PASSWORD, DEMO_SHA: "abc1234" } });
+    const { qaDir, config } = await project(profileFor(shop.url), {}, [shop.url]);
+    const env = await resolveEnvironment({ config, qaDir });
+    return { provider: createRemoteEnvProvider(env, fetch), cleanup: () => shop.close() };
+  },
+  async () => {
+    const { qaDir, config } = await project(profileFor("http://127.0.0.1:9"), {}, ["http://127.0.0.1:9"]);
+    const env = await resolveEnvironment({ config, qaDir });
+    return { provider: createRemoteEnvProvider(env, fetch), cleanup: () => Promise.resolve() };
+  },
+  false,
+);
 
 describe("provided environment (REQ-ENV-01, REQ-ENV-02, REQ-ENV-07, REQ-CFG-07)", () => {
   it("REQ-ENV-07/AC1 + REQ-ENV-01/AC3: uses environments.default; accounts and URLs come from the profile", async () => {

@@ -10,7 +10,7 @@ export { createPlaywrightBrowserFactory, locate, maskHar, type WebRunnerOptions 
 export const ADAPTER = {
   kind: "runner",
   name: "web",
-  implements: "Runner",
+  implements: "AttemptExecutor",
   roadmapStage: 5,
   requirements: ["REQ-EXEC-05", "REQ-EVD-02", "REQ-EVD-06"],
   status: "implemented",

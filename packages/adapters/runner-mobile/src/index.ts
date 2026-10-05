@@ -31,7 +31,7 @@ export { connectAppium } from "./connect.js";
 export const ADAPTER = {
   kind: "runner",
   name: "mobile",
-  implements: "Runner",
+  implements: "AttemptExecutor",
   roadmapStage: 8,
   requirements: ["REQ-EXEC-06", "REQ-EVD-03", "REQ-ENV-06"],
   status: "implemented",

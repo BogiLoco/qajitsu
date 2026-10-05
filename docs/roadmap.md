@@ -28,7 +28,7 @@ Monorepo, tooling, core types, the guard and the status model; fetching a ticket
 - [REQ-VER-04](requirements/verification.md#req-ver-04--tool-call-journal) Tool-call journal (must, implemented, AC 2/2)
 - [REQ-OBS-01](requirements/observability.md#req-obs-01--structured-event-log-per-run) Structured event log per run (must, implemented, AC 2/2)
 - [REQ-GEN-01](requirements/generic.md#req-gen-01--project-onboarding-through-qa) Project onboarding through `.qa/` (must, implemented, AC 3/3)
-- [REQ-GEN-02](requirements/generic.md#req-gen-02--adapter-interfaces) Adapter interfaces (must, in-progress, AC 2/3)
+- [REQ-GEN-02](requirements/generic.md#req-gen-02--adapter-interfaces) Adapter interfaces (must, implemented, AC 3/3)
 - [REQ-GEN-05](requirements/generic.md#req-gen-05--command-line) Command line (must, implemented, AC 3/3)
 - [REQ-NFR-01](requirements/non-functional.md#req-nfr-01--code-standards) Code standards (must, implemented, AC 3/3)
 - [REQ-NFR-02](requirements/non-functional.md#req-nfr-02--test-first-and-test-levels) Test-first and test levels (must, implemented, AC 4/4)

@@ -56,7 +56,7 @@ Only code computes statuses. The auditor can only downgrade PASSED to NEEDS_REVI
 
 ## Adapter interfaces (in `@qajitsu/core`)
 
-`TicketSource`, `CodeHost` (GitHub, GitLab), `ModelProvider` (AI SDK providers, Ollama, OpenAI-compatible/LiteLLM), `EnvProvider` (remote, compose, device farm), `SecretProvider`, `Runner` (api, web, mobile), `EvidenceStore`, `Publisher` (Jira comment, Xray, Zephyr).
+`TicketSource`, `CodeHost` (GitHub, GitLab), `ModelProvider` (AI SDK providers, Ollama, OpenAI-compatible/LiteLLM), `EnvProvider` (remote, compose, device farm), `SecretProvider`, `AttemptExecutor` (the runner seam: one attempt of one case; api, web and mobile through the sandbox executor, ADR-0005), `EvidenceStore`, `Publisher` (Jira comment, Xray, Zephyr).
 
 ## Agent loop
 

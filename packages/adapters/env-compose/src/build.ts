@@ -10,6 +10,8 @@ import {
   resolveServiceEnv,
   toDotenv,
   type Endpoint,
+  type EnvProvider,
+  type EnvironmentHandle,
   type ProjectConfig,
   type ServiceConfig,
 } from "@qajitsu/core";
@@ -121,7 +123,8 @@ export interface BuildOptions {
 }
 
 /** A started build environment. */
-export interface BuildEnvironment {
+/** A `--build` environment: the EnvProvider handle plus what cleanup and `env render` need (ADR-0005). */
+export interface BuildEnvironment extends EnvironmentHandle {
   readonly baseUrl: string;
   /** Compose project name (REQ-WS-02/AC2). */
   readonly project: string;
@@ -561,6 +564,8 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
     }
     return {
       baseUrl,
+      // Every service passed its readiness check above; a service that did not throws BuildStartError.
+      health: { ok: true, detail: "every service ready" },
       project,
       ports: Object.fromEntries(hostPorts),
       services: Object.fromEntries(
@@ -587,4 +592,21 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
       },
     );
   }
+}
+
+/** The compose EnvProvider; its handle carries the compose project, ports and services. */
+export interface ComposeEnvProvider extends EnvProvider {
+  start(): Promise<BuildEnvironment>;
+}
+
+/**
+ * The `--build` environment as an EnvProvider (REQ-ENV-03, ADR-0005): `start` builds and starts the services from
+ * the run's worktree and resolves once every one is ready; a start failure throws `BuildStartError` with the logs.
+ *
+ * @param options - Everything `startBuildEnvironment` needs.
+ * @example
+ * const env = await createComposeEnvProvider({ ticket, runId, config, qaDir, worktree, envDir, logsDir, resolveSecret }).start();
+ */
+export function createComposeEnvProvider(options: BuildOptions): ComposeEnvProvider {
+  return { kind: "compose", start: () => startBuildEnvironment(options) };
 }

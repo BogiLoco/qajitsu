@@ -4,6 +4,7 @@ import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, it } from "vitest";
 import { createFakeFetch, jsonReply } from "../../../tests/support/fake-fetch.js";
 import { modelProfile } from "./capabilities.js";
+import { modelProviderContract } from "../../../tests/contract/model-provider.contract.js";
 import { createModelRegistry } from "./registry.js";
 
 const config = parseProjectConfig({
@@ -36,6 +37,12 @@ const secrets: Record<string, string> = {
   "secret://env/LITELLM_KEY": "litellm-key",
 };
 const resolveSecret = (ref: string): Promise<string> => Promise.resolve(secrets[ref] ?? "");
+
+modelProviderContract("registry", () => createModelRegistry({ config, resolveSecret }), {
+  defaultRef: "claude/claude-sonnet-5",
+  plannerRef: "company/strong",
+  apiKey: "anthropic-key",
+});
 
 describe("model registry (REQ-LLM-01, REQ-LLM-02)", () => {
   it("REQ-LLM-01/AC1: builds Anthropic, OpenAI and Google models through the AI SDK", async () => {

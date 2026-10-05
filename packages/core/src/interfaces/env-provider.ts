@@ -1,28 +1,30 @@
-import type { RunId, TicketKey } from "../identifiers.js";
-
-/** What the run needs from an environment (REQ-ENV-01, REQ-ENV-03). */
-export interface EnvironmentRequest {
-  readonly ticket: TicketKey;
-  readonly runId: RunId;
-  /** `remote` uses a given profile or URL; `build` starts the app from the fetched repositories. */
-  readonly mode: "remote" | "build";
-  readonly profile?: string;
-  readonly url?: string;
-  /** Working copies at the analysed SHA, keyed by repo alias (REQ-CTX-04). */
-  readonly worktrees: Readonly<Record<string, string>>;
+/** Whether the environment answered its health check (REQ-ENV-01/AC1). */
+export interface EnvironmentHealth {
+  readonly ok: boolean;
+  readonly detail: string;
 }
 
-/** A running (or reachable) environment. */
+/** A running (or reachable) environment for one run. */
 export interface EnvironmentHandle {
-  /** Base URLs per service, e.g. `{ web: "http://localhost:51234" }`. */
-  readonly baseUrls: Readonly<Record<string, string>>;
+  readonly baseUrl: string;
+  readonly health: EnvironmentHealth;
   /** Deployed version (commit SHA) when the environment reports it (REQ-ENV-02). */
-  readonly deployedSha?: string;
-  /** Stops and cleans up everything this handle started (REQ-WS-03). */
-  stop(): Promise<void>;
+  readonly deployedSha?: string | undefined;
+  /** Stubbed dependencies, listed in the report (REQ-ENV-05/AC2). */
+  readonly stubs: readonly string[];
+  /**
+   * Stops what this handle started and returns the service logs it wrote (REQ-WS-03). With `keep`, containers
+   * stay up for debugging. A provided environment starts nothing and stops nothing.
+   */
+  stop(options?: { readonly keep?: boolean }): Promise<{ readonly logs: readonly string[] }>;
 }
 
-/** Starts or connects to an environment: remote, Docker Compose, device farm (REQ-GEN-02). */
+/**
+ * Starts or connects to the environment of a run: a provided one, one built from the worktree, later Kubernetes or
+ * a device farm (REQ-GEN-02, ADR-0005). A provider is built with its own options by its factory. It never reports
+ * an application that is not up as healthy: it returns `health.ok: false` or throws with the logs it collected.
+ */
 export interface EnvProvider {
-  start(request: EnvironmentRequest, signal?: AbortSignal): Promise<EnvironmentHandle>;
+  readonly kind: string;
+  start(): Promise<EnvironmentHandle>;
 }

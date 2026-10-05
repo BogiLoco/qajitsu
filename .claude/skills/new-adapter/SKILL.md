@@ -1,6 +1,6 @@
 ---
 name: new-adapter
-description: Add a new QAJitsu adapter - TicketSource, CodeHost, ModelProvider, EnvProvider, SecretProvider, Runner, EvidenceStore or Publisher - with contract tests, scrubbed fixtures, config schema and docs. Use for integrations like Jira Data Center, Bitbucket, Vault, a new LLM provider or a device farm.
+description: Add a new QAJitsu adapter - TicketSource, CodeHost, ModelProvider, EnvProvider, SecretProvider, AttemptExecutor (runner), EvidenceStore or Publisher - with contract tests, scrubbed fixtures, config schema and docs. Use for integrations like Jira Data Center, Bitbucket, Vault, a new LLM provider or a device farm.
 argument-hint: "[interface] [name], e.g. CodeHost bitbucket"
 ---
 
@@ -41,7 +41,7 @@ Satisfy the contract suite. Respect: Zod-parse every response; map HTTP errors t
 - **ModelProvider**: capability profile (tools, structured output, vision, context window), probe used by `qajitsu doctor`, cost reporting fields.
 - **EnvProvider**: labels `qajitsu.ticket`/`qajitsu.run` on every resource, health checks with timeout, cleanup by label, BLOCKED on start failure.
 - **SecretProvider**: values never logged; register every resolved value with the masker.
-- **Runner**: writes only through `@qajitsu/steps`; produces results JSON consumed by the verifier; evidence in the manifest.
+- **AttemptExecutor** (runner): one attempt of one case; the trusted parent records every call, assertion and evidence item (ADR-0004, ADR-0005); never sets a status. A new web or mobile target is a browser/device factory for the sandbox executor. Contract: `tests/contract/attempt-executor.contract.ts`.
 - **Publisher**: idempotent (stores comment/execution id in `run.json`), size checks before upload.
 
 ## 8. Docs and finish

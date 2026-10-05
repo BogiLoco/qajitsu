@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import type { AssertionRecord, Plan, TestCase } from "@qajitsu/core";
+import type { AssertionRecord, AttemptRecord, EvidenceItem, Plan, TestCase } from "@qajitsu/core";
 import type { Masker } from "./masking.js";
 import { assertSelector, type UiClient, type UiDriver, type UiOperation, type UiProperty } from "./ui.js";
 
@@ -77,32 +77,8 @@ export interface CaseContext {
   readonly verify: (stepId: string, field: string, actual?: unknown, expected?: unknown) => void;
 }
 
-/** One evidence item produced by an attempt, before it is stored. */
-export interface EvidenceItem {
-  /** Plan step, or `case` for evidence of the whole attempt (video, trace, HAR, console log). */
-  readonly stepId: string;
-  readonly kind: "request" | "response" | "screenshot" | "video" | "trace" | "log" | "har" | "dom";
-  /** File name inside the attempt folder: `S1-01.json`, `S1.png`, `failure.png`, `video.webm`. */
-  readonly name: string;
-  readonly content: string | Uint8Array;
-}
-
-/** Everything one attempt produced; the runner turns it into results and evidence. */
-export interface AttemptRecord {
-  readonly caseId: string;
-  readonly attempt: number;
-  readonly outcome: "passed" | "failed" | "error";
-  readonly error?: string;
-  /** Steps in order; `url` is the page at the end of a step that used the browser (REQ-OBS-06). */
-  readonly steps: readonly {
-    readonly id: string;
-    readonly ok: boolean;
-    readonly error?: string;
-    readonly url?: string;
-  }[];
-  readonly assertions: readonly AssertionRecord[];
-  readonly evidence: readonly EvidenceItem[];
-}
+// Defined in @qajitsu/core (ADR-0005) and re-exported here for spec authors and runners.
+export type { AttemptRecord, EvidenceItem } from "@qajitsu/core";
 
 /** Settings of one case attempt. */
 export interface CaseRuntimeOptions {

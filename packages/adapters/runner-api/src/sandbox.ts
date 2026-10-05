@@ -1,3 +1,4 @@
+import type { AttemptExecutor as CoreAttemptExecutor } from "@qajitsu/core";
 import { fork } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { dirname } from "node:path";
@@ -16,7 +17,8 @@ import type { AttemptInput } from "./attempt.js";
 import { createPlaywrightTransport } from "./transport.js";
 
 /** Executes one attempt; the sandbox in production, in-process in unit tests. */
-export type AttemptExecutor = (input: AttemptInput) => Promise<AttemptRecord>;
+/** The runner seam from `@qajitsu/core` (ADR-0005). */
+export type AttemptExecutor = CoreAttemptExecutor;
 
 /**
  * Node flags of the sandbox: permission model with read access to the given folders only, no writes,

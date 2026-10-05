@@ -4,7 +4,14 @@
  *
  * @packageDocumentation
  */
-export { checkHealth, readDeployedSha, loginAccounts, compareDeployedSha } from "./remote.js";
+export {
+  checkHealth,
+  readDeployedSha,
+  loginAccounts,
+  compareDeployedSha,
+  createRemoteEnvProvider,
+  type ScriptRunner,
+} from "./remote.js";
 
 /** Adapter metadata used by `qajitsu doctor` and the adapter table in the docs. */
 export const ADAPTER = {

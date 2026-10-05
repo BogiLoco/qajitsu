@@ -17,7 +17,14 @@ import { fileURLToPath } from "node:url";
 import { parseProjectConfig } from "@qajitsu/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
-import { labelsFor, projectName, startBuildEnvironment, type CommandExec } from "./build.js";
+import { envProviderContract } from "../../../../tests/contract/env-provider.contract.js";
+import {
+  createComposeEnvProvider,
+  labelsFor,
+  projectName,
+  startBuildEnvironment,
+  type CommandExec,
+} from "./build.js";
 
 const PASSWORD = "fictional-demo-password";
 const dirs: string[] = [];
@@ -57,6 +64,39 @@ const apiService = {
   env: { DEMO_USER_PASSWORD: { secret: "secret://env/DEMO_USER_PASSWORD" }, DEMO_SHA: "abc1234" },
   health: { http: "/health", timeout_s: 20 },
 };
+
+const composeProvider = async (api: typeof apiService) => {
+  const ws = await workspace();
+  const config = parseProjectConfig({
+    ...base,
+    services: { api },
+    build: { repo: "shop", base_service: "api" },
+  });
+  return {
+    provider: createComposeEnvProvider({
+      ticket: "DEMO-1",
+      runId: "20261005-0900-aaaa",
+      config,
+      qaDir: ws.qaDir,
+      worktree: ws.worktree,
+      envDir: ws.envDir,
+      logsDir: ws.logsDir,
+      resolveSecret: () => Promise.resolve(PASSWORD),
+    }),
+    cleanup: () => Promise.resolve(),
+  };
+};
+envProviderContract(
+  "compose (managed process)",
+  () => composeProvider(apiService),
+  () =>
+    composeProvider({
+      ...apiService,
+      command: ["node", "-e", "process.exit(1)"],
+      health: { http: "/health", timeout_s: 2 },
+    }),
+  true,
+);
 
 describe("--build environment (REQ-ENV-03, REQ-ENV-04, REQ-CFG-05, REQ-WS-02)", () => {
   it("REQ-ENV-03/AC2 + REQ-CTX-04/AC4: runs a managed process from the worktree with a dynamic port, logs and health check", async () => {

@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { resolve, sep } from "node:path";
 import { z } from "zod";
-import { AdapterError, type ResolvedEnvironment } from "@qajitsu/core";
+import { AdapterError, type EnvProvider, type ResolvedEnvironment } from "@qajitsu/core";
 
 const allowed = (env: ResolvedEnvironment, url: URL): void => {
   if (url.origin !== env.origin) {
@@ -261,4 +261,37 @@ async function scriptLogin(
   const result = ScriptOutputSchema.safeParse(parsed);
   if (!result.success) throw failed("printed an invalid session (expected { headers, session? })");
   return result.data;
+}
+
+/**
+ * The provided environment as an EnvProvider (REQ-ENV-01, REQ-ENV-02, ADR-0005): `start` checks health and, when
+ * healthy, reads the deployed SHA. It starts and stops nothing.
+ *
+ * @param env - The resolved environment (allowlist already applied).
+ * @param fetch - HTTP client.
+ * @param options - `readVersion: false` skips the deployed-SHA request (an environment this run built).
+ * @example
+ * const handle = await createRemoteEnvProvider(env, fetch).start();
+ * if (!handle.health.ok) blockEveryCase(handle.health.detail);
+ */
+export function createRemoteEnvProvider(
+  env: ResolvedEnvironment,
+  fetch: typeof globalThis.fetch,
+  options: { readonly readVersion?: boolean } = {},
+): EnvProvider {
+  return {
+    kind: "remote",
+    async start() {
+      const health = await checkHealth(env, fetch);
+      const deployedSha =
+        health.ok && options.readVersion !== false ? await readDeployedSha(env, fetch) : undefined;
+      return {
+        baseUrl: env.baseUrl,
+        health,
+        deployedSha,
+        stubs: [],
+        stop: () => Promise.resolve({ logs: [] }),
+      };
+    },
+  };
 }

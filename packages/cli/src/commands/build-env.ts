@@ -2,7 +2,7 @@ import { readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { basename } from "node:path";
 import {
   BuildStartError,
-  startBuildEnvironment,
+  createComposeEnvProvider,
   type BuildEnvironment,
   type CommandExec,
 } from "@qajitsu/adapter-env-compose";
@@ -95,7 +95,7 @@ export async function prepareBuild(
     );
   try {
     return {
-      build: await startBuildEnvironment({
+      build: await createComposeEnvProvider({
         ticket: ws.ticket,
         runId: ws.runId,
         config: project.config,
@@ -108,7 +108,7 @@ export async function prepareBuild(
         overrides: options.overrides,
         fetch: options.fetch,
         ...(options.exec ? { exec: options.exec } : {}),
-      }),
+      }).start(),
     };
   } catch (error) {
     if (!(error instanceof BuildStartError)) throw error;

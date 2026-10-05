@@ -2,7 +2,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogle } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { ConfigError, type ProjectConfig } from "@qajitsu/core";
+import { ConfigError, type ModelProvider, type ProjectConfig } from "@qajitsu/core";
 import type { LanguageModel } from "ai";
 import { createOllama } from "ai-sdk-ollama";
 import { modelProfile, type ModelProfile } from "./capabilities.js";
@@ -17,8 +17,8 @@ export interface ResolvedModel {
   readonly profile: ModelProfile;
 }
 
-/** Access to the configured models. */
-export interface ModelRegistry {
+/** Access to the configured models: the core ModelProvider with AI SDK types (ADR-0005). */
+export interface ModelRegistry extends ModelProvider {
   /** Resolves `<provider>/<model>`. */
   resolve(reference: string): Promise<ResolvedModel>;
   /** Resolves the model of an agent role (REQ-LLM-02). */

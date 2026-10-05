@@ -1,5 +1,5 @@
 import { pathToFileURL } from "node:url";
-import type { Plan } from "@qajitsu/core";
+import type { AttemptRequest } from "@qajitsu/core";
 import type { BrowserFactory } from "./sandbox.js";
 import {
   createCaseRuntime,
@@ -10,21 +10,8 @@ import {
 } from "@qajitsu/steps";
 
 /** Everything one attempt needs; sent to the sandboxed child over IPC. Never contains raw config secrets. */
-export interface AttemptInput {
-  readonly specFile: string;
-  readonly caseId: string;
-  readonly attempt: number;
-  readonly plan: Plan;
-  readonly baseUrl: string;
-  readonly allowedOrigins: readonly string[];
-  /** Headers per account alias, from the framework login helper (REQ-CFG-07/AC2). */
-  readonly accounts: Readonly<Record<string, Readonly<Record<string, string>>>>;
-  /** Values the child's masker must hide (session tokens, passwords). */
-  readonly secrets: readonly string[];
-  readonly timeoutMs: number;
-  /** Raw session tokens per alias for the browser (never sent to the sandbox; REQ-CFG-07). */
-  readonly sessions?: Readonly<Record<string, string>>;
-}
+/** One attempt of one case; the core `AttemptRequest` (ADR-0005). */
+export type AttemptInput = AttemptRequest;
 
 /** Shape a spec module must export. */
 interface SpecModule {

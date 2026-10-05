@@ -8,6 +8,7 @@ import { createSandboxExecutor, type AttemptInput } from "@qajitsu/adapter-runne
 import { PlanSchema } from "@qajitsu/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startShop } from "../../examples/demo-shop/api/server.mjs";
+import { attemptExecutorContract } from "../contract/attempt-executor.contract.js";
 
 const childScript = fileURLToPath(
   new URL("../../packages/adapters/runner-api/dist/child.js", import.meta.url),
@@ -19,6 +20,8 @@ const plan = PlanSchema.parse({
   ...JSON.parse(readFileSync(new URL("../../fixtures/plans/demo-1-draft.json", import.meta.url), "utf8")),
 });
 const PASSWORD = "fictional-demo-password";
+
+attemptExecutorContract("sandbox (production)", () => createSandboxExecutor({ childScript }));
 
 describe("sandboxed API runner (REQ-EXEC-04, invariant 2)", () => {
   let shop: { url: string; close: () => Promise<void> };

@@ -7,6 +7,7 @@
  */
 export {
   startBuildEnvironment,
+  createComposeEnvProvider,
   writeEnvFiles,
   endpointsFor,
   BuildStartError,
@@ -15,6 +16,7 @@ export {
   labelsFor,
   projectName,
   type BuildEnvironment,
+  type ComposeEnvProvider,
   type BuildOptions,
   type CommandExec,
 } from "./build.js";

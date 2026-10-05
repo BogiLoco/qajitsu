@@ -6,12 +6,21 @@ export interface ModelCapabilities {
   readonly contextWindow: number;
 }
 
+/** A configured model: its `<provider>/<model>` id, an opaque handle for the agent loop and its capabilities. */
+export interface ResolvedModelHandle {
+  readonly id: string;
+  /** Provider SDK handle, typed in `@qajitsu/models`; core never imports provider SDKs (invariant 11). */
+  readonly model: unknown;
+  readonly profile: ModelCapabilities;
+}
+
 /**
- * Access to LLMs from one provider (REQ-LLM-01). Core never imports provider SDK types
- * (invariant 11), so the language model handle is opaque here and typed in `@qajitsu/models`.
+ * Access to the configured models across providers (REQ-LLM-01, REQ-LLM-02, REQ-GEN-02, ADR-0005). Unknown providers
+ * are configuration errors that never repeat an API key.
  */
 export interface ModelProvider {
-  readonly id: string;
-  capabilities(model: string, signal?: AbortSignal): Promise<ModelCapabilities>;
-  languageModel(model: string): unknown;
+  /** Resolves `<provider>/<model>`. */
+  resolve(reference: string): Promise<ResolvedModelHandle>;
+  /** Resolves the model of an agent role; roles without their own model use `default` (REQ-LLM-02/AC1). */
+  forRole(role: string): Promise<ResolvedModelHandle>;
 }

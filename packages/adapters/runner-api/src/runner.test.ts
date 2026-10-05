@@ -7,6 +7,7 @@ import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
 import { CaseResultFileSchema, PlanSchema, createEventLog, parseEventLines } from "@qajitsu/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { startShop } from "../../../../examples/demo-shop/api/server.mjs";
+import { attemptExecutorContract } from "../../../../tests/contract/attempt-executor.contract.js";
 import { executeAttempt, type AttemptInput } from "./attempt.js";
 import { runCases } from "./run-cases.js";
 import type { AttemptExecutor } from "./sandbox.js";
@@ -36,6 +37,8 @@ const inProcess: AttemptExecutor = async (input) => {
     await dispose();
   }
 };
+
+attemptExecutorContract("in-process", () => inProcess);
 
 const setup = async (flag?: string) => {
   const shop = await startShop({

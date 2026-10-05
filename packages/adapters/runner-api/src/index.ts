@@ -20,7 +20,7 @@ export { createPlaywrightTransport } from "./transport.js";
 export const ADAPTER = {
   kind: "runner",
   name: "api",
-  implements: "Runner",
+  implements: "AttemptExecutor",
   roadmapStage: 3,
   requirements: ["REQ-EXEC-04", "REQ-EXEC-08", "REQ-EVD-01"],
   status: "implemented",

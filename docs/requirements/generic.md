@@ -17,16 +17,16 @@ QAJitsu plugs into any project through configuration; differences between projec
 
 ### REQ-GEN-02 · Adapter interfaces
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 1
-- Related: INV-12
+- Related: INV-12, ADR-0005
 
 **Acceptance criteria**
 
-- [x] AC1: Interfaces in `@qajitsu/core`: TicketSource, CodeHost, ModelProvider, EnvProvider, SecretProvider, Runner, EvidenceStore, Publisher.
+- [x] AC1: Interfaces in `@qajitsu/core`: TicketSource, CodeHost, ModelProvider, EnvProvider, SecretProvider, AttemptExecutor (the runner seam, ADR-0005), EvidenceStore, Publisher.
 - [x] AC2: Each adapter is a separate package selected by `type` in config through a registry.
-- [ ] AC3: Each interface has a shared contract test suite.
+- [x] AC3: Each interface has a shared contract test suite.
 
 ### REQ-GEN-03 · `init` and `doctor`
 
