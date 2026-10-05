@@ -13,7 +13,13 @@ import {
 } from "@qajitsu/core";
 import { DEFAULT_PROTECTED_PATHS, createGuard, createJournal, type Guard } from "@qajitsu/guard";
 import type { ModelRegistry, ResolvedModel } from "@qajitsu/models";
-import { checkAnalysisSources, checkPlanSources, indexDiff, type SourceContext } from "@qajitsu/verifier";
+import {
+  checkAnalysisSources,
+  checkExistingCoverage,
+  checkPlanSources,
+  indexDiff,
+  type SourceContext,
+} from "@qajitsu/verifier";
 import { stringify } from "yaml";
 import { renderChangeContext, untrusted, type ChangeContext } from "./context.js";
 import { runStructuredAgent } from "./loop.js";
@@ -128,6 +134,7 @@ export function sourceContext(context: ChangeContext): SourceContext {
     ticket: context.ticket,
     diffs: Object.fromEntries(context.repos.map((r) => [r.alias, indexDiff(r.diff)])),
     comments: Object.fromEntries(context.repos.map((r) => [r.alias, r.comments])),
+    tests: Object.fromEntries(context.testsRepos.map((t) => [t.alias, t.index.tests])),
   };
 }
 
@@ -216,7 +223,11 @@ export async function runPlanner(
     validate: (draft) => {
       const plan = PlanSchema.safeParse({ schema: 1, ticket: context.ticket.key, version: 1, ...draft });
       if (!plan.success) return plan.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
-      return issuesAsErrors(checkPlanSources(plan.data, sources));
+      // REQ-CTX-06/AC2: claimed existing coverage must name real tests of the tests repository.
+      return [
+        ...issuesAsErrors(checkPlanSources(plan.data, sources)),
+        ...checkExistingCoverage(plan.data, sources),
+      ];
     },
     tools: createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText }),
     guard: stageGuard(deps, "plan", role),

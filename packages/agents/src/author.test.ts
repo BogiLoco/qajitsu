@@ -70,6 +70,33 @@ describe("author (REQ-EXEC-01, REQ-EXEC-03/AC4)", () => {
     expect(promptOf(model, 0)).toContain("Account aliases available: user:standard");
   });
 
+  it("REQ-CTX-06/AC3 + REQ-EXEC-01/AC3: the author gets the tests repository's selector strategy, page objects and conventions", async () => {
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    const model = scriptedModel([
+      { text: "```ts\n" + spec("TC-01") + "```" },
+      { text: "```ts\n" + spec("TC-02") + "```" },
+    ]);
+    const { d, ws } = await deps(model);
+    await mkdir(ws.path("repos", "e2e", "pages"), { recursive: true });
+    await writeFile(
+      ws.path("repos", "e2e", "pages", "cart.page.ts"),
+      'export const total = (page) => page.getByTestId("cart-total");\n',
+    );
+    await writeFile(ws.path("repos", "e2e", "README.md"), "Selectors: data-testid only.\n");
+    await ws.update({
+      repos: {
+        ...ws.record.repos,
+        e2e: { host: "github", path: "demo-org/shop-tests", sha: "abc1234", role: "tests" },
+      },
+    });
+    await runAuthor(d, plan, await buildChangeContext(ws), analysis, ["user:standard"]);
+    const prompt = promptOf(model, 0);
+    expect(prompt).toContain("## Conventions of the tests repository 'e2e'");
+    expect(prompt).toContain("Preferred selectors: getByTestId");
+    expect(prompt).toContain('pages/cart.page.ts: getByTestId(\\"cart-total\\")');
+    expect(prompt).toContain("Selectors: data-testid only.");
+  });
+
   it("REQ-EXEC-03/AC4: a rejected spec returns to the author with the errors", async () => {
     const literal = spec("TC-01").replace('plan.expect("TC-01.S1.fields.total")', "1.01");
     const model = scriptedModel([

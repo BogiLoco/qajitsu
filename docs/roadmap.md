@@ -73,13 +73,13 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 
 <!-- prettier-ignore-start -->
 <!-- req-stage:3 -->
-- [REQ-CTX-06](requirements/context.md#req-ctx-06--test-repository-awareness) Test repository awareness (should, accepted, AC 0/4)
+- [REQ-CTX-06](requirements/context.md#req-ctx-06--test-repository-awareness) Test repository awareness (should, in-progress, AC 3/4)
 - [REQ-ENV-01](requirements/environment.md#req-env-01--provided-environment) Provided environment (must, implemented, AC 3/3)
 - [REQ-ENV-02](requirements/environment.md#req-env-02--deployed-version-check) Deployed version check (should, implemented, AC 3/3)
 - [REQ-ENV-07](requirements/environment.md#req-env-07--default-environment-selection) Default environment selection (should, implemented, AC 2/2)
 - [REQ-CFG-06](requirements/config-secrets.md#req-cfg-06--masking) Masking (must, implemented, AC 3/3)
 - [REQ-CFG-07](requirements/config-secrets.md#req-cfg-07--test-accounts-as-aliases) Test accounts as aliases (must, implemented, AC 2/2)
-- [REQ-EXEC-01](requirements/execution.md#req-exec-01--executable-specs-from-the-approved-plan) Executable specs from the approved plan (must, in-progress, AC 2/3)
+- [REQ-EXEC-01](requirements/execution.md#req-exec-01--executable-specs-from-the-approved-plan) Executable specs from the approved plan (must, implemented, AC 3/3)
 - [REQ-EXEC-02](requirements/execution.md#req-exec-02--steps-library-step-and-verify) Steps library: `step()` and `verify()` (must, implemented, AC 4/4)
 - [REQ-EXEC-03](requirements/execution.md#req-exec-03--static-checks-before-execution) Static checks before execution (must, implemented, AC 4/4)
 - [REQ-EXEC-04](requirements/execution.md#req-exec-04--api-testing) API testing (must, implemented, AC 3/3)

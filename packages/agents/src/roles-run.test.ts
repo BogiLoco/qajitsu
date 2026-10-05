@@ -114,6 +114,47 @@ describe("analyst and planner (REQ-PLAN-01..05, REQ-LLM-03)", () => {
     expect(promptOf(analyst, 1)).toContain("not verbatim in the ticket snapshot");
   });
 
+  it("REQ-CTX-06/AC2: the planner sees the existing tests and may only claim coverage by tests that exist", async () => {
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    await mkdir(ws.path("repos", "e2e", "tests"), { recursive: true });
+    await writeFile(
+      ws.path("repos", "e2e", "tests", "discounts.spec.ts"),
+      'test("an unknown code returns 404 and keeps the total", async () => {});\n',
+    );
+    await ws.update({
+      repos: {
+        ...ws.record.repos,
+        e2e: { host: "github", path: "demo-org/shop-tests", sha: "abc1234", role: "tests" },
+      },
+    });
+    const claim = (title: string) => ({
+      ...draft,
+      existing_coverage: [{ repo: "e2e", file: "tests/discounts.spec.ts", title, covers: ["AC4"] }],
+    });
+    const planner = scriptedModel([
+      { text: JSON.stringify(claim("unknown codes are rejected")) },
+      { text: JSON.stringify(claim("an unknown code returns 404 and keeps the total")) },
+    ]);
+    const context = await buildChangeContext(ws);
+    expect(context.repos.map((r) => r.alias)).toEqual(["shop"]);
+    const value = await runPlanner(deps({ planner, analyst: planner }), context, analysis as never);
+    expect(promptOf(planner, 0)).toContain("## Tests repository 'e2e'");
+    expect(promptOf(planner, 0)).toContain(
+      'tests/discounts.spec.ts: \\"an unknown code returns 404 and keeps the total\\"',
+    );
+    expect(promptOf(planner, 1)).toContain(
+      "existing_coverage.0: no test 'unknown codes are rejected' in e2e:tests/discounts.spec.ts",
+    );
+    expect(value.existing_coverage).toEqual([
+      {
+        repo: "e2e",
+        file: "tests/discounts.spec.ts",
+        title: "an unknown code returns 404 and keeps the total",
+        covers: ["AC4"],
+      },
+    ]);
+  });
+
   it("REQ-PLAN-02 + REQ-PLAN-03: the planner returns a validated, grounded draft that is stored as a version", async () => {
     const planner = scriptedModel([{ text: JSON.stringify(draft) }]);
     const value = await runPlanner(

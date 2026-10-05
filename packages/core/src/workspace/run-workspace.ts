@@ -31,6 +31,8 @@ const RepoRecordSchema = z.strictObject({
   sha: z.string().regex(/^[0-9a-f]{7,64}$/),
   change: z.string().optional(),
   strategy: z.string().optional(),
+  /** `tests`: the project's tests repository, context for planning and authoring, not part of the change (REQ-CTX-06). */
+  role: z.literal("tests").optional(),
 });
 
 /** Schema of `run.json`: the deterministic checkpoint of one run (REQ-WS-01, invariant 9). */

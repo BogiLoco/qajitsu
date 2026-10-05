@@ -116,6 +116,16 @@ export const TestCaseSchema = z.strictObject({
 /** One test case. */
 export type TestCase = z.infer<typeof TestCaseSchema>;
 
+/** An existing test of the tests repository that already covers part of the ticket (REQ-CTX-06/AC2). */
+const ExistingCoverageSchema = z.strictObject({
+  repo: z.string().min(1),
+  file: z.string().min(1),
+  /** Title of the test exactly as in the file. */
+  title: z.string().min(1),
+  /** What it covers: criteria (`AC2`) or a short description. */
+  covers: z.array(z.string().min(1)).min(1),
+});
+
 /** A test plan version, `plan/plan.vN.yaml` (REQ-PLAN-02). */
 export const PlanSchema = z
   .strictObject({
@@ -126,6 +136,7 @@ export const PlanSchema = z
     cases: z.array(TestCaseSchema).min(1),
     open_questions: z.array(QuestionSchema).default([]),
     out_of_scope: z.array(z.string()).default([]),
+    existing_coverage: z.array(ExistingCoverageSchema).default([]),
   })
   .superRefine((plan, ctx) => {
     const seen = new Set<string>();
@@ -156,6 +167,7 @@ export const PlanDraftSchema = z.strictObject({
   cases: z.array(TestCaseSchema).min(1),
   open_questions: z.array(QuestionSchema).default([]),
   out_of_scope: z.array(z.string()).default([]),
+  existing_coverage: z.array(ExistingCoverageSchema).default([]),
 });
 
 /** Plan content produced by the planner. */

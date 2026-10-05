@@ -36,6 +36,9 @@ Rules:
 - Test data uses aliases only, like {"user":"user:standard"}; never passwords, tokens or real personal data.
 - "evidence" lists what proves the result: request, response, screenshot, video, trace, log, har.
 - Unclear behaviour goes to "open_questions" (Q1, ...); deliberately untested things go to "out_of_scope".
+- When a tests repository is listed, check its existing tests first. A behaviour an existing test already verifies goes to
+  "existing_coverage" as {"repo","file","title","covers":["AC2"]} with the file and the title exactly as listed (checked
+  by code) instead of a new case; write cases only for what is not covered yet.
 Answer with one JSON object only, exactly in this shape. "evidence" belongs to the case (not to a step);
 "open_questions" and "out_of_scope" are top-level keys of the plan (not inside a case):
 {
@@ -56,5 +59,6 @@ Answer with one JSON object only, exactly in this shape. "evidence" belongs to t
     }
   ],
   "open_questions": [],
-  "out_of_scope": []
+  "out_of_scope": [],
+  "existing_coverage": []
 }`;

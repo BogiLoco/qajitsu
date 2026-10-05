@@ -39,6 +39,10 @@ export interface SourceContext {
   readonly diffs: Readonly<Record<string, DiffIndex>>;
   /** Review comments per repository alias. */
   readonly comments: Readonly<Record<string, readonly ReviewComment[]>>;
+  /** Tests per tests-repository alias, from the code index of its worktree (REQ-CTX-06). */
+  readonly tests?: Readonly<
+    Record<string, readonly { readonly file: string; readonly titles: readonly string[] }[]>
+  >;
 }
 
 /** One rejected source reference. */
@@ -146,4 +150,27 @@ export function checkAnalysisSources(analysis: Analysis, context: SourceContext)
 /** Formats issues for an agent repair prompt or the terminal. */
 export function formatSourceIssues(issues: readonly SourceIssue[]): string {
   return issues.map((i) => `${i.where}: ${JSON.stringify(i.source)} — ${i.reason}`).join("\n");
+}
+
+/**
+ * Checks the plan's claims that existing tests already cover parts of the ticket (REQ-CTX-06/AC2): each must name
+ * a test that exists in a tests repository of the run, and criteria it covers must exist in the ticket. A planner
+ * cannot invent coverage to skip work.
+ *
+ * @returns Problems as `existing_coverage.<i>: <reason>`; empty when every claim holds.
+ */
+export function checkExistingCoverage(plan: Plan, context: SourceContext): string[] {
+  const criteria = context.ticket.acceptanceCriteria.length;
+  return plan.existing_coverage.flatMap((claim, i) => {
+    const where = `existing_coverage.${String(i)}`;
+    const files = context.tests?.[claim.repo];
+    if (!files) return [`${where}: ${claim.repo} is not a tests repository of this run`];
+    const file = files.find((f) => f.file === claim.file);
+    if (!file) return [`${where}: ${claim.repo} has no test file ${claim.file}`];
+    if (!file.titles.includes(claim.title))
+      return [`${where}: no test '${claim.title}' in ${claim.repo}:${claim.file}`];
+    return claim.covers
+      .filter((c) => /^AC\d+$/.test(c) && Number(c.slice(2)) > criteria)
+      .map((c) => `${where}: ${c} is not an acceptance criterion of the ticket`);
+  });
 }

@@ -35,6 +35,8 @@ repos:
   web:
     host: github
     path: example-org/shop-web
+  # The existing automated tests (REQ-CTX-06): checked out at default_ref on every fetch, never part of the
+  # change. The planner sees their titles and lists what they already cover; the author copies their selectors.
   e2e-tests:
     host: github
     path: example-org/shop-e2e

@@ -148,6 +148,62 @@ describe("fetchContext (REQ-CTX-01..04)", () => {
     expect(fetches).toBe(1);
   });
 
+  it("REQ-CTX-06/AC1: the tests repository is checked out at its default branch, marked as tests, with no diff", async () => {
+    const tests = join(dir, "tests-origin");
+    await exec(["init", "-q", "-b", "main", tests]);
+    await writeFile(join(tests, "cart.spec.ts"), 'test("cart total", async () => {});\n');
+    await exec(["add", "."], { cwd: tests });
+    await exec(["-c", "user.name=qa", "-c", "user.email=qa@example.com", "commit", "-qm", "tests"], {
+      cwd: tests,
+    });
+    const testsSha = (await exec(["rev-parse", "HEAD"], { cwd: tests })).stdout.trim();
+    const resolved: string[] = [];
+    const withTests = parseProjectConfig({
+      project: "demo",
+      jira: { type: "file", tickets_dir: "t", project_key: "DEMO" },
+      code_hosts: { local: { type: "github", token: "secret://env/T" } },
+      repos: {
+        shop: { host: "local", path: "demo-org/demo-shop" },
+        e2e: { host: "local", path: "demo-org/shop-tests", role: "tests", default_ref: "main" },
+      },
+    });
+    const { ws, lines, promise } = await run({
+      config: withTests,
+      codeHosts: {
+        local: {
+          ...host,
+          resolveChange: (locator) => {
+            resolved.push(`${locator.repo} ${locator.kind} ${locator.id}`);
+            return Promise.resolve({
+              host: "local",
+              repo: locator.repo,
+              kind: "branch" as const,
+              id: locator.id,
+              headSha: testsSha,
+            });
+          },
+          cloneUrl: (repo) =>
+            Promise.resolve(pathToFileURL(repo === "demo-org/shop-tests" ? tests : origin).href),
+        },
+      },
+    });
+    const result = await promise;
+    expect(resolved).toEqual(["demo-org/shop-tests branch main"]);
+    // The analysed change is the app's; the tests repository is context, not part of the change.
+    expect(result.shas).toEqual({ shop: sha });
+    expect(await readFile(ws.path("repos", "e2e", "cart.spec.ts"), "utf8")).toContain("cart total");
+    await expect(readFile(ws.path("repos", "e2e.diff"), "utf8")).rejects.toThrow();
+    const record = (await openRunWorkspace(ws.root, key, ws.runId)).record;
+    expect(record.repos["e2e"]).toEqual({
+      host: "local",
+      path: "demo-org/shop-tests",
+      sha: testsSha,
+      role: "tests",
+    });
+    expect(record.repos["shop"]?.role).toBeUndefined();
+    expect(parseEventLines(lines.join("")).events.map((e) => e.event)).toContain("tests_repo.checked_out");
+  });
+
   it("REQ-CTX-01/AC5: a ticket fetch failure marks the run failed and is rethrown", async () => {
     source = { getTicket: () => Promise.reject(Object.assign(new Error("401"), { code: "JIRA_AUTH" })) };
     const { ws, lines, promise } = await run();

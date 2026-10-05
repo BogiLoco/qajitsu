@@ -12,6 +12,7 @@ import {
 import { generateText, stepCountIs, type ModelMessage } from "ai";
 import { guardTools } from "./loop.js";
 import { openMcpTools } from "./mcp.js";
+import { renderTestsRepo } from "./tests-repo.js";
 import { untrusted, UNTRUSTED_DATA_RULES, type ChangeContext } from "./context.js";
 import { modelForRole, stageGuard, type AgentStageDeps } from "./roles-run.js";
 import { AGENT_ROLES } from "./roles.js";
@@ -47,6 +48,9 @@ Rules (checked by code; a violating spec is rejected):
   Fields are "status", "fields.<key>" (read with res.json("<key>")) or "texts.<n>". The expected value is ALWAYS plan.expect(...) with exactly the same step and field; never a literal.
 - Never use process, fetch, require, eval, globalThis or timers. Never write files.
 - Use the read-only tools to look up endpoints, payloads and field names in the code under repos/.
+- When the tests repository's conventions are given, follow them: use its preferred selector strategy and the same
+  selectors and flows as its page objects and helpers (read them under repos/<tests repo>/). Specs cannot import them;
+  copy the selector, never the code.
 Answer with the complete spec in one \`\`\`ts code block and nothing else.
 Example:
 \`\`\`ts
@@ -165,6 +169,10 @@ export async function runAuthor(
               JSON.stringify(analysis.endpoints.map((e) => ({ method: e.method, path: e.path }))),
             ),
             `Code of the change is under ${context.repos.map((r) => `repos/${r.alias}/`).join(", ") || "repos/"}.`,
+            ...context.testsRepos.flatMap((t) => [
+              `## Conventions of the tests repository '${t.alias}' (REQ-EXEC-01/AC3; code under repos/${t.alias}/)`,
+              renderTestsRepo(t.alias, t.index),
+            ]),
           ].join("\n\n"),
         },
       ];

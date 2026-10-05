@@ -402,6 +402,9 @@ test_types: [api, web]
   hook, variables from templates and secrets, cleanup policy. The compose file of the change is checked before it
   starts (no privileged containers, host mounts or public ports). [docs/cli/build-and-runs.md](docs/cli/build-and-runs.md)
 - **OpenAPI contract validation** of every response against the document in the analysed commit.
+- **Your existing tests repository.** A repo with `role: tests` is checked out on every fetch. The planner sees its
+  test titles and lists in `existing_coverage` what is already covered (each claim checked by code against the real
+  file and title); the author gets its selector strategy, page-object selectors and README/CONTRIBUTING conventions.
 - **Exploration through MCP.** The author can look at the running app through MCP servers (e.g. Playwright MCP) to
   find selectors: `mcp.servers` in the project config, only the listed tools, every call through the guard and the
   journal, URLs checked against the environment allowlist, nothing stored as results or evidence.

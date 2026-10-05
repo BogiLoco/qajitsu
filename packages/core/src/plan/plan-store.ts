@@ -132,6 +132,12 @@ export function renderPlanMarkdown(plan: Plan): string {
       ? plan.open_questions.map((q) => `- ${q.id}: ${q.question}`)
       : ["_(none)_"]),
   );
+  if (plan.existing_coverage.length > 0) {
+    out.push("", "## Already covered by existing tests", "");
+    out.push(
+      ...plan.existing_coverage.map((c) => `- ${c.covers.join(", ")}: "${c.title}" in ${c.repo}:${c.file}`),
+    );
+  }
   out.push("", "## Out of scope", "");
   out.push(...(plan.out_of_scope.length > 0 ? plan.out_of_scope.map((o) => `- ${o}`) : ["_(none)_"]));
   return `${out.join("\n")}\n`;

@@ -94,7 +94,7 @@ export async function fetchContext(options: {
     const shas: Record<string, string> = {};
     const repos: Record<
       string,
-      { host: string; path: string; sha: string; change?: string; strategy?: string }
+      { host: string; path: string; sha: string; change?: string; strategy?: string; role?: "tests" }
     > = {};
     for (const { repoAlias, change } of discovery.changes) {
       const repo = config.repos[repoAlias];
@@ -117,6 +117,33 @@ export async function fetchContext(options: {
         strategy: discovery.strategy,
       };
       events.emit("fetch", ORCHESTRATOR, "repo.checked_out", { repo: repoAlias, sha: change.headSha });
+    }
+    // REQ-CTX-06/AC1: the tests repository is checked out like any other repo, at its default branch; change
+    // discovery never looks at it. It is context for the planner and the author, not part of the analysed change.
+    for (const [alias, repo] of Object.entries(config.repos)) {
+      if (repo.role !== "tests" || repos[alias] !== undefined) continue;
+      const host = codeHosts[repo.host];
+      if (!host)
+        throw new ConfigError(
+          "REPO_UNKNOWN",
+          `Code host '${repo.host}' of repository '${alias}' is not configured.`,
+          {
+            repoAlias: alias,
+          },
+        );
+      const head = await host.resolveChange(
+        { repo: repo.path, kind: "branch", id: repo.default_ref },
+        signal,
+      );
+      const cloneUrl = await host.cloneUrl(repo.path);
+      const mirror = await git.ensureMirror(repo.host, repo.path, cloneUrl, signal);
+      await git.addWorktree(mirror, head.headSha, ws.path("repos", alias), cloneUrl, signal);
+      repos[alias] = { host: repo.host, path: repo.path, sha: head.headSha, role: "tests" };
+      events.emit("fetch", ORCHESTRATOR, "tests_repo.checked_out", {
+        repo: alias,
+        ref: repo.default_ref,
+        sha: head.headSha,
+      });
     }
     await writeFile(
       ws.path("repos", "changes.json"),

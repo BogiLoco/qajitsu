@@ -168,6 +168,24 @@ describe("plan store (REQ-PLAN-02, REQ-PLAN-04, REQ-PLAN-06)", () => {
     );
     expect(md).toContain("- Q1: Which locale?");
     expect(md).toContain("## Out of scope\n\n_(none)_");
+    expect(md).not.toContain("Already covered");
+  });
+
+  it("REQ-CTX-06/AC2: existing tests that already cover the ticket are listed for the reviewer", () => {
+    const md = renderPlanMarkdown(
+      parsePlan({
+        schema: 1,
+        ticket: "DEMO-1",
+        version: 1,
+        ...draft,
+        existing_coverage: [
+          { repo: "e2e", file: "tests/discounts.spec.ts", title: "unknown code is 404", covers: ["AC4"] },
+        ],
+      }),
+    );
+    expect(md).toContain(
+      '## Already covered by existing tests\n\n- AC4: "unknown code is 404" in e2e:tests/discounts.spec.ts',
+    );
   });
 });
 

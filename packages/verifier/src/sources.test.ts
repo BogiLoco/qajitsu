@@ -3,6 +3,7 @@ import { AnalysisSchema, PlanSchema, TicketKeySchema, type Ticket } from "@qajit
 import { describe, expect, it } from "vitest";
 import {
   checkAnalysisSources,
+  checkExistingCoverage,
   checkPlanSources,
   checkSource,
   formatSourceIssues,
@@ -113,5 +114,46 @@ describe("grounded sources (REQ-PLAN-03)", () => {
       risks: [{ description: "r", source: [{ kind: "comment", repo: "web", index: 5 }] }],
     });
     expect(checkAnalysisSources(analysis, context).map((i) => i.where)).toEqual(["endpoints.0", "risks.0"]);
+  });
+});
+
+describe("existing coverage claims (REQ-CTX-06/AC2)", () => {
+  const plan = (coverage: unknown[]) =>
+    PlanSchema.parse({
+      schema: 1,
+      ticket: "DEMO-1",
+      version: 1,
+      cases: [
+        {
+          id: "TC-01",
+          title: "Cart total",
+          type: "api",
+          priority: "high",
+          source: [{ kind: "ac", id: "AC1" }],
+          steps: [{ id: "S1", action: "GET /cart", expect: { description: "ok", status: 200 } }],
+          evidence: ["response"],
+        },
+      ],
+      existing_coverage: coverage,
+    });
+  const tests = { e2e: [{ file: "tests/cart.spec.ts", titles: ["codes never stack"] }] };
+
+  it("REQ-CTX-06/AC2: a claim must name a real test of the tests repository and a real criterion", () => {
+    const ok = plan([
+      { repo: "e2e", file: "tests/cart.spec.ts", title: "codes never stack", covers: ["AC2"] },
+    ]);
+    expect(checkExistingCoverage(ok, { ...context, tests })).toEqual([]);
+    const invented = plan([
+      { repo: "e2e", file: "tests/cart.spec.ts", title: "codes stack forever", covers: ["AC2"] },
+      { repo: "e2e", file: "tests/none.spec.ts", title: "x", covers: ["AC1"] },
+      { repo: "web", file: "tests/cart.spec.ts", title: "codes never stack", covers: ["AC1"] },
+      { repo: "e2e", file: "tests/cart.spec.ts", title: "codes never stack", covers: ["AC9"] },
+    ]);
+    expect(checkExistingCoverage(invented, { ...context, tests })).toEqual([
+      "existing_coverage.0: no test 'codes stack forever' in e2e:tests/cart.spec.ts",
+      "existing_coverage.1: e2e has no test file tests/none.spec.ts",
+      "existing_coverage.2: web is not a tests repository of this run",
+      "existing_coverage.3: AC9 is not an acceptance criterion of the ticket",
+    ]);
   });
 });

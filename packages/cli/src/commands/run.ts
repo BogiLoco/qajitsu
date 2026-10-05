@@ -223,7 +223,10 @@ export async function runRun(
     const health = reached?.health ?? { ok: false, detail: prepared.failure?.message ?? "not started" };
     events.emit("run", SYSTEM, "env.health", { env: env.name, ok: health.ok, detail: health.detail });
     const deployedSha = reached?.deployedSha;
-    const analysed = Object.values(ws.record.repos).map((r) => r.sha);
+    // The tests repository is not deployed; only the analysed change counts (REQ-CTX-06).
+    const analysed = Object.values(ws.record.repos)
+      .filter((r) => r.role !== "tests")
+      .map((r) => r.sha);
     // A built environment runs exactly the fetched worktree (REQ-CTX-04/AC4).
     const versionCheck = built ? "built-from-worktree" : compareDeployedSha(deployedSha, analysed);
     await ws.update({

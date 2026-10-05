@@ -8,6 +8,7 @@ import {
   type RunWorkspace,
   type Ticket,
 } from "@qajitsu/core";
+import { indexTestsRepo, renderTestsRepo, type TestsRepoIndex } from "./tests-repo.js";
 
 /** Diffs longer than this are replaced by a file list; agents read the rest with tools (REQ-CTX-05/AC5). */
 export const DIFF_INLINE_LIMIT = 30_000;
@@ -100,6 +101,8 @@ export interface ChangeContext {
     readonly diffInlined: boolean;
   }[];
   readonly knowledge: readonly { readonly name: string; readonly text: string }[];
+  /** Tests repositories of the run with their code index (REQ-CTX-06); not part of the change. */
+  readonly testsRepos: readonly { readonly alias: string; readonly index: TestsRepoIndex }[];
 }
 
 /**
@@ -150,7 +153,12 @@ export async function buildChangeContext(
 ): Promise<ChangeContext> {
   const ticket = await readTicketSnapshot(ws.path("ticket", "ticket.json"));
   const repos: ChangeContext["repos"][number][] = [];
-  for (const alias of Object.keys(ws.record.repos)) {
+  const testsRepos: { alias: string; index: TestsRepoIndex }[] = [];
+  for (const [alias, record] of Object.entries(ws.record.repos)) {
+    if (record.role === "tests") {
+      testsRepos.push({ alias, index: await indexTestsRepo(ws.path("repos", alias)) });
+      continue;
+    }
     const raw = await readFile(ws.path("repos", `${alias}.diff`), "utf8");
     const meta = JSON.parse(await readFile(ws.path("repos", `${alias}.change.json`), "utf8")) as {
       change: ChangeRef;
@@ -167,7 +175,7 @@ export async function buildChangeContext(
       diffInlined: kept.length <= DIFF_INLINE_LIMIT,
     });
   }
-  return { ticket, repos, knowledge };
+  return { ticket, repos, knowledge, testsRepos };
 }
 
 /**
@@ -230,6 +238,12 @@ export function renderChangeContext(context: ChangeContext): string {
       repo.diffInlined
         ? `Diff:\n${untrusted(`repos/${repo.alias}.diff`, repo.diff)}`
         : `The diff is large (${String(repo.diff.length)} characters); it is not inlined. Read repos/${repo.alias}.diff and files under repos/${repo.alias}/ with your tools.`,
+    );
+  }
+  for (const t of context.testsRepos) {
+    parts.push(
+      `## Tests repository '${t.alias}' (existing automated tests; code under repos/${t.alias}/, not part of the change)`,
+      renderTestsRepo(t.alias, t.index),
     );
   }
   if (context.knowledge.length > 0) {

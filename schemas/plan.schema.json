@@ -304,6 +304,42 @@
       "items": {
         "type": "string"
       }
+    },
+    "existing_coverage": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "repo": {
+            "type": "string",
+            "minLength": 1
+          },
+          "file": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "covers": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "repo",
+          "file",
+          "title",
+          "covers"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "required": [
