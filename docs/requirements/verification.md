@@ -136,7 +136,7 @@ Nothing leaves the machine unless every gate passes.
 
 ### REQ-VER-11 · Bug fix verification: fails before, passes after
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: INV-1, INV-3, REQ-ENV-03, REQ-CTX-01, REQ-VER-02
@@ -146,10 +146,10 @@ then runs the same test on the version with the fix (it must pass). Strong evide
 
 **Acceptance criteria**
 
-- [ ] AC1: For Bug tickets the plan marks reproduction cases; `qj run --fix-check` runs them on the base commit and on the fix commit, each built from its own worktree.
-- [ ] AC2: The same approved spec runs on both versions; the spec hash is recorded for both runs.
-- [ ] AC3: The fix is verified only if the case is FAILED before and PASSED after; any other combination (passed before, failed after, BLOCKED or FLAKY on either side) is reported as not verified with the reason.
-- [ ] AC4: The report and Jira comment show both results side by side with their evidence.
+- [x] AC1: For Bug tickets the plan marks reproduction cases; `qj run --fix-check` runs them on the base commit and on the fix commit, each built from its own worktree.
+- [x] AC2: The same approved spec runs on both versions; the spec hash is recorded for both runs.
+- [x] AC3: The fix is verified only if the case is FAILED before and PASSED after; any other combination (passed before, failed after, BLOCKED or FLAKY on either side) is reported as not verified with the reason.
+- [x] AC4: The report and Jira comment show both results side by side with their evidence.
 
 ### REQ-VER-12 · Failure triage hints
 

@@ -92,5 +92,18 @@ describe("passive observations (REQ-EVD-07)", () => {
     expect(renderCommentPreview(model)).toContain("Observations (found by code, not test results):");
     const quiet = renderJiraWiki({ ...model, observations: [] });
     expect(quiet).not.toContain("Observations");
+    // REQ-VER-11/AC4: the fix verification has its own section next to the results.
+    const fixed = renderJiraWiki({
+      ...model,
+      fixCheck: [
+        "Fix verified: before shop@aaaaaaaaaaaa (run r0), with the fix bbbbbbbbbbbb",
+        "TC-01: FAILED before, PASSED with the fix",
+      ],
+    });
+    expect(fixed).toContain("h4. Fix verification");
+    expect(fixed).toContain("* TC\\-01: FAILED before, PASSED with the fix");
+    expect(renderCommentPreview({ ...model, fixCheck: ["Fix verified"] })).toContain(
+      "Fix verification:\n  Fix verified",
+    );
   });
 });

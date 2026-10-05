@@ -108,9 +108,9 @@ export const createBuildProject = async (
     return { out, err, exitCode };
   };
   /** fetch, plan, approve and copy the fixture specs; returns the run folder. */
-  const prepare = async (): Promise<string> => {
+  const prepare = async (planDraft: string = draft): Promise<string> => {
     expect((await run(["fetch", "DEMO-1"])).exitCode).toBe(0);
-    expect((await run(["plan", "DEMO-1"], [{ text: analysis }, { text: draft }])).exitCode).toBe(0);
+    expect((await run(["plan", "DEMO-1"], [{ text: analysis }, { text: planDraft }])).exitCode).toBe(0);
     expect((await run(["approve", "DEMO-1"])).exitCode).toBe(0);
     const runId = (await readRunIndex(join(home, "runs"), "DEMO-1" as TicketKey)).latest ?? "";
     const dir = join(home, "runs", "DEMO-1", runId);

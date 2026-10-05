@@ -93,6 +93,12 @@ statuses, gates, auditor and canary run, reports are written.
 - `--build`: build the application from the fetched worktrees
 - `--keep`: with `--build`, keep containers and worktrees after the run
 - `--set <service.VAR=value>`: with `--build`, override an overridable service variable (repeatable)
+- `--fix-check`: with `--build`, verify a bug fix (REQ-VER-11): after this run, a sibling run builds the commit the
+  change branched from and runs the same approved plan and specs; every case marked `reproduces` must be FAILED before
+  the fix and PASSED with it. Both results appear side by side in the report and the Jira comment.
+
+With `--fix-check` the exit code is the run's when the fix is verified, `1` when a reproduction case still fails
+with the fix, `2` when the check is not conclusive (e.g. the test passes before the fix) and `3` on errors.
 
 Exit codes: `0` every case PASSED and the publish gates hold, `1` any case FAILED, `2` otherwise (BLOCKED, FLAKY,
 NOT_RUN, NEEDS_REVIEW, failed gates), `3` configuration or framework errors. Ctrl+C stops the environment and exits

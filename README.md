@@ -415,6 +415,9 @@ test_types: [api, web]
   hook, variables from templates and secrets, cleanup policy. The compose file of the change is checked before it
   starts (no privileged containers, host mounts or public ports). [docs/cli/build-and-runs.md](docs/cli/build-and-runs.md)
 - **OpenAPI contract validation** of every response against the document in the analysed commit.
+- **Bug fix verification.** For a Bug ticket the planner marks the cases that reproduce the defect;
+  `qj run <TICKET> --build --fix-check` runs them on the commit before the fix (they must FAIL) and with the fix (they
+  must PASS), with the same approved plan and specs, and shows both side by side in the report and in Jira.
 - **Passive observations.** While web cases run, QAJitsu records browser console errors, 4xx/5xx responses and
   axe-core accessibility violations of every visited page. They appear in `report.html` and the Jira comment in
   their own section and never change a status or a count; switch checks off or ignore entries under `observations:`.

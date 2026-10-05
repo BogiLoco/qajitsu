@@ -60,6 +60,29 @@ describe("git repos (REQ-CTX-04)", () => {
     expect(second).not.toBe(third);
   });
 
+  it("REQ-VER-11/AC1: finds the commit a change branched from (the version before the fix)", async () => {
+    // main: first, second; fix branch from second with one commit; main moves on afterwards.
+    await git(origin, "checkout", "-qb", "fix/SHOP-1");
+    await writeFile(join(origin, "fix.txt"), "fix");
+    await git(origin, "add", ".");
+    await git(origin, "-c", "user.name=qa", "-c", "user.email=qa@example.com", "commit", "-qm", "fix");
+    const fix = await git(origin, "rev-parse", "HEAD");
+    await git(origin, "checkout", "-q", "main");
+    await writeFile(join(origin, "later.txt"), "later");
+    await git(origin, "add", ".");
+    await git(origin, "-c", "user.name=qa", "-c", "user.email=qa@example.com", "commit", "-qm", "later");
+    const repos = createGitRepos({ cacheDir: join(dir, "cache"), exec });
+    const mirror = await repos.ensureMirror("local", "demo-org/shop", pathToFileURL(origin).href);
+    expect(await repos.mergeBase(mirror, fix, "main")).toBe(second);
+    await expect(repos.mergeBase(mirror, fix, "--upload-pack=x")).rejects.toMatchObject({
+      code: "GIT_REF_INVALID",
+    });
+    await expect(repos.mergeBase(mirror, "nope", "main")).rejects.toMatchObject({ code: "GIT_SHA_INVALID" });
+    await expect(repos.mergeBase(mirror, fix, "no-such-branch")).rejects.toMatchObject({
+      code: "GIT_FAILED",
+    });
+  });
+
   it("REQ-CTX-04/AC2: an unknown SHA fails with GIT_SHA_MISSING; malformed input is rejected", async () => {
     const repos = createGitRepos({ cacheDir: join(dir, "cache"), exec });
     const url = pathToFileURL(origin).href;

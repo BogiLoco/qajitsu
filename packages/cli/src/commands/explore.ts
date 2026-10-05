@@ -361,6 +361,7 @@ export async function runExplorePromote(
       title: observation.title,
       type: "web",
       priority: observation.severity,
+      reproduces: false,
       source: [{ kind: "observation", session: record.id, id: observation.id }],
       preconditions: [
         `From exploratory session ${record.id} ${observation.id}: ${observation.description}`.slice(0, 500),

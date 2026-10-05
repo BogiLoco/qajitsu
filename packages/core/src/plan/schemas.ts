@@ -101,6 +101,11 @@ export const TestCaseSchema = z.strictObject({
   title: z.string().min(3),
   type: z.enum(["api", "web", "mobile"]),
   priority: z.enum(["high", "medium", "low"]),
+  /**
+   * The case reproduces the reported bug: it must fail on the version before the fix and pass with it
+   * (`qj run --fix-check`, REQ-VER-11).
+   */
+  reproduces: z.boolean().default(false),
   source: Sources,
   preconditions: z.array(z.string()).default([]),
   /** Test data by alias only, e.g. `{ user: "user:standard" }`; never secret values (invariant 8). */

@@ -42,6 +42,8 @@ export interface CommentModel {
   readonly notes: readonly string[];
   /** Passive observations, computed by code, never statuses (REQ-EVD-07/AC4). */
   readonly observations?: readonly RunObservation[] | undefined;
+  /** Fix verification lines (REQ-VER-11/AC4): verdict first, then one line per reproduction case. */
+  readonly fixCheck?: readonly string[] | undefined;
 }
 
 /** Observations shown in a comment; the rest are in the report. */
@@ -145,6 +147,10 @@ export function renderJiraAdf(m: CommentModel): { version: 1; type: "doc"; conte
       ),
     );
   }
+  if (m.fixCheck && m.fixCheck.length > 0) {
+    content.push(heading(4, "Fix verification"));
+    content.push(bullets(m.fixCheck.map((l) => [text(l)])));
+  }
   const observed = observationLines(m);
   if (observed.length > 0) {
     content.push(heading(4, OBSERVATIONS_TITLE));
@@ -200,6 +206,8 @@ export function renderJiraWiki(m: CommentModel): string {
       );
     }
   }
+  if (m.fixCheck && m.fixCheck.length > 0)
+    lines.push("", "h4. Fix verification", ...m.fixCheck.map((l) => `* ${wikiEscape(l)}`));
   const observed = observationLines(m);
   if (observed.length > 0)
     lines.push("", `h4. ${OBSERVATIONS_TITLE}`, ...observed.map((o) => `* ${wikiEscape(o)}`));
@@ -224,6 +232,8 @@ export function renderCommentPreview(m: CommentModel): string {
         `  ${f.caseId} ${f.stepId} ${f.field}: expected ${show(f.expected)}, actual ${show(f.actual)}`,
       );
   }
+  if (m.fixCheck && m.fixCheck.length > 0)
+    lines.push("", "Fix verification:", ...m.fixCheck.map((l) => `  ${l}`));
   const observed = observationLines(m);
   if (observed.length > 0) lines.push("", `${OBSERVATIONS_TITLE}:`, ...observed.map((o) => `  ${o}`));
   lines.push(

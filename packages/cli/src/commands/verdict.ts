@@ -42,7 +42,7 @@ import {
   type GateResult,
 } from "@qajitsu/verifier";
 import { parse } from "yaml";
-import type { z } from "zod";
+import { z } from "zod";
 import type { RunSession } from "../session.js";
 
 /** Environment facts recorded in `run.json` by `qj run`. */
@@ -77,7 +77,28 @@ export interface RunVerdict {
   readonly junit: string;
   /** Passive observations (REQ-EVD-07), masked; never part of a status or a count. */
   readonly observations: readonly RunObservation[];
+  /** Fix verification lines for the Jira comment (REQ-VER-11/AC4); empty without `--fix-check`. */
+  readonly fixCheck: readonly string[];
 }
+
+/** `data.fixCheck` of `run.json`, written by `qj run --fix-check` (REQ-VER-11). */
+const FixCheckDataSchema = z.object({
+  verified: z.boolean(),
+  baseRun: z.string(),
+  repo: z.string(),
+  baseSha: z.string(),
+  fixSha: z.string(),
+  cases: z.array(
+    z.object({
+      caseId: z.string(),
+      before: z.string(),
+      after: z.string(),
+      specAfter: z.string(),
+      verified: z.boolean(),
+      reason: z.string(),
+    }),
+  ),
+});
 
 /**
  * Re-reads results, evidence and the approved plan of a run and computes everything a report or a
@@ -312,6 +333,17 @@ export async function computeVerdict(
     }),
     session.project.config.observations.ignore,
   ).map((o) => ({ ...o, text: masker.maskText(o.text) }));
+  const fixCheckData = FixCheckDataSchema.safeParse(ws.record.data["fixCheck"]);
+  const fixCheck = fixCheckData.success ? fixCheckData.data : undefined;
+  const fixCheckLines = fixCheck
+    ? [
+        `Fix ${fixCheck.verified ? "verified" : "NOT verified"}: before ${fixCheck.repo}@${fixCheck.baseSha.slice(0, 12)} (run ${fixCheck.baseRun}), with the fix ${fixCheck.fixSha.slice(0, 12)}`,
+        ...fixCheck.cases.map(
+          (c) => `${c.caseId}: ${c.before} before, ${c.after} with the fix (${c.reason})`,
+        ),
+        `Evidence before the fix: qajitsu evidence ${ws.ticket} --run ${fixCheck.baseRun}`,
+      ]
+    : [];
   const matrixMd = renderMatrixMarkdown(rows);
   const csv = renderMatrixCsv(rows);
   const html = (g: readonly GateResult[]): string =>
@@ -331,6 +363,7 @@ export async function computeVerdict(
       graphSvg: graph.edges.length > 0 ? renderGraphSvg(graph) : undefined,
       checks: checkNotes,
       observations,
+      fixCheck,
     });
   const secretGate = gateNoSecrets(
     [
@@ -390,6 +423,7 @@ export async function computeVerdict(
     failed: verdict.failed,
     checks: checkNotes,
     observations,
+    fixCheck: fixCheckLines,
     junit: masker.maskText(
       renderJUnit(
         { ticket: ws.ticket, runId: ws.runId },

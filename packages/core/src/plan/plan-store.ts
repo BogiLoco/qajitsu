@@ -112,6 +112,11 @@ export function renderPlanMarkdown(plan: Plan): string {
   }
   for (const c of plan.cases) {
     out.push("", `## ${c.id}: ${c.title}`, "");
+    if (c.reproduces)
+      out.push(
+        "_Reproduces the reported bug: must fail before the fix and pass with it (`qj run --fix-check`)._",
+        "",
+      );
     if (c.preconditions.length > 0) out.push(`Preconditions: ${c.preconditions.join("; ")}`, "");
     const data = Object.entries(c.data);
     if (data.length > 0) out.push(`Data: ${data.map(([k, v]) => `${k}=${v}`).join(", ")}`, "");

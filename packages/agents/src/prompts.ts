@@ -36,6 +36,8 @@ Rules:
 - Test data uses aliases only, like {"user":"user:standard"}; never passwords, tokens or real personal data.
 - "evidence" lists what proves the result: request, response, screenshot, video, trace, log, har.
 - Unclear behaviour goes to "open_questions" (Q1, ...); deliberately untested things go to "out_of_scope".
+- For a ticket of type Bug, mark the case(s) that reproduce the reported defect with "reproduces": true: they must
+  fail on the version before the fix and pass with the fix. Other cases leave it out.
 - When a tests repository is listed, check its existing tests first. A behaviour an existing test already verifies goes to
   "existing_coverage" as {"repo","file","title","covers":["AC2"]} with the file and the title exactly as listed (checked
   by code) instead of a new case; write cases only for what is not covered yet.

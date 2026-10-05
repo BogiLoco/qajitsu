@@ -128,6 +128,7 @@ function commentModel(
     attachments: attachments.map((a) => a.name),
     notes,
     observations: v.observations,
+    fixCheck: v.fixCheck,
   };
 }
 

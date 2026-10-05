@@ -42,6 +42,24 @@ export interface ReportInput {
   readonly repos: Readonly<Record<string, string>>;
   /** Auditor and canary notes (REQ-VER-06, REQ-VER-09). */
   readonly checks?: readonly string[] | undefined;
+  /** Fix verification: the same reproduction cases before and with the fix (REQ-VER-11/AC4). */
+  readonly fixCheck?:
+    | {
+        readonly verified: boolean;
+        readonly baseRun: string;
+        readonly repo: string;
+        readonly baseSha: string;
+        readonly fixSha: string;
+        readonly cases: readonly {
+          readonly caseId: string;
+          readonly before: string;
+          readonly after: string;
+          readonly specAfter: string;
+          readonly verified: boolean;
+          readonly reason: string;
+        }[];
+      }
+    | undefined;
   /** Passive observations, computed by code, never statuses (REQ-EVD-07/AC4). */
   readonly observations?: readonly RunObservation[] | undefined;
   readonly gates: readonly {
@@ -182,6 +200,18 @@ section{border-top:1px solid #d0d7de;margin-top:16px}img,video{max-width:100%}
 <p class="muted">Run ${esc(input.runId)} · ${esc(input.generatedAt)} · environment ${esc(input.environment.name)} (${esc(input.environment.baseUrl)})${input.environment.deployedSha ? ` · deployed <code>${esc(input.environment.deployedSha)}</code>` : ""}${input.environment.stubs?.length ? ` · <strong>stubbed (not real):</strong> ${esc(input.environment.stubs.join(", "))}` : ""}<br>Code: ${repos || "–"} · plan sha256 <code>${esc(input.planSha256.slice(0, 16))}…</code></p>
 <div class="tiles">${tiles}</div>
 <h2>Summary</h2><p>${esc(input.summary).replace(/\n/g, "<br>")}</p>
+${
+  input.fixCheck
+    ? `<h2>Fix verification: ${input.fixCheck.verified ? '<span class="ok">verified</span>' : '<span class="bad">not verified</span>'}</h2>
+<p class="muted">The same approved plan and specs ran on ${esc(input.fixCheck.repo)} <code>${esc(input.fixCheck.baseSha.slice(0, 12))}</code> (before the fix, <a href="../../${esc(input.fixCheck.baseRun)}/report/report.html">run ${esc(input.fixCheck.baseRun)}</a>) and <code>${esc(input.fixCheck.fixSha.slice(0, 12))}</code> (with the fix, this run). A reproduction case must fail before and pass after.</p>
+<table><tr><th>TC</th><th>Before the fix</th><th>With the fix</th><th>Spec sha256</th><th>Verdict</th></tr>${input.fixCheck.cases
+        .map(
+          (c) =>
+            `<tr class="${c.verified ? "" : "bad"}"><td><a href="#${esc(c.caseId)}">${esc(c.caseId)}</a></td><td><a href="../../${esc(input.fixCheck?.baseRun ?? "")}/report/report.html#${esc(c.caseId)}">${esc(c.before)}</a></td><td><a href="#${esc(c.caseId)}">${esc(c.after)}</a></td><td><code>${esc(c.specAfter.slice(0, 12))}</code></td><td>${esc(c.reason)}</td></tr>`,
+        )
+        .join("")}</table>`
+    : ""
+}
 ${
   input.observations && input.observations.length > 0
     ? `<h2>Observations (${String(input.observations.length)}, not test results)</h2>

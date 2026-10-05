@@ -11,6 +11,7 @@ import { runPublish } from "./commands/publish.js";
 import { runPull } from "./commands/pull.js";
 import { runRun, type RunPorts } from "./commands/run.js";
 import { runTest } from "./commands/test-flow.js";
+import { runFixCheck } from "./commands/fix-check.js";
 import { runClean, runGc, runResume, runRuns } from "./commands/runs.js";
 import { runEnvCheck, runEnvRender, runEnvUp } from "./commands/env.js";
 import { runExplore, runExplorePromote } from "./commands/explore.js";
@@ -227,11 +228,29 @@ export function createProgram(version: string, io: ProgramIO): Command {
       collect,
       [],
     )
+    .option(
+      "--fix-check",
+      "with --build: verify a bug fix: cases marked reproduces must FAIL before the fix and PASS with it",
+    )
     .action(
       (
         ticket: string,
-        options: { run?: string; env?: string; build?: boolean; keep?: boolean; set: string[] },
-      ) => withPorts((ports) => runRun(ticket, options, commandIO, ports))(),
+        options: {
+          run?: string;
+          env?: string;
+          build?: boolean;
+          keep?: boolean;
+          set: string[];
+          fixCheck?: boolean;
+        },
+      ) => {
+        const { fixCheck, ...runOptions } = options;
+        return withPorts((ports) =>
+          fixCheck === true
+            ? runFixCheck(ticket, runOptions, commandIO, ports, review)
+            : runRun(ticket, runOptions, commandIO, ports),
+        )();
+      },
     );
 
   program

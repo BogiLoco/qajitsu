@@ -102,6 +102,12 @@ export interface GitRepos {
     cloneUrl: string,
     signal?: AbortSignal,
   ): Promise<string>;
+  /**
+   * The commit `sha` branched from on branch `ref` of the mirror: the version before a change (REQ-VER-11/AC1).
+   *
+   * @throws {AdapterError} `GIT_SHA_INVALID`, `GIT_REF_INVALID` or `GIT_FAILED`.
+   */
+  mergeBase(mirror: string, sha: string, ref: string, signal?: AbortSignal): Promise<string>;
 }
 
 /**
@@ -198,6 +204,18 @@ export function createGitRepos(options: { readonly cacheDir: string; readonly ex
         });
       }
       return target;
+    },
+
+    async mergeBase(mirror, sha, ref, signal) {
+      if (!SHA.test(sha)) throw new AdapterError("GIT_SHA_INVALID", "Expected a full commit SHA.", { sha });
+      if (!/^(?!-)[\w./-]+$/.test(ref) || ref.includes(".."))
+        throw new AdapterError("GIT_REF_INVALID", "Invalid branch name.", { ref });
+      const base = (
+        await run(["-C", mirror, "merge-base", sha, `refs/heads/${ref}`], "merge-base", {}, signal)
+      ).trim();
+      if (!SHA.test(base))
+        throw new AdapterError("GIT_FAILED", "git merge-base returned no commit.", { ref });
+      return base;
     },
   };
 }
