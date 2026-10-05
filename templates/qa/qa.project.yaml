@@ -88,6 +88,14 @@ test_types: [api, web]
 # Scripts from .qa/hooks/ around every run (REQ-GEN-01/AC2): setup before the cases, teardown after them
 # hooks: { setup: hooks/setup.mjs, teardown: hooks/teardown.mjs, timeout_s: 120 }
 #
+# MCP servers the author may use to explore the app for selectors (REQ-EXEC-01); exploration is guarded and journaled,
+# never test execution. Only the listed tools are offered; {{allowed_origins}} is the environment allowlist.
+# mcp:
+#   servers:
+#     playwright:
+#       command: [npx, "@playwright/mcp@0.0.41", --headless, --isolated, --allowed-origins, "{{allowed_origins}}"]
+#       tools: [browser_navigate, browser_snapshot, browser_click, browser_type, browser_wait_for]
+#
 # Retention of runs and runtime resources (REQ-WS-03)
 # cleanup: { policy: on_success, keep_last: 10, max_age_days: 30 }
 #

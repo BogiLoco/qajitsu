@@ -8,6 +8,7 @@ import {
   tool,
   type JSONSchema7,
   type ModelMessage,
+  type Schema,
   type ToolSet,
 } from "ai";
 import { z } from "zod";
@@ -18,7 +19,8 @@ import type { UsageTracker } from "./usage.js";
 export interface AgentTool {
   readonly name: string;
   readonly description: string;
-  readonly inputSchema: z.ZodObject;
+  /** Zod for built-in tools, a JSON Schema (`jsonSchema(...)`) for MCP tools. */
+  readonly inputSchema: z.ZodObject | Schema<Record<string, unknown>>;
   execute(input: Record<string, unknown>, signal?: AbortSignal): Promise<string>;
 }
 

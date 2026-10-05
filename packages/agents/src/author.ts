@@ -11,6 +11,7 @@ import {
 } from "@qajitsu/verifier";
 import { generateText, stepCountIs, type ModelMessage } from "ai";
 import { guardTools } from "./loop.js";
+import { openMcpTools } from "./mcp.js";
 import { untrusted, UNTRUSTED_DATA_RULES, type ChangeContext } from "./context.js";
 import { modelForRole, stageGuard, type AgentStageDeps } from "./roles-run.js";
 import { AGENT_ROLES } from "./roles.js";
@@ -112,74 +113,108 @@ export async function runAuthor(
   const role = AGENT_ROLES.find((r) => r.role === "author");
   if (!role) throw new Error("author role missing");
   const model = await modelForRole(deps.models, "author");
-  const guard = stageGuard(deps, "author", role);
-  const tools = model.profile.tools
-    ? guardTools(createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText }), guard, deps.signal)
-    : undefined;
   const actor = { kind: "agent", name: "author" } as const;
-  const out: AuthoredSpec[] = [];
-  for (const planCase of plan.cases) {
-    deps.events.emit("author", actor, "case.start", { caseId: planCase.id, model: model.id });
-    let messages: ModelMessage[] = [
-      {
-        role: "user",
-        content: [
-          `Write the spec for ${planCase.id}.`,
-          `Account aliases available: ${accounts.length > 0 ? accounts.join(", ") : "(none: call api without as())"}.`,
-          "## Approved case (from the plan; expectations are read with plan.expect)",
-          untrusted(`plan.${planCase.id}`, describeCase(planCase)),
-          "## Endpoints found by the analyst",
-          untrusted(
-            "analysis.endpoints",
-            JSON.stringify(analysis.endpoints.map((e) => ({ method: e.method, path: e.path }))),
-          ),
-          `Code of the change is under ${context.repos.map((r) => `repos/${r.alias}/`).join(", ") || "repos/"}.`,
-        ].join("\n\n"),
-      },
-    ];
-    let problems: SpecProblem[] = [];
-    let file: string | undefined;
-    let attempts = 0;
-    for (let attempt = 1; attempt <= AUTHOR_MAX_ATTEMPTS; attempt += 1) {
-      attempts = attempt;
-      const result = await generateText({
-        model: model.model,
-        system: AUTHOR_SYSTEM,
-        messages,
-        ...(tools ? { tools, stopWhen: stepCountIs(10) } : {}),
-        ...(deps.signal ? { abortSignal: deps.signal } : {}),
-        maxRetries: 2,
-      });
-      deps.usage.record("author", "author", model.id, model.profile, {
-        inputTokens: result.usage.inputTokens ?? 0,
-        outputTokens: result.usage.outputTokens ?? 0,
-      });
-      const code = extractCode(result.text);
-      problems =
-        code === undefined
-          ? [{ check: "lint", message: "answer contained no ```ts code block" }]
-          : await checkSpec(code, planCase.id, plan);
-      if (code !== undefined && problems.length === 0) {
-        file = deps.ws.path("specs", `${planCase.id}.spec.ts`);
-        await writeFile(file, code, "utf8");
-        break;
-      }
-      messages = [
-        ...messages,
-        ...result.responseMessages,
+  // REQ-EXEC-01/AC2: MCP exploration tools, guarded like every other tool (REQ-VER-03/AC3); never test execution.
+  const scratch = deps.mcp && model.profile.tools ? await mkdtemp(join(tmpdir(), "qj-mcp-")) : undefined;
+  const mcp =
+    deps.mcp && scratch !== undefined
+      ? await openMcpTools({
+          servers: deps.mcp.servers,
+          role: "author",
+          allowedOrigins: deps.mcp.allowedOrigins,
+          cwd: scratch,
+          mask: deps.maskText,
+          ...(deps.mcp.connect ? { connect: deps.mcp.connect } : {}),
+        })
+      : undefined;
+  for (const u of mcp?.unavailable ?? []) deps.events.emit("author", actor, "mcp.unavailable", u);
+  const guard = stageGuard(
+    deps,
+    "author",
+    role,
+    mcp && deps.mcp
+      ? {
+          tools: mcp.tools.map((t) => t.name),
+          networkTools: mcp.networkTools,
+          allowedOrigins: deps.mcp.allowedOrigins,
+        }
+      : undefined,
+  );
+  const tools = model.profile.tools
+    ? guardTools(
+        [...createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText }), ...(mcp?.tools ?? [])],
+        guard,
+        deps.signal,
+      )
+    : undefined;
+  try {
+    const out: AuthoredSpec[] = [];
+    for (const planCase of plan.cases) {
+      deps.events.emit("author", actor, "case.start", { caseId: planCase.id, model: model.id });
+      let messages: ModelMessage[] = [
         {
           role: "user",
-          content: `The spec was rejected (attempt ${String(attempt)} of ${String(AUTHOR_MAX_ATTEMPTS)}). Fix these problems and answer with the complete spec:\n${formatSpecProblems(problems)}`,
+          content: [
+            `Write the spec for ${planCase.id}.`,
+            `Account aliases available: ${accounts.length > 0 ? accounts.join(", ") : "(none: call api without as())"}.`,
+            "## Approved case (from the plan; expectations are read with plan.expect)",
+            untrusted(`plan.${planCase.id}`, describeCase(planCase)),
+            "## Endpoints found by the analyst",
+            untrusted(
+              "analysis.endpoints",
+              JSON.stringify(analysis.endpoints.map((e) => ({ method: e.method, path: e.path }))),
+            ),
+            `Code of the change is under ${context.repos.map((r) => `repos/${r.alias}/`).join(", ") || "repos/"}.`,
+          ].join("\n\n"),
         },
       ];
+      let problems: SpecProblem[] = [];
+      let file: string | undefined;
+      let attempts = 0;
+      for (let attempt = 1; attempt <= AUTHOR_MAX_ATTEMPTS; attempt += 1) {
+        attempts = attempt;
+        const result = await generateText({
+          model: model.model,
+          system: AUTHOR_SYSTEM,
+          messages,
+          ...(tools ? { tools, stopWhen: stepCountIs(10) } : {}),
+          ...(deps.signal ? { abortSignal: deps.signal } : {}),
+          maxRetries: 2,
+        });
+        deps.usage.record("author", "author", model.id, model.profile, {
+          inputTokens: result.usage.inputTokens ?? 0,
+          outputTokens: result.usage.outputTokens ?? 0,
+        });
+        const code = extractCode(result.text);
+        problems =
+          code === undefined
+            ? [{ check: "lint", message: "answer contained no ```ts code block" }]
+            : await checkSpec(code, planCase.id, plan);
+        if (code !== undefined && problems.length === 0) {
+          file = deps.ws.path("specs", `${planCase.id}.spec.ts`);
+          await writeFile(file, code, "utf8");
+          break;
+        }
+        messages = [
+          ...messages,
+          ...result.responseMessages,
+          {
+            role: "user",
+            content: `The spec was rejected (attempt ${String(attempt)} of ${String(AUTHOR_MAX_ATTEMPTS)}). Fix these problems and answer with the complete spec:\n${formatSpecProblems(problems)}`,
+          },
+        ];
+      }
+      deps.events.emit("author", actor, "case.end", {
+        caseId: planCase.id,
+        attempts,
+        ok: file !== undefined,
+        problems: problems.length,
+      });
+      out.push({ caseId: planCase.id, ...(file ? { file } : {}), attempts, problems: file ? [] : problems });
     }
-    deps.events.emit("author", actor, "case.end", {
-      caseId: planCase.id,
-      attempts,
-      ok: file !== undefined,
-      problems: problems.length,
-    });
-    out.push({ caseId: planCase.id, ...(file ? { file } : {}), attempts, problems: file ? [] : problems });
+    return out;
+  } finally {
+    await mcp?.close();
+    if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
   }
-  return out;
 }

@@ -14,7 +14,7 @@ The author agent writes test files for approved cases only. Exploring the app th
 **Acceptance criteria**
 
 - [x] AC1: One spec file per case under `specs/`, in TypeScript, using `@qajitsu/steps`.
-- [ ] AC2: MCP exploration is journaled and produces no results or evidence.
+- [x] AC2: MCP exploration is journaled and produces no results or evidence.
 - [ ] AC3: The author follows conventions of the project's tests repository when one is configured.
 
 ### REQ-EXEC-02 · Steps library: `step()` and `verify()`

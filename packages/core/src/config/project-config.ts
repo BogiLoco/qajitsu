@@ -257,6 +257,30 @@ export const ProjectConfigSchema = z.strictObject({
       timeout_s: z.number().int().min(1).max(1800).default(120),
     })
     .default({ timeout_s: 120 }),
+  /**
+   * MCP servers agents may use to explore the application (REQ-EXEC-01): started per stage without a shell, with a
+   * minimal environment, outside the run workspace. Only the listed tools are offered, every call goes through the
+   * guard (REQ-VER-03/AC3) and exploration never counts as test execution.
+   */
+  mcp: z
+    .strictObject({
+      servers: z
+        .record(
+          z.string().regex(/^[a-z][a-z0-9_-]{0,30}$/),
+          z.strictObject({
+            /** Command and arguments; `{{allowed_origins}}` becomes the environment allowlist joined by `;`. */
+            command: z.array(z.string().min(1)).min(1),
+            roles: z
+              .array(z.enum(["author"]))
+              .min(1)
+              .default(["author"]),
+            tools: z.array(z.string().regex(/^[\w.-]+$/)).min(1),
+            timeout_s: z.number().int().min(1).max(300).default(30),
+          }),
+        )
+        .default({}),
+    })
+    .default({ servers: {} }),
   test_types: z
     .array(z.enum(["api", "web", "mobile"]))
     .min(1)

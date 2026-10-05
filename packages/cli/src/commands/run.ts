@@ -410,6 +410,8 @@ async function executeCases(
       now: ports.now,
       maskJson: (v: unknown) => masker.maskJson(v),
       maskText: (t: string) => masker.maskText(t),
+      // REQ-EXEC-01/AC2: exploration through MCP stays inside the environment allowlist (invariant 10).
+      mcp: { servers: project.config.mcp.servers, allowedOrigins: [env.origin] },
     };
     const authored = await runAuthor(
       deps,

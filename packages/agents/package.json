@@ -23,6 +23,7 @@
     "@qajitsu/models": "workspace:*",
     "@qajitsu/steps": "workspace:*",
     "@qajitsu/verifier": "workspace:*",
+    "@ai-sdk/mcp": "catalog:",
     "ai": "catalog:",
     "yaml": "catalog:",
     "zod": "catalog:"

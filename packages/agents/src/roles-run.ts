@@ -1,3 +1,4 @@
+import type { McpClientLike, McpServers } from "./mcp.js";
 import { writeFile } from "node:fs/promises";
 import {
   AnalysisSchema,
@@ -32,6 +33,15 @@ export interface AgentStageDeps {
   readonly maskJson: (value: unknown) => unknown;
   readonly maskText: (text: string) => string;
   readonly signal?: AbortSignal;
+  /**
+   * MCP servers for exploration (REQ-EXEC-01): the environment allowlist and, in tests, a client factory. The
+   * servers run in a temporary folder outside the run workspace.
+   */
+  readonly mcp?: {
+    readonly servers: McpServers;
+    readonly allowedOrigins: readonly string[];
+    readonly connect?: (command: string, args: readonly string[], cwd: string) => Promise<McpClientLike>;
+  };
 }
 
 const roleDef = (role: AgentRoleDefinition["role"]): AgentRoleDefinition => {
@@ -64,7 +74,17 @@ export async function modelForRole(
 /**
  * Creates the guard of an agent stage; its decisions go into the run's event log (REQ-VER-03, REQ-OBS-01).
  */
-export function stageGuard(deps: AgentStageDeps, stage: string, role: AgentRoleDefinition): Guard {
+export function stageGuard(
+  deps: AgentStageDeps,
+  stage: string,
+  role: AgentRoleDefinition,
+  /** MCP tools of the stage (REQ-VER-03/AC3): allowed by name, `url` inputs checked against the allowlist. */
+  mcp?: {
+    readonly tools: readonly string[];
+    readonly networkTools: readonly string[];
+    readonly allowedOrigins: readonly string[];
+  },
+): Guard {
   const journal = createJournal(
     (line) => {
       const {
@@ -93,11 +113,11 @@ export function stageGuard(deps: AgentStageDeps, stage: string, role: AgentRoleD
     journal,
     policy: {
       workspaceRoot: deps.ws.dir,
-      allowedTools: new Set(role.tools.filter((t) => t !== "write_plan")),
+      allowedTools: new Set([...role.tools.filter((t) => t !== "write_plan"), ...(mcp?.tools ?? [])]),
       writeTools: new Set(["write_file", "move_file", "delete_file", "write_plan"]),
       protectedPaths: DEFAULT_PROTECTED_PATHS,
-      networkTools: new Set(),
-      allowedOrigins: [],
+      networkTools: new Set(mcp?.networkTools ?? []),
+      allowedOrigins: mcp?.allowedOrigins ?? [],
     },
   });
 }

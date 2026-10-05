@@ -1287,6 +1287,68 @@
       },
       "additionalProperties": false
     },
+    "mcp": {
+      "default": {
+        "servers": {}
+      },
+      "type": "object",
+      "properties": {
+        "servers": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,30}$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "roles": {
+                "default": [
+                  "author"
+                ],
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "author"
+                  ]
+                }
+              },
+              "tools": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[\\w.-]+$"
+                }
+              },
+              "timeout_s": {
+                "default": 30,
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 300
+              }
+            },
+            "required": [
+              "command",
+              "tools"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "test_types": {
       "default": [
         "api"

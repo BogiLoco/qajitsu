@@ -30,7 +30,7 @@ The layer that keeps results honest. Background: ADR-0002 and the architecture i
 
 ### REQ-VER-03 · Write bans for agents
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 1
 - Related: INV-2, INV-3
@@ -39,7 +39,7 @@ The layer that keeps results honest. Background: ADR-0002 and the architecture i
 
 - [x] AC1: The guard denies agent writes to `results/`, `evidence/`, `plan/plan.approved.yaml`, `journal/` and `run.json`.
 - [x] AC2: The guard denies paths outside the run workspace and tools not allowed for the stage (default deny).
-- [ ] AC3: The guard wraps every tool call of the agent loop, including MCP tools.
+- [x] AC3: The guard wraps every tool call of the agent loop, including MCP tools.
 
 ### REQ-VER-04 · Tool-call journal
 
