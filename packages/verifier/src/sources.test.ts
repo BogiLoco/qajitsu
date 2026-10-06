@@ -170,3 +170,34 @@ describe("observations as sources (REQ-EXEC-15/AC4)", () => {
     );
   });
 });
+
+describe("documentation as a source (REQ-KNOW-06)", () => {
+  const chunk = {
+    id: "0123456789abcdef-0",
+    source: "docs",
+    path: "docs/orders.md",
+    section: "Orders > Cancel",
+    modifiedAt: "2026-09-01T00:00:00.000Z",
+    fileHash: "f",
+    hash: "h",
+    tags: [],
+    text: "A paid order can be **cancelled** within 24 hours of payment.",
+  };
+  const withDocs: SourceContext = { ...context, docs: new Map([[chunk.id, chunk]]) };
+
+  it("REQ-KNOW-06/AC3: a documentation quote must be verbatim in a chunk the run's agents were given", () => {
+    const doc = { kind: "doc", chunk: chunk.id, quote: "can be cancelled within 24 hours" } as const;
+    expect(checkSource(doc, withDocs)).toBeUndefined();
+    expect(checkSource({ ...doc, quote: "can be cancelled within 48 hours" }, withDocs)).toBe(
+      "the quote is not in docs/orders.md",
+    );
+    expect(checkSource(doc, context)).toMatch(/no such documentation chunk/);
+    expect(checkSource({ ...doc, chunk: "fedcba9876543210-3" }, withDocs)).toMatch(
+      /no such documentation chunk/,
+    );
+    expect(checkSource({ ...doc, path: "docs/cart.md" }, withDocs)).toBe(
+      `chunk ${chunk.id} is from docs/orders.md, not docs/cart.md`,
+    );
+    expect(checkSource({ ...doc, path: "docs/orders.md" }, withDocs)).toBeUndefined();
+  });
+});

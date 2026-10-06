@@ -1,4 +1,12 @@
-import type { Analysis, Plan, ReviewComment, SourceRef, Ticket } from "@qajitsu/core";
+import {
+  checkDocQuote,
+  type Analysis,
+  type KnowledgeChunk,
+  type Plan,
+  type ReviewComment,
+  type SourceRef,
+  type Ticket,
+} from "@qajitsu/core";
 
 /** Line ranges a diff touches, per file: new side for added/changed files, old side for deleted ones. */
 export type DiffIndex = ReadonlyMap<string, readonly (readonly [number, number])[]>;
@@ -39,6 +47,8 @@ export interface SourceContext {
   readonly diffs: Readonly<Record<string, DiffIndex>>;
   /** Review comments per repository alias. */
   readonly comments: Readonly<Record<string, readonly ReviewComment[]>>;
+  /** Documentation chunks the run's agents were given, by id (REQ-KNOW-06/AC3). */
+  readonly docs?: ReadonlyMap<string, KnowledgeChunk>;
   /** Observation ids per exploratory session of the run (REQ-EXEC-15/AC4). */
   readonly observations?: Readonly<Record<string, readonly string[]>>;
   /** Tests per tests-repository alias, from the code index of its worktree (REQ-CTX-06). */
@@ -116,6 +126,15 @@ export function checkSource(source: SourceRef, context: SourceContext): string |
       return context.observations?.[source.session]?.includes(source.id) === true
         ? undefined
         : `observation ${source.id} does not exist in exploratory session ${source.session}`;
+    case "doc": {
+      // REQ-KNOW-06/AC3: the quote must be in the chunk the run's agents were given, verbatim.
+      const chunk = context.docs?.get(source.chunk);
+      const problem = checkDocQuote(source.quote, chunk);
+      if (problem !== undefined) return problem;
+      if (source.path !== undefined && source.path !== chunk?.path)
+        return `chunk ${source.chunk} is from ${chunk?.path ?? "?"}, not ${source.path}`;
+      return undefined;
+    }
   }
 }
 

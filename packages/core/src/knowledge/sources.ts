@@ -154,3 +154,50 @@ export function isOutdated(
   const modified = Date.parse(chunk.modifiedAt);
   return Number.isFinite(modified) && now.getTime() - modified > maxAgeDays * 86_400_000;
 }
+
+/** Chunks retrieved for a run, by id; `<run>/knowledge/chunks.json`, written only by trusted code. */
+const RunDocsSchema = z.record(
+  z.string(),
+  z.strictObject({
+    id: z.string(),
+    source: z.string(),
+    path: z.string(),
+    section: z.string(),
+    modifiedAt: z.string(),
+    fileHash: z.string(),
+    hash: z.string(),
+    tags: z.array(z.string()),
+    text: z.string(),
+  }),
+);
+
+/**
+ * Documentation chunks agents of a run were given (REQ-KNOW-06/AC3): plan quotes are checked against them, also at
+ * approval and after manual edits, without opening the knowledge base again.
+ *
+ * @param file - `<run>/knowledge/chunks.json`.
+ */
+export async function readRunDocs(file: string): Promise<Map<string, KnowledgeChunk>> {
+  const text = await readFile(file, "utf8").catch(() => undefined);
+  const parsed = text === undefined ? undefined : RunDocsSchema.safeParse(JSON.parse(text));
+  return new Map(parsed?.success === true ? Object.entries(parsed.data) : []);
+}
+
+/** Adds chunks to a run's documentation snapshot (atomic write). */
+export async function recordRunDocs(file: string, chunks: readonly KnowledgeChunk[]): Promise<void> {
+  if (chunks.length === 0) return;
+  const known = await readRunDocs(file);
+  for (const c of chunks)
+    known.set(c.id, {
+      id: c.id,
+      source: c.source,
+      path: c.path,
+      section: c.section,
+      modifiedAt: c.modifiedAt,
+      fileHash: c.fileHash,
+      hash: c.hash,
+      tags: [...c.tags],
+      text: c.text,
+    });
+  await writeAtomic(file, `${JSON.stringify(Object.fromEntries(known), null, 2)}\n`);
+}

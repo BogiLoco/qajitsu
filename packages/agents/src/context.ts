@@ -3,8 +3,10 @@ import { join } from "node:path";
 import {
   ConfigError,
   ExploreSessionSchema,
+  readRunDocs,
   readTicketSnapshot,
   type ChangeRef,
+  type KnowledgeChunk,
   type ReviewComment,
   type RunWorkspace,
   type Ticket,
@@ -104,6 +106,11 @@ export interface ChangeContext {
   readonly knowledge: readonly { readonly name: string; readonly text: string }[];
   /** Tests repositories of the run with their code index (REQ-CTX-06); not part of the change. */
   readonly testsRepos: readonly { readonly alias: string; readonly index: TestsRepoIndex }[];
+  /**
+   * Documentation chunks the run's agents were given, by id (`knowledge/chunks.json`); doc quotes are checked
+   * against them (REQ-KNOW-06/AC3). Agent stages add the chunks they retrieve.
+   */
+  readonly docs: Map<string, KnowledgeChunk>;
   /** Observation ids of the run's exploratory sessions; plan cases may cite them (REQ-EXEC-15/AC4). */
   readonly explorations: readonly { readonly session: string; readonly observations: readonly string[] }[];
 }
@@ -186,7 +193,8 @@ export async function buildChangeContext(
     if (parsed.success)
       explorations.push({ session: parsed.data.id, observations: parsed.data.observations.map((o) => o.id) });
   }
-  return { ticket, repos, knowledge, testsRepos, explorations };
+  const docs = await readRunDocs(ws.path("knowledge", "chunks.json"));
+  return { ticket, repos, knowledge, testsRepos, explorations, docs };
 }
 
 /**

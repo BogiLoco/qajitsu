@@ -141,7 +141,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
   };
 
   const withPorts =
-    (run: (ports: RuntimePorts & ModelPorts) => Promise<number>) => async (): Promise<void> => {
+    (run: (ports: RuntimePorts & ModelPorts & RunPorts) => Promise<number>) => async (): Promise<void> => {
       if (!io.ports) {
         io.writeError("Runtime ports are not configured.\n");
         io.setExitCode(3);

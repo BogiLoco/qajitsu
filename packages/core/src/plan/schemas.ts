@@ -2,7 +2,7 @@ import { z } from "zod";
 
 /**
  * Where a claim or test case comes from (REQ-PLAN-03/AC1, REQ-PLAN-01/AC2): an acceptance criterion id
- * (`AC1` = first criterion of the ticket snapshot), a verbatim quote from the ticket, a file and line
+ * (`AC1` = first criterion of the ticket snapshot), a verbatim quote from the ticket or the project's documentation, a file and line
  * range from the diff, or a review comment by index.
  */
 export const SourceRefSchema = z.discriminatedUnion("kind", [
@@ -22,6 +22,19 @@ export const SourceRefSchema = z.discriminatedUnion("kind", [
     kind: z.literal("comment"),
     repo: z.string().min(1),
     index: z.number().int().nonnegative(),
+  }),
+  /**
+   * A verbatim quote from a chunk of the project's knowledge base (REQ-KNOW-06/AC2+AC3). `path`, `section`,
+   * `modified` and `outdated` are filled by code from the stored chunk, never trusted from the model.
+   */
+  z.strictObject({
+    kind: z.literal("doc"),
+    chunk: z.string().regex(/^[0-9a-f]{16}-\d+$/),
+    quote: z.string().min(12),
+    path: z.string().optional(),
+    section: z.string().optional(),
+    modified: z.string().optional(),
+    outdated: z.boolean().optional(),
   }),
   /** An observation of an exploratory session of this run (REQ-EXEC-15/AC4). */
   z.strictObject({

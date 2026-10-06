@@ -46,6 +46,8 @@ export const DEFAULT_PROTECTED_PATHS: readonly string[] = [
   "checks/",
   // Exploratory sessions: actions, observations and recordings are written by the trusted parent (REQ-EXEC-15/AC2).
   "explore/",
+  // Documentation chunks agents were given; plan quotes are checked against them (REQ-KNOW-06/AC3).
+  "knowledge/",
   "run.json",
 ];
 

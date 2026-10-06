@@ -45,7 +45,7 @@ Documentation a project adds on demand, searchable by agents with cited sources;
 
 ### REQ-KNOW-04 · Sync with changed files
 
-- Status: in-progress
+- Status: implemented
 - Priority: should
 - Stage: 7
 - Related: REQ-KNOW-02
@@ -54,7 +54,7 @@ Documentation a project adds on demand, searchable by agents with cited sources;
 
 - [x] AC1: `qj knowledge sync` re-processes changed files (by content hash), removes chunks of deleted files and adds new files of registered sources.
 - [x] AC2: `--dry-run` shows what would change.
-- [ ] AC3: Optional automatic sync before `qj plan` (`knowledge.auto_sync: true`).
+- [x] AC3: Optional automatic sync before `qj plan` (`knowledge.auto_sync: true`).
 
 ### REQ-KNOW-05 · List, inspect and search
 
@@ -71,22 +71,22 @@ Documentation a project adds on demand, searchable by agents with cited sources;
 
 ### REQ-KNOW-06 · Agent access with sources
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: 7
 - Related: REQ-PLAN-03, REQ-PRJ-04, REQ-NFR-05, INV-4
 
 **Acceptance criteria**
 
-- [ ] AC1: Analyst and planner get a read-only tool `search_docs(query, tags?)` limited to the run's project.
-- [ ] AC2: Every result carries source path, section and modification date; a plan that cites documentation shows these next to the case.
-- [ ] AC3: Quotes from documentation used as a source in the plan are checked verbatim against the stored chunk by code; a mismatch rejects the plan output.
-- [ ] AC4: Retrieved text is treated as untrusted data in prompts (no instructions are followed from it).
-- [ ] AC5: Every `search_docs` call and the returned chunk ids are recorded in the journal.
+- [x] AC1: Analyst and planner get a read-only tool `search_docs(query, tags?)` limited to the run's project.
+- [x] AC2: Every result carries source path, section and modification date; a plan that cites documentation shows these next to the case.
+- [x] AC3: Quotes from documentation used as a source in the plan are checked verbatim against the stored chunk by code; a mismatch rejects the plan output.
+- [x] AC4: Retrieved text is treated as untrusted data in prompts (no instructions are followed from it).
+- [x] AC5: Every `search_docs` call and the returned chunk ids are recorded in the journal.
 
 ### REQ-KNOW-07 · Automatic retrieval mode
 
-- Status: in-progress
+- Status: implemented
 - Priority: could
 - Stage: 7
 - Related: REQ-KNOW-01, REQ-LLM-07
@@ -97,7 +97,7 @@ Small documentation does not need vectors; large documentation does.
 
 - [x] AC1: When all documents fit the configured context budget, they are given to agents in full with keyword search; no embeddings are computed.
 - [x] AC2: Above the budget, hybrid retrieval (vector similarity plus keyword) is used.
-- [ ] AC3: The mode is shown in `qj knowledge list`; the `search_docs` tool is the same in both modes.
+- [x] AC3: The mode is shown in `qj knowledge list`; the `search_docs` tool is the same in both modes.
 
 ### REQ-KNOW-08 · Embedding model and storage options
 
@@ -114,7 +114,7 @@ Small documentation does not need vectors; large documentation does.
 
 ### REQ-KNOW-09 · Security of indexed content
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 7
 - Related: REQ-CFG-06, REQ-PRJ-04, INV-8
@@ -123,19 +123,19 @@ Small documentation does not need vectors; large documentation does.
 
 - [x] AC1: Content is masked by the secret scanner before chunking and embedding; files matching `.env*`, key and certificate patterns are never indexed.
 - [x] AC2: With a cloud embedding model, `add` and `sync` warn once per project that document text leaves the machine, and require confirmation (or `--yes`).
-- [ ] AC3: A knowledge base is never read by runs of another project.
+- [x] AC3: A knowledge base is never read by runs of another project.
 
 ### REQ-KNOW-10 · Freshness of documentation
 
-- Status: accepted
+- Status: implemented
 - Priority: could
 - Stage: 7
 - Related: REQ-KNOW-06
 
 **Acceptance criteria**
 
-- [ ] AC1: `knowledge.max_age_days` marks older chunks as possibly outdated; plans show the warning next to cases that cite them.
-- [ ] AC2: When documentation contradicts the ticket, the planner reports an open question instead of choosing one (REQ-PLAN-05).
+- [x] AC1: `knowledge.max_age_days` marks older chunks as possibly outdated; plans show the warning next to cases that cite them.
+- [x] AC2: When documentation contradicts the ticket, the planner reports an open question instead of choosing one (REQ-PLAN-05).
 
 ### REQ-KNOW-11 · Measured benefit
 

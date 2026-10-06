@@ -39,6 +39,7 @@ import { parse } from "yaml";
 import type { RuntimePorts } from "../adapters.js";
 import { knowledgeDir, openSession, type ModelPorts, type RunSession } from "../session.js";
 import type { CommandIO } from "./fetch.js";
+import { openRunKnowledge, type KnowledgePorts } from "./knowledge.js";
 
 /** Options of `qajitsu plan`. */
 export interface PlanOptions {
@@ -140,11 +141,12 @@ export async function runPlan(
   rawKey: string,
   options: PlanOptions,
   io: CommandIO,
-  ports: RuntimePorts & ModelPorts,
+  ports: RuntimePorts & ModelPorts & KnowledgePorts,
   review: ReviewPorts,
 ): Promise<number> {
   const masker = createMasker();
   let session: RunSession | undefined;
+  let closeKnowledge: () => Promise<void> = () => Promise.resolve();
   try {
     session = await openSession(rawKey, options.run, io.cwd, ports, masker);
     const ws = session.ws;
@@ -162,7 +164,9 @@ export async function runPlan(
         {},
       );
     }
-    const deps = stageDeps(session, ports);
+    const docs = await openRunKnowledge(session.project, masker, session.resolveSecret, io, ports);
+    closeKnowledge = docs.close;
+    const deps = { ...stageDeps(session, ports), ...(docs.access ? { knowledge: docs.access } : {}) };
     const knowledge = await loadKnowledge(knowledgeDir(session.project), (t) => masker.containsSecret(t));
     const context = await buildChangeContext(ws, knowledge);
     let analysis: Analysis;
@@ -286,6 +290,8 @@ export async function runPlan(
     }
     io.writeError(formatError(error, (t) => masker.maskText(t)));
     return exitFor(error);
+  } finally {
+    await closeKnowledge();
   }
 }
 

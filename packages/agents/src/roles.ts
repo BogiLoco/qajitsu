@@ -18,16 +18,16 @@ export const AGENT_ROLES: readonly AgentRoleDefinition[] = [
     role: "analyst",
     purpose:
       "Classify the change (api/web/mobile/mixed), find affected endpoints and screens, list regression risks.",
-    tools: ["read_file", "search_code", "list_files"],
+    tools: ["read_file", "search_code", "list_files", "search_docs"],
     requires: { tools: true, structuredOutput: true, contextWindow: 64_000 },
-    requirements: ["REQ-PLAN-01", "REQ-CTX-05"],
+    requirements: ["REQ-PLAN-01", "REQ-CTX-05", "REQ-KNOW-06"],
   },
   {
     role: "planner",
     purpose: "Write the structured test plan with grounded sources and open questions.",
-    tools: ["read_file", "search_code", "list_files", "write_plan"],
+    tools: ["read_file", "search_code", "list_files", "search_docs", "write_plan"],
     requires: { tools: true, structuredOutput: true, contextWindow: 64_000 },
-    requirements: ["REQ-PLAN-02", "REQ-PLAN-03", "REQ-PLAN-05"],
+    requirements: ["REQ-PLAN-02", "REQ-PLAN-03", "REQ-PLAN-05", "REQ-KNOW-06"],
   },
   {
     role: "author",

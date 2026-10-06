@@ -55,7 +55,7 @@ Everything a project owns lives under one folder, so it can be inspected, backed
 
 ### REQ-PRJ-04 · Isolation between projects
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 2
 - Related: REQ-VER-03, REQ-KNOW-06, INV-2, INV-8, INV-10, ADR-0006
@@ -65,7 +65,7 @@ A run sees only its own project. This protects confidentiality when one person t
 **Acceptance criteria**
 
 - [x] AC1: Agent file tools are limited by the guard to the run workspace and the read-only parts of its own project home; paths in other projects are denied and journaled.
-- [ ] AC2: `search_docs` and `search_code` query only the run's project knowledge base and the run's repositories.
+- [x] AC2: `search_docs` and `search_code` query only the run's project knowledge base and the run's repositories.
 - [x] AC3: Secrets, environment profiles, URL allowlists and model settings are resolved from the run's project only.
 - [x] AC4: Adversarial test: an agent in project A that asks for a file, document or secret of project B is denied, and nothing from B appears in A's prompts, evidence or reports.
 

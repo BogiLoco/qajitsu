@@ -107,7 +107,7 @@ export const createBuildProject = async (
     })
       .exitOverride()
       .parseAsync(["node", "qj", ...args]);
-    return { out, err, exitCode };
+    return { out, err, exitCode, model };
   };
   /** fetch, plan, approve and copy the fixture specs; returns the run folder. */
   const prepare = async (planDraft: string = draft): Promise<string> => {

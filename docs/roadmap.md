@@ -66,7 +66,7 @@ Analyst and planner agents on several model providers; plan review loop and free
 - [REQ-PRJ-01](requirements/projects.md#req-prj-01--project-home-and-data-layout) Project home and data layout (must, implemented, AC 5/5)
 - [REQ-PRJ-02](requirements/projects.md#req-prj-02--project-initialisation-qj-init) Project initialisation (`qj init`) (must, implemented, AC 6/6)
 - [REQ-PRJ-03](requirements/projects.md#req-prj-03--active-project-and-switching) Active project and switching (must, implemented, AC 7/7)
-- [REQ-PRJ-04](requirements/projects.md#req-prj-04--isolation-between-projects) Isolation between projects (must, in-progress, AC 3/4)
+- [REQ-PRJ-04](requirements/projects.md#req-prj-04--isolation-between-projects) Isolation between projects (must, implemented, AC 4/4)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 
@@ -180,13 +180,13 @@ and `qj bench` reports detection and false-FAILED rates per model.
 - [REQ-KNOW-01](requirements/knowledge.md#req-know-01--knowledge-base-per-project-created-on-demand) Knowledge base per project, created on demand (should, in-progress, AC 3/4)
 - [REQ-KNOW-02](requirements/knowledge.md#req-know-02--add-documents-from-files-and-folders) Add documents from files and folders (should, in-progress, AC 4/5)
 - [REQ-KNOW-03](requirements/knowledge.md#req-know-03--remove-documents-and-reset) Remove documents and reset (should, implemented, AC 2/2)
-- [REQ-KNOW-04](requirements/knowledge.md#req-know-04--sync-with-changed-files) Sync with changed files (should, in-progress, AC 2/3)
+- [REQ-KNOW-04](requirements/knowledge.md#req-know-04--sync-with-changed-files) Sync with changed files (should, implemented, AC 3/3)
 - [REQ-KNOW-05](requirements/knowledge.md#req-know-05--list-inspect-and-search) List, inspect and search (should, implemented, AC 3/3)
-- [REQ-KNOW-06](requirements/knowledge.md#req-know-06--agent-access-with-sources) Agent access with sources (should, accepted, AC 0/5)
-- [REQ-KNOW-07](requirements/knowledge.md#req-know-07--automatic-retrieval-mode) Automatic retrieval mode (could, in-progress, AC 2/3)
+- [REQ-KNOW-06](requirements/knowledge.md#req-know-06--agent-access-with-sources) Agent access with sources (should, implemented, AC 5/5)
+- [REQ-KNOW-07](requirements/knowledge.md#req-know-07--automatic-retrieval-mode) Automatic retrieval mode (could, implemented, AC 3/3)
 - [REQ-KNOW-08](requirements/knowledge.md#req-know-08--embedding-model-and-storage-options) Embedding model and storage options (should, in-progress, AC 2/3)
-- [REQ-KNOW-09](requirements/knowledge.md#req-know-09--security-of-indexed-content) Security of indexed content (must, in-progress, AC 2/3)
-- [REQ-KNOW-10](requirements/knowledge.md#req-know-10--freshness-of-documentation) Freshness of documentation (could, accepted, AC 0/2)
+- [REQ-KNOW-09](requirements/knowledge.md#req-know-09--security-of-indexed-content) Security of indexed content (must, implemented, AC 3/3)
+- [REQ-KNOW-10](requirements/knowledge.md#req-know-10--freshness-of-documentation) Freshness of documentation (could, implemented, AC 2/2)
 - [REQ-KNOW-11](requirements/knowledge.md#req-know-11--measured-benefit) Measured benefit (should, accepted, AC 0/1)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->

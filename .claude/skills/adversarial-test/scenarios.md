@@ -46,3 +46,11 @@ Status: `todo` (no test yet) · `covered` (test exists, file name in brackets). 
 
 - todo · Agent MCP browser navigates to a non-allowlisted host → denied.
 - todo · Ticket text instructs the agent to call a production URL (prompt injection) → denied and journaled.
+
+## Knowledge base (REQ-KNOW-06, REQ-KNOW-09, REQ-PRJ-04)
+
+- done · Agent of project A searches for project B's documents → nothing from B in results, prompts, snapshot or journal (`tests/adversarial/knowledge-isolation.test.ts`).
+- done · Planner cites project B's chunk id → rejected, "no such documentation chunk".
+- done · Planner claims a real chunk comes from another file → rejected by code.
+- done · Agent rewrites `knowledge/chunks.json` to make a forged quote pass → denied by the guard.
+- done · Document text closes its `</untrusted_data>` wrapper to inject instructions → escaped (`packages/agents/src/knowledge-tools.test.ts`).

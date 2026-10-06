@@ -129,6 +129,41 @@
                   "properties": {
                     "kind": {
                       "type": "string",
+                      "const": "doc"
+                    },
+                    "chunk": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{16}-\\d+$"
+                    },
+                    "quote": {
+                      "type": "string",
+                      "minLength": 12
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "section": {
+                      "type": "string"
+                    },
+                    "modified": {
+                      "type": "string"
+                    },
+                    "outdated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "chunk",
+                    "quote"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
                       "const": "observation"
                     },
                     "session": {
@@ -265,6 +300,41 @@
                   "properties": {
                     "kind": {
                       "type": "string",
+                      "const": "doc"
+                    },
+                    "chunk": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{16}-\\d+$"
+                    },
+                    "quote": {
+                      "type": "string",
+                      "minLength": 12
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "section": {
+                      "type": "string"
+                    },
+                    "modified": {
+                      "type": "string"
+                    },
+                    "outdated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "chunk",
+                    "quote"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
                       "const": "observation"
                     },
                     "session": {
@@ -393,6 +463,41 @@
                     "kind",
                     "repo",
                     "index"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "doc"
+                    },
+                    "chunk": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{16}-\\d+$"
+                    },
+                    "quote": {
+                      "type": "string",
+                      "minLength": 12
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "section": {
+                      "type": "string"
+                    },
+                    "modified": {
+                      "type": "string"
+                    },
+                    "outdated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "chunk",
+                    "quote"
                   ],
                   "additionalProperties": false
                 },

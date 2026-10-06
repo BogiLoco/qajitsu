@@ -10,6 +10,7 @@ import {
   type KnowledgeSource,
   type VectorStore,
 } from "@qajitsu/core";
+import type { KnowledgeAccess } from "@qajitsu/agents";
 import { createEmbedder } from "@qajitsu/models";
 import { createMasker, type Masker } from "@qajitsu/steps";
 import { createCliSecretResolver, type RuntimePorts } from "../adapters.js";
@@ -40,12 +41,29 @@ interface Opened extends KnowledgeContext {
  */
 async function open(io: CommandIO, ports: Ports, yes: boolean): Promise<Opened> {
   const project = await loadProject(io.cwd, ports.project);
-  const resolved = project.project;
-  if (!resolved)
-    throw new ConfigError("PROJECT_NOT_SELECTED", "The knowledge base belongs to a project; select one.", {});
   const masker = createMasker();
   const resolveSecret = createCliSecretResolver(project, ports, masker);
   await registerConfiguredSecrets(project, resolveSecret);
+  return openKnowledgeContext(project, masker, resolveSecret, io, ports, yes);
+}
+
+/**
+ * Opens the knowledge base of a loaded project with its masker and secret resolver (shared by the knowledge
+ * commands and `qj plan`).
+ *
+ * @throws {ConfigError} `PROJECT_NOT_SELECTED`, `KNOWLEDGE_STORE_UNAVAILABLE`.
+ */
+async function openKnowledgeContext(
+  project: LoadedProject,
+  masker: Masker,
+  resolveSecret: (ref: string) => Promise<string>,
+  io: CommandIO,
+  ports: Ports,
+  yes: boolean,
+): Promise<Opened> {
+  const resolved = project.project;
+  if (!resolved)
+    throw new ConfigError("PROJECT_NOT_SELECTED", "The knowledge base belongs to a project; select one.", {});
   const dir = resolved.paths.knowledge;
   const config = project.config.knowledge;
   let store: VectorStore;
@@ -453,4 +471,53 @@ export async function searchKnowledge(
     ...(tags.length ? { tags } : {}),
     ...(vector ? { vector } : {}),
   });
+}
+
+/**
+ * The run's view of its project's knowledge base for the analyst and planner (REQ-KNOW-06/AC1, REQ-PRJ-04/AC2,
+ * REQ-KNOW-09/AC3): opened from the run's project only, after an optional sync of the registered sources
+ * (`knowledge.auto_sync`, REQ-KNOW-04/AC3). Undefined access when the project has no built knowledge base.
+ */
+export async function openRunKnowledge(
+  project: LoadedProject,
+  masker: Masker,
+  resolveSecret: (ref: string) => Promise<string>,
+  io: CommandIO,
+  ports: Ports,
+): Promise<{ readonly access?: KnowledgeAccess; readonly close: () => Promise<void> }> {
+  const dir = project.project?.paths.knowledge;
+  if (dir === undefined) return { close: () => Promise.resolve() };
+  const sources = await readKnowledgeSources(dir);
+  if (sources.length === 0 && (await readKnowledgeIndex(dir)) === undefined)
+    return { close: () => Promise.resolve() };
+  const k = await openKnowledgeContext(project, masker, resolveSecret, io, ports, false);
+  try {
+    if (project.config.knowledge.auto_sync && sources.length > 0) {
+      const report = await syncKnowledge(k, sources);
+      await markSynced(
+        k,
+        sources.map((s) => s.name),
+      );
+      io.write(
+        `Knowledge base synced: ${n(report.added.length, "added")}, ${n(report.updated.length, "updated")}, ${n(report.removed.length, "removed")}.\n`,
+      );
+    }
+    const index = await readKnowledgeIndex(dir);
+    if (!index || (await k.store.count()) === 0) {
+      await k.store.close();
+      return { close: () => Promise.resolve() };
+    }
+    return {
+      access: {
+        mode: index.mode,
+        maxAgeDays: k.config.max_age_days,
+        search: async (query, tags, limit) => searchKnowledge(k, query, tags, limit),
+        all: () => k.store.all(),
+      },
+      close: () => k.store.close(),
+    };
+  } catch (error) {
+    await k.store.close();
+    throw error;
+  }
 }
