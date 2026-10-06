@@ -90,7 +90,7 @@ checks (auditor, canary) can only make a result worse, never better.
 | `qj evidence`         | you                         | the report, failed steps, screenshots, videos, traces | `report/report.html`                  |
 | `qj publish`          | **you** confirm, code posts | the Jira comment and the evidence zip                 | Jira ticket                           |
 
-Every ticket gets a **run folder** (`~/.qa-runs/<TICKET>/<RUN-ID>/`). Each command continues the latest run of the
+Every ticket gets a **run folder** in its project (`~/.qajitsu/projects/<project>/runs/<TICKET>/<RUN-ID>/`). Each command continues the latest run of the
 ticket unless you pass `--run <id>`. A new `qj fetch` starts a new run.
 
 ---
@@ -127,7 +127,8 @@ a Docker image (`ci/docker/Dockerfile`) with Node.js, git, Chromium and `qajitsu
 Run these in **your** repository (the one with the application or its tests):
 
 ```sh
-qj init                # creates .qa/ (asks for Jira; detects git host, docker-compose, OpenAPI, test types)
+qj init shop           # registers project "shop" in ~/.qajitsu and creates .qa/ (asks for Jira; detects git host,
+                       # docker-compose, OpenAPI, test types); the project becomes the active one
 # put the secrets into .env.local next to .qa/ (never commit it):
 #   JIRA_EMAIL=...  JIRA_TOKEN=...  GITHUB_TOKEN=...  ANTHROPIC_API_KEY=...
 qj doctor --online     # checks Node, config, secrets, Docker, mobile tooling, Jira and code host access
@@ -263,13 +264,14 @@ Every option and exit code of every command: [docs/cli/commands.md](docs/cli/com
 
 ### Setup
 
-| Command                                                                                | When to use it                                     | What it does                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| -------------------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `qj init [--yes] [--force] [--jira-url <url>] [--project-key <KEY>] [--env-url <url>]` | once per project                                   | Creates `.qa/qa.project.yaml`, `.qa/envs/local.yaml`, `.qa/knowledge/`. Detects the git host and repository from `origin`, `docker-compose.yml`/`compose.yaml` services and ports (→ `services` and `build`), an OpenAPI document, and test types (web frameworks, Android/iOS projects). Asks for Jira; `--yes` takes flags and defaults. The result is validated before it is written; an existing config is kept unless `--force`. |
-| `qj doctor [--online] [--models]`                                                      | after setup and whenever something fails           | Checks Node.js, the configuration, every `secret://` reference (by name only), Docker (for `--build`), Android SDK and Appium (for mobile), iOS availability. `--online`: real access checks against Jira and every code host. `--models`: one call per model role and its capabilities. Exit 3 when anything is missing.                                                                                                             |
-| `qj env check [--env <profile>]`                                                       | before the first `--build`                         | Lists every missing or invalid variable of the environment profile and of the `--build` services (secrets, templates, stub mappings, seed hook, compose file) without starting anything.                                                                                                                                                                                                                                              |
-| `qj env render <TICKET>`                                                               | debugging a build                                  | Recreates the per-service `.env` files (0600) of a run with the ports recorded by `--build`. They contain secrets; `qj clean` removes them.                                                                                                                                                                                                                                                                                           |
-| `qj env up <TICKET> [--set <svc.VAR=value>]... [--detach]`                             | checking that the app starts, or poking it by hand | Starts the app from the run's worktree exactly as `run --build` would, without agents or tests, and prints the service URLs. Ctrl+C stops it; `--detach` leaves containers running until `qj clean`.                                                                                                                                                                                                                                  |
+| Command                                                                        | When to use it                                     | What it does                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------ | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `qj init <slug> [--qa-dir <path>] [--jira-prefix <KEY>]... [--yes] [--no-use]` | once per project                                   | Registers the project in `~/.qajitsu/projects/<slug>/` (runs, git cache, knowledge, exports) and links its `.qa/` folder, or creates `.qa/` by detection (git host, compose services and ports, OpenAPI, test types). Validates it, lists every problem and makes it the active project.                                  |
+| `qj use <slug>` / `qj projects list` / `qj projects current`                   | switching between projects                         | Sets the active project and shows its open work; lists every project with readiness and ticket prefixes; prints the active one. Any command takes `--project <slug>`; a ticket key like `BANK-12` selects its project by prefix.                                                                                          |
+| `qj doctor [--online] [--models]`                                              | after setup and whenever something fails           | Checks Node.js, the configuration, every `secret://` reference (by name only), Docker (for `--build`), Android SDK and Appium (for mobile), iOS availability. `--online`: real access checks against Jira and every code host. `--models`: one call per model role and its capabilities. Exit 3 when anything is missing. |
+| `qj env check [--env <profile>]`                                               | before the first `--build`                         | Lists every missing or invalid variable of the environment profile and of the `--build` services (secrets, templates, stub mappings, seed hook, compose file) without starting anything.                                                                                                                                  |
+| `qj env render <TICKET>`                                                       | debugging a build                                  | Recreates the per-service `.env` files (0600) of a run with the ports recorded by `--build`. They contain secrets; `qj clean` removes them.                                                                                                                                                                               |
+| `qj env up <TICKET> [--set <svc.VAR=value>]... [--detach]`                     | checking that the app starts, or poking it by hand | Starts the app from the run's worktree exactly as `run --build` would, without agents or tests, and prints the service URLs. Ctrl+C stops it; `--detach` leaves containers running until `qj clean`.                                                                                                                      |
 
 ### Main flow
 
@@ -344,7 +346,7 @@ Every option and exit code of every command: [docs/cli/commands.md](docs/cli/com
 ## 6. What QAJitsu writes to disk
 
 ```text
-~/.qa-runs/                         workspace root (workspace.root, or QAJITSU_WORKSPACE)
+~/.qajitsu/projects/<project>/runs/  workspace root (workspace.root, or QAJITSU_WORKSPACE)
   SHOP-482/
     index.json, latest              runs of the ticket
     20261004-1046-k7f3/             one run

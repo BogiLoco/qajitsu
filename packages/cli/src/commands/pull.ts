@@ -29,7 +29,7 @@ export async function runPull(
   try {
     const key = TicketKeySchema.parse(rawKey);
     const id = RunIdSchema.parse(runId);
-    const project = await loadProject(io.cwd);
+    const project = await loadProject(io.cwd, ports.project);
     const jira = project.config.jira;
     if (jira.type === "file")
       throw new ConfigError("PULL_NEEDS_JIRA", "qj pull reads Jira attachments; jira.type is 'file'.", {});

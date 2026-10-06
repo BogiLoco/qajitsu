@@ -61,7 +61,7 @@ export async function runMap(
   ports: RuntimePorts,
 ): Promise<number> {
   try {
-    const project = await loadProject(io.cwd);
+    const project = await loadProject(io.cwd, ports.project);
     const root = resolveWorkspaceRoot({
       configured: project.config.workspace.root,
       home: ports.home,
@@ -105,7 +105,11 @@ export async function runMap(
       { pages, api },
       ports.now(),
     );
-    const out = resolve(io.cwd, options.out ?? join(project.projectDir, "qa-map"));
+    // REQ-PRJ-01/AC4, REQ-PRJ-10/AC2: outputs go to the project's exports/, never into the repository.
+    const out = resolve(
+      io.cwd,
+      options.out ?? join(project.project?.paths.exports ?? project.projectDir, "qa-map"),
+    );
     await mkdir(out, { recursive: true });
     await writeFile(join(out, "map.json"), `${JSON.stringify(map, null, 2)}\n`, "utf8");
     await writeFile(join(out, "map.html"), renderAppMapHtml(map, project.config.project), "utf8");

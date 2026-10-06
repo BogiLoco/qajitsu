@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { createGitExec, parseEventLines } from "@qajitsu/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { RuntimePorts } from "../adapters.js";
+import { registerProject } from "@qajitsu/core";
 import { createProgram } from "../program.js";
 
 const gitExec = createGitExec({ PATH: process.env["PATH"] ?? "", HOME: tmpdir() });
@@ -54,6 +55,11 @@ describe("qajitsu fetch (stage 1 demo: REQ-CTX-01..04, REQ-WS-01, REQ-GEN-05)", 
         "environments: { allowlist: ['http://localhost:3000'] }",
       ].join("\n"),
     );
+    await registerProject(join(home, ".qajitsu"), {
+      slug: "demo",
+      qaDir: join(project, ".qa"),
+      jiraPrefixes: ["DEMO"],
+    });
   });
   afterEach(async () => {
     await rm(home, { recursive: true, force: true });
@@ -121,7 +127,7 @@ describe("qajitsu fetch (stage 1 demo: REQ-CTX-01..04, REQ-WS-01, REQ-GEN-05)", 
   });
 
   it("REQ-CTX-01/AC3: rejects a malformed key with exit code 3 before anything happens", async () => {
-    const result = await run(["fetch", "../../etc"]);
+    const result = await run(["--project", "demo", "fetch", "../../etc"]);
     expect(result.exitCode).toBe(3);
     expect(result.err).toContain("Invalid ticket key");
     await expect(readdir(join(home, "runs"))).rejects.toThrow();
@@ -158,11 +164,51 @@ describe("qajitsu fetch (stage 1 demo: REQ-CTX-01..04, REQ-WS-01, REQ-GEN-05)", 
     expect(bad.err).toContain("  - project:");
     await writeFile(join(project, ".qa", "qa.project.yaml"), "project: [\n");
     expect((await run(["fetch", "DEMO-1"])).err).toContain("[CONFIG_YAML_INVALID]");
+    // The project links its .qa/ folder; without a configuration there the command stops (ADR-0006).
+    await rm(join(project, ".qa", "qa.project.yaml"));
     expect((await run(["fetch", "DEMO-1"], home)).err).toContain("[CONFIG_NOT_FOUND]");
   });
 
-  it("finds .qa/ from a subfolder", async () => {
-    await mkdir(join(project, "src", "deep"), { recursive: true });
-    expect((await run(["fetch", "DEMO-1"], join(project, "src", "deep"))).exitCode).toBe(0);
+  it("REQ-PRJ-03/AC2+AC4 + REQ-PRJ-01: the project comes from the ticket prefix, not the folder; runs land in its home", async () => {
+    await mkdir(join(home, "elsewhere"), { recursive: true });
+    const result = await run(["fetch", "DEMO-1"], join(home, "elsewhere"));
+    expect(result.exitCode).toBe(0);
+    expect(result.out.split("\n")[0]).toBe("Project: demo (ticket prefix DEMO)");
+    const index = JSON.parse(await readFile(join(home, "runs", "DEMO-1", "index.json"), "utf8")) as {
+      latest: string;
+    };
+    const record = JSON.parse(
+      await readFile(join(home, "runs", "DEMO-1", index.latest, "run.json"), "utf8"),
+    ) as {
+      data: { project?: string };
+    };
+    expect(record.data.project).toBe("demo");
+    expect(
+      await readFile(join(home, "runs", "DEMO-1", index.latest, "journal", "events.jsonl"), "utf8"),
+    ).toContain('"run.project"');
+  });
+
+  it("REQ-WS-01/AC4 + REQ-CTX-04/AC1 + REQ-PRJ-01/AC2+AC4 + REQ-PRJ-08/AC1: by default runs and git mirrors live in the project home", async () => {
+    const yaml = join(project, ".qa", "qa.project.yaml");
+    await writeFile(
+      yaml,
+      (await readFile(yaml, "utf8")).replace("workspace: { root: ~/runs, git_cache: ~/cache }\n", ""),
+    );
+    expect((await run(["fetch", "DEMO-1"])).exitCode).toBe(0);
+    const projectHome = join(home, ".qajitsu", "projects", "demo");
+    expect(await readdir(join(projectHome, "runs", "DEMO-1"))).toEqual(
+      expect.arrayContaining(["index.json"]),
+    );
+    expect(await readdir(join(projectHome, "cache", "git"))).toEqual(["local"]);
+    // Nothing next to the repository or in the old shared folders.
+    await expect(readdir(join(home, ".qa-runs"))).rejects.toThrow();
+    await expect(readdir(join(home, ".qa-cache"))).rejects.toThrow();
+    expect((await readdir(project)).sort()).toEqual([".qa", "tickets"]);
+  });
+
+  it("REQ-PRJ-03/AC2: without a project for the ticket the command fails with exit code 3", async () => {
+    const result = await run(["fetch", "OTHER-1"]);
+    expect(result.exitCode).toBe(3);
+    expect(result.err).toContain("[PROJECT_NOT_SELECTED]");
   });
 });

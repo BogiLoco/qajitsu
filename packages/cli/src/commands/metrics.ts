@@ -200,7 +200,7 @@ export async function runMetrics(
   ports: RuntimePorts,
 ): Promise<number> {
   try {
-    const project = await loadProject(io.cwd);
+    const project = await loadProject(io.cwd, ports.project);
     const root = resolveWorkspaceRoot({
       configured: project.config.workspace.root,
       home: ports.home,

@@ -24,6 +24,11 @@ export interface GuardPolicy {
   readonly writeTools: ReadonlySet<string>;
   /** Workspace-relative paths agents may never write; a trailing `/` protects a directory. */
   readonly protectedPaths: readonly string[];
+  /**
+   * Tools that read files; their `path` input must stay inside the workspace (REQ-PRJ-04/AC1). Optional: the
+   * tools also confine themselves; the guard makes the denial visible in the journal.
+   */
+  readonly readTools?: ReadonlySet<string>;
   /** Tools whose `url` input must match the allowlist. */
   readonly networkTools: ReadonlySet<string>;
   /** Allowed URL origins, e.g. `https://staging.example.com`. */
@@ -113,6 +118,10 @@ export function evaluateToolCall(call: ToolCall, policy: GuardPolicy): GuardDeci
     const target = checkPath(policy, call.input["path"], "path");
     if (!target.allowed) return target;
     if ("to" in call.input) return checkPath(policy, call.input["to"], "to");
+  }
+  if (policy.readTools?.has(call.tool) === true && typeof call.input["path"] === "string") {
+    if (resolveInWorkspace(policy.workspaceRoot, call.input["path"]) === undefined)
+      return deny("OUTSIDE_WORKSPACE", `Path '${call.input["path"]}' is outside the run workspace.`);
   }
   if (policy.networkTools.has(call.tool)) return checkUrl(policy, call.input["url"]);
   return ALLOW;

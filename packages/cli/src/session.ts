@@ -80,7 +80,7 @@ export async function openSession(
       {},
     );
   }
-  const project = withModelOverride(await loadProject(cwd), ports.modelOverride);
+  const project = withModelOverride(await loadProject(cwd, ports.project), ports.modelOverride);
   const root = resolveWorkspaceRoot({
     configured: project.config.workspace.root,
     home: ports.home,
@@ -95,6 +95,14 @@ export async function openSession(
     );
   }
   const ws = await openRunWorkspace(root, key.data, id, ports.now);
+  // REQ-PRJ-03/AC6, REQ-PRJ-04: a run is only ever continued in the project it belongs to.
+  const owner = ws.record.data["project"];
+  if (ports.project && typeof owner === "string" && owner !== ports.project.slug)
+    throw new ConfigError(
+      "RUN_OTHER_PROJECT",
+      `Run ${ws.runId} belongs to project ${owner}, not ${ports.project.slug}; use --project ${owner}.`,
+      { run: ws.runId },
+    );
   const maskJson = (value: unknown): unknown => masker.maskJson(value);
   const logger = createCliLogger({ file: ws.path("logs", "qajitsu.log"), mask: maskJson });
   const events = createEventLog({

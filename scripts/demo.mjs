@@ -76,6 +76,8 @@ const recorded = () =>
 const workspace = mkdtempSync(join(tmpdir(), "qajitsu-demo-"));
 // The project loader reads QAJITSU_WORKSPACE from the process environment.
 process.env.QAJITSU_WORKSPACE = workspace;
+// ADR-0006: the demo registers demo-shop as a project in a throw-away QAJitsu home, not in ~/.qajitsu.
+process.env.QAJITSU_HOME = join(workspace, "qajitsu-home");
 const env = { ...process.env, DEMO_USER_PASSWORD: PASSWORD };
 const qj = async (...args) => {
   let code = 0;
@@ -132,6 +134,9 @@ try {
       : "QAJitsu demo, offline: the agents' answers are recorded (no API key, no network). Use --model for a live model.\n",
   );
   execFileSync(process.execPath, [join(shopDir, "scripts", "setup-demo-repo.mjs")], { stdio: "inherit" });
+  // 0 ready, 2 registered with problems the demo does not need (e.g. Docker for --build).
+  if (![0, 2].includes(await qj("init", "demo-shop", "--qa-dir", join(shopDir, ".qa"), "--yes")))
+    throw new Error("init failed");
   const clean = await cycle("1. The clean app: every case must PASS", {});
   const buggy = await cycle("2. Seeded bug BUG-01 (cart total rounding): TC-01 must FAIL", {
     BUG_CART_TOTAL_ROUNDING: "1",

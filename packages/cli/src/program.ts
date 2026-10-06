@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { QajitsuError, qajitsuHome, resolveProject, type ResolvedProject } from "@qajitsu/core";
 import { Command } from "commander";
 import type { RuntimePorts } from "./adapters.js";
 import { formatProbes, probeModels } from "@qajitsu/agents";
@@ -14,12 +15,12 @@ import { runTest } from "./commands/test-flow.js";
 import { runFixCheck } from "./commands/fix-check.js";
 import { runClean, runGc, runResume, runRuns } from "./commands/runs.js";
 import { runEnvCheck, runEnvRender, runEnvUp } from "./commands/env.js";
+import { runProjectInit, runProjects, runUse } from "./commands/projects.js";
 import { runExplore, runExplorePromote } from "./commands/explore.js";
 import { runBench } from "./commands/bench.js";
 import { runAuditVerify } from "./commands/audit.js";
 import { runTelemetryExport } from "./commands/telemetry.js";
 import { runMetrics } from "./commands/metrics.js";
-import { runInit } from "./commands/init.js";
 import { runExport } from "./commands/export.js";
 import { runMap } from "./commands/map.js";
 import { runCiComment, runCiDetect, runCiPublishPlan } from "./commands/ci.js";
@@ -65,8 +66,44 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .name("qajitsu")
     .description("Agentic QA: Jira ticket in, approved test plan, executed tests and evidence out.")
     .version(version)
+    .option(
+      "--project <slug>",
+      "project to work in (default: QAJITSU_PROJECT, the ticket prefix, the active project)",
+    )
     .configureOutput({ writeOut: io.write, writeErr: io.writeError })
     .showHelpAfterError();
+
+  // ADR-0006, REQ-PRJ-03: the project of a command is resolved once, before it runs, never from the current folder.
+  let resolved: ResolvedProject | undefined;
+  let projectError: unknown;
+  const PROJECT_FREE = new Set(["init", "use", "projects list", "projects current"]);
+  // These commands write machine-readable output to stdout; the project line goes to stderr.
+  const MACHINE_OUTPUT = new Set(["ci detect", "metrics"]);
+  program.hook("preAction", async (_root, action) => {
+    const path: string[] = [];
+    for (let c: Command | null = action; c && c !== program; c = c.parent) path.unshift(c.name());
+    const name = path.join(" ");
+    if (PROJECT_FREE.has(name) || !io.ports) return;
+    const first = action.args[0];
+    try {
+      resolved = await resolveProject(qajitsuHome(io.ports.env, io.ports.home), {
+        flag: program.opts<{ project?: string }>().project,
+        env: io.ports.env["QAJITSU_PROJECT"],
+        ticket: typeof first === "string" ? first : undefined,
+      });
+      // REQ-PRJ-03/AC4: every command names its project first.
+      (MACHINE_OUTPUT.has(name) ? io.writeError : io.write)(`Project: ${resolved.slug} (${resolved.via})\n`);
+    } catch (error) {
+      projectError = error;
+    }
+  });
+  const projectFailure = (): number => {
+    const code = projectError instanceof QajitsuError ? ` [${projectError.code}]` : "";
+    io.writeError(
+      `Error${code}: ${projectError instanceof Error ? projectError.message : "unknown error"}\n`,
+    );
+    return 3;
+  };
 
   const withPorts =
     (run: (ports: RuntimePorts & ModelPorts) => Promise<number>) => async (): Promise<void> => {
@@ -75,30 +112,74 @@ export function createProgram(version: string, io: ProgramIO): Command {
         io.setExitCode(3);
         return;
       }
-      io.setExitCode(await run(io.ports));
+      if (projectError !== undefined || !resolved) {
+        io.setExitCode(projectFailure());
+        return;
+      }
+      io.setExitCode(await run({ ...io.ports, project: resolved }));
     };
   const commandIO = { write: io.write, writeError: io.writeError, cwd: io.cwd, ask: io.ask };
   const review = { user: io.user ?? "unknown", openEditor: io.openEditor };
 
   program
     .command("init")
-    .description("Create .qa/ for this repository (detects git host, compose services, OpenAPI, test types)")
+    .description(
+      "Register a project: its home under ~/.qajitsu and its .qa/ folder (linked, or created by detection)",
+    )
+    .argument("<slug>", "project name, e.g. bank or shop-web")
+    .option("--qa-dir <path>", "the project's .qa/ folder (default: ./.qa)")
+    .option("--jira-prefix <KEY>", "Jira key prefix of the project, e.g. BANK (repeatable)", collect, [])
     .option("--yes", "do not ask; use detected values and flags")
-    .option("--force", "replace an existing .qa/qa.project.yaml")
-    .option("--jira-url <url>", "Jira base URL (empty: tickets from files)")
-    .option("--project-key <key>", "Jira project key")
-    .option("--env-url <url>", "URL of the test environment")
+    .option("--force", "relink an existing project (runs and knowledge stay)")
+    .option("--no-use", "do not make it the active project")
+    .option("--jira-url <url>", "when creating .qa/: Jira base URL (empty: tickets from files)")
+    .option("--project-key <key>", "when creating .qa/: Jira project key")
+    .option("--env-url <url>", "when creating .qa/: URL of the test environment")
     .action(
-      async (options: {
-        yes?: boolean;
-        force?: boolean;
-        jiraUrl?: string;
-        projectKey?: string;
-        envUrl?: string;
-      }) => {
-        io.setExitCode(await runInit(options, commandIO));
+      (
+        slug: string,
+        options: {
+          qaDir?: string;
+          jiraPrefix: string[];
+          yes?: boolean;
+          force?: boolean;
+          use?: boolean;
+          jiraUrl?: string;
+          projectKey?: string;
+          envUrl?: string;
+        },
+      ) => {
+        if (!io.ports) return withPorts(() => Promise.resolve(3))();
+        const ports = io.ports;
+        return runProjectInit(slug, options, commandIO, ports).then((code) => {
+          io.setExitCode(code);
+        });
       },
     );
+
+  program
+    .command("use")
+    .description("Make a project the active one and show its open work")
+    .argument("<slug>", "project name")
+    .action(async (slug: string) => {
+      io.setExitCode(io.ports ? await runUse(slug, commandIO, io.ports) : 3);
+    });
+
+  const projects = program
+    .command("projects")
+    .description("List the registered projects or print the active one");
+  projects
+    .command("list")
+    .description("Every project with readiness, ticket prefixes and open work")
+    .action(async () => {
+      io.setExitCode(io.ports ? await runProjects("list", commandIO, io.ports) : 3);
+    });
+  projects
+    .command("current")
+    .description("Print the active project")
+    .action(async () => {
+      io.setExitCode(io.ports ? await runProjects("current", commandIO, io.ports) : 3);
+    });
 
   program
     .command("doctor")
@@ -108,15 +189,26 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .action(async (options: { models?: boolean; online?: boolean }) => {
       const checks = runDoctor({
         nodeVersion: io.nodeVersion,
-        hasProjectConfig: existsSync(join(io.cwd, ".qa", "qa.project.yaml")),
+        hasProjectConfig:
+          resolved !== undefined && existsSync(join(resolved.record.qa_dir, "qa.project.yaml")),
       });
+      if (projectError !== undefined)
+        checks.push({
+          name: "project",
+          ok: false,
+          detail: projectError instanceof Error ? projectError.message : "unknown error",
+        });
       if (checks.every((c) => c.ok) && io.ports) {
         // REQ-GEN-03/AC2: secrets, Docker, Android/Appium and, with --online, Jira and code hosts.
         try {
           checks.push(
-            ...(await projectChecks(await loadProject(io.cwd), io.ports, {
-              online: options.online === true,
-            })),
+            ...(await projectChecks(
+              await loadProject(io.cwd, resolved),
+              { ...io.ports, ...(resolved ? { project: resolved } : {}) },
+              {
+                online: options.online === true,
+              },
+            )),
           );
         } catch (error) {
           checks.push({
@@ -130,7 +222,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
       let ok = checks.every((c) => c.ok);
       if (options.models === true && io.ports) {
         try {
-          const project = await loadProject(io.cwd);
+          const project = await loadProject(io.cwd, resolved);
           const { createModelRegistry } = await import("@qajitsu/models");
           const { createMasker } = await import("@qajitsu/steps");
           const { createCliSecretResolver } = await import("./adapters.js");
@@ -192,21 +284,9 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--pr <url>", "use this GitHub pull request (repeatable)", collect, [])
     .option("--mr <url>", "use this GitLab merge request (repeatable)", collect, [])
     .option("--ref <[repo=]ref>", "use this branch, tag or SHA (repeatable)", collect, [])
-    .action(async (ticket: string, options: { pr: string[]; mr: string[]; ref: string[] }) => {
-      if (!io.ports) {
-        io.writeError("Runtime ports are not configured.\n");
-        io.setExitCode(3);
-        return;
-      }
-      io.setExitCode(
-        await runFetch(
-          ticket,
-          options,
-          { write: io.write, writeError: io.writeError, cwd: io.cwd, ask: io.ask },
-          io.ports,
-        ),
-      );
-    });
+    .action((ticket: string, options: { pr: string[]; mr: string[]; ref: string[] }) =>
+      withPorts((ports) => runFetch(ticket, options, commandIO, ports))(),
+    );
 
   program
     .command("run")
@@ -388,7 +468,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .requiredOption("--model <ref>", "model reference <provider>/<model>")
     .option("--role <role>", "only this role uses the model (default: every role)")
     .option("--cases <file>", "benchmark cases (default: .qa/bench.yaml)")
-    .option("--out <dir>", "where the JSON report goes (default: <project>/bench-results)")
+    .option("--out <dir>", "where the JSON report goes (default: the project's exports/bench-results)")
     .action((options: { model: string; role?: string; cases?: string; out?: string }) =>
       withPorts((ports) => runBench(options, commandIO, ports, review))(),
     );
@@ -468,7 +548,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .description(
       "Application map over every run: tested and never-tested screens and endpoints (map.json, map.html)",
     )
-    .option("--out <dir>", "output folder (default: <project>/qa-map)")
+    .option("--out <dir>", "output folder (default: the project's exports/qa-map)")
     .option("--openapi <file>", "OpenAPI document of the known endpoints (default: from the newest worktree)")
     .action((options: { out?: string; openapi?: string }) =>
       withPorts((ports) => runMap(options, commandIO, ports))(),

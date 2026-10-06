@@ -275,7 +275,7 @@ export async function runCiDetect(
   ports: RuntimePorts,
 ): Promise<number> {
   try {
-    const project = await loadProject(io.cwd);
+    const project = await loadProject(io.cwd, ports.project);
     const eventPath = ports.env["GITHUB_EVENT_PATH"];
     const event = eventPath
       ? (JSON.parse(await readFile(eventPath, "utf8")) as Record<string, unknown>)

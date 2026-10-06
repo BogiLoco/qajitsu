@@ -2,7 +2,7 @@
 
 | Term                  | Meaning                                                                                                                                       |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Run                   | One execution of the pipeline for one ticket; has a unique run id and its own folder in `.qa-runs/<TICKET>/<RUN_ID>/`.                        |
+| Run                   | One execution of the pipeline for one ticket; has a unique run id and its own folder in `<project-home>/runs/<TICKET>/<RUN_ID>/`.             |
 | Run id                | `YYYYMMDD-HHMM-xxxx` (e.g. `20261003-1425-k3f9`); also used as the data marker (`qa-<ticket>-<run>`) on test data and runtime resources.      |
 | Stage (pipeline)      | A step of a run: fetch, analyse, plan, approve, env, author, check, execute, verify, report, publish, cleanup.                                |
 | Stage (roadmap)       | One of ten build stages of QAJitsu itself, see [roadmap](roadmap.md). Requirements carry `Stage: N`.                                          |

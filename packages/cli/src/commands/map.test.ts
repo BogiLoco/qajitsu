@@ -11,7 +11,7 @@ afterEach(async () => {
 });
 
 describe("qajitsu map (REQ-OBS-07)", () => {
-  it("REQ-OBS-07/AC1+AC2: tested endpoints from runs, untested ones from OpenAPI, as map.json and map.html", async () => {
+  it("REQ-OBS-07/AC1+AC2 + REQ-PRJ-01/AC4: tested endpoints from runs, untested ones from OpenAPI, as map.json and map.html", async () => {
     const p = await createBuildProject();
     cleanups.push(p.cleanup);
     await p.prepare();
@@ -21,7 +21,9 @@ describe("qajitsu map (REQ-OBS-07)", () => {
     );
     const r = await p.run(["map", "--openapi", openapi]);
     expect(r.exitCode).toBe(0);
-    const map = JSON.parse(await readFile(join(p.project, "qa-map", "map.json"), "utf8")) as {
+    const map = JSON.parse(
+      await readFile(join(p.home, ".qajitsu", "projects", "demo", "exports", "qa-map", "map.json"), "utf8"),
+    ) as {
       nodes: { id: string; tested: boolean }[];
       neverTested: string[];
     };
@@ -30,7 +32,9 @@ describe("qajitsu map (REQ-OBS-07)", () => {
     );
     expect(map.neverTested).toEqual(expect.arrayContaining(["api:POST /orders", "api:GET /me"]));
     expect(map.neverTested).not.toContain("api:GET /cart");
-    expect(await readFile(join(p.project, "qa-map", "map.html"), "utf8")).toContain("Never tested");
+    expect(
+      await readFile(join(p.home, ".qajitsu", "projects", "demo", "exports", "qa-map", "map.html"), "utf8"),
+    ).toContain("Never tested");
     expect(r.out).toMatch(/1 run\(s\), \d+ tested node\(s\), \d+ never tested\./);
   }, 120_000);
 

@@ -129,4 +129,24 @@ describe("resolveInWorkspace", () => {
   it("normalises Windows separators", () => {
     expect(resolveInWorkspace("C:\\w", "specs\\a.ts")).toBe("specs/a.ts");
   });
+
+  it.each([
+    ["/home/qa/.qajitsu/projects/bank/knowledge/contracts.md"],
+    ["../../../.qajitsu/projects/bank/knowledge/contracts.md"],
+    ["repos/../../other-run/results/TC-01.json"],
+  ])("REQ-PRJ-04/AC1: denies reading %s outside the run workspace", (path) => {
+    const reading = {
+      ...policy,
+      allowedTools: new Set([...policy.allowedTools, "read_file"]),
+      readTools: new Set(["read_file"]),
+    };
+    expect(evaluateToolCall({ tool: "read_file", input: { path } }, reading)).toMatchObject({
+      allowed: false,
+      code: "OUTSIDE_WORKSPACE",
+    });
+    expect(
+      evaluateToolCall({ tool: "read_file", input: { path: "repos/shop/src/a.ts" } }, reading).allowed,
+    ).toBe(true);
+    expect(evaluateToolCall({ tool: "read_file", input: {} }, reading).allowed).toBe(true);
+  });
 });

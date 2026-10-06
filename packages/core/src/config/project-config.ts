@@ -214,9 +214,9 @@ export const ProjectConfigSchema = z.strictObject({
     .default({ max_attachment_mb: 10, auto: false, media_hosts: ["media.atlassian.com"] }),
   workspace: z
     .strictObject({
-      /** Root of run folders; default `~/.qa-runs`, never the project repository (REQ-WS-01/AC4). */
+      /** Root of run folders; default `<project-home>/runs/`, never the project repository (REQ-WS-01/AC4). */
       root: z.string().min(1).optional(),
-      /** Bare mirror cache; default `~/.qa-cache/git` (REQ-CTX-04/AC1). */
+      /** Bare mirror cache; default `<project-home>/cache/git/` (REQ-CTX-04/AC1). */
       git_cache: z.string().min(1).optional(),
     })
     .default({}),

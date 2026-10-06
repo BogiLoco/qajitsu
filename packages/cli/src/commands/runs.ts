@@ -43,7 +43,7 @@ const fail = (io: CommandIO, error: unknown): number => {
  */
 export async function runRuns(rawKey: string, io: CommandIO, ports: RuntimePorts): Promise<number> {
   try {
-    const project = await loadProject(io.cwd);
+    const project = await loadProject(io.cwd, ports.project);
     const root = rootOf(project, ports);
     const ticket = ticketOf(rawKey);
     const index = await readRunIndex(root, ticket);
@@ -119,7 +119,7 @@ export async function runResume(
   continueWith: (stage: "plan" | "run", runId: string) => Promise<number>,
 ): Promise<number> {
   try {
-    const project = await loadProject(io.cwd);
+    const project = await loadProject(io.cwd, ports.project);
     const root = rootOf(project, ports);
     const ticket = ticketOf(rawKey);
     const runId = options.run ?? (await readRunIndex(root, ticket)).latest;
@@ -183,7 +183,7 @@ export async function runClean(
   ports: RuntimePorts & { readonly buildExec?: CommandExec },
 ): Promise<number> {
   try {
-    const project = await loadProject(io.cwd);
+    const project = await loadProject(io.cwd, ports.project);
     const root = rootOf(project, ports);
     const ticket = ticketOf(rawKey);
     const index = await readRunIndex(root, ticket);
@@ -208,7 +208,7 @@ export async function runGc(
   ports: RuntimePorts & { readonly buildExec?: CommandExec },
 ): Promise<number> {
   try {
-    const project = await loadProject(io.cwd);
+    const project = await loadProject(io.cwd, ports.project);
     const root = rootOf(project, ports);
     let count = 0;
     for (const ticket of await listTickets(root)) {

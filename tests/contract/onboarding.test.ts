@@ -224,6 +224,10 @@ describe("onboarding a new project through .qa/ only (REQ-GEN-01)", () => {
   it("REQ-GEN-01/AC2+AC3: a cookie-login app with a setup hook runs the whole flow without any QAJitsu code change", async () => {
     const app = await startNotes();
     const { home, run } = await notesProject(app.url);
+    // ADR-0006: the project is registered first; init links the existing .qa/ folder.
+    const init = await run(["init", "notes", "--yes"]);
+    expect(init.out).toContain("ticket prefixes: NOTES");
+    expect(init.exitCode).toBe(0);
     expect((await run(["doctor"])).exitCode).toBe(0);
     const result = await run(
       ["test", "NOTES-7", "--dry-run"],

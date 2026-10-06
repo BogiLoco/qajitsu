@@ -14,6 +14,8 @@
 #   QA_REUSE           "true": reuse the latest approved plan if the ticket did not change (new commits)
 #   QA_ENV             environment profile; QA_BUILD=true builds the app from the worktree instead
 #   QA_ARTIFACTS       artifact folder (default: qa-artifacts)
+#   QA_PROJECT         project slug registered for this job (default: ci); QA_DIR its .qa/ folder (default: .qa)
+#   QAJITSU_HOME       QAJitsu home of this job (default: a temporary folder outside the checkout, ADR-0006)
 # Exit code of "run" is the run's: 0 passed, 1 failed, 2 blocked/needs review, 3 error (REQ-CI-04/AC1).
 set -euo pipefail
 
@@ -29,6 +31,21 @@ if [ -n "${QAJITSU_WORKSPACE:-}" ] && [ -n "$(git ls-files -- "$QAJITSU_WORKSPAC
   echo "QAJITSU_WORKSPACE ($QAJITSU_WORKSPACE) contains files tracked by git; refusing to use it" >&2
   exit 3
 fi
+
+# ADR-0006: the checked-out .qa/ is registered as the project of this job in a home that lives only as long as it.
+if [ -z "${QAJITSU_HOME:-}" ]; then
+  QAJITSU_HOME="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/qajitsu-home.XXXXXX")"
+fi
+export QAJITSU_HOME
+if [ -n "$(git ls-files -- "$QAJITSU_HOME" 2>/dev/null | head -n 1)" ]; then
+  echo "QAJITSU_HOME ($QAJITSU_HOME) contains files tracked by git; refusing to use it" >&2
+  exit 3
+fi
+init_code=0
+$QJ init "${QA_PROJECT:-ci}" --qa-dir "${QA_DIR:-.qa}" --yes --force >&2 || init_code=$?
+# 2: registered but not ready (the problems are listed); the commands below report what they need.
+if [ "$init_code" -ne 0 ] && [ "$init_code" -ne 2 ]; then exit 3; fi
+export QAJITSU_PROJECT="${QA_PROJECT:-ci}"
 
 case "$step" in
   plan)

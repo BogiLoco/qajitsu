@@ -16,19 +16,47 @@ Exit codes follow one scheme (REQ-CI-04):
 
 `--help` on any command prints its options; `--version` prints the version.
 
+Every command except `init`, `use` and `projects` runs in a project (ADR-0006), resolved in this order: `--project
+<slug>` (before the command, e.g. `qj --project bank fetch BANK-12`), `QAJITSU_PROJECT`, the Jira key prefix of the
+ticket, the active project. The first output line names it (`Project: bank (ticket prefix BANK)`); without a project
+the command stops with exit code 3.
+
 ## Setup
 
-### `qajitsu init`
+### `qajitsu init <slug>`
 
-Creates `.qa/` for the current repository from detected values (git host, compose services, OpenAPI, test types).
+Registers a project (REQ-PRJ-02, ADR-0006): creates its home `~/.qajitsu/projects/<slug>/` (runs, git cache,
+knowledge, exports, logs), links the repository's `.qa/` folder or creates one from what the repository contains
+(git host, compose services, OpenAPI, test types), validates it and reports every problem, and makes it the active
+project. Running it again changes nothing without `--force`; runs and knowledge are never deleted.
 
+- `--qa-dir <path>`: the project's `.qa/` folder (default `./.qa`)
+- `--jira-prefix <KEY>`: Jira key prefix that selects this project, e.g. `BANK` (repeatable; default the configured
+  `jira.project_key`)
 - `--yes`: do not ask; use detected values and flags
-- `--force`: replace an existing `.qa/qa.project.yaml`
-- `--jira-url <url>`: Jira base URL (empty: tickets from files)
-- `--project-key <key>`: Jira project key
-- `--env-url <url>`: URL of the test environment
+- `--force`: relink an existing project
+- `--no-use`: do not make it the active project
+- `--jira-url <url>`, `--project-key <key>`, `--env-url <url>`: answers when `.qa/` is created
 
-Exit codes: `0` created, `3` the configuration exists (without `--force`) or cannot be written.
+Exit codes: `0` registered and ready, `2` registered but not ready (the problems are listed), `3` errors.
+
+### `qajitsu use <slug>`
+
+Makes a project the active one and shows its open work (REQ-PRJ-03).
+
+Exit codes: `0` switched, `3` unknown project.
+
+### `qajitsu projects list`
+
+Every registered project with readiness, ticket prefixes, open work and its `.qa/` folder; `*` marks the active one.
+
+Exit codes: `0` listed, `3` errors.
+
+### `qajitsu projects current`
+
+Prints the active project.
+
+Exit codes: `0` printed, `3` no active project.
 
 ### `qajitsu doctor`
 
@@ -188,7 +216,7 @@ Exit codes: the run's code (`0`, `1`, `2`) so a pipeline step can fail on it, `3
 
 Application map over every run: tested and never-tested screens and endpoints (`map.json`, `map.html`).
 
-- `--out <dir>`: output folder (default: `<project>/qa-map`)
+- `--out <dir>`: output folder (default: `<project-home>/exports/qa-map`)
 - `--openapi <file>`: OpenAPI document of the known endpoints (default: from the newest worktree)
 
 Exit codes: `0` written, `3` errors.
@@ -269,7 +297,7 @@ Makes real model calls; never in PR CI.
 - `--model <ref>`: the model to measure, e.g. `ollama/qwen2.5-coder:32b` (required)
 - `--role <role>`: only this role uses the model (default: every role)
 - `--cases <file>`: benchmark cases (default: `.qa/bench.yaml`)
-- `--out <dir>`: where the JSON report goes (default: `<project>/bench-results`)
+- `--out <dir>`: where the JSON report goes (default: `<project-home>/exports/bench-results`)
 
 Exit codes: `0` the benchmark completed (whatever the scores), `3` configuration errors.
 

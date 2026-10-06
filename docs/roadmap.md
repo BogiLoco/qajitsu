@@ -20,9 +20,9 @@ Monorepo, tooling, core types, the guard and the status model; fetching a ticket
 - [REQ-CTX-01](requirements/context.md#req-ctx-01--jira-ticket-as-the-input) Jira ticket as the input (must, implemented, AC 5/5)
 - [REQ-CTX-02](requirements/context.md#req-ctx-02--github-and-gitlab-support) GitHub and GitLab support (must, implemented, AC 4/4)
 - [REQ-CTX-03](requirements/context.md#req-ctx-03--change-discovery-for-a-ticket) Change discovery for a ticket (must, implemented, AC 5/5)
-- [REQ-CTX-04](requirements/context.md#req-ctx-04--repositories-always-fetched-at-the-changes-version) Repositories always fetched at the change's version (must, in-progress, AC 3/4)
+- [REQ-CTX-04](requirements/context.md#req-ctx-04--repositories-always-fetched-at-the-changes-version) Repositories always fetched at the change's version (must, implemented, AC 4/4)
 - [REQ-CFG-03](requirements/config-secrets.md#req-cfg-03--secret-providers) Secret providers (must, implemented, AC 3/3)
-- [REQ-WS-01](requirements/workspace.md#req-ws-01--folder-per-ticket-and-run-id) Folder per ticket and run id (must, in-progress, AC 3/4)
+- [REQ-WS-01](requirements/workspace.md#req-ws-01--folder-per-ticket-and-run-id) Folder per ticket and run id (must, implemented, AC 4/4)
 - [REQ-VER-01](requirements/verification.md#req-ver-01--status-model) Status model (must, implemented, AC 3/3)
 - [REQ-VER-03](requirements/verification.md#req-ver-03--write-bans-for-agents) Write bans for agents (must, implemented, AC 3/3)
 - [REQ-VER-04](requirements/verification.md#req-ver-04--tool-call-journal) Tool-call journal (must, implemented, AC 2/2)
@@ -63,10 +63,10 @@ Analyst and planner agents on several model providers; plan review loop and free
 - [REQ-LLM-03](requirements/models.md#req-llm-03--capability-profiles) Capability profiles (must, implemented, AC 3/3)
 - [REQ-LLM-04](requirements/models.md#req-llm-04--structured-output-with-repair) Structured output with repair (must, implemented, AC 3/3)
 - [REQ-LLM-07](requirements/models.md#req-llm-07--cost-and-token-tracking) Cost and token tracking (should, implemented, AC 2/2)
-- [REQ-PRJ-01](requirements/projects.md#req-prj-01--project-home-and-data-layout) Project home and data layout (must, accepted, AC 0/5)
-- [REQ-PRJ-02](requirements/projects.md#req-prj-02--project-initialisation-qj-init) Project initialisation (`qj init`) (must, accepted, AC 0/6)
-- [REQ-PRJ-03](requirements/projects.md#req-prj-03--active-project-and-switching) Active project and switching (must, accepted, AC 0/7)
-- [REQ-PRJ-04](requirements/projects.md#req-prj-04--isolation-between-projects) Isolation between projects (must, accepted, AC 0/4)
+- [REQ-PRJ-01](requirements/projects.md#req-prj-01--project-home-and-data-layout) Project home and data layout (must, implemented, AC 5/5)
+- [REQ-PRJ-02](requirements/projects.md#req-prj-02--project-initialisation-qj-init) Project initialisation (`qj init`) (must, implemented, AC 6/6)
+- [REQ-PRJ-03](requirements/projects.md#req-prj-03--active-project-and-switching) Active project and switching (must, in-progress, AC 6/7)
+- [REQ-PRJ-04](requirements/projects.md#req-prj-04--isolation-between-projects) Isolation between projects (must, in-progress, AC 2/4)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 
@@ -102,7 +102,7 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 - [REQ-NFR-04](requirements/non-functional.md#req-nfr-04--framework-self-test) Framework self-test (must, implemented, AC 2/2)
 - [REQ-PRJ-05](requirements/projects.md#req-prj-05--project-status-what-is-in-the-project-and-what-is-in-progress) Project status: what is in the project and what is in progress (must, accepted, AC 0/5)
 - [REQ-PRJ-06](requirements/projects.md#req-prj-06--continue-after-switching) Continue after switching (must, accepted, AC 0/3)
-- [REQ-PRJ-08](requirements/projects.md#req-prj-08--code-cache-per-project) Code cache per project (should, accepted, AC 0/3)
+- [REQ-PRJ-08](requirements/projects.md#req-prj-08--code-cache-per-project) Code cache per project (should, in-progress, AC 1/3)
 - [REQ-PRJ-10](requirements/projects.md#req-prj-10--evidence-reports-and-exports-stay-in-the-project) Evidence, reports and exports stay in the project (must, accepted, AC 0/6)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->

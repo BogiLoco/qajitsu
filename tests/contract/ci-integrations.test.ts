@@ -51,12 +51,15 @@ describe("CI integrations (REQ-CI-01, REQ-CI-03, REQ-CI-04)", () => {
         })
       ).calls,
     ).toEqual([
+      // ADR-0006: the checked-out .qa/ becomes the project of the job.
+      "init ci --qa-dir .qa --yes --force",
       "fetch DEMO-1 --ref shop=main",
       "plan DEMO-1",
       "ci publish-plan DEMO-1",
       "ci comment DEMO-1 --change https://github.com/o/r/pull/1",
     ]);
     expect((await script(["plan", "DEMO-1"], { QA_REVISE: "add expired codes" })).calls).toEqual([
+      "init ci --qa-dir .qa --yes --force",
       "plan DEMO-1 --revise add expired codes",
       "ci publish-plan DEMO-1",
     ]);
@@ -65,21 +68,23 @@ describe("CI integrations (REQ-CI-01, REQ-CI-03, REQ-CI-04)", () => {
   it("REQ-PLAN-07/AC4 + REQ-CI-03/AC3+AC4: run needs a named approver or reuses an approved plan; exit code is the run's", async () => {
     const refused = await script(["run", "DEMO-1"], {});
     expect(refused.code).not.toBe(0);
-    expect(refused.calls).toEqual([]);
+    expect(refused.calls).toEqual(["init ci --qa-dir .qa --yes --force"]);
     const approved = await script(["run", "DEMO-1"], { QA_APPROVER: "github:alice", QA_ENV: "staging" }, 1);
     expect(approved.code).toBe(1);
     expect(approved.calls).toEqual([
+      "init ci --qa-dir .qa --yes --force",
       "approve DEMO-1 --approver github:alice --confirm-open-questions",
       "run DEMO-1 --env staging",
       "export DEMO-1 --out qa-artifacts",
     ]);
     const pinned = await script(["run", "DEMO-1"], { QA_APPROVER: "github:alice", QA_VERSION: "2" });
-    expect(pinned.calls.slice(0, 2)).toEqual([
+    expect(pinned.calls.slice(1, 3)).toEqual([
       "approve DEMO-1 --approver github:alice --confirm-open-questions --version 2",
       "run DEMO-1",
     ]);
     const reused = await script(["run", "DEMO-1"], { QA_REUSE: "true", QA_BUILD: "true" });
     expect(reused.calls).toEqual([
+      "init ci --qa-dir .qa --yes --force",
       "fetch DEMO-1",
       "approve DEMO-1 --reuse-from latest --approver ci",
       "run DEMO-1 --build",

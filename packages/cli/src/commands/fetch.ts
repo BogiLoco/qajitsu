@@ -48,7 +48,7 @@ export async function runFetch(
       io.writeError(`Invalid ticket key '${rawKey.slice(0, 40)}': expected a Jira key like SHOP-482.\n`);
       return 3;
     }
-    const project = await loadProject(io.cwd);
+    const project = await loadProject(io.cwd, ports.project);
     const root = resolveWorkspaceRoot({
       configured: project.config.workspace.root,
       home: ports.home,
@@ -86,6 +86,14 @@ export async function runFetch(
       exec: ports.gitExec,
     });
     io.write(`Run ${ws.runId} for ${key.data}: ${ws.dir}\n`);
+    // REQ-PRJ-03/AC4+AC6: the run belongs to the project it started in.
+    if (ports.project) {
+      await ws.update({ data: { ...ws.record.data, project: ports.project.slug } });
+      events.emit("fetch", { kind: "system", name: "orchestrator" }, "run.project", {
+        project: ports.project.slug,
+        via: ports.project.via,
+      });
+    }
     const ask = io.ask;
     const result = await fetchContext({
       workspace: ws,

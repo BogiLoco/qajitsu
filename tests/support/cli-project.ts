@@ -1,7 +1,7 @@
 import { copyFile, cp, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createGitExec } from "@qajitsu/core";
+import { createGitExec, registerProject, setActiveProject } from "@qajitsu/core";
 
 export const gitExec = createGitExec({ PATH: process.env["PATH"] ?? "", HOME: tmpdir() });
 
@@ -61,5 +61,12 @@ export async function createCliProject(
       ...extraYaml,
     ].join("\n"),
   );
+  // ADR-0006: commands run in a registered project; this one is active and owns the DEMO prefix.
+  await registerProject(join(home, ".qajitsu"), {
+    slug: "demo",
+    qaDir: join(project, ".qa"),
+    jiraPrefixes: ["DEMO"],
+  });
+  await setActiveProject(join(home, ".qajitsu"), "demo");
   return { home, project, sha };
 }

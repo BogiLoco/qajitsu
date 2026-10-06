@@ -23,7 +23,7 @@ describe("qajitsu logs (REQ-OBS-02/AC1)", () => {
     expect(
       run.out
         .split("\n")
-        .filter(Boolean)
+        .filter((l) => l !== "" && !l.startsWith("Project: "))
         .every((l) => l.includes(" run ") && l.includes('"caseId":"TC-02"')),
     ).toBe(true);
     expect(run.out).toContain("verify");

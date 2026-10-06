@@ -154,7 +154,7 @@ export async function runBench(
   review: ReviewPorts,
 ): Promise<number> {
   try {
-    const project = await loadProject(io.cwd);
+    const project = await loadProject(io.cwd, ports.project);
     const casesFile = options.cases ?? join(project.qaDir, "bench.yaml");
     const parsed = BenchCasesSchema.safeParse(
       parse(await readFile(resolve(io.cwd, casesFile), "utf8")) as unknown,
@@ -256,7 +256,7 @@ export async function runBench(
       ? isAbsolute(options.out)
         ? options.out
         : resolve(io.cwd, options.out)
-      : join(project.projectDir, "bench-results");
+      : join(project.project?.paths.exports ?? project.projectDir, "bench-results");
     await mkdir(outDir, { recursive: true });
     const file = join(
       outDir,

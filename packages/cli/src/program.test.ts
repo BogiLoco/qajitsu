@@ -1,12 +1,18 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { registerProject, setActiveProject } from "@qajitsu/core";
 import { describe, expect, it } from "vitest";
 import { formatDoctor, runDoctor } from "./doctor.js";
 import { createProgram } from "./program.js";
 import { readVersion } from "./version.js";
 
-function run(args: string[], cwd = mkdtempSync(join(tmpdir(), "qj-cli-")), nodeVersion = "v22.22.0") {
+function run(
+  args: string[],
+  cwd = mkdtempSync(join(tmpdir(), "qj-cli-")),
+  nodeVersion = "v22.22.0",
+  ports?: Parameters<typeof createProgram>[1]["ports"],
+) {
   let out = "";
   let err = "";
   let exitCode = 0;
@@ -16,6 +22,7 @@ function run(args: string[], cwd = mkdtempSync(join(tmpdir(), "qj-cli-")), nodeV
     cwd,
     nodeVersion,
     setExitCode: (c) => (exitCode = c),
+    ...(ports ? { ports } : {}),
   }).exitOverride();
   return program.parseAsync(["node", "qajitsu", ...args]).then(
     () => ({ out, err, exitCode }),
@@ -38,8 +45,21 @@ describe("qajitsu CLI (REQ-GEN-05)", () => {
   it("doctor passes with project config and a supported Node.js", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "qj-cli-"));
     mkdirSync(join(cwd, ".qa"));
-    writeFileSync(join(cwd, ".qa", "qa.project.yaml"), "project: demo\n");
-    const result = await run(["doctor"], cwd);
+    writeFileSync(
+      join(cwd, ".qa", "qa.project.yaml"),
+      "project: demo\njira: { type: file, tickets_dir: t, project_key: DEMO }\n",
+    );
+    await registerProject(join(cwd, ".qajitsu"), { slug: "demo", qaDir: join(cwd, ".qa") });
+    await setActiveProject(join(cwd, ".qajitsu"), "demo");
+    const result = await run(["doctor"], cwd, "v22.22.0", {
+      env: {},
+      home: cwd,
+      now: () => new Date(0),
+      random: () => 0,
+      fetch: globalThis.fetch,
+      gitExec: () => Promise.resolve({ stdout: "", stderr: "" }),
+    });
+    expect(result.out.split("\n")[0]).toBe("Project: demo (active project)");
     expect(result.out).toContain("✔ node");
     expect(result.exitCode).toBe(0);
   });

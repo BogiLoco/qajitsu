@@ -1,6 +1,6 @@
-import { readFile, stat } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { ConfigError, parseProjectConfig, type ProjectConfig } from "@qajitsu/core";
+import { ConfigError, parseProjectConfig, type ProjectConfig, type ResolvedProject } from "@qajitsu/core";
 import { parse } from "yaml";
 
 /** A loaded project: validated config plus where it lives. */
@@ -10,43 +10,73 @@ export interface LoadedProject {
   readonly qaDir: string;
   /** Repository (or folder) that contains `.qa/`. */
   readonly projectDir: string;
+  /** The registered project, when the command resolved one (ADR-0006). */
+  readonly project?: ResolvedProject;
 }
 
+const readConfig = async (dir: string): Promise<ProjectConfig> => {
+  const file = join(dir, ".qa", "qa.project.yaml");
+  let raw: unknown;
+  try {
+    raw = parse(await readFile(file, "utf8")) as unknown;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw error;
+    throw new ConfigError("CONFIG_YAML_INVALID", `${file} is not valid YAML.`, {
+      file,
+      cause: error instanceof Error ? error.message.split("\n")[0] : String(error),
+    });
+  }
+  return parseProjectConfig(raw, file);
+};
+
 /**
- * Finds `.qa/qa.project.yaml` in `cwd` or a parent folder and validates it (REQ-GEN-01).
+ * Loads and validates the configuration of a project (REQ-GEN-01). With a resolved project (every CLI command,
+ * ADR-0006) it is the project's own `.qa/` folder, and run folders and git mirrors default to the project home
+ * (REQ-WS-01/AC4, REQ-CTX-04/AC1); without one (library use and tests) the first `.qa/` in `cwd` or a parent.
  *
- * @param cwd - Starting folder.
+ * @param cwd - Starting folder when no project is given.
+ * @param project - The project resolved for the command.
+ * @param env - Environment, for the `QAJITSU_WORKSPACE` run-level override.
  * @throws {ConfigError} `CONFIG_NOT_FOUND`, `CONFIG_YAML_INVALID` or `CONFIG_INVALID`.
  */
 export async function loadProject(
   cwd: string,
+  project?: ResolvedProject,
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): Promise<LoadedProject> {
+  const workspaceOverride = env["QAJITSU_WORKSPACE"];
+  const finish = (config: ProjectConfig, dir: string): LoadedProject => {
+    const workspace = {
+      ...config.workspace,
+      ...(project && config.workspace.root === undefined ? { root: project.paths.runs } : {}),
+      ...(project && config.workspace.git_cache === undefined ? { git_cache: project.paths.gitCache } : {}),
+      // Run-level override (configuration layer 5): CI jobs share run folders through artifacts here.
+      ...(workspaceOverride !== undefined && workspaceOverride !== "" ? { root: workspaceOverride } : {}),
+    };
+    return {
+      config: { ...config, workspace },
+      qaDir: join(dir, ".qa"),
+      projectDir: dir,
+      ...(project ? { project } : {}),
+    };
+  };
+  if (project) {
+    const dir = dirname(project.record.qa_dir);
+    try {
+      return finish(await readConfig(dir), dir);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      throw new ConfigError(
+        "CONFIG_NOT_FOUND",
+        `Project ${project.slug} links ${project.record.qa_dir}, which has no qa.project.yaml.`,
+        { project: project.slug },
+      );
+    }
+  }
   let dir = resolve(cwd);
   for (;;) {
-    const file = join(dir, ".qa", "qa.project.yaml");
     try {
-      await stat(file);
-      let raw: unknown;
-      try {
-        raw = parse(await readFile(file, "utf8")) as unknown;
-      } catch (error) {
-        throw new ConfigError("CONFIG_YAML_INVALID", `${file} is not valid YAML.`, {
-          file,
-          cause: error instanceof Error ? error.message.split("\n")[0] : String(error),
-        });
-      }
-      const config = parseProjectConfig(raw, file);
-      // Run-level override (configuration layer 5): CI jobs share run folders through artifacts here.
-      const workspace = env["QAJITSU_WORKSPACE"];
-      return {
-        config:
-          workspace === undefined || workspace === ""
-            ? config
-            : { ...config, workspace: { ...config.workspace, root: workspace } },
-        qaDir: join(dir, ".qa"),
-        projectDir: dir,
-      };
+      return finish(await readConfig(dir), dir);
     } catch (error) {
       if (!(error instanceof Error) || (error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }

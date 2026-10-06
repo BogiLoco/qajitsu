@@ -5,7 +5,7 @@ exports; a run sees only its own project, and the user can switch projects and c
 
 ### REQ-PRJ-01 · Project home and data layout
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 2
 - Related: REQ-WS-01, REQ-CTX-04, REQ-PRJ-04, ADR-0006
@@ -14,48 +14,48 @@ Everything a project owns lives under one folder, so it can be inspected, backed
 
 **Acceptance criteria**
 
-- [ ] AC1: QAJitsu home is `~/.qajitsu/` (overridable with `QAJITSU_HOME`); it holds only global settings (`config.yaml`) and `projects/<slug>/`.
-- [ ] AC2: A project home contains `project.yaml` (identity, link to the project's `.qa/` config, Jira key prefixes), `runs/` (run workspaces, REQ-WS-01), `cache/` (git mirrors and code indexes, REQ-PRJ-08), `knowledge/` (REQ-KNOW-01), `context.json` (REQ-PRJ-05), `exports/` (REQ-PRJ-10) and `logs/`.
-- [ ] AC3: Project slugs match `^[a-z][a-z0-9-]{1,39}$`; paths are built only from validated slugs, ticket keys and run ids.
-- [ ] AC4: No file of one project is written outside its project home, except the project's own `.qa/` folder when the user asks `init` to create it.
-- [ ] AC5: Global settings never contain secrets; secrets stay `secret://` references resolved per project (REQ-CFG-03).
+- [x] AC1: QAJitsu home is `~/.qajitsu/` (overridable with `QAJITSU_HOME`); it holds only global settings (`config.yaml`) and `projects/<slug>/`.
+- [x] AC2: A project home contains `project.yaml` (identity, link to the project's `.qa/` config, Jira key prefixes), `runs/` (run workspaces, REQ-WS-01), `cache/` (git mirrors and code indexes, REQ-PRJ-08), `knowledge/` (REQ-KNOW-01), `context.json` (REQ-PRJ-05), `exports/` (REQ-PRJ-10) and `logs/`.
+- [x] AC3: Project slugs match `^[a-z][a-z0-9-]{1,39}$`; paths are built only from validated slugs, ticket keys and run ids.
+- [x] AC4: No file of one project is written outside its project home, except the project's own `.qa/` folder when the user asks `init` to create it.
+- [x] AC5: Global settings never contain secrets; secrets stay `secret://` references resolved per project (REQ-CFG-03).
 
 ### REQ-PRJ-02 · Project initialisation (`qj init`)
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 2
 - Related: REQ-PRJ-01, REQ-GEN-01, REQ-GEN-03, ADR-0006
 
 **Acceptance criteria**
 
-- [ ] AC1: `qj init <slug>` creates the project home and registers the project; it runs interactively, or non-interactively with flags (`--qa-dir`, `--jira-prefix`, `--yes`) for scripts and CI.
-- [ ] AC2: It links an existing `.qa/` folder of a repository, or creates one from `templates/qa/` when asked.
-- [ ] AC3: It validates the configuration (as `qj doctor` does) and reports every problem before finishing; an invalid project is registered but marked as not ready.
-- [ ] AC4: The new project becomes the active project unless `--no-use` is given.
-- [ ] AC5: Re-running `init` on an existing slug changes nothing without `--force`, and never deletes runs or knowledge.
-- [ ] AC6: The knowledge base starts empty; nothing is indexed during `init` (REQ-KNOW-01).
+- [x] AC1: `qj init <slug>` creates the project home and registers the project; it runs interactively, or non-interactively with flags (`--qa-dir`, `--jira-prefix`, `--yes`) for scripts and CI.
+- [x] AC2: It links an existing `.qa/` folder of a repository, or creates one from `templates/qa/` when asked.
+- [x] AC3: It validates the configuration (as `qj doctor` does) and reports every problem before finishing; an invalid project is registered but marked as not ready.
+- [x] AC4: The new project becomes the active project unless `--no-use` is given.
+- [x] AC5: Re-running `init` on an existing slug changes nothing without `--force`, and never deletes runs or knowledge.
+- [x] AC6: The knowledge base starts empty; nothing is indexed during `init` (REQ-KNOW-01).
 
 ### REQ-PRJ-03 · Active project and switching
 
-- Status: accepted
+- Status: in-progress
 - Priority: must
 - Stage: 2
 - Related: REQ-PRJ-05, REQ-PRJ-06, ADR-0006
 
 **Acceptance criteria**
 
-- [ ] AC1: `qj use <slug>` sets the active project; `qj projects list` shows all projects with readiness and open work; `qj projects current` prints the active one.
-- [ ] AC2: The project for a command is resolved in this order: `--project` flag, `QAJITSU_PROJECT`, Jira key prefix mapping (e.g. `BANK-12` → `bank`), active project. If none applies, the command fails with exit code 3.
-- [ ] AC3: A Jira prefix mapped to more than one project is an error; QAJitsu never guesses.
-- [ ] AC4: Every command prints the resolved project in its first output line and records it in `run.json` and the journal.
-- [ ] AC5: After `qj use`, a short summary of the project's open work is shown (REQ-PRJ-05).
-- [ ] AC6: A run is bound to its project when it starts; switching the active project never affects running or paused runs.
+- [x] AC1: `qj use <slug>` sets the active project; `qj projects list` shows all projects with readiness and open work; `qj projects current` prints the active one.
+- [x] AC2: The project for a command is resolved in this order: `--project` flag, `QAJITSU_PROJECT`, Jira key prefix mapping (e.g. `BANK-12` → `bank`), active project. If none applies, the command fails with exit code 3.
+- [x] AC3: A Jira prefix mapped to more than one project is an error; QAJitsu never guesses.
+- [x] AC4: Every command prints the resolved project in its first output line and records it in `run.json` and the journal.
+- [x] AC5: After `qj use`, a short summary of the project's open work is shown (REQ-PRJ-05).
+- [x] AC6: A run is bound to its project when it starts; switching the active project never affects running or paused runs.
 - [ ] AC7: Runs of different projects may execute at the same time (separate processes); locks are per run (REQ-WS-04).
 
 ### REQ-PRJ-04 · Isolation between projects
 
-- Status: accepted
+- Status: in-progress
 - Priority: must
 - Stage: 2
 - Related: REQ-VER-03, REQ-KNOW-06, INV-2, INV-8, INV-10, ADR-0006
@@ -64,10 +64,10 @@ A run sees only its own project. This protects confidentiality when one person t
 
 **Acceptance criteria**
 
-- [ ] AC1: Agent file tools are limited by the guard to the run workspace and the read-only parts of its own project home; paths in other projects are denied and journaled.
+- [x] AC1: Agent file tools are limited by the guard to the run workspace and the read-only parts of its own project home; paths in other projects are denied and journaled.
 - [ ] AC2: `search_docs` and `search_code` query only the run's project knowledge base and the run's repositories.
 - [ ] AC3: Secrets, environment profiles, URL allowlists and model settings are resolved from the run's project only.
-- [ ] AC4: Adversarial test: an agent in project A that asks for a file, document or secret of project B is denied, and nothing from B appears in A's prompts, evidence or reports.
+- [x] AC4: Adversarial test: an agent in project A that asks for a file, document or secret of project B is denied, and nothing from B appears in A's prompts, evidence or reports.
 
 ### REQ-PRJ-05 · Project status: what is in the project and what is in progress
 
@@ -116,7 +116,7 @@ After a switch the user sees at once what was being done and what to do next.
 
 ### REQ-PRJ-08 · Code cache per project
 
-- Status: accepted
+- Status: in-progress
 - Priority: should
 - Stage: 3
 - Related: REQ-CTX-04, REQ-PRJ-01
@@ -125,7 +125,7 @@ Code fetched for runs is kept per project so repeated runs on the same commit ar
 
 **Acceptance criteria**
 
-- [ ] AC1: Git mirrors live in `<project-home>/cache/git/`; each run gets worktrees at the change's SHA (REQ-CTX-04).
+- [x] AC1: Git mirrors live in `<project-home>/cache/git/`; each run gets worktrees at the change's SHA (REQ-CTX-04).
 - [ ] AC2: Code indexes, when built, are cached by `<repo>@<sha>` and reused by later runs on the same commit.
 - [ ] AC3: Caches follow the retention policy and are removed with the project.
 

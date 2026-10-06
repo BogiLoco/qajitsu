@@ -45,9 +45,12 @@ describe("qajitsu bench (REQ-LLM-06)", () => {
       "| bench-clean-cart | DEMO-1 | – | accepted | TC-01 PASSED, TC-02 PASSED | clean |",
     );
     expect(result.out).toContain("Detection 100% · false FAILED 0% · BLOCKED 0% · plan acceptance 100%");
-    const [file] = await readdir(join(p.project, "bench-results"));
+    const [file] = await readdir(join(p.home, ".qajitsu", "projects", "demo", "exports", "bench-results"));
     const report = JSON.parse(
-      await readFile(join(p.project, "bench-results", file ?? ""), "utf8"),
+      await readFile(
+        join(p.home, ".qajitsu", "projects", "demo", "exports", "bench-results", file ?? ""),
+        "utf8",
+      ),
     ) as BenchReport;
     expect(report).toMatchObject({
       model: "mock/scripted",

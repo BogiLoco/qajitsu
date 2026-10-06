@@ -38,7 +38,7 @@ export async function runAuditVerify(
       const key = TicketKeySchema.safeParse(rawKey ?? "");
       if (!key.success)
         throw new ConfigError("TICKET_KEY_INVALID", "Pass a ticket key or --file <journal>.", {});
-      const project = await loadProject(io.cwd);
+      const project = await loadProject(io.cwd, ports.project);
       const root = resolveWorkspaceRoot({
         configured: project.config.workspace.root,
         home: ports.home,

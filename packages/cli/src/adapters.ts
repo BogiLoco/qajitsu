@@ -18,6 +18,7 @@ import {
   type AdapterDeps,
   type CodeHost,
   type GitExec,
+  type ResolvedProject,
   type TicketSource,
 } from "@qajitsu/core";
 import type { Masker } from "@qajitsu/steps";
@@ -32,6 +33,8 @@ export interface RuntimePorts {
   readonly random: () => number;
   readonly fetch: typeof globalThis.fetch;
   readonly gitExec: GitExec;
+  /** The project the command runs in, resolved before it starts (ADR-0006). */
+  readonly project?: ResolvedProject;
   /** Runs the `op`, `aws` and `gcloud` CLIs of secret managers (replaced in tests). */
   readonly secretCliExec?: SecretCliExec;
 }

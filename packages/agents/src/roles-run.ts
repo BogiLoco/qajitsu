@@ -121,6 +121,8 @@ export function stageGuard(
       workspaceRoot: deps.ws.dir,
       allowedTools: new Set([...role.tools.filter((t) => t !== "write_plan"), ...(mcp?.tools ?? [])]),
       writeTools: new Set(["write_file", "move_file", "delete_file", "write_plan"]),
+      // REQ-PRJ-04/AC1: reads stay inside the run workspace, so nothing of another project is reachable.
+      readTools: new Set(["read_file", "list_files", "search_code", "view_image"]),
       protectedPaths: DEFAULT_PROTECTED_PATHS,
       networkTools: new Set(mcp?.networkTools ?? []),
       allowedOrigins: mcp?.allowedOrigins ?? [],

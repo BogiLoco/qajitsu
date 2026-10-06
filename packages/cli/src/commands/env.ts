@@ -34,7 +34,7 @@ export async function runEnvCheck(
 ): Promise<number> {
   const masker = createMasker();
   try {
-    const project = await loadProject(io.cwd);
+    const project = await loadProject(io.cwd, ports.project);
     const resolveSecret = createCliSecretResolver(project, ports, masker);
     const secretExists = (ref: string): Promise<boolean> =>
       resolveSecret(ref).then(
