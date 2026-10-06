@@ -82,7 +82,12 @@ export async function buildEvidenceZip(session: RunSession, v: RunVerdict): Prom
       {},
     );
   const name = `${ws.ticket}_${ws.runId}_evidence.zip`;
-  const path = ws.path("report", name);
+  // REQ-PRJ-10/AC2, REQ-PUB-02/AC1: the zip is an export of the project, kept in its exports/ folder.
+  const exportsDir = session.project.project
+    ? join(session.project.project.paths.exports, ws.ticket)
+    : ws.path("report");
+  await mkdir(exportsDir, { recursive: true });
+  const path = join(exportsDir, name);
   const data = zip(entries);
   await writeFile(path, data);
   return { path, name, mimeType: "application/zip", bytes: data.byteLength };

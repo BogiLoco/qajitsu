@@ -287,22 +287,23 @@ Every option and exit code of every command: [docs/cli/commands.md](docs/cli/com
 
 ### Inspecting results
 
-| Command                                                                    | What it does                                                                                                                                           |
-| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `qj evidence <TICKET> [--failed] [--case <TC>] [--trace <TC>] [--no-open]` | Statuses, failed assertions (expected vs actual), evidence files, cURL commands; opens `report.html`, videos or a Playwright trace unless `--no-open`. |
-| `qj logs <TICKET> [--follow] [--stage <s>] [--agent <role>] [--case <TC>]` | The structured event journal: stages, agent tool calls (allowed and denied), model usage, attempts. `--follow` while a run is running.                 |
-| `qj runs <TICKET>`                                                         | All runs of a ticket: status, stage, results, retention.                                                                                               |
-| `qj map [--out <dir>] [--openapi <file>]`                                  | Application map over all runs: tested screens, endpoints and transitions, and the ones never tested (`qa-map/map.html`, `map.json`).                   |
-| `qj export <TICKET> --out <dir>`                                           | Pipeline artifacts: `report.html`, `junit.xml`, `matrix.md/.csv`, `gates.json` and the evidence zip. Exit code = the run's.                            |
-| `qj pull <TICKET> --run <id>`                                              | Downloads the evidence zip of a run from the Jira ticket (e.g. from a CI run) and verifies it against its manifest.                                    |
+| Command                                                                              | What it does                                                                                                                                           |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `qj evidence <TICKET> [--failed] [--case <TC>] [--trace <TC>] [--no-open] [--serve]` | Statuses, failed assertions (expected vs actual), evidence files, cURL commands; opens `report.html`, videos or a Playwright trace unless `--no-open`. |
+| `qj logs <TICKET> [--follow] [--stage <s>] [--agent <role>] [--case <TC>]`           | The structured event journal: stages, agent tool calls (allowed and denied), model usage, attempts. `--follow` while a run is running.                 |
+| `qj runs <TICKET>`                                                                   | All runs of a ticket: status, stage, results, retention.                                                                                               |
+| `qj map [--out <dir>] [--openapi <file>]`                                            | Application map over all runs: tested screens, endpoints and transitions, and the ones never tested (`qa-map/map.html`, `map.json`).                   |
+| `qj export <TICKET> [--out <dir>]`                                                   | Pipeline artifacts: `report.html`, `junit.xml`, `matrix.md/.csv`, `gates.json` and the evidence zip. Exit code = the run's.                            |
+| `qj pull <TICKET> --run <id>`                                                        | Downloads the evidence zip of a run from the Jira ticket (e.g. from a CI run) and verifies it against its manifest.                                    |
 
 ### Run management
 
-| Command                                    | What it does                                                                                                                                                                                                        |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `qj resume <TICKET> [--env ...] [--build]` | Continues a run from its last checkpoint: plans if there is no plan, runs if approved; stops at human steps (approval, publish) and says what to do.                                                                |
-| `qj clean <TICKET> [--run <id> \| --all]`  | Removes containers, volumes and networks of the run (found by QAJitsu labels only), worktrees and `.env` files. Plan, specs, results, evidence, reports and journal stay. Runs used by another process are skipped. |
-| `qj gc [--dry-run]`                        | Applies retention to every ticket (`cleanup.keep_last`, `cleanup.max_age_days`; runs marked `keep` and running runs are exempt). Journals of deleted runs are archived under `audit.retention_days`.                |
+| Command                                           | What it does                                                                                                                                                                                                                                                      |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `qj status [--all]` / `qj note <TICKET> "<text>"` | What is in progress in the project: readiness, default environment, knowledge base, each open ticket with its state and the next command, and its notes. `--all` for every project.                                                                               |
+| `qj resume [<TICKET>] [--env ...] [--build]`      | Continues a run from its last checkpoint: plans if there is no plan, runs if approved; stops at human steps (approval, publish) and says what to do. Without a ticket: lists resumable work. A changed environment or secret after approval needs a confirmation. |
+| `qj clean <TICKET> [--run <id> \| --all]`         | Removes containers, volumes and networks of the run (found by QAJitsu labels only), worktrees and `.env` files. Plan, specs, results, evidence, reports and journal stay. Runs used by another process are skipped.                                               |
+| `qj gc [--dry-run]`                               | Applies retention to every ticket (`cleanup.keep_last`, `cleanup.max_age_days`; runs marked `keep` and running runs are exempt). Journals of deleted runs are archived under `audit.retention_days`.                                                              |
 
 ### Quality and operations
 

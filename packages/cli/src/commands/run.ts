@@ -33,6 +33,7 @@ import { openSession, type ModelPorts, type RunSession } from "../session.js";
 import type { CommandIO } from "./fetch.js";
 import { anchorJournal, computeVerdict, writeReports } from "./verdict.js";
 import { auditRun, runCanary } from "./checks.js";
+import { approvalContext, changedParts, type ApprovalContext } from "./context-fingerprint.js";
 import { runRunHook, type HookExec } from "./hooks.js";
 import { prepareMobile, type PreparedMobile } from "./mobile.js";
 import { exportRunTelemetry } from "./telemetry.js";
@@ -189,6 +190,31 @@ export async function runRun(
     // REQ-WS-04/AC2: one process per run; other runs of the ticket may run in parallel.
     release = await acquireRunLock(ws.path("run.lock"));
     const { plan, approval } = await loadApprovedPlan(ws);
+    // REQ-PRJ-06/AC3: a run never continues silently after its environment or secrets changed since approval.
+    const approvedContext = ws.record.data["approvalContext"] as ApprovalContext | undefined;
+    if (approvedContext) {
+      const changed = changedParts(approvedContext, await approvalContext(session));
+      if (changed.length > 0) {
+        const what = changed.join(" and ");
+        const answer = io.ask
+          ? (
+              await io.ask(
+                `The ${what} changed since the plan was approved. Run with the changed ${what}? [y/N] `,
+              )
+            )
+              .trim()
+              .toLowerCase()
+          : "";
+        if (answer !== "y" && answer !== "yes")
+          throw new ConfigError(
+            "RUN_CONTEXT_CHANGED",
+            `The ${what} changed since the plan was approved; confirm interactively or start a new run with 'qajitsu fetch ${ws.ticket}'.`,
+            { changed },
+          );
+        events.emit("run", { kind: "user", name: "cli" }, "approval.context_reconfirmed", { changed });
+        await ws.update({ data: { ...ws.record.data, approvalContext: await approvalContext(session) } });
+      }
+    }
     events.emit("run", SYSTEM, "stage.start", { planVersion: approval.version });
     const results = new Map<string, CaseResultFile>();
 

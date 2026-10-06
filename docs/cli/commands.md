@@ -180,6 +180,9 @@ Shows statuses, failed assertions, evidence files and cURL commands; opens the r
 - `--case <id>`: only this case
 - `--trace <case>`: open the Playwright trace of a case
 - `--no-open`: print only, do not open the report, videos or traces
+- `--serve`: serve the run's `report/` and `evidence/` on 127.0.0.1 until Ctrl+C (never `env/`, `repos/` or the
+  journal; REQ-PRJ-10/AC4)
+- `--port <n>`: with `--serve`, the port (default: a free one)
 
 Exit codes: `0` shown, `3` errors.
 
@@ -208,7 +211,7 @@ Exit codes: `0` pulled and verified, `2` pulled but the hashes differ, `3` error
 Writes pipeline artifacts of a run: `report.html`, `junit.xml`, the matrix and the evidence zip.
 
 - `--run <id>`: run id (default: latest run of the ticket)
-- `--out <dir>`: output folder (required), e.g. `qa-artifacts`
+- `--out <dir>`: output folder, e.g. `qa-artifacts` (default: `<project-home>/exports/<TICKET>/<RUN>/`)
 
 Exit codes: the run's code (`0`, `1`, `2`) so a pipeline step can fail on it, `3` errors.
 
@@ -259,9 +262,30 @@ Lists the runs of a ticket with stage, status and results.
 
 Exit codes: `0` listed (also when there are none), `3` errors.
 
-### `qajitsu resume <ticket>`
+### `qajitsu status`
 
-Continues a run from its last checkpoint; stops at plan approval and publishing.
+The active project at a glance (REQ-PRJ-05): configuration readiness, default environment, knowledge base, and every
+ticket with unfinished work, its state ("plan v2 waiting for approval", "results not published", "interrupted during
+run") and the command that continues it, with the ticket's latest notes. Computed from the run folders;
+`context.json` in the project home is only an index of it.
+
+- `--all`: every project
+- `--rebuild`: rebuild `context.json` from the run folders
+
+Exit codes: `0` shown, `3` errors.
+
+### `qajitsu note <ticket> <text>`
+
+Attaches a note to a ticket; `status` shows it next to the ticket's work. Known secrets in the text are masked.
+
+Exit codes: `0` stored, `3` empty note or errors.
+
+### `qajitsu resume [ticket]`
+
+Continues a run from its last checkpoint; stops at plan approval and publishing. Without a ticket it lists the
+resumable work of the project with the command for each. When the environment or a secret changed after the plan was
+approved, the run does not continue silently: interactively it asks for confirmation, otherwise it stops with
+`RUN_CONTEXT_CHANGED` (REQ-PRJ-06/AC3).
 
 - `--run <id>`: run id (default: latest run of the ticket)
 - `--env <profile|url>`: environment for the run stage

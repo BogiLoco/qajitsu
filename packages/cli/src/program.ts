@@ -7,6 +7,7 @@ import { formatProbes, probeModels } from "@qajitsu/agents";
 import { runFetch } from "./commands/fetch.js";
 import { runApprove, runPlan } from "./commands/plan.js";
 import { runEvidence } from "./commands/evidence.js";
+import { runEvidenceServe } from "./commands/viewer.js";
 import { runLogs } from "./commands/logs.js";
 import { runPublish } from "./commands/publish.js";
 import { runPull } from "./commands/pull.js";
@@ -16,6 +17,7 @@ import { runFixCheck } from "./commands/fix-check.js";
 import { runClean, runGc, runResume, runRuns } from "./commands/runs.js";
 import { runEnvCheck, runEnvRender, runEnvUp } from "./commands/env.js";
 import { runProjectInit, runProjects, runUse } from "./commands/projects.js";
+import { runNote, runResumable, runStatus } from "./commands/status.js";
 import { runExplore, runExplorePromote } from "./commands/explore.js";
 import { runBench } from "./commands/bench.js";
 import { runAuditVerify } from "./commands/audit.js";
@@ -436,19 +438,48 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .action((ticket: string) => withPorts((ports) => runRuns(ticket, commandIO, ports))());
 
   program
-    .command("resume")
-    .description("Continue a run from its last checkpoint (stops at human approval and publish)")
+    .command("status")
+    .description(
+      "Project readiness, default environment, knowledge base and work in progress with the next command",
+    )
+    .option("--all", "every project")
+    .option("--rebuild", "rebuild context.json from the run folders")
+    .action(async (options: { all?: boolean; rebuild?: boolean }) => {
+      // --all needs no active project: it walks every registered one (REQ-PRJ-05/AC5).
+      if (options.all === true && io.ports) {
+        io.setExitCode(await runStatus(options, commandIO, io.ports));
+        return;
+      }
+      await withPorts((ports) => runStatus(options, commandIO, ports))();
+    });
+
+  program
+    .command("note")
+    .description("Attach a note to a ticket; status shows it next to the ticket's open work")
     .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .argument("<text>", "the note")
+    .action((ticket: string, text: string) =>
+      withPorts((ports) => runNote(ticket, text, commandIO, ports, io.user ?? "unknown"))(),
+    );
+
+  program
+    .command("resume")
+    .description(
+      "Continue a run from its last checkpoint (stops at human approval and publish); without a ticket, list resumable work",
+    )
+    .argument("[ticket]", "Jira key, e.g. SHOP-482")
     .option("--run <id>", "run id (default: latest run of the ticket)")
     .option("--env <profile|url>", "environment for the run stage")
     .option("--build", "build the environment for the run stage")
-    .action((ticket: string, options: { run?: string; env?: string; build?: boolean }) =>
+    .action((ticket: string | undefined, options: { run?: string; env?: string; build?: boolean }) =>
       withPorts((ports) =>
-        runResume(ticket, options, commandIO, ports, (stage, runId) =>
-          stage === "plan"
-            ? runPlan(ticket, { run: runId }, commandIO, ports, review)
-            : runRun(ticket, { run: runId, env: options.env, build: options.build }, commandIO, ports),
-        ),
+        ticket === undefined
+          ? runResumable(commandIO, ports)
+          : runResume(ticket, options, commandIO, ports, (stage, runId) =>
+              stage === "plan"
+                ? runPlan(ticket, { run: runId }, commandIO, ports, review)
+                : runRun(ticket, { run: runId, env: options.env, build: options.build }, commandIO, ports),
+            ),
       )(),
     );
 
@@ -511,8 +542,11 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .description("Write pipeline artifacts of a run: report.html, junit.xml, matrix and the evidence zip")
     .argument("<ticket>", "Jira key, e.g. SHOP-482")
     .option("--run <id>", "run id (default: latest run of the ticket)")
-    .requiredOption("--out <dir>", "artifact folder, e.g. qa-artifacts")
-    .action((ticket: string, options: { run?: string; out: string }) =>
+    .option(
+      "--out <dir>",
+      "artifact folder, e.g. qa-artifacts (default: the project's exports/<TICKET>/<RUN>)",
+    )
+    .action((ticket: string, options: { run?: string; out?: string }) =>
       withPorts((ports) => runExport(ticket, options, commandIO, ports))(),
     );
 
@@ -581,16 +615,28 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--case <id>", "only this case")
     .option("--trace <case>", "open the Playwright trace of a case")
     .option("--no-open", "print only, do not open the report, videos or traces")
+    .option("--serve", "serve the report and evidence on localhost until Ctrl+C")
+    .option("--port <n>", "with --serve: port (default: a free one)")
     .action(
       (
         ticket: string,
-        options: { run?: string; failed?: boolean; case?: string; trace?: string; open?: boolean },
+        options: {
+          run?: string;
+          failed?: boolean;
+          case?: string;
+          trace?: string;
+          open?: boolean;
+          serve?: boolean;
+          port?: string;
+        },
       ) =>
         withPorts((ports) =>
-          runEvidence(ticket, options, commandIO, ports, {
-            ...(io.openFile ? { openFile: io.openFile } : {}),
-            ...(io.openTrace ? { openTrace: io.openTrace } : {}),
-          }),
+          options.serve === true
+            ? runEvidenceServe(ticket, options, commandIO, ports)
+            : runEvidence(ticket, options, commandIO, ports, {
+                ...(io.openFile ? { openFile: io.openFile } : {}),
+                ...(io.openTrace ? { openTrace: io.openTrace } : {}),
+              }),
         )(),
     );
 

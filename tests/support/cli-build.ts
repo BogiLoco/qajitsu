@@ -12,8 +12,8 @@ import { createCliProject, gitExec } from "./cli-project.js";
 import { scriptedModel, type Turn } from "./mock-model.js";
 
 export const PASSWORD = "fictional-demo-password";
-const draft = readFileSync(new URL("../../fixtures/plans/demo-1-draft.json", import.meta.url), "utf8");
-const analysis = JSON.stringify({
+export const draft = readFileSync(new URL("../../fixtures/plans/demo-1-draft.json", import.meta.url), "utf8");
+export const analysis = JSON.stringify({
   summary: "Cart API.",
   change_type: ["api"],
   endpoints: [{ method: "GET", path: "/cart", source: [{ kind: "ac", id: "AC1" }] }],
@@ -77,12 +77,13 @@ export const createBuildProject = async (
   const run = async (
     args: string[],
     script: Turn[] = [{ text: "{}" }],
-    extra: { readonly env?: Readonly<Record<string, string>> } = {},
+    extra: { readonly env?: Readonly<Record<string, string>>; readonly ask?: readonly string[] } = {},
   ) => {
     let out = "";
     let err = "";
     let exitCode = 0;
     const model = scriptedModel(script);
+    const answers = [...(extra.ask ?? [])];
     await createProgram("1.0.0", {
       write: (t) => (out += t),
       writeError: (t) => (err += t),
@@ -90,6 +91,7 @@ export const createBuildProject = async (
       nodeVersion: "v22.22.0",
       setExitCode: (c) => (exitCode = c),
       user: "qa-lead",
+      ...(extra.ask ? { ask: () => Promise.resolve(answers.shift() ?? "") } : {}),
       ports: {
         env: { DEMO_USER_PASSWORD: PASSWORD, ...extra.env },
         home,

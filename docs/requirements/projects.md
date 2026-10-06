@@ -71,7 +71,7 @@ A run sees only its own project. This protects confidentiality when one person t
 
 ### REQ-PRJ-05 · Project status: what is in the project and what is in progress
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 3
 - Related: REQ-WS-01, REQ-WS-04, REQ-KNOW-05
@@ -80,24 +80,24 @@ After a switch the user sees at once what was being done and what to do next.
 
 **Acceptance criteria**
 
-- [ ] AC1: `qj status` shows for the active project: configuration readiness, default environment, knowledge base summary (sources, documents, last sync), and work in progress.
-- [ ] AC2: Work in progress lists each open ticket with its last run, current pipeline stage, state (e.g. "plan v2 waiting for approval", "run paused at env", "results not published") and the next command to continue.
-- [ ] AC3: Status is computed by code from `run.json` files; `context.json` is only an index and can be rebuilt with `qj status --rebuild`.
-- [ ] AC4: The user can attach notes to a ticket (`qj note <TICKET> "..."`); notes are shown in status and kept with the ticket's runs.
-- [ ] AC5: `qj status --all` shows the same summary for every project.
+- [x] AC1: `qj status` shows for the active project: configuration readiness, default environment, knowledge base summary (sources, documents, last sync), and work in progress.
+- [x] AC2: Work in progress lists each open ticket with its last run, current pipeline stage, state (e.g. "plan v2 waiting for approval", "run paused at env", "results not published") and the next command to continue.
+- [x] AC3: Status is computed by code from `run.json` files; `context.json` is only an index and can be rebuilt with `qj status --rebuild`.
+- [x] AC4: The user can attach notes to a ticket (`qj note <TICKET> "..."`); notes are shown in status and kept with the ticket's runs.
+- [x] AC5: `qj status --all` shows the same summary for every project.
 
 ### REQ-PRJ-06 · Continue after switching
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: 3
 - Related: REQ-WS-04, REQ-PRJ-05
 
 **Acceptance criteria**
 
-- [ ] AC1: `qj resume [TICKET]` continues the latest unfinished run of the ticket from its last checkpoint; without a ticket it lists resumable work in the active project.
-- [ ] AC2: Switching projects, closing the terminal or restarting the machine loses no state: plans, approvals, results and notes are on disk.
-- [ ] AC3: A run whose approved plan, environment or secrets changed while it was paused does not continue silently; it asks to re-approve or start a new run.
+- [x] AC1: `qj resume [TICKET]` continues the latest unfinished run of the ticket from its last checkpoint; without a ticket it lists resumable work in the active project.
+- [x] AC2: Switching projects, closing the terminal or restarting the machine loses no state: plans, approvals, results and notes are on disk.
+- [x] AC3: A run whose approved plan, environment or secrets changed while it was paused does not continue silently; it asks to re-approve or start a new run.
 
 ### REQ-PRJ-07 · Start fresh and clean up
 
@@ -143,7 +143,7 @@ Code fetched for runs is kept per project so repeated runs on the same commit ar
 
 ### REQ-PRJ-10 · Evidence, reports and exports stay in the project
 
-- Status: accepted
+- Status: in-progress
 - Priority: must
 - Stage: 3
 - Related: REQ-PRJ-01, REQ-PRJ-04, REQ-VER-05, REQ-PUB-02, REQ-PUB-06, INV-7
@@ -152,9 +152,9 @@ Everything a run produces as proof belongs to the run's project and is found the
 
 **Acceptance criteria**
 
-- [ ] AC1: Evidence (screenshots, videos, traces, request/response pairs, logs), `results/`, `report/` and the manifest are written only inside the run workspace `<project-home>/runs/<TICKET>/<RUN_ID>/`.
-- [ ] AC2: Evidence zips and other exports are written to `<project-home>/exports/` (or a path given with `--out`); never to the current directory by default.
-- [ ] AC3: Evidence pulled from CI runs (`qj pull`) lands in the matching project's `runs/`, resolved by the ticket key prefix (REQ-PRJ-03).
-- [ ] AC4: `qj evidence <TICKET>` and the local viewer for reports and videos open files of the resolved project only; the viewer serves only that run workspace and binds to localhost.
-- [ ] AC5: The `evidence-local` store refuses paths outside the run workspace; the manifest stores paths relative to it, so a run folder can be moved or archived as a unit.
+- [x] AC1: Evidence (screenshots, videos, traces, request/response pairs, logs), `results/`, `report/` and the manifest are written only inside the run workspace `<project-home>/runs/<TICKET>/<RUN_ID>/`.
+- [x] AC2: Evidence zips and other exports are written to `<project-home>/exports/` (or a path given with `--out`); never to the current directory by default.
+- [x] AC3: Evidence pulled from CI runs (`qj pull`) lands in the matching project's `runs/`, resolved by the ticket key prefix (REQ-PRJ-03).
+- [x] AC4: `qj evidence <TICKET>` and the local viewer for reports and videos open files of the resolved project only; the viewer serves only that run workspace and binds to localhost.
+- [x] AC5: The `evidence-local` store refuses paths outside the run workspace; the manifest stores paths relative to it, so a run folder can be moved or archived as a unit.
 - [ ] AC6: Retention and `qj projects remove` treat evidence like other run data; `--keep` keeps evidence of the selected runs (REQ-WS-03).

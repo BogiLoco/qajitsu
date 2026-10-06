@@ -26,7 +26,7 @@ evidenceStoreContract(
 );
 
 describe("local evidence store (REQ-VER-05/AC1, invariant 7)", () => {
-  it("REQ-VER-05/AC1: writes files and a manifest with SHA-256, size, case and step", async () => {
+  it("REQ-VER-05/AC1 + REQ-PRJ-10/AC5: writes files and a manifest with SHA-256, size, case and step", async () => {
     const dir = await mkdtemp(join(tmpdir(), "qj-ev-"));
     dirs.push(dir);
     const store = createLocalEvidenceStore(dir);

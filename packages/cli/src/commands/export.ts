@@ -9,7 +9,7 @@ import { buildEvidenceZip } from "./publish.js";
 import { computeVerdict, writeReports } from "./verdict.js";
 
 /**
- * `qajitsu export <TICKET> [--run <id>] --out <dir>`: the pipeline artifacts of a run (REQ-CI-04/AC3):
+ * `qajitsu export <TICKET> [--run <id>] [--out <dir>]`: the pipeline artifacts of a run (REQ-CI-04/AC3):
  * report.html, junit.xml, matrix.md/csv and the secret-scanned evidence zip built from the manifest.
  * Reports are recomputed from the files on disk, so the export says the same as `run` and `publish`.
  *
@@ -17,7 +17,7 @@ import { computeVerdict, writeReports } from "./verdict.js";
  */
 export async function runExport(
   rawKey: string,
-  options: { readonly run?: string | undefined; readonly out: string },
+  options: { readonly run?: string | undefined; readonly out?: string | undefined },
   io: CommandIO,
   ports: RuntimePorts & ModelPorts,
 ): Promise<number> {
@@ -28,7 +28,15 @@ export async function runExport(
       throw new ConfigError("RUN_NOT_EXECUTED", "This run has no results yet; run 'qajitsu run' first.", {});
     const verdict = await computeVerdict(session, ports.now);
     await writeReports(session, verdict);
-    const out = resolve(io.cwd, options.out);
+    // REQ-PRJ-10/AC2: by default into the project's exports/, never the current folder.
+    const out =
+      options.out !== undefined
+        ? resolve(io.cwd, options.out)
+        : join(
+            session.project.project?.paths.exports ?? session.ws.path("report"),
+            session.ws.ticket,
+            session.ws.runId,
+          );
     await mkdir(out, { recursive: true });
     const bundle = await buildEvidenceZip(session, verdict);
     const files = ["report.html", "junit.xml", "matrix.md", "matrix.csv", "gates.json"];

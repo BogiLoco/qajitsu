@@ -218,9 +218,10 @@ describe("qajitsu run (stage 3: REQ-EXEC-*, REQ-ENV-*, REQ-VER-07, REQ-EVD-05)",
 
   it("REQ-ENV-07/AC2: without a default environment an interactive run asks; CI fails", async () => {
     const { run, prepare, project } = await setup();
-    await prepare();
+    // Before approval: a change after it would stop the run as RUN_CONTEXT_CHANGED (REQ-PRJ-06/AC3).
     const yaml = join(project, ".qa", "qa.project.yaml");
     await writeFile(yaml, (await readFile(yaml, "utf8")).replace("default: local, ", ""));
+    await prepare();
     expect((await run(["run", "DEMO-1"])).err).toContain("[ENV_NOT_SELECTED]");
     const asked = await run(["run", "DEMO-1"], undefined, ["local"]);
     expect(asked.exitCode).toBe(0);

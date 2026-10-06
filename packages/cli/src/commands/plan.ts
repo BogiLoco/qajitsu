@@ -33,6 +33,7 @@ import {
 import { createMasker } from "@qajitsu/steps";
 import { exportRunTelemetry } from "./telemetry.js";
 import { anchorJournal } from "./verdict.js";
+import { approvalContext } from "./context-fingerprint.js";
 import { checkPlanSources, formatSourceIssues } from "@qajitsu/verifier";
 import { parse } from "yaml";
 import type { RuntimePorts } from "../adapters.js";
@@ -242,6 +243,7 @@ export async function runPlan(
           confirmOpenQuestions: confirm,
         });
         session.events.emit("approve", { kind: "user", name: review.user }, "plan.approved", { ...approval });
+        await recordApprovalContext(session);
         io.write(`Approved plan v${String(approval.version)} (sha256 ${approval.sha256.slice(0, 16)}…)\n`);
         return 0;
       }
@@ -339,6 +341,7 @@ export async function runApprove(
       confirmOpenQuestions: options.confirmOpenQuestions === true,
     });
     session.events.emit("approve", { kind: "user", name: approver }, "plan.approved", { ...approval });
+    await recordApprovalContext(session);
     io.write(
       `Approved plan v${String(approval.version)} of ${session.ws.ticket} run ${session.ws.runId}\nsha256 ${approval.sha256}\n${join(session.ws.dir, "plan", "plan.approved.yaml")}\n`,
     );
@@ -430,5 +433,13 @@ async function reuseApprovedPlan(
     from: sourceRunId,
     ...approval,
   });
+  await recordApprovalContext(session);
   return { version: approval.version, sha256: approval.sha256, from: sourceRunId };
+}
+
+/** Records what the approval depended on besides the plan (REQ-PRJ-06/AC3): environments and secrets. */
+async function recordApprovalContext(session: RunSession): Promise<void> {
+  await session.ws.update({
+    data: { ...session.ws.record.data, approvalContext: await approvalContext(session) },
+  });
 }

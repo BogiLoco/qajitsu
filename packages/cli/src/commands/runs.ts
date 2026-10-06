@@ -22,7 +22,8 @@ import type { RuntimePorts } from "../adapters.js";
 import { loadProject, type LoadedProject } from "../project.js";
 import type { CommandIO } from "./fetch.js";
 
-const rootOf = (project: LoadedProject, ports: RuntimePorts): string =>
+/** Root of the run folders of a loaded project. */
+export const rootOf = (project: LoadedProject, ports: RuntimePorts): string =>
   resolveWorkspaceRoot({ configured: project.config.workspace.root, home: ports.home, cwd: project.qaDir });
 
 const ticketOf = (raw: string): TicketKey => {

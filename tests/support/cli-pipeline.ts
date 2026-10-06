@@ -6,6 +6,7 @@ import { createPlaywrightTransport, executeAttempt, type AttemptExecutor } from 
 import { createPlaywrightBrowserFactory } from "@qajitsu/adapter-runner-web";
 import { startShop } from "../../examples/demo-shop/api/server.mjs";
 import { createProgram } from "../../packages/cli/src/program.js";
+import type { RunPorts } from "../../packages/cli/src/commands/run.js";
 import { createCliProject, gitExec } from "./cli-project.js";
 import { scriptedModel, type Turn } from "./mock-model.js";
 
@@ -103,6 +104,7 @@ export async function createDemoPipeline(
       ask?: string[];
       fetch?: typeof globalThis.fetch;
       compressVideo?: (input: string, output: string) => Promise<boolean>;
+      signals?: RunPorts["signals"];
     } = {},
   ) => {
     let out = "";
@@ -127,6 +129,7 @@ export async function createDemoPipeline(
         fetch: opts.fetch ?? globalThis.fetch,
         gitExec,
         extraModels: { mock: () => model.mock },
+        ...(opts.signals ? { signals: opts.signals } : {}),
         executor: (options.wrapExecutor ?? ((e: AttemptExecutor) => e))(
           web ? inProcessWebExecutor : inProcessExecutor,
         ),

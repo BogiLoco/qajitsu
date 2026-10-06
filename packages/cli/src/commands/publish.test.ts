@@ -18,8 +18,8 @@ interface PublishData {
 }
 
 describe("qajitsu publish (REQ-PUB-01..04, REQ-VER-10)", () => {
-  it("REQ-VER-10/AC1 + REQ-PUB-01 + REQ-PUB-02/AC1: shows a preview, publishes after confirmation, attaches the evidence zip", async () => {
-    const { run, runDir, executed } = await pipeline("BUG_CART_TOTAL_ROUNDING");
+  it("REQ-VER-10/AC1 + REQ-PUB-01 + REQ-PUB-02/AC1 + REQ-PRJ-10/AC2: shows a preview, publishes after confirmation, attaches the evidence zip", async () => {
+    const { run, runDir, executed, home } = await pipeline("BUG_CART_TOTAL_ROUNDING");
     expect((await executed()).exitCode).toBe(1);
     const declined = await run(["publish", "DEMO-1"], { ask: ["n"] });
     expect(declined.out).toContain("QAJitsu test results: 2 cases: 1 PASSED, 1 FAILED");
@@ -31,7 +31,16 @@ describe("qajitsu publish (REQ-PUB-01..04, REQ-VER-10)", () => {
     const adf = await readFile(join(runDir, "report", "published", "jira-comment.adf.json"), "utf8");
     expect(adf).toContain("qajitsu evidence DEMO-1 --run 20261003-1046-aaaa --failed");
     expect(adf).not.toContain(DEMO_PASSWORD);
-    const zip = join(runDir, "report", "DEMO-1_20261003-1046-aaaa_evidence.zip");
+    // REQ-PRJ-10/AC2: the zip is kept in the project's exports/.
+    const zip = join(
+      home,
+      ".qajitsu",
+      "projects",
+      "demo",
+      "exports",
+      "DEMO-1",
+      "DEMO-1_20261003-1046-aaaa_evidence.zip",
+    );
     const listing = execFileSync("unzip", ["-l", zip]).toString();
     expect(listing).toContain("evidence/manifest.json");
     expect(listing).toContain("report/report.html");
@@ -192,13 +201,21 @@ describe("qajitsu publish (REQ-PUB-01..04, REQ-VER-10)", () => {
     expect(opened).toHaveLength(1);
   });
 
-  it("REQ-PUB-06/AC3: qj pull downloads the evidence zip of a run from Jira and verifies the manifest", async () => {
+  it("REQ-PUB-06/AC3 + REQ-PRJ-10/AC3: qj pull downloads the evidence zip of a run from Jira and verifies the manifest", async () => {
     const { run, executed, project, home } = await pipeline();
     await executed();
     expect((await run(["publish", "DEMO-1", "--auto-publish"])).exitCode).toBe(0);
     const { readFile: read } = await import("node:fs/promises");
     const zipBytes = await read(
-      join(home, "runs", "DEMO-1", "20261003-1046-aaaa", "report", "DEMO-1_20261003-1046-aaaa_evidence.zip"),
+      join(
+        home,
+        ".qajitsu",
+        "projects",
+        "demo",
+        "exports",
+        "DEMO-1",
+        "DEMO-1_20261003-1046-aaaa_evidence.zip",
+      ),
     );
     const yaml = join(project, ".qa", "qa.project.yaml");
     await writeFile(
