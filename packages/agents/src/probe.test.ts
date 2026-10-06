@@ -48,6 +48,7 @@ describe("doctor --models (REQ-LLM-03/AC2)", () => {
       "auditor",
       "explorer",
       "summary",
+      "triage",
     ]);
   });
 });

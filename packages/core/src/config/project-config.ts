@@ -196,8 +196,10 @@ export const ProjectConfigSchema = z.strictObject({
       auditor_max_images: z.number().int().min(0).max(50).default(12),
       /** Run one step with an inverted expectation; if it passes, the run becomes NEEDS_REVIEW (REQ-VER-09). */
       canary: z.boolean().default(false),
+      /** Suggested causes of FAILED cases with cited evidence (REQ-VER-12); never a status. */
+      triage: z.enum(["on", "off"]).default("on"),
     })
-    .default({ auditor: "optional", auditor_max_images: 12, canary: false }),
+    .default({ auditor: "optional", auditor_max_images: 12, canary: false, triage: "on" }),
   /** Mobile runner, devices and app binaries (REQ-EXEC-06, REQ-ENV-06, REQ-EVD-03). */
   mobile: MobileSchema.optional(),
   /** Web runner (REQ-EXEC-05, REQ-EVD-06). */

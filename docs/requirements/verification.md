@@ -153,7 +153,7 @@ then runs the same test on the version with the fix (it must pass). Strong evide
 
 ### REQ-VER-12 · Failure triage hints
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: INV-1, INV-5, INV-6, REQ-VER-06
@@ -163,7 +163,7 @@ the label is only a hint.
 
 **Acceptance criteria**
 
-- [ ] AC1: Each FAILED case gets a hint: `product-bug`, `test-bug`, `environment` or `data`, with a short justification citing evidence (step, request, screenshot, log).
-- [ ] AC2: The hint never changes the status; a hint that cites no existing evidence is dropped.
-- [ ] AC3: Matrix, report and Jira comment show the hint visibly as a suggestion, separate from the computed status and counts.
-- [ ] AC4: A model error or invalid output leaves the case without a hint; the run continues.
+- [x] AC1: Each FAILED case gets a hint: `product-bug`, `test-bug`, `environment` or `data`, with a short justification citing evidence (step, request, screenshot, log).
+- [x] AC2: The hint never changes the status; a hint that cites no existing evidence is dropped.
+- [x] AC3: Matrix, report and Jira comment show the hint visibly as a suggestion, separate from the computed status and counts.
+- [x] AC4: A model error or invalid output leaves the case without a hint; the run continues.

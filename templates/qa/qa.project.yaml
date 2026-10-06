@@ -125,7 +125,7 @@ test_types: [api, web]
 # cleanup: { policy: on_success, keep_last: 10, max_age_days: 30 }
 #
 # Auditor and canary (REQ-VER-06, REQ-VER-09)
-# verification: { auditor: optional, auditor_max_images: 12, canary: false }
+# verification: { auditor: optional, auditor_max_images: 12, canary: false, triage: on }
 #
 # Android and iOS (REQ-ENV-06, docs/guides/mobile.md)
 # mobile: { recording: retain-on-failure, android: { app: { source: build, repo: app, command: [./gradlew, assembleDebug], output: app/build/outputs/apk/debug/app-debug.apk }, app_id: com.example.app } }

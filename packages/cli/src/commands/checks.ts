@@ -1,17 +1,20 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { join, relative, sep } from "node:path";
 import { runCases, type RunCasesOptions } from "@qajitsu/adapter-runner-api";
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
-import { createUsageTracker, runAuditor, type AuditInput } from "@qajitsu/agents";
+import { createUsageTracker, runAuditor, runTriage, type AuditInput } from "@qajitsu/agents";
 import {
   AuditRecordSchema,
   CanaryRecordSchema,
+  TriageRecordSchema,
+  type TriageRecord,
   type AuditRecord,
   type CanaryRecord,
   type CaseResultFile,
   type Plan,
   sha256,
 } from "@qajitsu/core";
-import { buildCanaryPlan, canaryCaught } from "@qajitsu/verifier";
+import { buildCanaryPlan, canaryCaught, checkTriageHints } from "@qajitsu/verifier";
 import type { RunSession } from "../session.js";
 import { computeVerdict } from "./verdict.js";
 
@@ -208,5 +211,79 @@ export async function runCanary(
   }
   record = CanaryRecordSchema.parse(record);
   await writeRecord(session, "canary.json", record);
+  return record;
+}
+
+/** Log files of a run (relative to `logs/`), newest content last; at most `max`. */
+async function runLogs(dir: string, max: number): Promise<string[]> {
+  const entries = await readdir(dir, { withFileTypes: true, recursive: true }).catch(() => []);
+  return entries
+    .filter((e) => e.isFile() && /\.(log|txt|jsonl?)$/i.test(e.name))
+    .map((e) => relative(dir, join(e.parentPath, e.name)).split(sep).join("/"))
+    .sort()
+    .slice(0, max);
+}
+
+/**
+ * Suggests a cause for every FAILED case (REQ-VER-12) and writes `checks/triage.json`. Hints are kept only when
+ * their citations exist (`checkTriageHints`); a model failure is recorded and the run continues without hints
+ * (AC4). Statuses never read this record (invariant 1).
+ *
+ * @returns The record, or undefined when triage is off or nothing FAILED.
+ */
+export async function triageRun(session: RunSession, now: () => Date): Promise<TriageRecord | undefined> {
+  const { project, ws, masker, events } = session;
+  if (project.config.verification.triage === "off") return undefined;
+  const verdict = await computeVerdict(session, now);
+  const failed = verdict.cases.filter((c) => c.status === "FAILED").map((c) => c.caseId);
+  if (failed.length === 0) return undefined;
+  const cases = failed.flatMap((caseId) => {
+    const result = verdict.results.get(caseId);
+    return result ? [{ caseId, result, evidence: result.attempts.at(-1)?.evidence ?? [] }] : [];
+  });
+  const texts: Record<string, string> = {};
+  for (const m of verdict.manifest)
+    if (cases.some((c) => c.evidence.includes(m.path)) && !["screenshot", "video", "trace"].includes(m.kind))
+      texts[m.path] = masker.maskText((await readFile(ws.path("evidence", m.path), "utf8")).slice(0, 4000));
+  const logNames = await runLogs(ws.path("logs"), 10);
+  const logs: Record<string, string> = {};
+  for (const name of logNames)
+    logs[name] = masker.maskText(
+      (await readFile(ws.path("logs", name), "utf8").catch(() => "")).slice(-3000),
+    );
+  const usage = createUsageTracker({
+    events,
+    budget: project.config.models.token_budget,
+    alreadyUsed: Number(ws.record.data["tokens"] ?? 0),
+  });
+  let record: TriageRecord;
+  try {
+    const answer = await runTriage(
+      {
+        ws,
+        models: session.models,
+        events,
+        usage,
+        now,
+        maskJson: (v: unknown) => masker.maskJson(v),
+        maskText: (t: string) => masker.maskText(t),
+      },
+      { plan: verdict.plan, cases, texts, logs },
+    );
+    const checked = checkTriageHints(
+      answer.hints.map((h) => ({ ...h, justification: masker.maskText(h.justification) })),
+      { results: verdict.results, manifest: verdict.manifest.map((m) => m.path), logs: logNames, failed },
+    );
+    record = TriageRecordSchema.parse({ schema: 1, status: "done", model: answer.model, ...checked });
+  } catch (error) {
+    record = {
+      schema: 1,
+      status: "failed",
+      error: masker.maskText(error instanceof Error ? error.message : String(error)).slice(0, 500),
+    };
+    events.emit("triage", SYSTEM, "triage.failed", { error: record.error });
+  }
+  await ws.update({ data: { ...ws.record.data, tokens: usage.total } });
+  await writeRecord(session, "triage.json", record);
   return record;
 }

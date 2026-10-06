@@ -66,6 +66,23 @@ Check records fail closed: `checks/audit.json` and `checks/canary.json` are hash
 When a check is enabled and something PASSED, a missing, changed or unreadable record turns every PASSED into
 NEEDS_REVIEW and fails the `checks-intact` publish gate. Deleting a record never brings back a PASSED it took away.
 
+## Failure hints (REQ-VER-12)
+
+After a run with FAILED cases, the `triage` role (`models.roles.triage`, else `default`) suggests a likely cause
+for each one: `product-bug`, `test-bug`, `environment` or `data`, with a short justification. It sees the approved
+plan, the runner record, text evidence and the tails of the run's log files, and must cite what it relies on: a step
+(`S1`), an assertion (`S1.fields.total`), an evidence file or a log file. Code keeps only citations that exist for
+that case and drops a hint with none left; an invalid answer leaves the case without a hint.
+
+Hints are suggestions: they never change a status or a count. They appear as a separate column in the matrix, under
+the status in the report and in their own section of the Jira comment. `checks/triage.json` is hashed into
+`run.json` like the other check records, so an edited hint fails the `checks-intact` gate.
+
+```yaml
+verification:
+  triage: on # off: no model calls for FAILED cases
+```
+
 ## The canary (REQ-VER-09)
 
 ```yaml

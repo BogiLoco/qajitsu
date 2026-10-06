@@ -13,7 +13,7 @@ const HEADER = [
   "Evidence",
 ] as const;
 
-const values = (r: MatrixRow): (string | number)[] => [
+const values = (r: MatrixRow, hints = false): (string | number)[] => [
   r.caseId,
   r.title,
   r.requirement,
@@ -22,7 +22,12 @@ const values = (r: MatrixRow): (string | number)[] => [
   r.stepsPassed,
   r.stepsTotal,
   r.evidence,
+  ...(hints ? [r.hint ?? ""] : []),
 ];
+
+/** Columns of the matrix; the hint column appears only when a FAILED case has a hint (REQ-VER-12/AC3). */
+const headerOf = (rows: readonly MatrixRow[]): readonly string[] =>
+  rows.some((r) => r.hint !== undefined) ? [...HEADER, "Hint (suggestion)"] : HEADER;
 
 /** Neutralises spreadsheet formulas in text cells (CSV/formula injection). */
 const safeText = (value: string): string => (/^[=+\-@\t\r]/.test(value) ? `'${value}` : value);
@@ -38,7 +43,9 @@ export function renderMatrixCsv(rows: readonly MatrixRow[]): string {
     const s = safeText(v);
     return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  return `${[HEADER, ...rows.map(values)].map((r) => r.map(cell).join(",")).join("\r\n")}\r\n`;
+  const header = headerOf(rows);
+  const hints = header.length > HEADER.length;
+  return `${[header, ...rows.map((r) => values(r, hints))].map((r) => r.map(cell).join(",")).join("\r\n")}\r\n`;
 }
 
 const xml = (s: string): string =>
@@ -58,7 +65,14 @@ const column = (i: number): string => String.fromCharCode(65 + i);
  * @param rows - Matrix rows.
  */
 export function renderMatrixXlsx(rows: readonly MatrixRow[]): Uint8Array {
-  const all: (string | number)[][] = [[summaryLine(rows)], [], [...HEADER], ...rows.map(values)];
+  const header = headerOf(rows);
+  const hints = header.length > HEADER.length;
+  const all: (string | number)[][] = [
+    [summaryLine(rows)],
+    [],
+    [...header],
+    ...rows.map((r) => values(r, hints)),
+  ];
   const sheetRows = all
     .map((r, ri) => {
       const cells = r

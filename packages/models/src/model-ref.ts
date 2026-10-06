@@ -10,6 +10,7 @@ export const MODEL_ROLES = [
   "auditor",
   "explorer",
   "summary",
+  "triage",
 ] as const;
 
 /** A role that is assigned a model in `models.roles`. */

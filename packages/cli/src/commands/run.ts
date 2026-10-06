@@ -33,7 +33,7 @@ import { buildAdapters, type RuntimePorts } from "../adapters.js";
 import { codeIndexCache, openSession, type ModelPorts, type RunSession } from "../session.js";
 import type { CommandIO } from "./fetch.js";
 import { anchorJournal, computeVerdict, writeReports } from "./verdict.js";
-import { auditRun, runCanary } from "./checks.js";
+import { auditRun, triageRun, runCanary } from "./checks.js";
 import { approvalContext, changedParts, type ApprovalContext } from "./context-fingerprint.js";
 import { runRunHook, type HookExec } from "./hooks.js";
 import { prepareMobile, type PreparedMobile } from "./mobile.js";
@@ -365,6 +365,13 @@ export async function runRun(
         io.write(
           `Environment kept (${built.project}); remove it with: qajitsu clean ${ws.ticket} --run ${ws.runId}\n`,
         );
+    }
+    // REQ-VER-12: hints for FAILED cases, after the service logs are in logs/; they never change a status, so the
+    // reports are only rendered again with the hints next to the computed results.
+    if (ws.record.data["bench"] === undefined && verdict.cases.some((c) => c.status === "FAILED")) {
+      const triage = await triageRun(session, ports.now);
+      if (triage?.status === "failed") io.writeError(`Failure hints not available: ${triage.error}\n`);
+      if (triage) await writeReports(session, await computeVerdict(session, ports.now));
     }
     await ws.update({
       status: "completed",

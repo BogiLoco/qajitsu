@@ -136,7 +136,7 @@ The author agent writes test files for approved cases only. Exploring the app th
 
 ### REQ-EXEC-11 · Human-in-the-loop steps
 
-- Status: proposed
+- Status: accepted
 - Priority: should
 - Stage: later
 - Related: INV-1, INV-2, INV-8, REQ-VER-01, REQ-VER-04, REQ-EVD-01
@@ -158,7 +158,7 @@ person, not from the runner.
 
 ### REQ-EXEC-12 · Visual regression
 
-- Status: proposed
+- Status: accepted
 - Priority: could
 - Stage: later
 - Related: INV-1, INV-4, REQ-EXEC-05, REQ-EVD-01
@@ -172,7 +172,7 @@ person, not from the runner.
 
 ### REQ-EXEC-13 · Browser and viewport matrix
 
-- Status: proposed
+- Status: accepted
 - Priority: could
 - Stage: later
 - Related: REQ-EXEC-05, REQ-EXEC-10
@@ -185,7 +185,7 @@ person, not from the runner.
 
 ### REQ-EXEC-14 · Locale testing
 
-- Status: proposed
+- Status: accepted
 - Priority: could
 - Stage: later
 - Related: INV-4, REQ-EXEC-05, REQ-PLAN-02

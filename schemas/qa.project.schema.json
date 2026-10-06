@@ -513,7 +513,8 @@
       "default": {
         "auditor": "optional",
         "auditor_max_images": 12,
-        "canary": false
+        "canary": false,
+        "triage": "on"
       },
       "type": "object",
       "properties": {
@@ -535,6 +536,14 @@
         "canary": {
           "default": false,
           "type": "boolean"
+        },
+        "triage": {
+          "default": "on",
+          "type": "string",
+          "enum": [
+            "on",
+            "off"
+          ]
         }
       },
       "additionalProperties": false

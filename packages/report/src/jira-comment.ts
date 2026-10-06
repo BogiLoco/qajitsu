@@ -59,6 +59,11 @@ const observationLines = (m: CommentModel): string[] => {
 };
 const OBSERVATIONS_TITLE = "Observations (found by code, not test results)";
 
+/** Failure hints of the matrix rows (REQ-VER-12/AC3): suggestions next to, never inside, the computed results. */
+const HINTS_TITLE = "Failure hints (suggestions, not statuses)";
+const hintLines = (m: CommentModel): string[] =>
+  m.rows.flatMap((r) => (r.hint === undefined ? [] : [`${r.caseId}: ${r.hint}`]));
+
 const show = (v: unknown): string =>
   typeof v === "string" ? JSON.stringify(v) : JSON.stringify(v) || "undefined";
 
@@ -151,6 +156,10 @@ export function renderJiraAdf(m: CommentModel): { version: 1; type: "doc"; conte
     content.push(heading(4, "Fix verification"));
     content.push(bullets(m.fixCheck.map((l) => [text(l)])));
   }
+  if (hintLines(m).length > 0) {
+    content.push(heading(4, HINTS_TITLE));
+    content.push(bullets(hintLines(m).map((l) => [text(l)])));
+  }
   const observed = observationLines(m);
   if (observed.length > 0) {
     content.push(heading(4, OBSERVATIONS_TITLE));
@@ -208,6 +217,8 @@ export function renderJiraWiki(m: CommentModel): string {
   }
   if (m.fixCheck && m.fixCheck.length > 0)
     lines.push("", "h4. Fix verification", ...m.fixCheck.map((l) => `* ${wikiEscape(l)}`));
+  if (hintLines(m).length > 0)
+    lines.push("", `h4. ${HINTS_TITLE}`, ...hintLines(m).map((l) => `* ${wikiEscape(l)}`));
   const observed = observationLines(m);
   if (observed.length > 0)
     lines.push("", `h4. ${OBSERVATIONS_TITLE}`, ...observed.map((o) => `* ${wikiEscape(o)}`));
@@ -234,6 +245,7 @@ export function renderCommentPreview(m: CommentModel): string {
   }
   if (m.fixCheck && m.fixCheck.length > 0)
     lines.push("", "Fix verification:", ...m.fixCheck.map((l) => `  ${l}`));
+  if (hintLines(m).length > 0) lines.push("", `${HINTS_TITLE}:`, ...hintLines(m).map((l) => `  ${l}`));
   const observed = observationLines(m);
   if (observed.length > 0) lines.push("", `${OBSERVATIONS_TITLE}:`, ...observed.map((o) => `  ${o}`));
   lines.push(

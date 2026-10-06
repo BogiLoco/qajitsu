@@ -4,6 +4,7 @@ import {
   APPROVED_PLAN_FILE,
   AuditRecordSchema,
   CanaryRecordSchema,
+  TriageRecordSchema,
   CaseResultFileSchema,
   loadApprovedPlan,
   parseEventLines,
@@ -181,6 +182,14 @@ export async function computeVerdict(
   };
   const audit = await readChecked("audit.json", AuditRecordSchema, verification.auditor !== "off");
   const canary = await readChecked("canary.json", CanaryRecordSchema, verification.canary);
+  // REQ-VER-12: hints are shown next to the results and never read by status computation (invariant 1).
+  const triage = await readChecked("triage.json", TriageRecordSchema, false);
+  const hintOf = new Map(
+    (triage?.status === "done" ? triage.hints : []).map((h) => [
+      h.caseId,
+      masker.maskText(`${h.category}: ${h.justification}`),
+    ]),
+  );
   const checked = applyVerificationChecks(evaluated.cases, audit, canary, integrity);
   const cases = evaluated.cases.map((c, i) => ({ ...c, status: checked[i]?.status ?? c.status }));
   const checkNotes = [
@@ -203,6 +212,10 @@ export async function computeVerdict(
             : `Canary: ${canary.caseId} ${canary.stepId} ${canary.field} PASSED with an inverted expectation; every PASSED is NEEDS_REVIEW.`,
         ]
       : []),
+    ...(triage?.status === "done" && triage.hints.length > 0
+      ? [`Failure hints by ${triage.model}: suggestions with cited evidence, not statuses.`]
+      : []),
+    ...(triage?.status === "failed" ? [`Failure hints not available: ${triage.error}`] : []),
     ...checked
       .filter((c) => c.downgradedBy)
       .map((c) => `${c.caseId} → NEEDS_REVIEW (${c.downgradedBy ?? ""})`),
@@ -219,6 +232,7 @@ export async function computeVerdict(
       status: c.status,
       stepsPassed: c.stepsPassed,
       stepsTotal: c.stepsTotal,
+      ...(c.status === "FAILED" && hintOf.has(c.caseId) ? { hint: hintOf.get(c.caseId) } : {}),
       evidence:
         c.evidence.length > 0
           ? `${String(c.evidence.length)} file(s)`

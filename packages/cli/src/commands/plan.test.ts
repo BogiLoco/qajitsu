@@ -222,7 +222,8 @@ describe("qajitsu plan / approve (REQ-PLAN-01..06, REQ-GEN-05)", () => {
   it("REQ-LLM-03/AC2: doctor --models probes the configured models", async () => {
     const probe: Turn[] = [{ tools: [{ name: "ping", input: { value: "ok" } }] }, { text: "done" }];
     const result = await run(["doctor", "--models"], {
-      script: Array.from({ length: 6 }, () => probe).flat(),
+      // Six tool roles, then summary (text only), then triage (tools).
+      script: [...Array.from({ length: 6 }, () => probe).flat(), { text: "done" }, ...probe],
     });
     expect(result.out).toContain("✔ analyst: mock/scripted ok, tool calls work");
     expect(result.out).toContain("✔ summary: mock/scripted ok");

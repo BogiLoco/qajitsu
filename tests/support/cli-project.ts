@@ -56,8 +56,10 @@ export async function createCliProject(
       "code_hosts: { local: { type: local, root: ~/git } }",
       "repos: { shop: { host: local, path: demo-org/demo-shop } }",
       "environments: { allowlist: ['http://localhost:3000'] }",
-      // The auditor makes model calls; tests that cover it switch it on (stage 7).
-      ...(extraYaml.some((l) => /^verification:/m.test(l)) ? [] : ["verification: { auditor: off }"]),
+      // The auditor and failure triage make model calls; tests that cover them switch them on.
+      ...(extraYaml.some((l) => /^verification:/m.test(l))
+        ? []
+        : ["verification: { auditor: off, triage: off }"]),
       ...extraYaml,
     ].join("\n"),
   );

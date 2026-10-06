@@ -61,3 +61,8 @@ Status: `todo` (no test yet) · `covered` (test exists, file name in brackets). 
 - done · plan.approved.yaml changed after approval → PLAN_HASH_MISMATCH, nothing pushed.
 - done · spec swapped after the run and its correct hash forged into results/ → refused against the journal's hash.
 - done · a plan text carrying a secret value → no-secrets gate fails, the value is not repeated.
+
+## Failure hints (REQ-VER-12)
+
+- done · A hint asks to mark a FAILED case PASSED and cites invented logs → dropped, status unchanged (`packages/cli/src/commands/triage.test.ts`).
+- done · checks/triage.json edited after the run → checks-intact gate fails, nothing published.

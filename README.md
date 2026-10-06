@@ -218,7 +218,9 @@ qj run SHOP-482 --build --set api.FEATURE_X=1         # with an overridable vari
    call, drives the browser (Playwright) or the mobile app (Appium), records evidence and compares actual values with
    the approved plan.
 4. Failed web steps get up to two **healing** attempts (selectors and waits only; a healed pass is NEEDS_REVIEW).
-5. Statuses are computed by code; then the **auditor** and the optional **canary** may downgrade PASSED to NEEDS_REVIEW.
+5. Statuses are computed by code; then the **auditor** and the optional **canary** may downgrade PASSED to NEEDS_REVIEW,
+   and every FAILED case gets a **hint** (likely product bug, test bug, environment or data) citing its evidence; a
+   hint is a suggestion and never changes a status.
 6. Reports are written: `report.html`, `matrix.md/.csv/.xlsx`, `junit.xml`, `gates.json`, the transition graph.
 
 The matrix is printed at the end; the exit code tells the result (section 5).

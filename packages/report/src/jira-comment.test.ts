@@ -100,3 +100,23 @@ describe("Jira comment (REQ-PUB-01, REQ-PUB-03)", () => {
     expect(renderJiraWiki({ ...model, failures: [], attachments: [], notes: [] })).not.toContain("Failures");
   });
 });
+
+describe("failure hints in the Jira comment (REQ-VER-12/AC3)", () => {
+  it("REQ-VER-12/AC3: hints appear in their own section as suggestions; the matrix counts stay the computed ones", () => {
+    const withHint: CommentModel = {
+      ...model,
+      rows: model.rows.map((r) =>
+        r.caseId === "TC-01" ? { ...r, hint: "product-bug: rounded per line (S1.fields.total)" } : r,
+      ),
+    };
+    const json = JSON.stringify(renderJiraAdf(withHint));
+    expect(json).toContain("Failure hints (suggestions, not statuses)");
+    expect(json).toContain("TC-01: product-bug: rounded per line (S1.fields.total)");
+    expect(json).toContain("QAJitsu test results: 2 cases: 1 PASSED, 1 FAILED");
+    expect(renderJiraWiki(withHint)).toContain("h4. Failure hints (suggestions, not statuses)");
+    expect(renderCommentPreview(withHint)).toContain(
+      "Failure hints (suggestions, not statuses):\n  TC-01: product-bug",
+    );
+    expect(JSON.stringify(renderJiraAdf(model))).not.toContain("Failure hints");
+  });
+});

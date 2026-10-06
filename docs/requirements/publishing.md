@@ -86,7 +86,7 @@ Deferred: AC1-AC3 (Xray/Zephyr import, draft bug tickets, ticket transitions) ar
 
 ### REQ-PUB-07 · Bug reports from failed cases
 
-- Status: proposed
+- Status: accepted
 - Priority: should
 - Stage: later
 - Related: REQ-PUB-05, REQ-PUB-03, INV-6, INV-8

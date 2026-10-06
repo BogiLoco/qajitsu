@@ -41,3 +41,42 @@ export const CanaryRecordSchema = z.strictObject({
 
 /** Parsed `checks/canary.json`. */
 export type CanaryRecord = z.infer<typeof CanaryRecordSchema>;
+
+/** Suggested causes of a FAILED case (REQ-VER-12/AC1). A hint is never a status. */
+export const TRIAGE_CATEGORIES = ["product-bug", "test-bug", "environment", "data"] as const;
+
+/** Evidence a hint cites: a step, an assertion (`S1.status`), an evidence file or a log file of the run. */
+export const TriageCiteSchema = z.strictObject({
+  kind: z.enum(["step", "assertion", "evidence", "log"]),
+  ref: z.string().min(1).max(300),
+});
+
+/** One hint for one FAILED case, with the citations code verified. */
+export const TriageHintSchema = z.strictObject({
+  caseId: z.string(),
+  category: z.enum(TRIAGE_CATEGORIES),
+  justification: z.string().min(1).max(600),
+  cites: z.array(TriageCiteSchema).min(1),
+});
+
+/** A triage hint. */
+export type TriageHint = z.infer<typeof TriageHintSchema>;
+
+/**
+ * `checks/triage.json`: hints for FAILED cases (REQ-VER-12). Written by the orchestrator from the validated model
+ * answer after code dropped hints without real evidence; never read by status computation.
+ */
+export const TriageRecordSchema = z.discriminatedUnion("status", [
+  z.strictObject({
+    schema: z.literal(1),
+    status: z.literal("done"),
+    model: z.string(),
+    hints: z.array(TriageHintSchema),
+    /** Case ids whose hint was dropped because it cited nothing that exists (REQ-VER-12/AC2). */
+    dropped: z.array(z.string()).default([]),
+  }),
+  z.strictObject({ schema: z.literal(1), status: z.literal("failed"), error: z.string() }),
+]);
+
+/** Parsed `checks/triage.json`. */
+export type TriageRecord = z.infer<typeof TriageRecordSchema>;

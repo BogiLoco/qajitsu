@@ -18,3 +18,4 @@ export * from "./healer.js";
 export * from "./auditor.js";
 export * from "./explorer.js";
 export * from "./knowledge-tools.js";
+export * from "./triage.js";

@@ -13,3 +13,4 @@ export * from "./checks.js";
 export * from "./canary.js";
 export * from "./expectations.js";
 export * from "./fix-check.js";
+export * from "./triage.js";

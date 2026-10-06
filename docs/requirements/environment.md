@@ -99,7 +99,7 @@ QAJitsu warns when the environment does not run the code being tested.
 
 ### REQ-ENV-08 · Message capture: email, SMS and webhooks
 
-- Status: proposed
+- Status: accepted
 - Priority: should
 - Stage: later
 - Related: INV-8, INV-10, REQ-ENV-05, REQ-CFG-07
