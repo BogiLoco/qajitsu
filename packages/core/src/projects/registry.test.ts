@@ -10,6 +10,7 @@ import {
   registerProject,
   resolveProject,
   setActiveProject,
+  setProjectArchived,
 } from "./registry.js";
 
 const dirs: string[] = [];
@@ -102,5 +103,25 @@ describe("project registry (REQ-PRJ-01..03, ADR-0006)", () => {
     await expect(resolveProject(home, { ticket: "BANK-1" })).rejects.toMatchObject({
       code: "PROJECT_NOT_SELECTED",
     });
+  });
+
+  it("REQ-PRJ-07/AC5: an archived project keeps its home but leaves lists, prefix mapping and the active slot", async () => {
+    const { home, qa } = await setup();
+    await registerProject(home, { slug: "bank", qaDir: await qa("bank"), jiraPrefixes: ["BANK"] });
+    await registerProject(home, { slug: "shop", qaDir: await qa("shop"), jiraPrefixes: ["SHOP"] });
+    await setActiveProject(home, "bank");
+    await setProjectArchived(home, "bank", true);
+    expect((await listProjects(home)).map((p) => p.slug)).toEqual(["shop"]);
+    expect((await listProjects(home, { includeArchived: true })).map((p) => p.slug)).toEqual([
+      "bank",
+      "shop",
+    ]);
+    expect(await readActiveProject(home)).toBeUndefined();
+    await expect(resolveProject(home, { ticket: "BANK-1" })).rejects.toMatchObject({
+      code: "PROJECT_NOT_SELECTED",
+    });
+    expect(await readdir(join(home, "projects", "bank"))).toContain("runs");
+    await setProjectArchived(home, "bank", false);
+    expect((await resolveProject(home, { ticket: "BANK-1" })).slug).toBe("bank");
   });
 });

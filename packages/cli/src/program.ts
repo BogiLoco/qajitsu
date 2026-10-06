@@ -14,9 +14,15 @@ import { runPull } from "./commands/pull.js";
 import { runRun, type RunPorts } from "./commands/run.js";
 import { runTest } from "./commands/test-flow.js";
 import { runFixCheck } from "./commands/fix-check.js";
-import { runClean, runGc, runResume, runRuns } from "./commands/runs.js";
+import { runClean, runGc, runResume, runRuns, runWorkReset } from "./commands/runs.js";
 import { runEnvCheck, runEnvRender, runEnvUp } from "./commands/env.js";
-import { runProjectInit, runProjects, runUse } from "./commands/projects.js";
+import {
+  runProjectArchive,
+  runProjectInit,
+  runProjectRemove,
+  runProjects,
+  runUse,
+} from "./commands/projects.js";
 import { runNote, runResumable, runStatus } from "./commands/status.js";
 import { runExplore, runExplorePromote } from "./commands/explore.js";
 import { runBench } from "./commands/bench.js";
@@ -73,12 +79,22 @@ export function createProgram(version: string, io: ProgramIO): Command {
       "project to work in (default: QAJITSU_PROJECT, the ticket prefix, the active project)",
     )
     .configureOutput({ writeOut: io.write, writeErr: io.writeError })
+    // Global options go before the command (`qj --project bank fetch BANK-1`), so `clean --project` is its own.
+    .enablePositionalOptions()
     .showHelpAfterError();
 
   // ADR-0006, REQ-PRJ-03: the project of a command is resolved once, before it runs, never from the current folder.
   let resolved: ResolvedProject | undefined;
   let projectError: unknown;
-  const PROJECT_FREE = new Set(["init", "use", "projects list", "projects current"]);
+  const PROJECT_FREE = new Set([
+    "init",
+    "use",
+    "projects list",
+    "projects current",
+    "projects remove",
+    "projects archive",
+    "projects unarchive",
+  ]);
   // These commands write machine-readable output to stdout; the project line goes to stderr.
   const MACHINE_OUTPUT = new Set(["ci detect", "metrics"]);
   program.hook("preAction", async (_root, action) => {
@@ -173,8 +189,35 @@ export function createProgram(version: string, io: ProgramIO): Command {
   projects
     .command("list")
     .description("Every project with readiness, ticket prefixes and open work")
-    .action(async () => {
-      io.setExitCode(io.ports ? await runProjects("list", commandIO, io.ports) : 3);
+    .option("--archived", "include archived projects")
+    .action(async (options: { archived?: boolean }) => {
+      io.setExitCode(
+        io.ports ? await runProjects("list", commandIO, io.ports, options.archived === true) : 3,
+      );
+    });
+  projects
+    .command("remove")
+    .description("Delete a project's home after confirmation; its .qa/ folder stays, run journals are kept")
+    .argument("<slug>", "project name")
+    .option("--dry-run", "only list what would be deleted and its size")
+    .option("--yes", "do not ask for confirmation")
+    .option("--delete-audit", "also delete the archived run journals")
+    .action(async (slug: string, options: { dryRun?: boolean; yes?: boolean; deleteAudit?: boolean }) => {
+      io.setExitCode(io.ports ? await runProjectRemove(slug, options, commandIO, io.ports) : 3);
+    });
+  projects
+    .command("archive")
+    .description("Hide a project from lists and ticket prefixes; nothing is deleted")
+    .argument("<slug>", "project name")
+    .action(async (slug: string) => {
+      io.setExitCode(io.ports ? await runProjectArchive(slug, true, commandIO, io.ports) : 3);
+    });
+  projects
+    .command("unarchive")
+    .description("Show an archived project again")
+    .argument("<slug>", "project name")
+    .action(async (slug: string) => {
+      io.setExitCode(io.ports ? await runProjectArchive(slug, false, commandIO, io.ports) : 3);
     });
   projects
     .command("current")
@@ -485,12 +528,33 @@ export function createProgram(version: string, io: ProgramIO): Command {
 
   program
     .command("clean")
-    .description("Remove containers, volumes, networks, worktrees and .env files of a run; artifacts stay")
-    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .description(
+      "Remove containers, volumes, networks, worktrees and .env files of a run (artifacts stay); --project applies retention to the whole project",
+    )
+    .argument("[ticket]", "Jira key, e.g. SHOP-482")
     .option("--run <id>", "run id (default: latest run of the ticket)")
     .option("--all", "every run of the ticket")
-    .action((ticket: string, options: { run?: string; all?: boolean }) =>
-      withPorts((ports) => runClean(ticket, options, commandIO, ports))(),
+    .option(
+      "--project",
+      "retention (cleanup.keep_last, max_age_days) for all runs and git mirrors of the project",
+    )
+    .option("--dry-run", "with --project: only list what would be removed")
+    .action(
+      (
+        ticket: string | undefined,
+        options: { run?: string; all?: boolean; project?: boolean; dryRun?: boolean },
+      ) => withPorts((ports) => runClean(ticket, options, commandIO, ports))(),
+    );
+
+  program
+    .command("work")
+    .description("Manage the open work of a ticket")
+    .command("reset")
+    .description("Close the ticket's open work so the next fetch starts a new run; --delete removes its runs")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--delete", "also remove the ticket's runs (except runs marked keep)")
+    .action((ticket: string, options: { delete?: boolean }) =>
+      withPorts((ports) => runWorkReset(ticket, options, commandIO, ports))(),
     );
 
   program

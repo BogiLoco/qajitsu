@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { removeRunResources, type CommandExec } from "@qajitsu/adapter-env-compose";
 import {
@@ -173,18 +173,86 @@ async function cleanOne(
 }
 
 /**
+ * Removes a run completely: its runtime resources, then its journal is archived (REQ-OBS-05/AC2) and the folder
+ * deleted, all under the run's lock. A run in use by another process is skipped.
+ *
+ * @returns One line describing what happened.
+ */
+export async function removeRun(
+  root: string,
+  ticket: TicketKey,
+  runId: string,
+  exec: CommandExec | undefined,
+): Promise<string> {
+  const cleaned = await cleanOne(root, ticket, runId, exec, async () => {
+    await archiveJournal(root, ticket, runId);
+    await deleteRun(root, ticket, runId);
+  });
+  return cleaned.endsWith("skipped") ? `${ticket}/${cleaned}` : `removed ${ticket}/${runId}`;
+}
+
+/**
+ * Applies the cleanup age to the project's git mirrors (REQ-PRJ-07/AC2): mirrors no fetch touched for
+ * `cleanup.max_age_days` are removed; they are re-cloned on demand.
+ *
+ * @returns Removed mirror paths.
+ */
+async function pruneGitCache(
+  project: LoadedProject,
+  ports: RuntimePorts,
+  dryRun: boolean,
+): Promise<string[]> {
+  const cache = project.config.workspace.git_cache;
+  if (cache === undefined) return [];
+  const dir = resolveWorkspaceRoot({ configured: cache, home: ports.home, cwd: project.qaDir });
+  const limit = ports.now().getTime() - project.config.cleanup.max_age_days * 86_400_000;
+  const removed: string[] = [];
+  const walk = async (folder: string, depth: number): Promise<void> => {
+    for (const entry of await readdir(folder, { withFileTypes: true }).catch(() => [])) {
+      if (!entry.isDirectory()) continue;
+      const path = join(folder, entry.name);
+      if (entry.name.endsWith(".git")) {
+        const used = await stat(join(path, "FETCH_HEAD")).catch(() => stat(path));
+        if (used.mtimeMs < limit) {
+          removed.push(path);
+          if (!dryRun) await rm(path, { recursive: true, force: true });
+        }
+      } else if (depth < 4) await walk(path, depth + 1);
+    }
+  };
+  await walk(dir, 0);
+  return removed;
+}
+
+/**
  * `qajitsu clean <TICKET> [--run <id>] [--all]`: removes containers, volumes, networks (by QAJitsu
  * labels only), worktrees and `.env` files of a run; plan, specs, results, evidence, report and
  * journal stay (REQ-WS-03/AC3, AC4; REQ-WS-04/AC1).
  */
 export async function runClean(
-  rawKey: string,
-  options: { readonly run?: string | undefined; readonly all?: boolean | undefined },
+  rawKey: string | undefined,
+  options: {
+    readonly run?: string | undefined;
+    readonly all?: boolean | undefined;
+    /** REQ-PRJ-07/AC2: retention for all runs and caches of the project. */
+    readonly project?: boolean | undefined;
+    readonly dryRun?: boolean | undefined;
+  },
   io: CommandIO,
   ports: RuntimePorts & { readonly buildExec?: CommandExec },
 ): Promise<number> {
   try {
     const project = await loadProject(io.cwd, ports.project);
+    if (options.project === true) {
+      const code = await runGc({ dryRun: options.dryRun }, io, ports);
+      if (code !== 0) return code;
+      const mirrors = await pruneGitCache(project, ports, options.dryRun === true);
+      for (const m of mirrors)
+        io.write(`${options.dryRun === true ? "would remove" : "removed"} git mirror ${m}\n`);
+      return 0;
+    }
+    if (rawKey === undefined)
+      throw new ConfigError("TICKET_MISSING", "Name a ticket, or use --project for the whole project.", {});
     const root = rootOf(project, ports);
     const ticket = ticketOf(rawKey);
     const index = await readRunIndex(root, ticket);
@@ -224,12 +292,8 @@ export async function runGc(
           continue;
         }
         try {
-          const cleaned = await cleanOne(root, ticket, runId, ports.buildExec, async () => {
-            // REQ-OBS-05/AC2: the journal outlives the run under the audit retention; no archive, no delete.
-            await archiveJournal(root, ticket, runId);
-            await deleteRun(root, ticket, runId);
-          });
-          io.write(cleaned.endsWith("skipped") ? `${ticket}/${cleaned}\n` : `removed ${ticket}/${runId}\n`);
+          // REQ-OBS-05/AC2: the journal outlives the run under the audit retention; no archive, no delete.
+          io.write(`${await removeRun(root, ticket, runId, ports.buildExec)}\n`);
         } catch (error) {
           io.writeError(
             `${ticket}/${runId}: kept, its journal could not be archived (${error instanceof Error ? error.message : String(error)})\n`,
@@ -245,6 +309,49 @@ export async function runGc(
     io.write(
       `${String(count)} run(s) ${options.dryRun === true ? "selected" : "processed"} under ${join(root)}\n`,
     );
+    return 0;
+  } catch (error) {
+    return fail(io, error);
+  }
+}
+
+/**
+ * `qajitsu work reset <TICKET> [--delete]`: closes the ticket's open work (REQ-PRJ-07/AC1). The latest run is marked
+ * closed, so commands no longer continue it and the next `fetch` starts a new run; with `--delete` the ticket's runs
+ * are removed as `gc` removes them (resources cleaned, journals archived), except runs marked keep or in use.
+ *
+ * @returns 0, or 3 on errors.
+ */
+export async function runWorkReset(
+  rawKey: string,
+  options: { readonly delete?: boolean | undefined },
+  io: CommandIO,
+  ports: RuntimePorts & { readonly buildExec?: CommandExec },
+): Promise<number> {
+  try {
+    const project = await loadProject(io.cwd, ports.project);
+    const root = rootOf(project, ports);
+    const ticket = ticketOf(rawKey);
+    const index = await readRunIndex(root, ticket);
+    if (index.runs.length === 0) {
+      io.write(`${ticket} has no runs; nothing to reset.\n`);
+      return 0;
+    }
+    if (options.delete === true) {
+      for (const r of index.runs) {
+        if (r.retention === "keep") {
+          io.write(`${ticket}/${r.runId}: marked keep, kept\n`);
+          continue;
+        }
+        io.write(`${await removeRun(root, ticket, r.runId, ports.buildExec)}\n`);
+      }
+    }
+    const latest = (await readRunIndex(root, ticket)).latest;
+    if (latest !== undefined) {
+      const ws = await openRunWorkspace(root, ticket, latest);
+      await ws.update({ data: { ...ws.record.data, closed: { at: ports.now().toISOString() } } });
+    }
+    io.write(`Work on ${ticket} closed; 'qajitsu fetch ${ticket}' starts a new run.\n`);
     return 0;
   } catch (error) {
     return fail(io, error);

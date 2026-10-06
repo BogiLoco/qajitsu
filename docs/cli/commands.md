@@ -50,7 +50,35 @@ Exit codes: `0` switched, `3` unknown project.
 
 Every registered project with readiness, ticket prefixes, open work and its `.qa/` folder; `*` marks the active one.
 
+- `--archived`: include archived projects (marked `archived`)
+
 Exit codes: `0` listed, `3` errors.
+
+### `qajitsu projects remove <slug>`
+
+Deletes a project's home (runs, caches, knowledge base, exports, logs) after listing what goes and its size
+(REQ-PRJ-07/AC3+AC4). Containers, worktrees and locks of every run are cleaned first; run journals are archived to
+`<QAJITSU_HOME>/audit/<slug>/`; the project's `.qa/` folder in its repository is never touched. Without `--yes` it
+asks to type the slug; non-interactively it refuses.
+
+- `--dry-run`: only list what would be deleted and its size
+- `--yes`: do not ask for confirmation
+- `--delete-audit`: also delete the archived run journals
+
+Exit codes: `0` removed or listed, `3` refused or errors.
+
+### `qajitsu projects archive <slug>`
+
+Hides a project from `projects list`, `status --all` and ticket prefix mapping (REQ-PRJ-07/AC5). Nothing is deleted;
+an archived active project stops being active.
+
+Exit codes: `0` archived, `3` unknown project.
+
+### `qajitsu projects unarchive <slug>`
+
+Shows an archived project again in lists and ticket prefix mapping.
+
+Exit codes: `0` restored, `3` unknown project.
 
 ### `qajitsu projects current`
 
@@ -294,14 +322,28 @@ approved, the run does not continue silently: interactively it asks for confirma
 Exit codes: the code of the stage it continued (`plan` or `run`); `0` when the run is complete, `2` when it waits for
 a person (approval or publish), `3` errors.
 
-### `qajitsu clean <ticket>`
+### `qajitsu clean [ticket]`
 
 Removes containers, volumes, networks, worktrees and `.env` files of a run; results, evidence and reports stay.
+With `--project` it applies retention (`cleanup.keep_last`, `cleanup.max_age_days`) to every run of the project and
+removes git mirrors not fetched within `max_age_days` (REQ-PRJ-07/AC2).
 
 - `--run <id>`: run id (default: latest run of the ticket)
 - `--all`: every run of the ticket
+- `--project`: every run and git mirror of the project instead of one ticket
+- `--dry-run`: with `--project`, only list what would be removed
 
 Exit codes: `0` cleaned (runs in use by another process are skipped and listed), `3` errors.
+
+### `qajitsu work reset <ticket>`
+
+Closes the open work of a ticket (REQ-PRJ-07/AC1): `status` and `resume` stop offering it, commands without `--run`
+refuse the closed run with `RUN_CLOSED`, and the next `fetch` starts a new run. Old runs stay and can still be named
+with `--run`.
+
+- `--delete`: also remove the ticket's runs (except runs marked keep); journals are archived first
+
+Exit codes: `0` closed, `3` errors.
 
 ### `qajitsu gc`
 

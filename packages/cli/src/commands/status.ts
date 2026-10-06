@@ -64,6 +64,7 @@ export function describeRun(
   record: RunRecord,
   planVersions: number,
 ): { readonly stage: string; readonly state: string; readonly next: string } | undefined {
+  if (record.data["closed"] !== undefined) return undefined;
   const step = nextStage(record, planVersions);
   const run = `--run ${record.runId}`;
   if (record.status === "running" && step.next !== "done")

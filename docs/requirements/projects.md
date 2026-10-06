@@ -101,18 +101,18 @@ After a switch the user sees at once what was being done and what to do next.
 
 ### REQ-PRJ-07 · Start fresh and clean up
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: 6
 - Related: REQ-WS-03, REQ-OBS-05
 
 **Acceptance criteria**
 
-- [ ] AC1: `qj work reset <TICKET>` closes the ticket's open work so the next command starts a new run; old runs are kept or deleted according to `--delete` and the retention policy.
-- [ ] AC2: `qj clean --project [<slug>]` applies retention to all runs and caches of a project.
-- [ ] AC3: `qj projects remove <slug>` deletes the project home after confirmation; `--dry-run` lists what would be deleted (runs, caches, knowledge base) and its size.
-- [ ] AC4: Removing a project never deletes the repository's `.qa/` folder, test data in the system under test, or the audit log unless explicitly requested with separate flags.
-- [ ] AC5: `qj projects archive <slug>` keeps the project home but hides it from lists and prefix mapping.
+- [x] AC1: `qj work reset <TICKET>` closes the ticket's open work so the next command starts a new run; old runs are kept or deleted according to `--delete` and the retention policy.
+- [x] AC2: `qj clean --project [<slug>]` applies retention to all runs and caches of a project.
+- [x] AC3: `qj projects remove <slug>` deletes the project home after confirmation; `--dry-run` lists what would be deleted (runs, caches, knowledge base) and its size.
+- [x] AC4: Removing a project never deletes the repository's `.qa/` folder, test data in the system under test, or the audit log unless explicitly requested with separate flags.
+- [x] AC5: `qj projects archive <slug>` keeps the project home but hides it from lists and prefix mapping.
 
 ### REQ-PRJ-08 · Code cache per project
 
@@ -127,7 +127,7 @@ Code fetched for runs is kept per project so repeated runs on the same commit ar
 
 - [x] AC1: Git mirrors live in `<project-home>/cache/git/`; each run gets worktrees at the change's SHA (REQ-CTX-04).
 - [ ] AC2: Code indexes, when built, are cached by `<repo>@<sha>` and reused by later runs on the same commit.
-- [ ] AC3: Caches follow the retention policy and are removed with the project.
+- [x] AC3: Caches follow the retention policy and are removed with the project.
 
 ### REQ-PRJ-09 · Export and import of a project profile
 

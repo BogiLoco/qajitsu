@@ -18,6 +18,8 @@ export const ProjectRecordSchema = z.strictObject({
   /** Jira key prefixes that select this project (`BANK` for `BANK-12`, REQ-PRJ-03/AC2). */
   jira_prefixes: z.array(z.string().regex(/^[A-Z][A-Z0-9_]{1,19}$/)).default([]),
   created_at: z.string(),
+  /** Archived projects keep their home but are hidden from lists and prefix mapping (REQ-PRJ-07/AC5). */
+  archived: z.boolean().default(false),
 });
 
 /** A registered project. */
@@ -120,14 +122,17 @@ export async function readProject(qjHome: string, slug: string): Promise<Project
   return parsed.data;
 }
 
-/** Every registered project, by slug. */
-export async function listProjects(qjHome: string): Promise<ProjectRecord[]> {
+/** Every registered project, by slug; archived ones only with `includeArchived` (REQ-PRJ-07/AC5). */
+export async function listProjects(
+  qjHome: string,
+  options: { readonly includeArchived?: boolean } = {},
+): Promise<ProjectRecord[]> {
   const slugs = (await readdir(join(qjHome, "projects")).catch(() => [] as string[])).sort();
   const out: ProjectRecord[] = [];
   for (const slug of slugs) {
     if (!ProjectSlugSchema.safeParse(slug).success) continue;
     const record = await readProject(qjHome, slug).catch(() => undefined);
-    if (record) out.push(record);
+    if (record && (!record.archived || options.includeArchived === true)) out.push(record);
   }
   return out;
 }
@@ -162,6 +167,7 @@ export async function registerProject(
     qa_dir: options.qaDir,
     jira_prefixes: [...(options.jiraPrefixes ?? existing?.jira_prefixes ?? [])],
     created_at: existing?.created_at ?? (options.now ?? (() => new Date()))().toISOString(),
+    archived: false,
   });
   for (const dir of [paths.runs, paths.gitCache, paths.knowledge, paths.exports, paths.logs])
     await mkdir(dir, { recursive: true });
@@ -234,4 +240,29 @@ export async function resolveProject(
     "No project selected: create one with 'qajitsu init <slug>' or choose one with 'qajitsu use <slug>' or --project.",
     {},
   );
+}
+
+/**
+ * Archives or restores a project (REQ-PRJ-07/AC5): the home stays, the project disappears from lists and from
+ * ticket prefix mapping, and stops being the active project.
+ *
+ * @throws {ConfigError} `PROJECT_NOT_FOUND`.
+ */
+export async function setProjectArchived(
+  qjHome: string,
+  slug: string,
+  archived: boolean,
+): Promise<ProjectRecord> {
+  const record = { ...(await readProject(qjHome, slug)), archived };
+  await writeYamlAtomic(projectPaths(qjHome, slug).record, record);
+  if (archived && (await readActiveProject(qjHome)) === slug) await clearActiveProject(qjHome);
+  return record;
+}
+
+/** Clears the active project (after `projects remove` or `archive` of the active one). */
+export async function clearActiveProject(qjHome: string): Promise<void> {
+  const global = await readGlobal(qjHome);
+  if (global.active === undefined) return;
+  await mkdir(qjHome, { recursive: true });
+  await writeYamlAtomic(join(qjHome, "config.yaml"), { schema: 1 });
 }

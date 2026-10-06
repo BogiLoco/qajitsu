@@ -102,7 +102,7 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 - [REQ-NFR-04](requirements/non-functional.md#req-nfr-04--framework-self-test) Framework self-test (must, implemented, AC 2/2)
 - [REQ-PRJ-05](requirements/projects.md#req-prj-05--project-status-what-is-in-the-project-and-what-is-in-progress) Project status: what is in the project and what is in progress (must, implemented, AC 5/5)
 - [REQ-PRJ-06](requirements/projects.md#req-prj-06--continue-after-switching) Continue after switching (must, implemented, AC 3/3)
-- [REQ-PRJ-08](requirements/projects.md#req-prj-08--code-cache-per-project) Code cache per project (should, in-progress, AC 1/3)
+- [REQ-PRJ-08](requirements/projects.md#req-prj-08--code-cache-per-project) Code cache per project (should, in-progress, AC 2/3)
 - [REQ-PRJ-10](requirements/projects.md#req-prj-10--evidence-reports-and-exports-stay-in-the-project) Evidence, reports and exports stay in the project (must, in-progress, AC 5/6)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
@@ -160,7 +160,7 @@ the variable schema and secrets, seeds data with the run's marker, and cleans ev
 - [REQ-WS-02](requirements/workspace.md#req-ws-02--labels-and-names-for-runtime-resources) Labels and names for runtime resources (must, implemented, AC 2/2)
 - [REQ-WS-03](requirements/workspace.md#req-ws-03--cleanup-policy-and-retention) Cleanup policy and retention (must, implemented, AC 4/4)
 - [REQ-WS-04](requirements/workspace.md#req-ws-04--run-management-commands) Run management commands (should, implemented, AC 3/3)
-- [REQ-PRJ-07](requirements/projects.md#req-prj-07--start-fresh-and-clean-up) Start fresh and clean up (should, accepted, AC 0/5)
+- [REQ-PRJ-07](requirements/projects.md#req-prj-07--start-fresh-and-clean-up) Start fresh and clean up (should, implemented, AC 5/5)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 

@@ -242,7 +242,10 @@ evidence zip and media; running it again updates the same comment.
 ### Step 7: clean up
 
 Cleanup follows `cleanup.policy` automatically after `run --build`. Manually: `qj clean SHOP-482` (containers,
-worktrees, `.env` files; results and reports stay) and `qj gc` (deletes old runs by retention).
+worktrees, `.env` files; results and reports stay) and `qj gc` (deletes old runs by retention). To start a ticket
+over: `qj work reset SHOP-482` (add `--delete` to remove its runs). For a whole project: `qj clean --project`
+(retention plus stale git mirrors), `qj projects archive <slug>` or `qj projects remove <slug>` (its `.qa/` folder
+stays).
 
 ### The short version
 
@@ -298,12 +301,16 @@ Every option and exit code of every command: [docs/cli/commands.md](docs/cli/com
 
 ### Run management
 
-| Command                                           | What it does                                                                                                                                                                                                                                                      |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `qj status [--all]` / `qj note <TICKET> "<text>"` | What is in progress in the project: readiness, default environment, knowledge base, each open ticket with its state and the next command, and its notes. `--all` for every project.                                                                               |
-| `qj resume [<TICKET>] [--env ...] [--build]`      | Continues a run from its last checkpoint: plans if there is no plan, runs if approved; stops at human steps (approval, publish) and says what to do. Without a ticket: lists resumable work. A changed environment or secret after approval needs a confirmation. |
-| `qj clean <TICKET> [--run <id> \| --all]`         | Removes containers, volumes and networks of the run (found by QAJitsu labels only), worktrees and `.env` files. Plan, specs, results, evidence, reports and journal stay. Runs used by another process are skipped.                                               |
-| `qj gc [--dry-run]`                               | Applies retention to every ticket (`cleanup.keep_last`, `cleanup.max_age_days`; runs marked `keep` and running runs are exempt). Journals of deleted runs are archived under `audit.retention_days`.                                                              |
+| Command                                                       | What it does                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `qj status [--all]` / `qj note <TICKET> "<text>"`             | What is in progress in the project: readiness, default environment, knowledge base, each open ticket with its state and the next command, and its notes. `--all` for every project.                                                                               |
+| `qj resume [<TICKET>] [--env ...] [--build]`                  | Continues a run from its last checkpoint: plans if there is no plan, runs if approved; stops at human steps (approval, publish) and says what to do. Without a ticket: lists resumable work. A changed environment or secret after approval needs a confirmation. |
+| `qj clean <TICKET> [--run <id> \| --all]`                     | Removes containers, volumes and networks of the run (found by QAJitsu labels only), worktrees and `.env` files. Plan, specs, results, evidence, reports and journal stay. Runs used by another process are skipped.                                               |
+| `qj gc [--dry-run]`                                           | Applies retention to every ticket (`cleanup.keep_last`, `cleanup.max_age_days`; runs marked `keep` and running runs are exempt). Journals of deleted runs are archived under `audit.retention_days`.                                                              |
+| `qj work reset <TICKET> [--delete]`                           | Closes the ticket's open work so the next fetch starts a new run; `--delete` removes its runs.                                                                                                                                                                    |
+| `qj clean --project [--dry-run]`                              | Retention for every run of the project and removal of stale git mirrors.                                                                                                                                                                                          |
+| `qj projects remove <slug> [--dry-run] [--yes]`               | Deletes a project's home after confirmation; its `.qa/` stays, journals are archived.                                                                                                                                                                             |
+| `qj projects archive <slug>` / `qj projects unarchive <slug>` | Hides a project from lists and ticket prefixes, or shows it again; nothing is deleted.                                                                                                                                                                            |
 
 ### Quality and operations
 

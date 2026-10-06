@@ -95,6 +95,13 @@ export async function openSession(
     );
   }
   const ws = await openRunWorkspace(root, key.data, id, ports.now);
+  // REQ-PRJ-07/AC1: after `qj work reset` the latest run is closed; only an explicit --run reopens it.
+  if (runId === undefined && ws.record.data["closed"] !== undefined)
+    throw new ConfigError(
+      "RUN_CLOSED",
+      `Work on ${key.data} was reset; start a new run with 'qajitsu fetch ${key.data}' (or name the old one with --run).`,
+      { run: ws.runId },
+    );
   // REQ-PRJ-03/AC6, REQ-PRJ-04: a run is only ever continued in the project it belongs to.
   const owner = ws.record.data["project"];
   if (ports.project && typeof owner === "string" && owner !== ports.project.slug)
