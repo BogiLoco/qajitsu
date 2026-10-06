@@ -438,6 +438,9 @@ Makes real model calls; never in PR CI.
 - `--role <role>`: only this role uses the model (default: every role)
 - `--cases <file>`: benchmark cases (default: `.qa/bench.yaml`)
 - `--out <dir>`: where the JSON report goes (default: `<project-home>/exports/bench-results`)
+- `--knowledge <mode>`: `on` (default; the knowledge base when the project has one), `off`, or `compare`: every case
+  runs without and then with the knowledge base, and the report shows the difference in detection, false FAILED,
+  BLOCKED and plans accepted without edits (REQ-KNOW-11)
 
 Exit codes: `0` the benchmark completed (whatever the scores), `3` configuration errors.
 

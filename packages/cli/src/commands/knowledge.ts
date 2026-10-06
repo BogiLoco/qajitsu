@@ -25,6 +25,8 @@ export interface KnowledgePorts {
   readonly knowledgeStore?: (dir: string, project: LoadedProject) => Promise<VectorStore>;
   /** Builds the embedding model `<provider>/<model>`; default: the models layer. */
   readonly embedder?: (reference: string, project: LoadedProject) => Promise<Embedder>;
+  /** Plan without the knowledge base (`qj bench --knowledge off|compare`, REQ-KNOW-11). */
+  readonly knowledgeDisabled?: boolean;
 }
 
 type Ports = RuntimePorts & KnowledgePorts;
@@ -486,7 +488,7 @@ export async function openRunKnowledge(
   ports: Ports,
 ): Promise<{ readonly access?: KnowledgeAccess; readonly close: () => Promise<void> }> {
   const dir = project.project?.paths.knowledge;
-  if (dir === undefined) return { close: () => Promise.resolve() };
+  if (dir === undefined || ports.knowledgeDisabled === true) return { close: () => Promise.resolve() };
   const sources = await readKnowledgeSources(dir);
   if (sources.length === 0 && (await readKnowledgeIndex(dir)) === undefined)
     return { close: () => Promise.resolve() };

@@ -644,7 +644,11 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--role <role>", "only this role uses the model (default: every role)")
     .option("--cases <file>", "benchmark cases (default: .qa/bench.yaml)")
     .option("--out <dir>", "where the JSON report goes (default: the project's exports/bench-results)")
-    .action((options: { model: string; role?: string; cases?: string; out?: string }) =>
+    .option(
+      "--knowledge <mode>",
+      "on (default), off, or compare: every case without and with the knowledge base",
+    )
+    .action((options: { model: string; role?: string; cases?: string; out?: string; knowledge?: string }) =>
       withPorts((ports) => runBench(options, commandIO, ports, review))(),
     );
 

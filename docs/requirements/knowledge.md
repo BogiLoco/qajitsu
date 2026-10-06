@@ -139,14 +139,14 @@ Small documentation does not need vectors; large documentation does.
 
 ### REQ-KNOW-11 · Measured benefit
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: 7
 - Related: REQ-LLM-06
 
 **Acceptance criteria**
 
-- [ ] AC1: `qj bench` can run with and without the knowledge base and reports the difference in detection rate, false FAILED and plan acceptance without edits.
+- [x] AC1: `qj bench` can run with and without the knowledge base and reports the difference in detection rate, false FAILED and plan acceptance without edits.
 
 ### REQ-KNOW-12 · Online sources
 

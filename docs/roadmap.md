@@ -187,7 +187,7 @@ and `qj bench` reports detection and false-FAILED rates per model.
 - [REQ-KNOW-08](requirements/knowledge.md#req-know-08--embedding-model-and-storage-options) Embedding model and storage options (should, in-progress, AC 2/3)
 - [REQ-KNOW-09](requirements/knowledge.md#req-know-09--security-of-indexed-content) Security of indexed content (must, implemented, AC 3/3)
 - [REQ-KNOW-10](requirements/knowledge.md#req-know-10--freshness-of-documentation) Freshness of documentation (could, implemented, AC 2/2)
-- [REQ-KNOW-11](requirements/knowledge.md#req-know-11--measured-benefit) Measured benefit (should, accepted, AC 0/1)
+- [REQ-KNOW-11](requirements/knowledge.md#req-know-11--measured-benefit) Measured benefit (should, implemented, AC 1/1)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 

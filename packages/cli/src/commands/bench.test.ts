@@ -2,8 +2,17 @@ import { readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createBuildProject } from "../../../../tests/support/cli-build.js";
-import type { Turn } from "../../../../tests/support/mock-model.js";
-import { formatBench, summariseBench, type BenchCaseResult, type BenchReport } from "./bench.js";
+import { createFakeEmbedder } from "../../../../tests/support/fake-embedder.js";
+import { promptOf, type Turn } from "../../../../tests/support/mock-model.js";
+import { mkdir } from "node:fs/promises";
+import { apiService } from "../../../../tests/support/cli-build.js";
+import {
+  compareKnowledge,
+  formatBench,
+  summariseBench,
+  type BenchCaseResult,
+  type BenchReport,
+} from "./bench.js";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -132,6 +141,97 @@ describe("qajitsu bench (REQ-LLM-06)", () => {
       planAcceptanceRate: 0,
       durationMs: 0,
       tokens: 0,
+    });
+  });
+
+  it("REQ-KNOW-11/AC1: --knowledge compare runs every case without and with the knowledge base and reports the difference", async () => {
+    const embedder = createFakeEmbedder();
+    const p = await createBuildProject(apiService(), {
+      ports: { embedder: (ref) => Promise.resolve({ ...embedder, id: ref }) },
+    });
+    cleanups.push(p.cleanup);
+    await writeFile(
+      join(p.project, ".qa", "bench.yaml"),
+      "version: 1\ncases:\n  - { id: bench-cart-rounding, ticket: DEMO-1, flags: [BUG_CART_TOTAL_ROUNDING], expect: { detects: BUG-01 } }\n",
+    );
+    expect((await p.run(["bench", "--model", "mock/scripted", "--knowledge", "compare"])).err).toContain(
+      "[KNOWLEDGE_EMPTY]",
+    );
+    await mkdir(join(p.project, "docs"));
+    await writeFile(
+      join(p.project, "docs", "cart.md"),
+      "# Cart\nThe cart total is rounded once, after summing the lines.\n",
+    );
+    expect((await p.run(["knowledge", "add", "docs"])).exitCode).toBe(0);
+    const analysis = JSON.stringify({
+      summary: "Cart API.",
+      change_type: ["api"],
+      endpoints: [{ method: "GET", path: "/cart", source: [{ kind: "ac", id: "AC1" }] }],
+      confidence: "high",
+    });
+    const draft = await read("fixtures/plans/demo-1-draft.json");
+    // Without documentation the scripted planner misses the rounding case; with it, it plans it.
+    const weak = JSON.parse(draft) as { cases: { id: string }[] };
+    weak.cases = weak.cases.filter((c) => c.id !== "TC-01");
+    const result = await p.run(
+      ["bench", "--model", "mock/scripted", "--knowledge", "compare"],
+      [
+        { text: analysis },
+        { text: JSON.stringify(weak) },
+        await code("TC-02"),
+        { text: analysis },
+        { text: draft },
+        await code("TC-01"),
+        await code("TC-02"),
+      ],
+    );
+    expect(result.err).toBe("");
+    expect(result.out).toContain(
+      "bench-cart-rounding: DEMO-1 with BUG_CART_TOTAL_ROUNDING (without knowledge base)…",
+    );
+    expect(result.out).toContain(
+      "| bench-cart-rounding (no docs) | DEMO-1 | BUG_CART_TOTAL_ROUNDING | accepted | TC-02 PASSED | missed |",
+    );
+    expect(result.out).toContain(
+      "| bench-cart-rounding (docs) | DEMO-1 | BUG_CART_TOTAL_ROUNDING | accepted | TC-01 FAILED, TC-02 PASSED | detected |",
+    );
+    expect(result.out).toContain("| Detection | 0% | 100% | +100 pp |");
+    expect(result.out).toContain("| False FAILED | 0% | 0% | 0 pp |");
+    expect(result.out).toContain("| Plan accepted without edits | 100% | 100% | 0 pp |");
+    // The first pass never saw the documentation; the second did.
+    expect(promptOf(result.model, 0)).not.toContain("## Project documentation");
+    expect(promptOf(result.model, 3)).toContain("## Project documentation");
+    const dir = join(p.home, ".qajitsu", "projects", "demo", "exports", "bench-results");
+    const report = JSON.parse(
+      await readFile(join(dir, (await readdir(dir))[0] ?? ""), "utf8"),
+    ) as BenchReport;
+    expect(report).toMatchObject({ knowledge: "compare", comparison: { delta: { detectionRate: 1 } } });
+    expect((await p.run(["bench", "--model", "mock/scripted", "--knowledge", "maybe"])).err).toContain(
+      "[BENCH_KNOWLEDGE_INVALID]",
+    );
+  }, 300_000);
+
+  it("REQ-KNOW-11/AC1: the comparison subtracts the pass without documentation from the pass with it", () => {
+    const base = {
+      ticket: "DEMO-1",
+      flags: [],
+      falseFailed: 0,
+      blocked: 0,
+      durationMs: 1,
+      tokens: 1,
+      statuses: {},
+    };
+    const c = compareKnowledge([
+      { ...base, id: "a", expect: "detect", detected: false, planAccepted: false, knowledge: false },
+      { ...base, id: "b", expect: "all_passed", falseFailed: 1, planAccepted: true, knowledge: false },
+      { ...base, id: "a", expect: "detect", detected: true, planAccepted: true, knowledge: true },
+      { ...base, id: "b", expect: "all_passed", planAccepted: true, knowledge: true },
+    ]);
+    expect(c.delta).toEqual({
+      detectionRate: 1,
+      falseFailedRate: -1,
+      blockedRate: 0,
+      planAcceptanceRate: 0.5,
     });
   });
 });

@@ -4,6 +4,7 @@ import {
   ConfigError,
   QajitsuError,
   RunRecordSchema,
+  readKnowledgeIndex,
   TicketKeySchema,
   openRunWorkspace,
   parseEventLines,
@@ -57,6 +58,21 @@ export interface BenchCaseResult {
   readonly tokens: number;
   readonly costUsd?: number | undefined;
   readonly error?: string;
+  /** Whether the analyst and planner had the project's knowledge base (REQ-KNOW-11). */
+  readonly knowledge?: boolean;
+}
+
+type Rate = "detectionRate" | "falseFailedRate" | "blockedRate" | "planAcceptanceRate";
+
+/** Rates and totals of a set of benchmark cases. */
+export interface BenchSummary {
+  readonly detectionRate: number;
+  readonly falseFailedRate: number;
+  readonly blockedRate: number;
+  readonly planAcceptanceRate: number;
+  readonly durationMs: number;
+  readonly tokens: number;
+  readonly costUsd?: number | undefined;
 }
 
 /** Benchmark report written to `<out>/<date>-<model>.json`. */
@@ -64,15 +80,35 @@ export interface BenchReport {
   readonly model: string;
   readonly role: string;
   readonly at: string;
+  /** `on`: with the knowledge base (if the project has one), `off`: without, `compare`: both (REQ-KNOW-11). */
+  readonly knowledge?: "on" | "off" | "compare";
   readonly cases: readonly BenchCaseResult[];
-  readonly summary: {
-    readonly detectionRate: number;
-    readonly falseFailedRate: number;
-    readonly blockedRate: number;
-    readonly planAcceptanceRate: number;
-    readonly durationMs: number;
-    readonly tokens: number;
-    readonly costUsd?: number | undefined;
+  readonly summary: BenchSummary;
+  /** With `compare`: each case without and with the knowledge base, and the difference (with − without). */
+  readonly comparison?: {
+    readonly without: BenchSummary;
+    readonly with: BenchSummary;
+    readonly delta: Pick<BenchSummary, Rate>;
+  };
+}
+
+/**
+ * Compares benchmark passes without and with the knowledge base (REQ-KNOW-11/AC1): every rate of the pass with
+ * documentation minus the pass without it.
+ */
+export function compareKnowledge(cases: readonly BenchCaseResult[]): NonNullable<BenchReport["comparison"]> {
+  const without = summariseBench(cases.filter((c) => c.knowledge === false));
+  const withDocs = summariseBench(cases.filter((c) => c.knowledge === true));
+  const d = (k: Rate): number => Number((withDocs[k] - without[k]).toFixed(3));
+  return {
+    without,
+    with: withDocs,
+    delta: {
+      detectionRate: d("detectionRate"),
+      falseFailedRate: d("falseFailedRate"),
+      blockedRate: d("blockedRate"),
+      planAcceptanceRate: d("planAcceptanceRate"),
+    },
   };
 }
 
@@ -84,7 +120,7 @@ const ratio = (n: number, d: number): number => (d === 0 ? 0 : Number((n / d).to
  *
  * @param cases - Per-case results.
  */
-export function summariseBench(cases: readonly BenchCaseResult[]): BenchReport["summary"] {
+export function summariseBench(cases: readonly BenchCaseResult[]): BenchSummary {
   const bugs = cases.filter((c) => c.expect === "detect");
   const clean = cases.filter((c) => c.expect === "all_passed");
   const tests = cases.reduce((n, c) => n + Object.keys(c.statuses).length, 0);
@@ -116,7 +152,7 @@ export function formatBench(report: BenchReport): string {
     "|---|---|---|---|---|---|",
     ...report.cases.map(
       (c) =>
-        `| ${c.id} | ${c.ticket} | ${c.flags.join(", ") || "–"} | ${c.planAccepted ? "accepted" : "rejected"} | ${
+        `| ${c.id}${c.knowledge === undefined || report.knowledge !== "compare" ? "" : c.knowledge ? " (docs)" : " (no docs)"} | ${c.ticket} | ${c.flags.join(", ") || "–"} | ${c.planAccepted ? "accepted" : "rejected"} | ${
           Object.entries(c.statuses)
             .map(([k, v]) => `${k} ${v}`)
             .join(", ") || "–"
@@ -124,6 +160,26 @@ export function formatBench(report: BenchReport): string {
     ),
     "",
     `Detection ${pct(s.detectionRate)} · false FAILED ${pct(s.falseFailedRate)} · BLOCKED ${pct(s.blockedRate)} · plan acceptance ${pct(s.planAcceptanceRate)} · ${String(Math.round(s.durationMs / 1000))} s · ${String(s.tokens)} tokens${s.costUsd === undefined ? "" : ` · $${s.costUsd.toFixed(4)}`}`,
+    ...(report.comparison ? ["", formatComparison(report.comparison)] : []),
+  ].join("\n");
+}
+
+const signedPct = (x: number): string => `${x > 0 ? "+" : ""}${(x * 100).toFixed(0)} pp`;
+
+/** The knowledge base comparison as a Markdown table (REQ-KNOW-11/AC1). */
+function formatComparison(c: NonNullable<BenchReport["comparison"]>): string {
+  const pct = (x: number): string => `${(x * 100).toFixed(0)}%`;
+  const row = (name: string, k: Rate) =>
+    `| ${name} | ${pct(c.without[k])} | ${pct(c.with[k])} | ${signedPct(c.delta[k])} |`;
+  return [
+    "Knowledge base: without vs with",
+    "",
+    "| Metric | Without | With | Difference |",
+    "|---|---|---|---|",
+    row("Detection", "detectionRate"),
+    row("False FAILED", "falseFailedRate"),
+    row("BLOCKED", "blockedRate"),
+    row("Plan accepted without edits", "planAcceptanceRate"),
   ].join("\n");
 }
 
@@ -148,6 +204,7 @@ export async function runBench(
     readonly role?: string | undefined;
     readonly cases?: string | undefined;
     readonly out?: string | undefined;
+    readonly knowledge?: string | undefined;
   },
   io: CommandIO,
   ports: RuntimePorts & ModelPorts & RunPorts,
@@ -175,82 +232,116 @@ export async function runBench(
       home: ports.home,
       cwd: project.qaDir,
     });
-    const benchPorts = { ...ports, modelOverride: { ref: options.model, role: options.role } };
+    const mode = options.knowledge ?? "on";
+    if (mode !== "on" && mode !== "off" && mode !== "compare")
+      throw new ConfigError("BENCH_KNOWLEDGE_INVALID", "--knowledge must be on, off or compare.", {});
+    const knowledgeDir = project.project?.paths.knowledge;
+    if (
+      mode === "compare" &&
+      (knowledgeDir === undefined || (await readKnowledgeIndex(knowledgeDir)) === undefined)
+    )
+      throw new ConfigError(
+        "KNOWLEDGE_EMPTY",
+        "--knowledge compare needs a knowledge base: add documents with 'qajitsu knowledge add'.",
+        {},
+      );
+    // REQ-KNOW-11/AC1: in compare mode every case runs without, then with the knowledge base.
+    const passes: (boolean | undefined)[] =
+      mode === "compare" ? [false, true] : [mode === "off" ? false : undefined];
     const results: BenchCaseResult[] = [];
-    for (const c of parsed.data.cases) {
-      io.write(`${c.id}: ${c.ticket}${c.flags.length > 0 ? ` with ${c.flags.join(", ")}` : ""}…\n`);
-      const started = ports.now().getTime();
-      const sub = quietIO(io.cwd);
-      const fetched = await runFetch(c.ticket, { ref: c.ref === undefined ? [] : [c.ref] }, sub, benchPorts);
-      const runId = (await readRunIndex(root, c.ticket)).latest;
-      // Marked before anything else: publish refuses benchmark runs.
-      if (fetched === 0 && runId !== undefined) {
-        const ws = await openRunWorkspace(root, c.ticket, runId);
-        await ws.update({
-          data: { ...ws.record.data, bench: { case: c.id, model: options.model, flags: c.flags } },
-        });
-      }
-      const planned =
-        fetched === 0 && runId !== undefined
-          ? await runPlan(c.ticket, { run: runId }, sub, benchPorts, review)
-          : 3;
-      const approved =
-        planned === 0
-          ? // Recorded as an automatic approval by the benchmark, never as a person's.
-            await runApprove(c.ticket, { run: runId, confirmOpenQuestions: true }, sub, benchPorts, {
-              ...review,
-              user: `bench:${review.user}`,
-            })
-          : 3;
-      if (approved === 0)
-        await runRun(
+    for (const withDocs of passes)
+      for (const c of parsed.data.cases) {
+        const benchPorts = {
+          ...ports,
+          modelOverride: { ref: options.model, role: options.role },
+          ...(withDocs === false ? { knowledgeDisabled: true } : {}),
+        };
+        const label =
+          withDocs === undefined ? "" : withDocs ? " (with knowledge base)" : " (without knowledge base)";
+        io.write(`${c.id}: ${c.ticket}${c.flags.length > 0 ? ` with ${c.flags.join(", ")}` : ""}${label}…\n`);
+        const started = ports.now().getTime();
+        const sub = quietIO(io.cwd);
+        const fetched = await runFetch(
           c.ticket,
-          { run: runId, build: true, set: c.flags.map((f) => `${base}.${f}=1`) },
+          { ref: c.ref === undefined ? [] : [c.ref] },
           sub,
           benchPorts,
         );
-      const dir = join(root, c.ticket, runId ?? "missing");
-      const record = RunRecordSchema.safeParse(
-        JSON.parse(await readFile(join(dir, "run.json"), "utf8").catch(() => "null")) as unknown,
-      );
-      const statuses = (record.success ? record.data.data["results"] : undefined) as
-        Record<string, string> | undefined;
-      const { events } = parseEventLines(
-        await readFile(join(dir, "journal", "events.jsonl"), "utf8").catch(() => ""),
-      );
-      const usage = events
-        .filter((e) => e.event === "model.usage")
-        .map((e) => (e.details ?? {}) as Record<string, unknown>);
-      const costs = usage.map((u) => u["costUsd"]).filter((x): x is number => typeof x === "number");
-      const values = Object.values(statuses ?? {});
-      results.push({
-        id: c.id,
-        ticket: c.ticket,
-        flags: c.flags,
-        expect: "detects" in c.expect ? "detect" : "all_passed",
-        planAccepted: planned === 0 && approved === 0,
-        statuses: statuses ?? {},
-        ...("detects" in c.expect ? { detected: values.includes("FAILED") } : {}),
-        falseFailed: "detects" in c.expect ? 0 : values.filter((v) => v === "FAILED").length,
-        blocked: values.filter((v) => v === "BLOCKED").length,
-        durationMs: ports.now().getTime() - started,
-        tokens: usage.reduce((n, u) => n + Number(u["inputTokens"] ?? 0) + Number(u["outputTokens"] ?? 0), 0),
-        ...(costs.length > 0 ? { costUsd: costs.reduce((a, b) => a + b, 0) } : {}),
-        ...(statuses === undefined
-          ? {
-              error: (sub.log.filter((l) => l.startsWith("Error")).at(-1) ?? "did not finish")
-                .trim()
-                .slice(0, 300),
-            }
-          : {}),
-      });
-    }
+        const runId = (await readRunIndex(root, c.ticket)).latest;
+        // Marked before anything else: publish refuses benchmark runs.
+        if (fetched === 0 && runId !== undefined) {
+          const ws = await openRunWorkspace(root, c.ticket, runId);
+          await ws.update({
+            data: { ...ws.record.data, bench: { case: c.id, model: options.model, flags: c.flags } },
+          });
+        }
+        const planned =
+          fetched === 0 && runId !== undefined
+            ? await runPlan(c.ticket, { run: runId }, sub, benchPorts, review)
+            : 3;
+        const approved =
+          planned === 0
+            ? // Recorded as an automatic approval by the benchmark, never as a person's.
+              await runApprove(c.ticket, { run: runId, confirmOpenQuestions: true }, sub, benchPorts, {
+                ...review,
+                user: `bench:${review.user}`,
+              })
+            : 3;
+        if (approved === 0)
+          await runRun(
+            c.ticket,
+            { run: runId, build: true, set: c.flags.map((f) => `${base}.${f}=1`) },
+            sub,
+            benchPorts,
+          );
+        const dir = join(root, c.ticket, runId ?? "missing");
+        const record = RunRecordSchema.safeParse(
+          JSON.parse(await readFile(join(dir, "run.json"), "utf8").catch(() => "null")) as unknown,
+        );
+        const statuses = (record.success ? record.data.data["results"] : undefined) as
+          Record<string, string> | undefined;
+        const { events } = parseEventLines(
+          await readFile(join(dir, "journal", "events.jsonl"), "utf8").catch(() => ""),
+        );
+        const usage = events
+          .filter((e) => e.event === "model.usage")
+          .map((e) => (e.details ?? {}) as Record<string, unknown>);
+        const costs = usage.map((u) => u["costUsd"]).filter((x): x is number => typeof x === "number");
+        const values = Object.values(statuses ?? {});
+        results.push({
+          id: c.id,
+          ticket: c.ticket,
+          flags: c.flags,
+          expect: "detects" in c.expect ? "detect" : "all_passed",
+          planAccepted: planned === 0 && approved === 0,
+          statuses: statuses ?? {},
+          ...("detects" in c.expect ? { detected: values.includes("FAILED") } : {}),
+          falseFailed: "detects" in c.expect ? 0 : values.filter((v) => v === "FAILED").length,
+          blocked: values.filter((v) => v === "BLOCKED").length,
+          durationMs: ports.now().getTime() - started,
+          tokens: usage.reduce(
+            (n, u) => n + Number(u["inputTokens"] ?? 0) + Number(u["outputTokens"] ?? 0),
+            0,
+          ),
+          ...(costs.length > 0 ? { costUsd: costs.reduce((a, b) => a + b, 0) } : {}),
+          ...(withDocs === undefined ? {} : { knowledge: withDocs }),
+          ...(statuses === undefined
+            ? {
+                error: (sub.log.filter((l) => l.startsWith("Error")).at(-1) ?? "did not finish")
+                  .trim()
+                  .slice(0, 300),
+              }
+            : {}),
+        });
+      }
     const report: BenchReport = {
       model: options.model,
       role: options.role ?? "all",
       at: ports.now().toISOString(),
+      knowledge: mode,
       cases: results,
       summary: summariseBench(results),
+      ...(mode === "compare" ? { comparison: compareKnowledge(results) } : {}),
     };
     const outDir = options.out
       ? isAbsolute(options.out)
