@@ -9,6 +9,15 @@ export type {
 } from "./code-host.js";
 export type { EnvProvider, EnvironmentHandle, EnvironmentHealth } from "./env-provider.js";
 export type { EvidenceEntry, EvidenceStore } from "./evidence-store.js";
+export type {
+  Embedder,
+  KnowledgeChunk,
+  KnowledgeFile,
+  KnowledgeHit,
+  KnowledgeQuery,
+  StoredChunk,
+  VectorStore,
+} from "./knowledge-store.js";
 export type { ModelCapabilities, ModelProvider, ResolvedModelHandle } from "./model-provider.js";
 export type { PublishAttachment, PublishInput, PublishResult, Publisher } from "./publisher.js";
 export type {

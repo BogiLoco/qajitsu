@@ -7,3 +7,4 @@
 export * from "./model-ref.js";
 export * from "./capabilities.js";
 export * from "./registry.js";
+export * from "./embedder.js";

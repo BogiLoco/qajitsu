@@ -89,6 +89,16 @@ test_types: [api, web]
 #
 # Passive observations while planned cases run (REQ-EVD-07): listed in the report and the Jira comment, never statuses.
 # observations: { console: true, http_errors: true, accessibility: true, ignore: [favicon.ico, color-contrast] }
+
+# Knowledge base (REQ-KNOW, ADR-0007): documents added with `qj knowledge add`, searched by the analyst and planner.
+# Small documentation is used in full; above full_context_tokens retrieval is hybrid with the embedding model.
+# knowledge:
+#   embedding: ollama/nomic-embed-text   # <provider>/<model> from models.providers; cloud models need confirmation
+#   store: lancedb                       # or chroma, with chroma: { url: secret://env/CHROMA_URL, token: ... }
+#   full_context_tokens: 20000
+#   index_threshold: 50000               # chunks from which ANN and full-text indexes are built
+#   max_age_days: 365                    # older documents are marked as possibly outdated in plans
+#   auto_sync: false                     # sync sources before every `qj plan`
 #
 # Secret managers besides env (REQ-CFG-03/AC3); their own tokens come from secret://env/...
 # secrets:

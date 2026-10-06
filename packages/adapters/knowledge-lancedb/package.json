@@ -1,0 +1,25 @@
+{
+  "name": "@qajitsu/adapter-knowledge-lancedb",
+  "version": "0.0.0",
+  "description": "QAJitsu VectorStore on LanceDB, embedded in the process, one database per project (ADR-0007).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "qajitsu-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@lancedb/lancedb": "0.39.0",
+    "@qajitsu/core": "workspace:*",
+    "apache-arrow": "18.1.0"
+  }
+}

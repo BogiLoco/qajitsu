@@ -340,6 +340,37 @@ export const ProjectConfigSchema = z.strictObject({
         .default({}),
     })
     .default({ servers: {} }),
+  /**
+   * The project's knowledge base (REQ-KNOW-01, REQ-KNOW-07, REQ-KNOW-08, ADR-0007): documents added with
+   * `qj knowledge add`, searchable by the analyst and planner. Documentation that fits `full_context_tokens` is used
+   * without embeddings; above it retrieval is hybrid (vectors plus keywords) with `embedding`.
+   */
+  knowledge: z
+    .strictObject({
+      /** `<provider>/<model>` of the embedding model through `models.providers`; a local Ollama model by default. */
+      embedding: z
+        .string()
+        .regex(/^[\w.-]+\/.+$/)
+        .default("ollama/nomic-embed-text"),
+      store: z.enum(["lancedb", "chroma"]).default("lancedb"),
+      /** A shared Chroma server (REQ-KNOW-08/AC3); URL and token are secret:// references. */
+      chroma: z.strictObject({ url: SecretRef, token: SecretRef.optional() }).optional(),
+      /** Documentation up to this size (about 4 characters per token) is used in full, without embeddings. */
+      full_context_tokens: z.number().int().min(0).max(1_000_000).default(20_000),
+      /** Chunks from which approximate vector and full-text indexes are built (REQ-KNOW-01/AC4). */
+      index_threshold: z.number().int().min(256).default(50_000),
+      /** Chunks of files older than this are marked as possibly outdated in plans (REQ-KNOW-10/AC1). */
+      max_age_days: z.number().int().positive().optional(),
+      /** Sync registered sources before every `qj plan` (REQ-KNOW-04/AC3). */
+      auto_sync: z.boolean().default(false),
+    })
+    .default({
+      embedding: "ollama/nomic-embed-text",
+      store: "lancedb",
+      full_context_tokens: 20_000,
+      index_threshold: 50_000,
+      auto_sync: false,
+    }),
   test_types: z
     .array(z.enum(["api", "web", "mobile"]))
     .min(1)

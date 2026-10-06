@@ -1473,6 +1473,70 @@
       },
       "additionalProperties": false
     },
+    "knowledge": {
+      "default": {
+        "embedding": "ollama/nomic-embed-text",
+        "store": "lancedb",
+        "full_context_tokens": 20000,
+        "index_threshold": 50000,
+        "auto_sync": false
+      },
+      "type": "object",
+      "properties": {
+        "embedding": {
+          "default": "ollama/nomic-embed-text",
+          "type": "string",
+          "pattern": "^[\\w.-]+\\/.+$"
+        },
+        "store": {
+          "default": "lancedb",
+          "type": "string",
+          "enum": [
+            "lancedb",
+            "chroma"
+          ]
+        },
+        "chroma": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+            },
+            "token": {
+              "type": "string",
+              "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "additionalProperties": false
+        },
+        "full_context_tokens": {
+          "default": 20000,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "index_threshold": {
+          "default": 50000,
+          "type": "integer",
+          "minimum": 256,
+          "maximum": 9007199254740991
+        },
+        "max_age_days": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "auto_sync": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
     "test_types": {
       "default": [
         "api"

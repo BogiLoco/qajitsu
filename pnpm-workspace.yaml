@@ -25,6 +25,12 @@ overrides:
   # GHSA-c475-qrg2-pj4r, via webdriverio > @puppeteer/browsers > proxy-agent > get-uri; only ftp:// PAC files use it.
   basic-ftp: ^6.2.2
 
+# @lancedb/lancedb lists its own embedding helpers as optional dependencies; QAJitsu embeds through the models layer
+# (REQ-KNOW-08), and @huggingface/transformers would pull onnxruntime-node with an install script.
+ignoredOptionalDependencies:
+  - "@huggingface/transformers"
+  - openai
+
 auditConfig:
   ignoreGhsas:
     # extract-zip has no fixed release. It is reached only through webdriverio > @puppeteer/browsers when WebdriverIO

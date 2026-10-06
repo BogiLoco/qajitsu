@@ -32,3 +32,5 @@ export * from "./telemetry/otlp.js";
 export * from "./explore/session.js";
 export * from "./observations.js";
 export * from "./projects/registry.js";
+export * from "./knowledge/extract.js";
+export * from "./knowledge/sources.js";
