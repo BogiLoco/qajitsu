@@ -27,6 +27,11 @@ export const CaseAttemptSchema = z.strictObject({
     .default([]),
   /** Evidence paths (relative to `evidence/`) written for this attempt. */
   evidence: z.array(z.string()).default([]),
+  /** SHA-256 of the spec file this attempt executed, recorded by the runner (REQ-PUB-08/AC2). */
+  specSha256: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .optional(),
   startedAt: z.string().optional(),
   /** The attempt ran a spec changed by the healer (REQ-EXEC-09). */
   healed: z.boolean().optional(),

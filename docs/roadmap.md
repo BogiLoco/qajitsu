@@ -81,7 +81,7 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 
 <!-- prettier-ignore-start -->
 <!-- req-stage:3 -->
-- [REQ-CTX-06](requirements/context.md#req-ctx-06--test-repository-awareness) Test repository awareness (should, in-progress, AC 3/4)
+- [REQ-CTX-06](requirements/context.md#req-ctx-06--test-repository-awareness) Test repository awareness (should, implemented, AC 4/4)
 - [REQ-ENV-01](requirements/environment.md#req-env-01--provided-environment) Provided environment (must, implemented, AC 3/3)
 - [REQ-ENV-02](requirements/environment.md#req-env-02--deployed-version-check) Deployed version check (should, implemented, AC 3/3)
 - [REQ-ENV-07](requirements/environment.md#req-env-07--default-environment-selection) Default environment selection (should, implemented, AC 2/2)
@@ -253,7 +253,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-EVD-07](requirements/evidence.md#req-evd-07--passive-observations-during-tests) Passive observations during tests (should, implemented, AC 5/5)
 - [REQ-PUB-05](requirements/publishing.md#req-pub-05--optional-integrations) Optional integrations (could, deferred, AC 1/4)
 - [REQ-PUB-07](requirements/publishing.md#req-pub-07--bug-reports-from-failed-cases) Bug reports from failed cases (should, proposed, AC 0/5)
-- [REQ-PUB-08](requirements/publishing.md#req-pub-08--promote-ticket-cases-to-the-regression-suite) Promote ticket cases to the regression suite (should, proposed, AC 0/4)
+- [REQ-PUB-08](requirements/publishing.md#req-pub-08--promote-ticket-cases-to-the-regression-suite) Promote ticket cases to the regression suite (should, implemented, AC 4/4)
 - [REQ-PUB-09](requirements/publishing.md#req-pub-09--release-readiness-report) Release readiness report (could, proposed, AC 0/4)
 - [REQ-OBS-08](requirements/observability.md#req-obs-08--map-as-planner-input) Map as planner input (could, proposed, AC 0/1)
 - [REQ-PRJ-09](requirements/projects.md#req-prj-09--export-and-import-of-a-project-profile) Export and import of a project profile (could, implemented, AC 2/2)

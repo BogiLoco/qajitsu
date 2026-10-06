@@ -352,3 +352,51 @@ describe("PR comment and status check (REQ-CI-04/AC4)", () => {
     });
   });
 });
+
+describe("pull requests for promoted cases (REQ-PUB-08/AC1)", () => {
+  it("REQ-PUB-08/AC1: opens a pull request from the pushed branch, or returns the open one for that branch", async () => {
+    let exists = false;
+    const { host, requests } = build({
+      extra: [
+        {
+          method: "POST",
+          match: /^\/repos\/example-org\/shop-tests\/pulls$/,
+          reply: (req) =>
+            exists
+              ? jsonReply({ message: "A pull request already exists" }, 422)(req)
+              : jsonReply(
+                  { number: 7, html_url: "https://github.com/example-org/shop-tests/pull/7" },
+                  201,
+                )(req),
+        },
+        {
+          match: /^\/repos\/example-org\/shop-tests\/pulls\?state=open&head=example-org%3Aqajitsu%2Fdemo-1/,
+          reply: jsonReply([{ number: 7, html_url: "https://github.com/example-org/shop-tests/pull/7" }]),
+        },
+      ],
+    });
+    const request = {
+      repo: "example-org/shop-tests",
+      sourceBranch: "qajitsu/demo-1-20261006-1000-abcd",
+      targetBranch: "main",
+      title: "test(DEMO-1): promote TC-01",
+      body: "From QAJitsu run 20261006-1000-abcd",
+    };
+    expect(await host.openChangeRequest?.(request)).toEqual({
+      id: "7",
+      url: "https://github.com/example-org/shop-tests/pull/7",
+      created: true,
+    });
+    expect(JSON.parse(requests.find((r) => r.method === "POST")?.body ?? "{}")).toEqual({
+      title: "test(DEMO-1): promote TC-01",
+      head: "qajitsu/demo-1-20261006-1000-abcd",
+      base: "main",
+      body: "From QAJitsu run 20261006-1000-abcd",
+    });
+    exists = true;
+    expect(await host.openChangeRequest?.(request)).toMatchObject({ id: "7", created: false });
+    await expect(host.openChangeRequest?.({ ...request, sourceBranch: "../main" })).rejects.toMatchObject({
+      code: "GITHUB_BRANCH_INVALID",
+    });
+  });
+});

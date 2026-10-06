@@ -110,6 +110,14 @@ const RepoSchema = z.strictObject({
     .string()
     .regex(/^(?!\/)(?!.*\.\.)[\w./-]+\.(ya?ml|json)$/, "Relative path to a .yaml or .json file")
     .optional(),
+  /**
+   * Tests repository only: folder that `qj promote` writes regression packs to (REQ-PUB-08); default: `qajitsu/`
+   * inside the repository's `tests/`, `test/` or `e2e/` folder.
+   */
+  promote_dir: z
+    .string()
+    .regex(/^(?!\/)(?!.*\.\.)[\w./-]+$/, "Relative folder inside the tests repository")
+    .optional(),
 });
 
 /**

@@ -243,6 +243,16 @@ journal intact, approved plan unchanged, ...). Then it shows a **preview** of th
 `Publish this to SHOP-482? [y/N]`. On `y` it posts the matrix with failures and reproduction hints, attaches the
 evidence zip and media; running it again updates the same comment.
 
+### Optional: keep the cases as regression tests
+
+```sh
+qj promote SHOP-482 --dry-run          # see the pack: PASSED specs, expectations.yaml, README
+qj promote SHOP-482                    # shows the target and asks before pushing a branch and opening the PR/MR
+```
+
+Only PASSED cases are promoted, with the exact spec that passed and the expected values of the approved plan, into
+the tests repository (`repos.<alias>.role: tests`, folder `promote_dir` or `tests/qajitsu/`).
+
 ### Step 7: clean up
 
 Cleanup follows `cleanup.policy` automatically after `run --build`. Manually: `qj clean SHOP-482` (containers,
@@ -503,6 +513,7 @@ Every option and exit code of every command: [docs/cli/commands.md](docs/cli/com
 | `qj approve <TICKET> [--version <n>] [--confirm-open-questions] [--approver <name>] [--reuse-from <run\|latest>]` | when the plan is right                                                          | Freezes the plan (SHA-256). `--approver` records who approved (CI). `--reuse-from` reuses a plan approved in an earlier run of the same ticket after new commits, only if the ticket text did not change and the approval is in that run's journal.                                               |
 | `qj run <TICKET> [--env <profile\|url>] [--build] [--keep] [--set <svc.VAR=value>]...`                            | after approval                                                                  | Writes missing specs, checks them, executes API, web, mixed and mobile cases, computes statuses, runs the auditor and canary, writes reports. `--build` starts the app from the worktree; `--keep` keeps containers and worktrees; `--set` overrides variables marked `overridable`.              |
 | `qj publish <TICKET> [--auto-publish]`                                                                            | when you want the results in Jira                                               | Gates, preview, `[y/N]`, then the comment, the evidence zip and media. `--auto-publish` (or `publish.auto`) skips the preview in CI and is recorded.                                                                                                                                              |
+| `qj promote <TICKET> [--cases TC-01,TC-03] [--dry-run] [--yes]`                                                   | after a good run                                                                | Proposes the PASSED cases as a pull/merge request to the tests repository: the specs that passed, unchanged, and the plan's expectations; asks before pushing.                                                                                                                                    |
 | `qj explore <TICKET> --goal "<text>" [--time-box <min>] [--max-steps <n>]`                                        | when you want an agent to look around a change, before or besides planned cases | An exploratory session in a browser QAJitsu drives and records: observations with steps and screenshots, `explore/<session>/report.html` for review, no statuses. `qj explore promote <TICKET> --session S01 --observation O1` turns an observation into a draft plan case (runs after approval). |
 
 ### Inspecting results

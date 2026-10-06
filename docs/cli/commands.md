@@ -192,6 +192,25 @@ Publishes the results comment and attachments to the ticket after a confirmed pr
 
 Exit codes: `0` published, `2` preview declined, `3` refused by the gates or failed.
 
+### `qajitsu promote <ticket>`
+
+Proposes the run's PASSED cases as a pull/merge request to the project's tests repository (`repos.<alias>.role:
+tests`), so the work on a ticket becomes regression tests (REQ-PUB-08, REQ-CTX-06/AC4). Statuses and gates are
+computed exactly as for `publish`; only PASSED cases are promoted, and only when their spec is byte for byte the one
+that passed (hash recorded by the runner and in the journal). The pack in `<promote_dir>/<TICKET>/` holds the
+unchanged specs as `<TC>.qajitsu.ts`, `expectations.yaml` (the approved plan's cases, its SHA-256, approver and run)
+and a README; it is scanned for secrets. The branch is `qajitsu/<ticket>-<run-id>`; nothing is pushed without
+confirmation.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+- `--cases <ids>`: comma-separated case ids, e.g. `TC-01,TC-03` (default: every PASSED case); any non-PASSED case
+  in the list refuses the promotion
+- `--repo <alias>`: the tests repository when the project has several
+- `--dry-run`: write the pack to `<project-home>/exports/<TICKET>/promote/<run-id>/`; push nothing
+- `--yes`: push and open the pull request without asking
+
+Exit codes: `0` promoted (or written with `--dry-run`), `2` not confirmed, `3` refused or errors.
+
 ## Exploratory testing
 
 ### `qajitsu explore <ticket>`

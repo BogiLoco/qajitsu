@@ -208,3 +208,55 @@ describe("MR note and commit status (REQ-CI-04/AC4)", () => {
     });
   });
 });
+
+describe("merge requests for promoted cases (REQ-PUB-08/AC1)", () => {
+  it("REQ-PUB-08/AC1: opens a merge request from the pushed branch, or returns the open one for that branch", async () => {
+    let exists = false;
+    const fake = createFakeFetch([
+      {
+        method: "POST",
+        match: /^\/api\/v4\/projects\/qa%2Fshop-tests\/merge_requests$/,
+        reply: (req) =>
+          exists
+            ? jsonReply({ message: ["Another open merge request already exists"] }, 409)(req)
+            : jsonReply(
+                { iid: 4, web_url: "https://gitlab.example.com/qa/shop-tests/-/merge_requests/4" },
+                201,
+              )(req),
+      },
+      {
+        match:
+          /^\/api\/v4\/projects\/qa%2Fshop-tests\/merge_requests\?state=opened&source_branch=qajitsu%2Fdemo-1/,
+        reply: jsonReply([
+          { iid: 4, web_url: "https://gitlab.example.com/qa/shop-tests/-/merge_requests/4" },
+        ]),
+      },
+    ]);
+    const host = createGitLabCodeHost(
+      { alias: "gitlab", baseUrl: "https://gitlab.example.com", token: "secret://env/GITLAB_TOKEN" },
+      testDeps(fake.fetch, { "secret://env/GITLAB_TOKEN": TOKEN }),
+    );
+    const request = {
+      repo: "qa/shop-tests",
+      sourceBranch: "qajitsu/demo-1-20261006-1000-abcd",
+      targetBranch: "main",
+      title: "test(DEMO-1): promote TC-01",
+      body: "From QAJitsu run 20261006-1000-abcd",
+    };
+    expect(await host.openChangeRequest?.(request)).toEqual({
+      id: "4",
+      url: "https://gitlab.example.com/qa/shop-tests/-/merge_requests/4",
+      created: true,
+    });
+    expect(JSON.parse(fake.requests.find((r) => r.method === "POST")?.body ?? "{}")).toMatchObject({
+      source_branch: "qajitsu/demo-1-20261006-1000-abcd",
+      target_branch: "main",
+      remove_source_branch: true,
+    });
+    exists = true;
+    expect(await host.openChangeRequest?.(request)).toMatchObject({ id: "4", created: false });
+    await expect(host.openChangeRequest?.({ ...request, targetBranch: "a..b" })).rejects.toMatchObject({
+      code: "GITLAB_BRANCH_INVALID",
+    });
+  });
+});

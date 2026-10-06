@@ -103,7 +103,7 @@ Extends REQ-PUB-05/AC2 (draft bug tickets).
 
 ### REQ-PUB-08 · Promote ticket cases to the regression suite
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-CTX-06, REQ-EXEC-01, INV-4
@@ -112,10 +112,10 @@ Work spent on one ticket builds the regression suite instead of being lost.
 
 **Acceptance criteria**
 
-- [ ] AC1: `qj promote <TICKET> [--cases TC-01,TC-03]` opens a PR/MR in the tests repository with the selected specs.
-- [ ] AC2: Only cases that were PASSED in a run of the approved plan can be promoted; others are refused with the reason.
-- [ ] AC3: Promoted specs keep their expectations from the plan and follow the tests repository's conventions; the PR/MR links the ticket and the run.
-- [ ] AC4: Nothing is pushed without user confirmation.
+- [x] AC1: `qj promote <TICKET> [--cases TC-01,TC-03]` opens a PR/MR in the tests repository with the selected specs.
+- [x] AC2: Only cases that were PASSED in a run of the approved plan can be promoted; others are refused with the reason.
+- [x] AC3: Promoted specs keep their expectations from the plan and follow the tests repository's conventions; the PR/MR links the ticket and the run.
+- [x] AC4: Nothing is pushed without user confirmation.
 
 ### REQ-PUB-09 · Release readiness report
 

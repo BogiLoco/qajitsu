@@ -11,6 +11,9 @@ import {
 } from "@qajitsu/core";
 import { z } from "zod";
 
+/** Branch names QAJitsu creates or targets: no `..`, no leading `/`. */
+const BRANCH = /^(?!.*\.\.)(?!\/)[\w./-]{1,200}$/;
+
 /** Settings of one GitLab code host from `code_hosts` in `.qa/qa.project.yaml`. */
 export interface GitLabConfig {
   /** Alias of the host in the project configuration. */
@@ -324,6 +327,38 @@ export function createGitLabCodeHost(
           name,
         },
       );
+    },
+
+    async openChangeRequest(request, signal) {
+      const base = project(request.repo);
+      for (const branch of [request.sourceBranch, request.targetBranch])
+        if (!BRANCH.test(branch)) throw new AdapterError("GITLAB_BRANCH_INVALID", "Invalid branch name.", {});
+      const Mr = z.object({ iid: z.number().int(), web_url: z.string() });
+      try {
+        const mr = await http.json(`${base}/merge_requests`, Mr, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            source_branch: request.sourceBranch,
+            target_branch: request.targetBranch,
+            title: request.title,
+            description: request.body,
+            remove_source_branch: true,
+          }),
+          signal,
+        });
+        return { id: String(mr.iid), url: mr.web_url, created: true };
+      } catch (error) {
+        // 409: a merge request for this branch already exists; return it instead of failing.
+        if (!(error instanceof AdapterError) || error.context["status"] !== 409) throw error;
+        const [open] = await http.json(
+          `${base}/merge_requests?state=opened&source_branch=${encodeURIComponent(request.sourceBranch)}`,
+          z.array(Mr),
+          { signal },
+        );
+        if (!open) throw error;
+        return { id: String(open.iid), url: open.web_url, created: false };
+      }
     },
 
     async upsertComment(target, body, marker, signal) {

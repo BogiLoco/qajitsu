@@ -1081,6 +1081,10 @@
           "openapi": {
             "type": "string",
             "pattern": "^(?!\\/)(?!.*\\.\\.)[\\w./-]+\\.(ya?ml|json)$"
+          },
+          "promote_dir": {
+            "type": "string",
+            "pattern": "^(?!\\/)(?!.*\\.\\.)[\\w./-]+$"
           }
         },
         "required": [

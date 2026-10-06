@@ -1,7 +1,8 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   CaseResultFileSchema,
+  sha256,
   type CaseResultFile,
   type EventLog,
   type EvidenceStore,
@@ -104,7 +105,17 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
     healed: boolean,
   ): Promise<{ entry: Attempt; record?: AttemptRecord }> => {
     const started = options.now();
-    options.events.emit("run", actor, "case.attempt.start", { caseId, attempt, healed });
+    // REQ-PUB-08/AC2: which spec ran is recorded by the runner, so only that exact code can be promoted.
+    const specSha256 = await readFile(spec).then(
+      (bytes) => sha256(bytes),
+      () => undefined,
+    );
+    options.events.emit("run", actor, "case.attempt.start", {
+      caseId,
+      attempt,
+      healed,
+      ...(specSha256 === undefined ? {} : { specSha256 }),
+    });
     let session;
     try {
       session = await options.login();
@@ -174,6 +185,7 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
         startedAt: started.toISOString(),
         durationMs: options.now().getTime() - started.getTime(),
         ...(healed ? { healed: true } : {}),
+        ...(specSha256 === undefined ? {} : { specSha256 }),
       },
     };
   };

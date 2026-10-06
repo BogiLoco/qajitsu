@@ -24,6 +24,7 @@ import {
   runUse,
 } from "./commands/projects.js";
 import { runNote, runResumable, runStatus } from "./commands/status.js";
+import { runPromote, type PromoteOptions } from "./commands/promote.js";
 import { runProjectExport, runProjectImport } from "./commands/project-profile.js";
 import {
   runKnowledgeAdd,
@@ -792,6 +793,19 @@ export function createProgram(version: string, io: ProgramIO): Command {
       withPorts((ports) =>
         runPublish(ticket, options, commandIO, ports, io.user ?? "unknown", io.compressVideo),
       )(),
+    );
+
+  program
+    .command("promote")
+    .description("Propose the run's PASSED cases as a pull/merge request to the project's tests repository")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .option("--cases <ids>", "comma-separated case ids, e.g. TC-01,TC-03 (default: every PASSED case)")
+    .option("--repo <alias>", "the tests repository when the project has several")
+    .option("--dry-run", "write the pack to the project's exports; push nothing")
+    .option("--yes", "push and open the pull request without asking")
+    .action((ticket: string, options: PromoteOptions) =>
+      withPorts((ports) => runPromote(ticket, options, commandIO, ports, io.user ?? "unknown"))(),
     );
 
   program

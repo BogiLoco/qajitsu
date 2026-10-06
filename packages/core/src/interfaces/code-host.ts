@@ -45,6 +45,15 @@ export interface ChangeTarget {
   readonly id: string;
 }
 
+/** A pull/merge request to open from a pushed branch (REQ-PUB-08/AC1). */
+export interface ChangeRequest {
+  readonly repo: string;
+  readonly sourceBranch: string;
+  readonly targetBranch: string;
+  readonly title: string;
+  readonly body: string;
+}
+
 /** A commit status check shown on the PR/MR (REQ-CI-04/AC4). */
 export interface CommitStatus {
   readonly state: "pending" | "success" | "failure" | "error";
@@ -82,6 +91,14 @@ export interface CodeHost {
     marker: string,
     signal?: AbortSignal,
   ): Promise<{ readonly url?: string | undefined }>;
+  /**
+   * Opens a pull/merge request from an already pushed branch, or returns the open one for that branch
+   * (REQ-PUB-08/AC1). Hosts without pull requests leave it out.
+   */
+  openChangeRequest?(
+    request: ChangeRequest,
+    signal?: AbortSignal,
+  ): Promise<{ readonly id: string; readonly url?: string | undefined; readonly created: boolean }>;
   /** Sets a commit status check on `sha` (REQ-CI-04/AC4). */
   setCommitStatus?(repo: string, sha: string, status: CommitStatus, signal?: AbortSignal): Promise<void>;
   /** Cheap access check for `qajitsu doctor --online` (REQ-GEN-03/AC2); never returns secrets. */

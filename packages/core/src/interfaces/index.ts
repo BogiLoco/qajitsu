@@ -2,6 +2,7 @@ export type { AdapterDeps, Logger } from "./common.js";
 export type {
   ChangeLocator,
   ChangeRef,
+  ChangeRequest,
   ChangeTarget,
   CodeHost,
   CommitStatus,

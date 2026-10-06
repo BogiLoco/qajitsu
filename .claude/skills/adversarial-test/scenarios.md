@@ -54,3 +54,10 @@ Status: `todo` (no test yet) · `covered` (test exists, file name in brackets). 
 - done · Planner claims a real chunk comes from another file → rejected by code.
 - done · Agent rewrites `knowledge/chunks.json` to make a forged quote pass → denied by the guard.
 - done · Document text closes its `</untrusted_data>` wrapper to inject instructions → escaped (`packages/agents/src/knowledge-tools.test.ts`).
+
+## Promotion to the regression suite (REQ-PUB-08)
+
+- done · run.json rewritten to show a FAILED case as PASSED → refused, statuses are recomputed from results (`tests/adversarial/promote-tampering.test.ts`).
+- done · plan.approved.yaml changed after approval → PLAN_HASH_MISMATCH, nothing pushed.
+- done · spec swapped after the run and its correct hash forged into results/ → refused against the journal's hash.
+- done · a plan text carrying a secret value → no-secrets gate fails, the value is not repeated.

@@ -88,7 +88,7 @@ Agents receive enough of the change to plan precisely without flooding their con
 
 ### REQ-CTX-06 · Test repository awareness
 
-- Status: in-progress
+- Status: implemented
 - Priority: should
 - Stage: 3
 - Related: REQ-EXEC-01
@@ -100,7 +100,7 @@ QAJitsu reads the project's existing test repository to follow its conventions a
 - [x] AC1: The tests repository is declared in config (`repos.<alias>.role: tests`) and checked out like any other repo.
 - [x] AC2: The planner lists existing cases that already cover parts of the ticket.
 - [x] AC3: The author reuses existing helpers and page objects when present: their selectors and flows, since specs run sandboxed and cannot import them (ADR-0004).
-- [ ] AC4: Optionally (opt-in), new approved cases are proposed as a PR/MR to the tests repository (see REQ-PUB-08).
+- [x] AC4: Optionally (opt-in), new approved cases are proposed as a PR/MR to the tests repository (see REQ-PUB-08).
 
 ### REQ-CTX-07 · Project knowledge for agents
 

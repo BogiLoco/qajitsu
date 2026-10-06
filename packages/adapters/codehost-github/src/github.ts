@@ -12,6 +12,9 @@ import {
 import { z } from "zod";
 import { createInstallationTokenProvider } from "./github-app.js";
 
+/** Branch names QAJitsu creates or targets: no `..`, no leading `/`. */
+const BRANCH = /^(?!.*\.\.)(?!\/)[\w./-]{1,200}$/;
+
 /** Settings of one GitHub code host from `code_hosts` in `.qa/qa.project.yaml`. */
 export interface GitHubConfig {
   /** Alias of the host in the project configuration. */
@@ -342,6 +345,38 @@ export function createGitHubCodeHost(
             signal,
           });
       return { url: saved.html_url };
+    },
+
+    async openChangeRequest(request, signal) {
+      const repo = checkRepo(request.repo);
+      for (const branch of [request.sourceBranch, request.targetBranch])
+        if (!BRANCH.test(branch)) throw new AdapterError("GITHUB_BRANCH_INVALID", "Invalid branch name.", {});
+      const Pull = z.object({ number: z.number().int(), html_url: z.string() });
+      try {
+        const pr = await http.json(`/repos/${repo}/pulls`, Pull, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            title: request.title,
+            head: request.sourceBranch,
+            base: request.targetBranch,
+            body: request.body,
+          }),
+          signal,
+        });
+        return { id: String(pr.number), url: pr.html_url, created: true };
+      } catch (error) {
+        // 422: a pull request for this branch already exists; return it instead of failing.
+        if (!(error instanceof AdapterError) || error.context["status"] !== 422) throw error;
+        const owner = repo.split("/")[0] ?? "";
+        const [open] = await http.json(
+          `/repos/${repo}/pulls?state=open&head=${encodeURIComponent(`${owner}:${request.sourceBranch}`)}`,
+          z.array(Pull),
+          { signal },
+        );
+        if (!open) throw error;
+        return { id: String(open.number), url: open.html_url, created: false };
+      }
     },
 
     async setCommitStatus(repo, sha, status, signal) {
