@@ -33,13 +33,13 @@ QAJitsu plugs into any project through configuration; differences between projec
 - Status: implemented
 - Priority: must
 - Stage: 9
-- Related: REQ-LLM-03, REQ-CFG-04
+- Related: REQ-LLM-03, REQ-CFG-04, REQ-PRJ-02
 
 **Acceptance criteria**
 
 - [x] AC1: `qajitsu doctor` checks Node.js and project configuration (stage 1).
 - [x] AC2: `doctor` grows with stages: Jira and code host access, Docker, emulators, secrets, model capabilities.
-- [x] AC3: `qajitsu init` creates `.qa/` interactively, detecting `docker-compose.yml`, repos and test types.
+- [x] AC3: `qajitsu init` (basic version in REQ-PRJ-02, stage 2) learns to detect `docker-compose.yml`, repos and test types when creating `.qa/`.
 
 ### REQ-GEN-04 · Claude Code plugin interface
 
@@ -55,7 +55,7 @@ QAJitsu plugs into any project through configuration; differences between projec
 
 ### REQ-GEN-05 · Command line
 
-- Status: implemented
+- Status: in-progress
 - Priority: must
 - Stage: 1
 - Related: REQ-CI-04
@@ -65,5 +65,5 @@ The CLI `qajitsu` (alias `qj`) is the primary interface. Commands arrive with th
 **Acceptance criteria**
 
 - [x] AC1: `--version`, `doctor` (stage 1).
-- [x] AC2: `fetch` (1); `plan`, `approve` (2); `run`, `test`, `env check|render|up` (3–6); `evidence`, `logs` (5); `runs`, `resume`, `clean`, `gc` (6); `bench` (7); `init`, `pull` (9).
+- [ ] AC2: `fetch` (1); `init`, `use`, `projects`, `plan`, `approve` (2); `run`, `test`, `env check|render|up`, `status`, `note` (3); `evidence`, `logs` (5); `runs`, `resume`, `clean`, `gc`, `work reset` (6); `bench`, `knowledge` (7); `pull` (9).
 - [x] AC3: Every command documents its exit codes in `docs/cli/`.

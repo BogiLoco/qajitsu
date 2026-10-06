@@ -1,6 +1,7 @@
 # Evidence and test matrix (EVD)
 
-What proof QAJitsu collects per test type and how results are summarised.
+What proof QAJitsu collects per test type and how results are summarised. All evidence is stored in the run workspace
+inside the project's home (REQ-PRJ-10).
 
 ### REQ-EVD-01 · API evidence
 

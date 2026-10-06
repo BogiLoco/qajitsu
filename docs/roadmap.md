@@ -20,16 +20,16 @@ Monorepo, tooling, core types, the guard and the status model; fetching a ticket
 - [REQ-CTX-01](requirements/context.md#req-ctx-01--jira-ticket-as-the-input) Jira ticket as the input (must, implemented, AC 5/5)
 - [REQ-CTX-02](requirements/context.md#req-ctx-02--github-and-gitlab-support) GitHub and GitLab support (must, implemented, AC 4/4)
 - [REQ-CTX-03](requirements/context.md#req-ctx-03--change-discovery-for-a-ticket) Change discovery for a ticket (must, implemented, AC 5/5)
-- [REQ-CTX-04](requirements/context.md#req-ctx-04--repositories-always-fetched-at-the-changes-version) Repositories always fetched at the change's version (must, implemented, AC 4/4)
+- [REQ-CTX-04](requirements/context.md#req-ctx-04--repositories-always-fetched-at-the-changes-version) Repositories always fetched at the change's version (must, in-progress, AC 3/4)
 - [REQ-CFG-03](requirements/config-secrets.md#req-cfg-03--secret-providers) Secret providers (must, implemented, AC 3/3)
-- [REQ-WS-01](requirements/workspace.md#req-ws-01--folder-per-ticket-and-run-id) Folder per ticket and run id (must, implemented, AC 4/4)
+- [REQ-WS-01](requirements/workspace.md#req-ws-01--folder-per-ticket-and-run-id) Folder per ticket and run id (must, in-progress, AC 3/4)
 - [REQ-VER-01](requirements/verification.md#req-ver-01--status-model) Status model (must, implemented, AC 3/3)
 - [REQ-VER-03](requirements/verification.md#req-ver-03--write-bans-for-agents) Write bans for agents (must, implemented, AC 3/3)
 - [REQ-VER-04](requirements/verification.md#req-ver-04--tool-call-journal) Tool-call journal (must, implemented, AC 2/2)
 - [REQ-OBS-01](requirements/observability.md#req-obs-01--structured-event-log-per-run) Structured event log per run (must, implemented, AC 2/2)
 - [REQ-GEN-01](requirements/generic.md#req-gen-01--project-onboarding-through-qa) Project onboarding through `.qa/` (must, implemented, AC 3/3)
 - [REQ-GEN-02](requirements/generic.md#req-gen-02--adapter-interfaces) Adapter interfaces (must, implemented, AC 3/3)
-- [REQ-GEN-05](requirements/generic.md#req-gen-05--command-line) Command line (must, implemented, AC 3/3)
+- [REQ-GEN-05](requirements/generic.md#req-gen-05--command-line) Command line (must, in-progress, AC 2/3)
 - [REQ-NFR-01](requirements/non-functional.md#req-nfr-01--code-standards) Code standards (must, implemented, AC 3/3)
 - [REQ-NFR-02](requirements/non-functional.md#req-nfr-02--test-first-and-test-levels) Test-first and test levels (must, implemented, AC 4/4)
 - [REQ-NFR-03](requirements/non-functional.md#req-nfr-03--documentation) Documentation (must, implemented, AC 3/3)
@@ -39,12 +39,14 @@ Monorepo, tooling, core types, the guard and the status model; fetching a ticket
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 
-## Stage 2 · Plan, approval and models
+## Stage 2 · Projects, plan, approval and models
 
 Analyst and planner agents on several model providers; plan review loop and freeze.
 
 **Done when:** `qj plan DEMO-1` produces `plan.v1.yaml` + `plan.v1.md` with sources for every case, `--revise` creates v2,
 `qj approve` freezes the plan with a hash; works with one cloud model and one Ollama model.
+
+**Also done when:** Projects: two projects initialised with `qj init` are isolated, and `qj use` switches between them (REQ-PRJ-01..04).
 
 <!-- prettier-ignore-start -->
 <!-- req-stage:2 -->
@@ -61,6 +63,10 @@ Analyst and planner agents on several model providers; plan review loop and free
 - [REQ-LLM-03](requirements/models.md#req-llm-03--capability-profiles) Capability profiles (must, implemented, AC 3/3)
 - [REQ-LLM-04](requirements/models.md#req-llm-04--structured-output-with-repair) Structured output with repair (must, implemented, AC 3/3)
 - [REQ-LLM-07](requirements/models.md#req-llm-07--cost-and-token-tracking) Cost and token tracking (should, implemented, AC 2/2)
+- [REQ-PRJ-01](requirements/projects.md#req-prj-01--project-home-and-data-layout) Project home and data layout (must, accepted, AC 0/5)
+- [REQ-PRJ-02](requirements/projects.md#req-prj-02--project-initialisation-qj-init) Project initialisation (`qj init`) (must, accepted, AC 0/6)
+- [REQ-PRJ-03](requirements/projects.md#req-prj-03--active-project-and-switching) Active project and switching (must, accepted, AC 0/7)
+- [REQ-PRJ-04](requirements/projects.md#req-prj-04--isolation-between-projects) Isolation between projects (must, accepted, AC 0/4)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 
@@ -70,6 +76,8 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 
 **Done when:** `qj run DEMO-1 --env staging` runs approved API cases against demo-shop, every seeded API bug ends FAILED,
 `report.html` and the matrix show request/response evidence, and the e2e test runs in CI.
+
+**Also done when:** Working context: after switching projects the user sees what is in progress (`qj status`), continues it, and finds all evidence in the project's folder (REQ-PRJ-05, 06, 08, 10).
 
 <!-- prettier-ignore-start -->
 <!-- req-stage:3 -->
@@ -92,6 +100,10 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 - [REQ-EVD-04](requirements/evidence.md#req-evd-04--test-matrix) Test matrix (must, implemented, AC 3/3)
 - [REQ-EVD-05](requirements/evidence.md#req-evd-05--report-formats) Report formats (must, implemented, AC 3/3)
 - [REQ-NFR-04](requirements/non-functional.md#req-nfr-04--framework-self-test) Framework self-test (must, implemented, AC 2/2)
+- [REQ-PRJ-05](requirements/projects.md#req-prj-05--project-status-what-is-in-the-project-and-what-is-in-progress) Project status: what is in the project and what is in progress (must, accepted, AC 0/5)
+- [REQ-PRJ-06](requirements/projects.md#req-prj-06--continue-after-switching) Continue after switching (must, accepted, AC 0/3)
+- [REQ-PRJ-08](requirements/projects.md#req-prj-08--code-cache-per-project) Code cache per project (should, accepted, AC 0/3)
+- [REQ-PRJ-10](requirements/projects.md#req-prj-10--evidence-reports-and-exports-stay-in-the-project) Evidence, reports and exports stay in the project (must, accepted, AC 0/6)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 
@@ -104,7 +116,7 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 <!-- req-stage:4 -->
 - [REQ-VER-10](requirements/verification.md#req-ver-10--human-preview-before-publishing) Human preview before publishing (must, implemented, AC 2/2)
 - [REQ-PUB-01](requirements/publishing.md#req-pub-01--jira-comment) Jira comment (must, implemented, AC 4/4)
-- [REQ-PUB-02](requirements/publishing.md#req-pub-02--attachments) Attachments (must, deferred, AC 2/3)
+- [REQ-PUB-02](requirements/publishing.md#req-pub-02--attachments) Attachments (must, in-progress, AC 1/3)
 - [REQ-PUB-03](requirements/publishing.md#req-pub-03--jira-cloud-and-data-center) Jira Cloud and Data Center (should, implemented, AC 2/2)
 - [REQ-PUB-04](requirements/publishing.md#req-pub-04--idempotent-publishing) Idempotent publishing (must, implemented, AC 2/2)
 <!-- /req-stage -->
@@ -134,6 +146,8 @@ without touching assertions, `qj logs` and the report timeline show what happene
 **Done when:** `qj run DEMO-1 --build` brings demo-shop up from its repositories with Docker Compose, generates `.env` from
 the variable schema and secrets, seeds data with the run's marker, and cleans everything per the retention policy.
 
+**Also done when:** The user can close work on a ticket, start over, and remove or archive a whole project safely (REQ-PRJ-07).
+
 <!-- prettier-ignore-start -->
 <!-- req-stage:6 -->
 - [REQ-ENV-03](requirements/environment.md#req-env-03--build-the-environment-from-repositories) Build the environment from repositories (must, implemented, AC 3/3)
@@ -146,13 +160,16 @@ the variable schema and secrets, seeds data with the run's marker, and cleans ev
 - [REQ-WS-02](requirements/workspace.md#req-ws-02--labels-and-names-for-runtime-resources) Labels and names for runtime resources (must, implemented, AC 2/2)
 - [REQ-WS-03](requirements/workspace.md#req-ws-03--cleanup-policy-and-retention) Cleanup policy and retention (must, implemented, AC 4/4)
 - [REQ-WS-04](requirements/workspace.md#req-ws-04--run-management-commands) Run management commands (should, implemented, AC 3/3)
+- [REQ-PRJ-07](requirements/projects.md#req-prj-07--start-fresh-and-clean-up) Start fresh and clean up (should, accepted, AC 0/5)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 
-## Stage 7 · Auditor, canary and model benchmark
+## Stage 7 · Auditor, canary, model benchmark and knowledge base
 
 **Done when:** the auditor flags weak PASSED results as NEEDS_REVIEW, the canary blocks runs whose tests cannot fail,
 and `qj bench` reports detection and false-FAILED rates per model.
+
+**Also done when:** Documentation added with `qj knowledge add` is searchable by agents with cited sources, and its effect is measured by the benchmark (REQ-KNOW-01..11).
 
 <!-- prettier-ignore-start -->
 <!-- req-stage:7 -->
@@ -160,6 +177,17 @@ and `qj bench` reports detection and false-FAILED rates per model.
 - [REQ-VER-09](requirements/verification.md#req-ver-09--canary-check) Canary check (could, implemented, AC 2/2)
 - [REQ-LLM-05](requirements/models.md#req-llm-05--local-models-used-honestly) Local models used honestly (should, implemented, AC 2/2)
 - [REQ-LLM-06](requirements/models.md#req-llm-06--model-benchmark) Model benchmark (should, implemented, AC 3/3)
+- [REQ-KNOW-01](requirements/knowledge.md#req-know-01--knowledge-base-per-project-created-on-demand) Knowledge base per project, created on demand (should, accepted, AC 0/3)
+- [REQ-KNOW-02](requirements/knowledge.md#req-know-02--add-documents-from-files-and-folders) Add documents from files and folders (should, accepted, AC 0/5)
+- [REQ-KNOW-03](requirements/knowledge.md#req-know-03--remove-documents-and-reset) Remove documents and reset (should, accepted, AC 0/2)
+- [REQ-KNOW-04](requirements/knowledge.md#req-know-04--sync-with-changed-files) Sync with changed files (should, accepted, AC 0/3)
+- [REQ-KNOW-05](requirements/knowledge.md#req-know-05--list-inspect-and-search) List, inspect and search (should, accepted, AC 0/3)
+- [REQ-KNOW-06](requirements/knowledge.md#req-know-06--agent-access-with-sources) Agent access with sources (should, accepted, AC 0/5)
+- [REQ-KNOW-07](requirements/knowledge.md#req-know-07--automatic-retrieval-mode) Automatic retrieval mode (could, accepted, AC 0/3)
+- [REQ-KNOW-08](requirements/knowledge.md#req-know-08--embedding-model-and-storage-options) Embedding model and storage options (should, accepted, AC 0/3)
+- [REQ-KNOW-09](requirements/knowledge.md#req-know-09--security-of-indexed-content) Security of indexed content (must, accepted, AC 0/3)
+- [REQ-KNOW-10](requirements/knowledge.md#req-know-10--freshness-of-documentation) Freshness of documentation (could, accepted, AC 0/2)
+- [REQ-KNOW-11](requirements/knowledge.md#req-know-11--measured-benefit) Measured benefit (should, accepted, AC 0/1)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 
@@ -228,5 +256,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-PUB-08](requirements/publishing.md#req-pub-08--promote-ticket-cases-to-the-regression-suite) Promote ticket cases to the regression suite (should, proposed, AC 0/4)
 - [REQ-PUB-09](requirements/publishing.md#req-pub-09--release-readiness-report) Release readiness report (could, proposed, AC 0/4)
 - [REQ-OBS-08](requirements/observability.md#req-obs-08--map-as-planner-input) Map as planner input (could, proposed, AC 0/1)
+- [REQ-PRJ-09](requirements/projects.md#req-prj-09--export-and-import-of-a-project-profile) Export and import of a project profile (could, accepted, AC 0/2)
+- [REQ-KNOW-12](requirements/knowledge.md#req-know-12--online-sources) Online sources (could, accepted, AC 0/2)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->

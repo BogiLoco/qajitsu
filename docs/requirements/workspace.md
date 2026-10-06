@@ -4,17 +4,17 @@ Every run lives in its own folder under the ticket, identified by a unique run i
 
 ### REQ-WS-01 · Folder per ticket and run id
 
-- Status: implemented
+- Status: in-progress
 - Priority: must
 - Stage: 1
-- Related: REQ-VER-04, REQ-VER-05
+- Related: REQ-VER-04, REQ-VER-05, REQ-PRJ-01
 
 **Acceptance criteria**
 
 - [x] AC1: Layout `<root>/<TICKET>/<RUN-ID>/` with RUN-ID `YYYYMMDD-HHMM-xxxx` (UTC time plus 4 random characters).
 - [x] AC2: Subfolders: `ticket/`, `plan/`, `repos/`, `env/`, `logs/`, `specs/`, `results/`, `evidence/`, `journal/`, `report/`, plus `run.json`.
 - [x] AC3: `<TICKET>/index.json` lists runs with status and retention; `latest` points to the newest run.
-- [x] AC4: The root is configurable; default is the user's home directory, not the project repository.
+- [ ] AC4: The root is configurable; default is `<project-home>/runs/` of the run's project (REQ-PRJ-01), never the project repository.
 
 ### REQ-WS-02 · Labels and names for runtime resources
 

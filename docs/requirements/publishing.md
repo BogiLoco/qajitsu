@@ -18,16 +18,16 @@ How results and evidence reach Jira and the people who need them.
 
 ### REQ-PUB-02 · Attachments
 
-- Status: deferred
+- Status: in-progress
 - Priority: must
 - Stage: 4
-- Related: REQ-EVD-06
+- Related: REQ-EVD-06, REQ-PRJ-10
 
 Deferred: AC3 (object storage for oversized attachments) is parked; oversized files are skipped and reported.
 
 **Acceptance criteria**
 
-- [x] AC1: `<TICKET>_<RUN-ID>_evidence.zip` with the evidence folder, `report.html` and manifest.
+- [ ] AC1: `<TICKET>_<RUN-ID>_evidence.zip` with the evidence folder, `report.html` and manifest, created in the project's `exports/` (REQ-PRJ-10).
 - [x] AC2: Failure screenshots and videos attached individually so they are visible without unzipping.
 - [ ] AC3: Sizes checked against the instance limit; oversized files go to object storage (S3, MinIO, Azure Blob) with a time-limited link.
 
@@ -76,7 +76,7 @@ Deferred: AC1-AC3 (Xray/Zephyr import, draft bug tickets, ticket transitions) ar
 - Status: implemented
 - Priority: must
 - Stage: 5
-- Related: REQ-EVD-02, REQ-OBS-02
+- Related: REQ-EVD-02, REQ-OBS-02, REQ-PRJ-10
 
 **Acceptance criteria**
 

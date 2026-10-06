@@ -54,16 +54,16 @@ QAJitsu finds which PRs/MRs and branches implement the ticket, in a fixed order 
 
 ### REQ-CTX-04 · Repositories always fetched at the change's version
 
-- Status: implemented
+- Status: in-progress
 - Priority: must
 - Stage: 1
-- Related: REQ-CTX-05, REQ-ENV-03, REQ-WS-01
+- Related: REQ-CTX-05, REQ-ENV-03, REQ-WS-01, REQ-PRJ-08
 
 Repositories with the change are fetched on every run, also when tests run against an existing environment, so agents analyse real code instead of guessing from the ticket.
 
 **Acceptance criteria**
 
-- [x] AC1: A bare mirror per repository is kept in a cache (`~/.qa-cache/git`) and updated incrementally.
+- [ ] AC1: A bare mirror per repository is kept in the project's cache (`<project-home>/cache/git/`, REQ-PRJ-08) and updated incrementally.
 - [x] AC2: Each run gets a `git worktree` per repository at the exact SHA under `repos/`.
 - [x] AC3: The SHA of every repository is recorded in `run.json` and in the Jira report.
 - [x] AC4: `--build` uses exactly these worktrees, so the tested code is the analysed code.
@@ -107,7 +107,7 @@ QAJitsu reads the project's existing test repository to follow its conventions a
 - Status: implemented
 - Priority: should
 - Stage: 2
-- Related: REQ-GEN-01
+- Related: REQ-GEN-01, REQ-KNOW-01
 
 Teams can give agents domain knowledge that is not in the code.
 
