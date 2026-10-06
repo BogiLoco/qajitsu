@@ -11,11 +11,13 @@ export type {
 export type { EnvProvider, EnvironmentHandle, EnvironmentHealth } from "./env-provider.js";
 export type { EvidenceEntry, EvidenceStore } from "./evidence-store.js";
 export type {
+  DocumentSource,
   Embedder,
   KnowledgeChunk,
   KnowledgeFile,
   KnowledgeHit,
   KnowledgeQuery,
+  RemoteDocument,
   StoredChunk,
   VectorStore,
 } from "./knowledge-store.js";

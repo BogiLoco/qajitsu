@@ -3,9 +3,12 @@ import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   ConfigError,
   QajitsuError,
+  parseOnlineLocator,
   readKnowledgeIndex,
   readKnowledgeSources,
   writeKnowledgeSources,
+  type AdapterDeps,
+  type DocumentSource,
   type Embedder,
   type KnowledgeSource,
   type VectorStore,
@@ -15,6 +18,7 @@ import { createEmbedder } from "@qajitsu/models";
 import { createMasker, type Masker } from "@qajitsu/steps";
 import { createCliSecretResolver, type RuntimePorts } from "../adapters.js";
 import { syncKnowledge, type KnowledgeContext, type SyncReport } from "../knowledge/engine.js";
+import { createCliLogger } from "../logger.js";
 import { loadProject, type LoadedProject } from "../project.js";
 import { registerConfiguredSecrets } from "../session.js";
 import type { CommandIO } from "./fetch.js";
@@ -87,6 +91,19 @@ async function openKnowledgeContext(
     });
   } else store = await (await import("@qajitsu/adapter-knowledge-lancedb")).createLanceDbStore(dir);
   const consentFile = join(dir, "cloud-consent.json");
+  const logger = createCliLogger({
+    file: join(resolved.paths.logs, "knowledge.log"),
+    mask: (v) => masker.maskJson(v),
+  });
+  const deps: AdapterDeps = {
+    fetch: ports.fetch,
+    logger,
+    now: ports.now,
+    resolveSecret,
+    registerSecret: (v) => {
+      masker.register(v);
+    },
+  };
   return {
     project,
     slug: resolved.slug,
@@ -96,6 +113,7 @@ async function openKnowledgeContext(
     config,
     now: ports.now,
     maskSecrets: (text) => masker.maskText(text),
+    documentSource: (source) => onlineSource(source, project, deps),
     embedder: () =>
       ports.embedder
         ? ports.embedder(config.embedding, project)
@@ -198,8 +216,9 @@ export async function runKnowledgeAdd(
   ports: Ports,
 ): Promise<number> {
   return withKnowledge(io, ports, options.yes === true, async (k) => {
+    // `confluence:<SPACE>[/<page>]` and `jira:bugs[/<component>]` are online sources (REQ-KNOW-12), not paths.
     const targets = [
-      ...paths.map((p) => (isAbsolute(p) ? p : resolve(io.cwd, p))),
+      ...paths.map((p) => (parseOnlineLocator(p) !== undefined || isAbsolute(p) ? p : resolve(io.cwd, p))),
       ...(options.qaKnowledge === true ? [join(k.project.qaDir, "knowledge")] : []),
     ];
     if (targets.length === 0)
@@ -207,7 +226,8 @@ export async function runKnowledgeAdd(
     const sources = await readKnowledgeSources(k.dir);
     const chosen: KnowledgeSource[] = [];
     for (const path of targets) {
-      if (!(await stat(path).catch(() => undefined)))
+      const online = parseOnlineLocator(path);
+      if (!online && !(await stat(path).catch(() => undefined)))
         throw new ConfigError("KNOWLEDGE_SOURCE_MISSING", `${path} does not exist.`, {});
       const existing = sources.find((s) => s.path === path);
       if (existing) {
@@ -221,11 +241,16 @@ export async function runKnowledgeAdd(
         chosen.push(updated);
         continue;
       }
-      const base = path === join(k.project.qaDir, "knowledge") ? "qa-knowledge" : slugOf(path);
+      const base = online
+        ? slugOf(path.replace(/[:/]+/g, "-"))
+        : path === join(k.project.qaDir, "knowledge")
+          ? "qa-knowledge"
+          : slugOf(path);
       let name = base;
       for (let i = 2; sources.some((s) => s.name === name); i++) name = `${base}-${String(i)}`;
       const source: KnowledgeSource = {
         name,
+        kind: online?.kind ?? "files",
         path,
         include: [...(options.include ?? [])],
         exclude: [...(options.exclude ?? [])],
@@ -535,4 +560,71 @@ export async function openRunKnowledge(
     await k.store.close();
     throw error;
   }
+}
+
+/**
+ * The reader of an online knowledge source (REQ-KNOW-12): Confluence from `knowledge.confluence` (on Jira Cloud by
+ * default `<jira.base_url>/wiki` with the Jira credentials), resolved Jira bugs from the project's `jira` settings.
+ *
+ * @throws {ConfigError} `KNOWLEDGE_CONFLUENCE_NOT_CONFIGURED`, `KNOWLEDGE_JIRA_NOT_CONFIGURED`.
+ */
+async function onlineSource(
+  source: KnowledgeSource,
+  project: LoadedProject,
+  deps: AdapterDeps,
+): Promise<DocumentSource> {
+  const locator = parseOnlineLocator(source.path);
+  const jira = project.config.jira;
+  const exclude = new Set(source.exclude);
+  const filtered = (reader: DocumentSource): DocumentSource => ({
+    list: async (signal) => (await reader.list(signal)).filter((d) => !exclude.has(d.id)),
+    load: (d, signal) => reader.load(d, signal),
+  });
+  if (locator?.kind === "confluence") {
+    const c = project.config.knowledge.confluence ?? {};
+    const flavor = c.type ?? (jira.type === "datacenter" ? "datacenter" : "cloud");
+    const baseUrl =
+      c.base_url ??
+      (flavor === "cloud" && jira.base_url ? `${jira.base_url.replace(/\/+$/, "")}/wiki` : undefined);
+    const token = c.token ?? jira.token;
+    if (baseUrl === undefined || token === undefined)
+      throw new ConfigError(
+        "KNOWLEDGE_CONFLUENCE_NOT_CONFIGURED",
+        "Set knowledge.confluence.base_url and token (secret://), or use Jira Cloud whose site hosts Confluence.",
+        {},
+      );
+    const { createConfluenceSource } = await import("@qajitsu/adapter-knowledge-confluence");
+    return filtered(
+      createConfluenceSource(
+        { baseUrl, flavor, email: c.email ?? jira.email, token, space: locator.space, page: locator.page },
+        deps,
+      ),
+    );
+  }
+  if (locator?.kind === "jira") {
+    const { createFileBugSource, createJiraBugSource } = await import("@qajitsu/adapter-ticket-jira");
+    if (jira.type === "file") {
+      if (jira.tickets_dir === undefined)
+        throw new ConfigError("KNOWLEDGE_JIRA_NOT_CONFIGURED", "jira.tickets_dir is not set.", {});
+      return filtered(
+        createFileBugSource(resolve(project.qaDir, jira.tickets_dir), { component: locator.component }),
+      );
+    }
+    if (jira.base_url === undefined || jira.token === undefined)
+      throw new ConfigError("KNOWLEDGE_JIRA_NOT_CONFIGURED", "jira.base_url and jira.token are needed.", {});
+    return filtered(
+      createJiraBugSource(
+        {
+          baseUrl: jira.base_url,
+          flavor: jira.type === "datacenter" ? "datacenter" : "cloud",
+          email: jira.email,
+          token: jira.token,
+          projectKey: jira.project_key,
+          component: locator.component,
+        },
+        deps,
+      ),
+    );
+  }
+  throw new ConfigError("KNOWLEDGE_LOCATOR_INVALID", `'${source.path}' is not an online source.`, {});
 }

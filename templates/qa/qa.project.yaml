@@ -95,6 +95,8 @@ test_types: [api, web]
 # knowledge:
 #   embedding: ollama/nomic-embed-text   # <provider>/<model> from models.providers; cloud models need confirmation
 #   store: lancedb                       # or chroma, with chroma: { url: secret://env/CHROMA_URL, token: ... }
+#   confluence: { base_url: https://wiki.example.com, type: datacenter, token: secret://env/CONFLUENCE_TOKEN }
+#                                        # for `qj knowledge add confluence:<SPACE>`; Jira Cloud sites need none
 #   full_context_tokens: 20000
 #   index_threshold: 50000               # chunks from which ANN and full-text indexes are built
 #   max_age_days: 365                    # older documents are marked as possibly outdated in plans

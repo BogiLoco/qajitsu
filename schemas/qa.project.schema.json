@@ -1500,6 +1500,31 @@
             "chroma"
           ]
         },
+        "confluence": {
+          "type": "object",
+          "properties": {
+            "base_url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "cloud",
+                "datacenter"
+              ]
+            },
+            "email": {
+              "type": "string",
+              "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+            },
+            "token": {
+              "type": "string",
+              "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+            }
+          },
+          "additionalProperties": false
+        },
         "chroma": {
           "type": "object",
           "properties": {

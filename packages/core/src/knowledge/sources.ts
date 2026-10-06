@@ -11,7 +11,9 @@ const SourceName = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/);
 /** A registered source: a file or folder with its filters and tags (REQ-KNOW-02/AC1+AC3). */
 export const KnowledgeSourceSchema = z.strictObject({
   name: SourceName,
-  /** Absolute path of the file or folder. */
+  /** `files`: a file or folder; `confluence` and `jira`: an online source (REQ-KNOW-12). */
+  kind: z.enum(["files", "confluence", "jira"]).default("files"),
+  /** Absolute path of the file or folder, or the locator of an online source (`confluence:SHOP`, `jira:bugs`). */
   path: z.string().min(1),
   include: z.array(z.string().min(1)).default([]),
   exclude: z.array(z.string().min(1)).default([]),
@@ -200,4 +202,33 @@ export async function recordRunDocs(file: string, chunks: readonly KnowledgeChun
       text: c.text,
     });
   await writeAtomic(file, `${JSON.stringify(Object.fromEntries(known), null, 2)}\n`);
+}
+
+/** A parsed online source locator (REQ-KNOW-12). */
+export type OnlineLocator =
+  | { readonly kind: "confluence"; readonly space: string; readonly page?: string | undefined }
+  | { readonly kind: "jira"; readonly component?: string | undefined };
+
+/**
+ * Parses `confluence:<SPACE>[/<page id>]` and `jira:bugs[/<component>]`; undefined for anything else (a path).
+ *
+ * @throws {ConfigError} `KNOWLEDGE_LOCATOR_INVALID` for a malformed online locator.
+ */
+export function parseOnlineLocator(value: string): OnlineLocator | undefined {
+  if (value.startsWith("confluence:")) {
+    const m = /^confluence:([A-Za-z0-9~_]{1,64})(?:\/(\d{1,20}))?$/.exec(value);
+    if (!m?.[1])
+      throw new ConfigError(
+        "KNOWLEDGE_LOCATOR_INVALID",
+        "Use confluence:<SPACE> or confluence:<SPACE>/<page id>.",
+        {},
+      );
+    return { kind: "confluence", space: m[1], page: m[2] };
+  }
+  if (value.startsWith("jira:")) {
+    const m = /^jira:bugs(?:\/([\p{L}\p{N} ._-]{1,80}))?$/u.exec(value);
+    if (!m) throw new ConfigError("KNOWLEDGE_LOCATOR_INVALID", "Use jira:bugs or jira:bugs/<component>.", {});
+    return { kind: "jira", component: m[1] };
+  }
+  return undefined;
 }

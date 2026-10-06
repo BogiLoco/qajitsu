@@ -408,6 +408,18 @@ qj knowledge add ~/wiki-export --include "**/*.md" --exclude "drafts/**" --tag b
 qj knowledge add --qa-knowledge                          # the repository's .qa/knowledge/ folder
 ```
 
+Online sources work the same way and sync incrementally (only pages or issues that changed are downloaded):
+
+```sh
+qj knowledge add confluence:SHOP              # a Confluence space
+qj knowledge add confluence:SHOP/123456       # one page and its subpages
+qj knowledge add jira:bugs/Payments           # resolved bugs of a component: regression ideas for the planner
+```
+
+Confluence on Jira Cloud needs no extra settings (same site and token); Data Center or a separate site:
+`knowledge: { confluence: { base_url: https://wiki.example.com, type: datacenter, token: secret://env/CONFLUENCE_TOKEN } }`.
+Resolved bugs are tagged `component-<name>`, so `--tag component-payments` narrows a search.
+
 Each path becomes a **source** recorded in `~/.qajitsu/projects/<slug>/knowledge/sources.yaml`. The command prints
 what happened:
 

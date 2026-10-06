@@ -150,12 +150,12 @@ Small documentation does not need vectors; large documentation does.
 
 ### REQ-KNOW-12 · Online sources
 
-- Status: accepted
+- Status: implemented
 - Priority: could
 - Stage: later
 - Related: REQ-KNOW-02
 
 **Acceptance criteria**
 
-- [ ] AC1: Confluence spaces and pages as sources (`qj knowledge add confluence:<space>`), synced incrementally by page version.
-- [ ] AC2: Jira issue history (resolved bugs per component) as a source for regression ideas.
+- [x] AC1: Confluence spaces and pages as sources (`qj knowledge add confluence:<space>`), synced incrementally by page version.
+- [x] AC2: Jira issue history (resolved bugs per component) as a source for regression ideas.

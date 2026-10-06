@@ -11,8 +11,10 @@ import {
   retrievalMode,
   sha256,
   writeKnowledgeIndex,
+  type DocumentSource,
   type Embedder,
   type Extracted,
+  type KnowledgeFile,
   type KnowledgeChunk,
   type KnowledgeIndex,
   type KnowledgeSource,
@@ -34,6 +36,8 @@ export interface KnowledgeContext {
   /** Asks once per project before document text goes to a cloud embedding model (REQ-KNOW-09/AC2). */
   readonly confirmCloud: (embedder: Embedder) => Promise<void>;
   readonly now: () => Date;
+  /** The online reader of a Confluence or Jira source (REQ-KNOW-12). */
+  readonly documentSource?: (source: KnowledgeSource) => Promise<DocumentSource>;
 }
 
 /** Outcome of a sync, by display path (REQ-KNOW-02/AC4). */
@@ -126,15 +130,17 @@ export async function extractPdf(bytes: Buffer): Promise<Extracted> {
 
 /** Chunks of one file, masked before chunking (REQ-KNOW-02/AC5, REQ-KNOW-09/AC1). */
 async function chunksOf(
-  file: ScannedFile,
+  file: Pick<ScannedFile, "display" | "rel">,
   source: KnowledgeSource,
   bytes: Buffer,
   modifiedAt: string,
   mask: (text: string) => string,
+  remote?: { readonly version: string; readonly tags: readonly string[] },
 ): Promise<KnowledgeChunk[] | string> {
   const extracted = /\.pdf$/i.test(file.rel) ? await extractPdf(bytes) : extractDocument(file.rel, bytes);
   if (!extracted.ok) return extracted.reason;
-  const fileHash = sha256(bytes);
+  const fileHash = remote ? remote.version : sha256(bytes);
+  const tags = remote ? [...new Set([...source.tags, ...remote.tags])] : source.tags;
   const sections = extracted.sections.map((s) => ({ section: mask(s.section), text: mask(s.text) }));
   return chunkSections(sections).map((c, i) => ({
     id: chunkId(file.display, i),
@@ -144,7 +150,7 @@ async function chunksOf(
     modifiedAt,
     fileHash,
     hash: sha256(c.text),
-    tags: source.tags,
+    tags,
     text: c.text,
   }));
 }
@@ -193,36 +199,78 @@ export async function syncKnowledge(
   const fresh: KnowledgeChunk[] = [];
   const replaced = new Set<string>();
   const mask = (text: string): string => maskCredentials(ctx.maskSecrets(text));
+  /** Records one document: unchanged, or chunked (added or updated), or skipped with the reason. */
+  const consider = async (
+    display: string,
+    unchanged: (before: KnowledgeFile) => boolean,
+    produce: () => Promise<KnowledgeChunk[] | string>,
+  ): Promise<void> => {
+    const before = known.get(display);
+    if (before && unchanged(before)) {
+      report.unchanged.push(display);
+      return;
+    }
+    const chunks = await produce();
+    if (typeof chunks === "string") {
+      report.skipped.push({ path: display, reason: chunks });
+      if (before) {
+        replaced.add(display);
+        report.removed.push(display);
+      }
+      return;
+    }
+    (before ? report.updated : report.added).push(display);
+    if (before) replaced.add(display);
+    fresh.push(...chunks);
+  };
   for (const source of sources) {
-    const files = await scanSource(source, report.skipped);
-    if (files === undefined)
-      throw new ConfigError(
-        "KNOWLEDGE_SOURCE_MISSING",
-        `Source '${source.name}' (${source.path}) does not exist; remove it with 'qajitsu knowledge remove ${source.name}'.`,
-        {},
-      );
     const seen = new Set<string>();
-    for (const file of files) {
-      seen.add(file.display);
-      const bytes = await readFile(file.abs);
-      const before = known.get(file.display);
-      if (before?.fileHash === sha256(bytes)) {
-        report.unchanged.push(file.display);
-        continue;
+    if (source.kind !== "files") {
+      // REQ-KNOW-12: online sources list versions cheaply; only new and changed documents are loaded.
+      if (!ctx.documentSource)
+        throw new ConfigError(
+          "KNOWLEDGE_SOURCE_UNAVAILABLE",
+          `Source '${source.name}' needs its online reader.`,
+          {},
+        );
+      const reader = await ctx.documentSource(source);
+      for (const doc of await reader.list()) {
+        const display = `${source.name}/${doc.id}`;
+        const version = `v:${doc.version}`;
+        seen.add(display);
+        await consider(
+          display,
+          (before) => before.fileHash === version,
+          async () => {
+            const loaded = await reader.load(doc);
+            return chunksOf(
+              { display, rel: `${doc.id}.${loaded.format === "html" ? "html" : "md"}` },
+              source,
+              Buffer.from(loaded.text, "utf8"),
+              doc.modifiedAt,
+              mask,
+              { version, tags: doc.tags ?? [] },
+            );
+          },
+        );
       }
-      const modifiedAt = (await stat(file.abs)).mtime.toISOString();
-      const chunks = await chunksOf(file, source, bytes, modifiedAt, mask);
-      if (typeof chunks === "string") {
-        report.skipped.push({ path: file.display, reason: chunks });
-        if (before) {
-          replaced.add(file.display);
-          report.removed.push(file.display);
-        }
-        continue;
+    } else {
+      const files = await scanSource(source, report.skipped);
+      if (files === undefined)
+        throw new ConfigError(
+          "KNOWLEDGE_SOURCE_MISSING",
+          `Source '${source.name}' (${source.path}) does not exist; remove it with 'qajitsu knowledge remove ${source.name}'.`,
+          {},
+        );
+      for (const file of files) {
+        seen.add(file.display);
+        const bytes = await readFile(file.abs);
+        await consider(
+          file.display,
+          (before) => before.fileHash === sha256(bytes),
+          async () => chunksOf(file, source, bytes, (await stat(file.abs)).mtime.toISOString(), mask),
+        );
       }
-      (before ? report.updated : report.added).push(file.display);
-      if (before) replaced.add(file.display);
-      fresh.push(...chunks);
     }
     for (const f of known.values())
       if (f.source === source.name && !seen.has(f.path)) {

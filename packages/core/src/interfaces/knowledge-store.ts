@@ -83,3 +83,27 @@ export interface Embedder {
   readonly local: boolean;
   embed(texts: readonly string[]): Promise<number[][]>;
 }
+
+/** A document of an online source: a Confluence page or a Jira issue (REQ-KNOW-12). */
+export interface RemoteDocument {
+  /** Stable id inside the source, e.g. a page id or an issue key. */
+  readonly id: string;
+  readonly title: string;
+  /** Changes whenever the content changes (page version, issue update time); unchanged documents are not loaded. */
+  readonly version: string;
+  /** ISO 8601. */
+  readonly modifiedAt: string;
+  readonly tags?: readonly string[];
+}
+
+/**
+ * An online source of documents for the knowledge base (REQ-KNOW-12): listing is cheap and carries versions, so a
+ * sync loads only new and changed documents. Content is untrusted data, masked before it is stored.
+ */
+export interface DocumentSource {
+  list(signal?: AbortSignal): Promise<readonly RemoteDocument[]>;
+  load(
+    document: RemoteDocument,
+    signal?: AbortSignal,
+  ): Promise<{ readonly format: "html" | "markdown"; readonly text: string }>;
+}

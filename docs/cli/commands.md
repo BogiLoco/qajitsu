@@ -316,6 +316,11 @@ changed files and prints counts of added, updated, unchanged, skipped and remove
 
 Exit codes: `0` indexed, `3` errors or no confirmation for a cloud model.
 
+Online sources (REQ-KNOW-12) instead of paths: `confluence:<SPACE>` (a whole space) or `confluence:<SPACE>/<page id>`
+(a page and its descendants), from `knowledge.confluence` (on Jira Cloud by default `<jira.base_url>/wiki` with the
+Jira credentials); `jira:bugs` or `jira:bugs/<component>` (resolved bugs of the project, tagged
+`component-<name>`). They sync by page version or issue update time: only changed documents are downloaded.
+
 ### `qajitsu knowledge sync`
 
 Re-processes changed files (by content hash), removes chunks of deleted files and adds new files of every registered

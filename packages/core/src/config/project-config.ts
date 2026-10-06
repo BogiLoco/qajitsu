@@ -361,6 +361,18 @@ export const ProjectConfigSchema = z.strictObject({
         .regex(/^[\w.-]+\/.+$/)
         .default("ollama/nomic-embed-text"),
       store: z.enum(["lancedb", "chroma"]).default("lancedb"),
+      /**
+       * Confluence for `qj knowledge add confluence:<SPACE>` (REQ-KNOW-12/AC1). On Jira Cloud it defaults to
+       * `<jira.base_url>/wiki` with the Jira e-mail and token; Data Center needs its own `base_url` and token.
+       */
+      confluence: z
+        .strictObject({
+          base_url: SecureUrl.optional(),
+          type: z.enum(["cloud", "datacenter"]).optional(),
+          email: SecretRef.optional(),
+          token: SecretRef.optional(),
+        })
+        .optional(),
       /** A shared Chroma server (REQ-KNOW-08/AC3); URL and token are secret:// references. */
       chroma: z.strictObject({ url: SecretRef, token: SecretRef.optional() }).optional(),
       /** Documentation up to this size (about 4 characters per token) is used in full, without embeddings. */

@@ -1,0 +1,24 @@
+{
+  "name": "@qajitsu/adapter-knowledge-confluence",
+  "version": "0.0.0",
+  "description": "QAJitsu DocumentSource for Confluence spaces and pages (Cloud and Data Center), synced by page version.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "qajitsu-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@qajitsu/core": "workspace:*",
+    "zod": "catalog:"
+  }
+}

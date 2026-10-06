@@ -173,7 +173,8 @@ export async function runProjectImport(
     const sources = profile.knowledge_sources.map((s) => ({ ...s, path: mapPath(s.path, maps) }));
     const missing: string[] = [];
     for (const s of sources)
-      if (!(await stat(s.path).catch(() => undefined))) missing.push(`${s.name} (${s.path})`);
+      if (s.kind === "files" && !(await stat(s.path).catch(() => undefined)))
+        missing.push(`${s.name} (${s.path})`);
     if (sources.length > 0 && (already.length === 0 || options.force === true))
       await writeKnowledgeSources(knowledge, sources);
     io.write(

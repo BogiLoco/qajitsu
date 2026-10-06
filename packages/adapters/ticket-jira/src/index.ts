@@ -13,6 +13,7 @@ export {
 } from "./adf.js";
 export { createJiraCloudTicketSource, DEV_PANEL_APPLICATIONS, type JiraCloudConfig } from "./jira-cloud.js";
 export { createFileTicketSource } from "./file-source.js";
+export { componentTag, createFileBugSource, createJiraBugSource, MAX_BUGS } from "./jira-bugs.js";
 
 /** Adapter metadata used by `qajitsu doctor` and the adapter table in the docs. */
 export const ADAPTER = {
