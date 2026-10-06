@@ -70,9 +70,22 @@ async function openKnowledgeContext(
   const config = project.config.knowledge;
   let store: VectorStore;
   if (ports.knowledgeStore) store = await ports.knowledgeStore(dir, project);
-  else if (config.store === "chroma")
-    throw new ConfigError("KNOWLEDGE_STORE_UNAVAILABLE", "The chroma store is not available yet.", {});
-  else store = await (await import("@qajitsu/adapter-knowledge-lancedb")).createLanceDbStore(dir);
+  else if (config.store === "chroma") {
+    // REQ-KNOW-08/AC3: a shared Chroma server; one collection per project keeps projects apart.
+    if (!config.chroma)
+      throw new ConfigError(
+        "KNOWLEDGE_CHROMA_NOT_CONFIGURED",
+        "knowledge.store is chroma: set knowledge.chroma.url (and token) as secret:// references.",
+        {},
+      );
+    const { createChromaStore } = await import("@qajitsu/adapter-knowledge-chroma");
+    store = await createChromaStore({
+      url: await resolveSecret(config.chroma.url),
+      token: config.chroma.token === undefined ? undefined : await resolveSecret(config.chroma.token),
+      collection: `qajitsu-${resolved.slug}`,
+      fetch: ports.fetch,
+    });
+  } else store = await (await import("@qajitsu/adapter-knowledge-lancedb")).createLanceDbStore(dir);
   const consentFile = join(dir, "cloud-consent.json");
   return {
     project,

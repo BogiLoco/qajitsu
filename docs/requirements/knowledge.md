@@ -101,7 +101,7 @@ Small documentation does not need vectors; large documentation does.
 
 ### REQ-KNOW-08 · Embedding model and storage options
 
-- Status: in-progress
+- Status: implemented
 - Priority: should
 - Stage: 7
 - Related: REQ-LLM-01, REQ-KNOW-01, ADR-0007
@@ -110,7 +110,7 @@ Small documentation does not need vectors; large documentation does.
 
 - [x] AC1: The embedding model is set per project (`knowledge.embedding: <provider>/<model>`) through the models layer; the default is a local model via Ollama.
 - [x] AC2: The model used is stored with the index; using a different model without `qj knowledge reindex` is an error.
-- [ ] AC3: Optional `chroma` store adapter (`knowledge.store: chroma`, server URL and token as `secret://` references) for teams that share one Chroma server; LanceDB stays the default.
+- [x] AC3: Optional `chroma` store adapter (`knowledge.store: chroma`, server URL and token as `secret://` references) for teams that share one Chroma server; LanceDB stays the default.
 
 ### REQ-KNOW-09 · Security of indexed content
 

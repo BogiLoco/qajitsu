@@ -8,6 +8,7 @@ import { readRunIndex, type TicketKey } from "@qajitsu/core";
 import { expect } from "vitest";
 import { createProgram } from "../../packages/cli/src/program.js";
 import type { RunPorts } from "../../packages/cli/src/commands/run.js";
+import type { RuntimePorts } from "../../packages/cli/src/adapters.js";
 import { createCliProject, gitExec } from "./cli-project.js";
 import { scriptedModel, type Turn } from "./mock-model.js";
 
@@ -53,7 +54,7 @@ export const createBuildProject = async (
   options: {
     readonly buildExec?: CommandExec;
     readonly now?: () => Date;
-    readonly ports?: Partial<RunPorts>;
+    readonly ports?: Partial<RunPorts & Pick<RuntimePorts, "fetch">>;
   } = {},
 ) => {
   const { home, project } = await createCliProject(

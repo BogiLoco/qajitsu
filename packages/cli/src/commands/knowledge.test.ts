@@ -2,6 +2,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { apiService, createBuildProject, PASSWORD } from "../../../../tests/support/cli-build.js";
+import { createFakeChroma } from "../../../../tests/support/fake-chroma.js";
 import { createFakeEmbedder } from "../../../../tests/support/fake-embedder.js";
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -254,5 +255,42 @@ describe("knowledge security (REQ-KNOW-09)", () => {
     expect((await p.run(["--project", "other", "knowledge", "list"])).out).toContain(
       "Knowledge base of other: empty",
     );
+  }, 120_000);
+});
+
+describe("chroma store (REQ-KNOW-08/AC3)", () => {
+  it("REQ-KNOW-08/AC3: knowledge.store chroma keeps the project's chunks in its own collection on the shared server", async () => {
+    const server = createFakeChroma();
+    const embedder = createFakeEmbedder();
+    const p = await createBuildProject(apiService(), {
+      ports: { embedder: (ref) => Promise.resolve({ ...embedder, id: ref }), fetch: server.fetch },
+    });
+    cleanups.push(p.cleanup);
+    await mkdir(join(p.project, "docs"));
+    await writeFile(
+      join(p.project, "docs", "orders.md"),
+      "# Orders\nA paid order can be cancelled within 24 hours.\n",
+    );
+    const yaml = join(p.project, ".qa", "qa.project.yaml");
+    await writeFile(yaml, `${await readFile(yaml, "utf8")}\nknowledge: { store: chroma }\n`);
+    expect((await p.run(["knowledge", "list"])).err).toContain("[KNOWLEDGE_CHROMA_NOT_CONFIGURED]");
+    await writeFile(
+      yaml,
+      (await readFile(yaml, "utf8")).replace(
+        "knowledge: { store: chroma }",
+        "knowledge: { store: chroma, chroma: { url: secret://env/CHROMA_URL, token: secret://env/CHROMA_TOKEN } }",
+      ),
+    );
+    const env = { CHROMA_URL: "https://chroma.example.com", CHROMA_TOKEN: "chroma-team-token" };
+    const added = await p.run(["knowledge", "add", "docs"], undefined, { env });
+    expect(added.exitCode).toBe(0);
+    expect(added.out).toContain("1 added");
+    expect([...server.collections.keys()]).toEqual(["qajitsu-demo"]);
+    expect(server.requests.every((r) => r.token === "chroma-team-token")).toBe(true);
+    const found = await p.run(["knowledge", "search", "cancel paid order"], undefined, { env });
+    expect(found.out).toContain("docs/orders.md › Orders");
+    const list = await p.run(["knowledge", "list"], undefined, { env });
+    expect(list.out).toContain("store chroma");
+    expect(list.out + list.err + added.out + found.out).not.toContain("chroma-team-token");
   }, 120_000);
 });

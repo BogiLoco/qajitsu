@@ -184,7 +184,7 @@ and `qj bench` reports detection and false-FAILED rates per model.
 - [REQ-KNOW-05](requirements/knowledge.md#req-know-05--list-inspect-and-search) List, inspect and search (should, implemented, AC 3/3)
 - [REQ-KNOW-06](requirements/knowledge.md#req-know-06--agent-access-with-sources) Agent access with sources (should, implemented, AC 5/5)
 - [REQ-KNOW-07](requirements/knowledge.md#req-know-07--automatic-retrieval-mode) Automatic retrieval mode (could, implemented, AC 3/3)
-- [REQ-KNOW-08](requirements/knowledge.md#req-know-08--embedding-model-and-storage-options) Embedding model and storage options (should, in-progress, AC 2/3)
+- [REQ-KNOW-08](requirements/knowledge.md#req-know-08--embedding-model-and-storage-options) Embedding model and storage options (should, implemented, AC 3/3)
 - [REQ-KNOW-09](requirements/knowledge.md#req-know-09--security-of-indexed-content) Security of indexed content (must, implemented, AC 3/3)
 - [REQ-KNOW-10](requirements/knowledge.md#req-know-10--freshness-of-documentation) Freshness of documentation (could, implemented, AC 2/2)
 - [REQ-KNOW-11](requirements/knowledge.md#req-know-11--measured-benefit) Measured benefit (should, implemented, AC 1/1)

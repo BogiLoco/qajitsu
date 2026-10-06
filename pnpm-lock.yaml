@@ -195,6 +195,15 @@ importers:
         specifier: 'catalog:'
         version: 4.6.5
 
+  packages/adapters/knowledge-chroma:
+    dependencies:
+      '@qajitsu/core':
+        specifier: workspace:*
+        version: link:../../core
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
+
   packages/adapters/knowledge-lancedb:
     dependencies:
       '@lancedb/lancedb':
@@ -364,6 +373,9 @@ importers:
       '@qajitsu/adapter-evidence-local':
         specifier: workspace:*
         version: link:../adapters/evidence-local
+      '@qajitsu/adapter-knowledge-chroma':
+        specifier: workspace:*
+        version: link:../adapters/knowledge-chroma
       '@qajitsu/adapter-knowledge-lancedb':
         specifier: workspace:*
         version: link:../adapters/knowledge-lancedb

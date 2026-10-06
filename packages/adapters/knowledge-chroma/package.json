@@ -1,0 +1,24 @@
+{
+  "name": "@qajitsu/adapter-knowledge-chroma",
+  "version": "0.0.0",
+  "description": "QAJitsu VectorStore on a shared Chroma server over its HTTP API, one collection per project.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "qajitsu-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@qajitsu/core": "workspace:*",
+    "zod": "catalog:"
+  }
+}
