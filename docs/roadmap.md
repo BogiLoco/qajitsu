@@ -29,7 +29,7 @@ Monorepo, tooling, core types, the guard and the status model; fetching a ticket
 - [REQ-OBS-01](requirements/observability.md#req-obs-01--structured-event-log-per-run) Structured event log per run (must, implemented, AC 2/2)
 - [REQ-GEN-01](requirements/generic.md#req-gen-01--project-onboarding-through-qa) Project onboarding through `.qa/` (must, implemented, AC 3/3)
 - [REQ-GEN-02](requirements/generic.md#req-gen-02--adapter-interfaces) Adapter interfaces (must, implemented, AC 3/3)
-- [REQ-GEN-05](requirements/generic.md#req-gen-05--command-line) Command line (must, in-progress, AC 2/3)
+- [REQ-GEN-05](requirements/generic.md#req-gen-05--command-line) Command line (must, implemented, AC 3/3)
 - [REQ-NFR-01](requirements/non-functional.md#req-nfr-01--code-standards) Code standards (must, implemented, AC 3/3)
 - [REQ-NFR-02](requirements/non-functional.md#req-nfr-02--test-first-and-test-levels) Test-first and test levels (must, implemented, AC 4/4)
 - [REQ-NFR-03](requirements/non-functional.md#req-nfr-03--documentation) Documentation (must, implemented, AC 3/3)
@@ -103,7 +103,7 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 - [REQ-PRJ-05](requirements/projects.md#req-prj-05--project-status-what-is-in-the-project-and-what-is-in-progress) Project status: what is in the project and what is in progress (must, implemented, AC 5/5)
 - [REQ-PRJ-06](requirements/projects.md#req-prj-06--continue-after-switching) Continue after switching (must, implemented, AC 3/3)
 - [REQ-PRJ-08](requirements/projects.md#req-prj-08--code-cache-per-project) Code cache per project (should, in-progress, AC 2/3)
-- [REQ-PRJ-10](requirements/projects.md#req-prj-10--evidence-reports-and-exports-stay-in-the-project) Evidence, reports and exports stay in the project (must, in-progress, AC 5/6)
+- [REQ-PRJ-10](requirements/projects.md#req-prj-10--evidence-reports-and-exports-stay-in-the-project) Evidence, reports and exports stay in the project (must, implemented, AC 6/6)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 

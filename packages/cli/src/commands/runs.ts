@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { removeRunResources, type CommandExec } from "@qajitsu/adapter-env-compose";
 import {
   ConfigError,
+  updateRunIndex,
   QajitsuError,
   TicketKeySchema,
   acquireRunLock,
@@ -42,11 +43,33 @@ const fail = (io: CommandIO, error: unknown): number => {
 /**
  * `qajitsu runs <TICKET>`: the runs of a ticket with status, last stage and results (REQ-WS-04/AC1).
  */
-export async function runRuns(rawKey: string, io: CommandIO, ports: RuntimePorts): Promise<number> {
+export async function runRuns(
+  rawKey: string,
+  io: CommandIO,
+  ports: RuntimePorts,
+  options: { readonly keep?: string | undefined; readonly unkeep?: string | undefined } = {},
+): Promise<number> {
   try {
     const project = await loadProject(io.cwd, ports.project);
     const root = rootOf(project, ports);
     const ticket = ticketOf(rawKey);
+    // REQ-PRJ-10/AC6: a run marked keep, with its evidence, is exempt from retention (gc, clean --project).
+    for (const [runId, retention] of [
+      [options.keep, "keep"],
+      [options.unkeep, "default"],
+    ] as const) {
+      if (runId === undefined) continue;
+      await updateRunIndex(root, ticket, (index) => {
+        if (!index.runs.some((r) => r.runId === runId))
+          throw new ConfigError("RUN_NOT_FOUND", `No run ${runId} for ${ticket}.`, { ticket });
+        return { ...index, runs: index.runs.map((r) => (r.runId === runId ? { ...r, retention } : r)) };
+      });
+      io.write(
+        retention === "keep"
+          ? `${ticket}/${runId} marked keep: retention never removes it or its evidence.\n`
+          : `${ticket}/${runId} follows the retention policy again.\n`,
+      );
+    }
     const index = await readRunIndex(root, ticket);
     if (index.runs.length === 0) {
       io.write(`No runs for ${ticket}.\n`);

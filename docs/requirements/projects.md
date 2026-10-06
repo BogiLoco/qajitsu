@@ -143,7 +143,7 @@ Code fetched for runs is kept per project so repeated runs on the same commit ar
 
 ### REQ-PRJ-10 · Evidence, reports and exports stay in the project
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 3
 - Related: REQ-PRJ-01, REQ-PRJ-04, REQ-VER-05, REQ-PUB-02, REQ-PUB-06, INV-7
@@ -157,4 +157,4 @@ Everything a run produces as proof belongs to the run's project and is found the
 - [x] AC3: Evidence pulled from CI runs (`qj pull`) lands in the matching project's `runs/`, resolved by the ticket key prefix (REQ-PRJ-03).
 - [x] AC4: `qj evidence <TICKET>` and the local viewer for reports and videos open files of the resolved project only; the viewer serves only that run workspace and binds to localhost.
 - [x] AC5: The `evidence-local` store refuses paths outside the run workspace; the manifest stores paths relative to it, so a run folder can be moved or archived as a unit.
-- [ ] AC6: Retention and `qj projects remove` treat evidence like other run data; `--keep` keeps evidence of the selected runs (REQ-WS-03).
+- [x] AC6: Retention and `qj projects remove` treat evidence like other run data; `--keep` keeps evidence of the selected runs (REQ-WS-03).

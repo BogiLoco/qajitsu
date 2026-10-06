@@ -558,7 +558,11 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .command("runs")
     .description("List the runs of a ticket")
     .argument("<ticket>", "Jira key, e.g. SHOP-482")
-    .action((ticket: string) => withPorts((ports) => runRuns(ticket, commandIO, ports))());
+    .option("--keep <id>", "mark a run keep: retention never removes it or its evidence")
+    .option("--unkeep <id>", "let a run follow the retention policy again")
+    .action((ticket: string, options: { keep?: string; unkeep?: string }) =>
+      withPorts((ports) => runRuns(ticket, commandIO, ports, options))(),
+    );
 
   program
     .command("status")

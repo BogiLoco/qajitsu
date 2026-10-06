@@ -1,4 +1,4 @@
-import { readFile, readdir, utimes, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createBuildProject } from "../../../../tests/support/cli-build.js";
@@ -110,4 +110,34 @@ describe("start fresh and clean up (REQ-PRJ-07)", () => {
     await p.run(["projects", "unarchive", "demo"]);
     expect((await p.run(["fetch", "DEMO-1"])).out.split("\n")[0]).toBe("Project: demo (ticket prefix DEMO)");
   }, 120_000);
+
+  it("REQ-PRJ-10/AC6: retention removes old runs with their evidence; a run marked keep keeps its evidence", async () => {
+    const p = await setup();
+    const yaml = join(p.project, ".qa", "qa.project.yaml");
+    const runs: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      runs.push(await fetchRun(p));
+      await mkdir(join(p.runs, "DEMO-1", runs[i] ?? "", "evidence"), { recursive: true });
+      await writeFile(join(p.runs, "DEMO-1", runs[i] ?? "", "evidence", "S1.png"), "png");
+    }
+    const [oldest = "", middle = "", latest = ""] = runs;
+    expect((await p.run(["runs", "DEMO-1", "--keep", "nope"])).err).toContain("[RUN_NOT_FOUND]");
+    const kept = await p.run(["runs", "DEMO-1", "--keep", oldest]);
+    expect(kept.out).toContain(`DEMO-1/${oldest} marked keep`);
+    expect(kept.out).toMatch(new RegExp(`\\| ${oldest} \\|.*\\| keep \\|`));
+    await writeFile(
+      yaml,
+      `${await readFile(yaml, "utf8")}\ncleanup: { policy: on_success, keep_last: 1, max_age_days: 30 }\n`,
+    );
+    expect((await p.run(["clean", "--project"])).exitCode).toBe(0);
+    const left = (await readdir(join(p.runs, "DEMO-1"))).filter((f) => /^\d{8}-/.test(f)).sort();
+    expect(left).toEqual([oldest, latest].sort());
+    expect(await readdir(join(p.runs, "DEMO-1", oldest, "evidence"))).toEqual(["S1.png"]);
+    await expect(readdir(join(p.runs, "DEMO-1", middle))).rejects.toThrow();
+    expect((await p.run(["runs", "DEMO-1", "--unkeep", oldest])).out).toContain(
+      "follows the retention policy again",
+    );
+    await p.run(["clean", "--project"]);
+    expect((await readdir(join(p.runs, "DEMO-1"))).filter((f) => /^\d{8}-/.test(f))).toEqual([latest]);
+  }, 180_000);
 });

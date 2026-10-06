@@ -92,4 +92,37 @@ describe("reference documentation in sync with the code (REQ-NFR-03/AC3)", () =>
     expect(rows.map((m) => m[1]).sort()).toEqual(packages);
     for (const m of rows) expect(m[2], m[1]).toBe("implemented");
   });
+
+  it("REQ-GEN-05/AC2: the command line offers every command of the catalogue", () => {
+    const paths = new Set(commands().map((c) => c.path));
+    for (const path of [
+      "fetch",
+      "init",
+      "use",
+      "projects list",
+      "projects current",
+      "plan",
+      "approve",
+      "run",
+      "test",
+      "env check",
+      "env render",
+      "env up",
+      "status",
+      "note",
+      "evidence",
+      "logs",
+      "runs",
+      "resume",
+      "clean",
+      "gc",
+      "work reset",
+      "bench",
+      "knowledge add",
+      "knowledge sync",
+      "knowledge search",
+      "pull",
+    ])
+      expect(paths.has(path), path).toBe(true);
+  });
 });

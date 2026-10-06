@@ -360,9 +360,13 @@ Exit codes: `0` written, `3` errors.
 
 ### `qajitsu runs <ticket>`
 
-Lists the runs of a ticket with stage, status and results.
+Lists the runs of a ticket with stage, status, results and retention.
 
-Exit codes: `0` listed (also when there are none), `3` errors.
+- `--keep <id>`: mark a run keep: `gc`, `clean --project` and `work reset --delete` never remove it or its evidence
+  (REQ-PRJ-10/AC6)
+- `--unkeep <id>`: let a run follow the retention policy again
+
+Exit codes: `0` listed (also when there are none), `3` errors or an unknown run.
 
 ### `qajitsu status`
 
