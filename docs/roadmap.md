@@ -177,7 +177,7 @@ and `qj bench` reports detection and false-FAILED rates per model.
 - [REQ-VER-09](requirements/verification.md#req-ver-09--canary-check) Canary check (could, implemented, AC 2/2)
 - [REQ-LLM-05](requirements/models.md#req-llm-05--local-models-used-honestly) Local models used honestly (should, implemented, AC 2/2)
 - [REQ-LLM-06](requirements/models.md#req-llm-06--model-benchmark) Model benchmark (should, implemented, AC 3/3)
-- [REQ-KNOW-01](requirements/knowledge.md#req-know-01--knowledge-base-per-project-created-on-demand) Knowledge base per project, created on demand (should, accepted, AC 0/3)
+- [REQ-KNOW-01](requirements/knowledge.md#req-know-01--knowledge-base-per-project-created-on-demand) Knowledge base per project, created on demand (should, accepted, AC 0/4)
 - [REQ-KNOW-02](requirements/knowledge.md#req-know-02--add-documents-from-files-and-folders) Add documents from files and folders (should, accepted, AC 0/5)
 - [REQ-KNOW-03](requirements/knowledge.md#req-know-03--remove-documents-and-reset) Remove documents and reset (should, accepted, AC 0/2)
 - [REQ-KNOW-04](requirements/knowledge.md#req-know-04--sync-with-changed-files) Sync with changed files (should, accepted, AC 0/3)

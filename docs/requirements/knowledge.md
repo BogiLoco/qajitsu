@@ -7,13 +7,14 @@ Documentation a project adds on demand, searchable by agents with cited sources;
 - Status: accepted
 - Priority: should
 - Stage: 7
-- Related: REQ-PRJ-01, REQ-PRJ-02, REQ-CTX-07
+- Related: REQ-PRJ-01, REQ-PRJ-02, REQ-CTX-07, ADR-0007
 
 **Acceptance criteria**
 
 - [ ] AC1: Each project has its own knowledge base in `<project-home>/knowledge/`; it is empty after `init` and created on the first `add`.
 - [ ] AC2: Files in the repository's `.qa/knowledge/` (REQ-CTX-07) are a default source that can be added with one command (`qj knowledge add --qa-knowledge`).
-- [ ] AC3: Storage is behind a `VectorStore` interface; the default store is embedded (no server to run), one store per project.
+- [ ] AC3: Storage is behind a `VectorStore` interface; the default store is LanceDB, embedded in the process (no server to run), one store per project in `<project-home>/knowledge/` (ADR-0007).
+- [ ] AC4: The store handles large documentation and frequent changes: an approximate vector index and a full-text index are built once the knowledge base passes a configurable size, chunks are upserted and deleted by id without rebuilding the store, and search stays under one second for 1 million chunks on a developer machine.
 
 ### REQ-KNOW-02 · Add documents from files and folders
 
@@ -103,13 +104,13 @@ Small documentation does not need vectors; large documentation does.
 - Status: accepted
 - Priority: should
 - Stage: 7
-- Related: REQ-LLM-01, REQ-KNOW-01
+- Related: REQ-LLM-01, REQ-KNOW-01, ADR-0007
 
 **Acceptance criteria**
 
 - [ ] AC1: The embedding model is set per project (`knowledge.embedding: <provider>/<model>`) through the models layer; the default is a local model via Ollama.
 - [ ] AC2: The model used is stored with the index; using a different model without `qj knowledge reindex` is an error.
-- [ ] AC3: Optional `chroma` store adapter for users who run Chroma; the embedded store stays the default.
+- [ ] AC3: Optional `chroma` store adapter (`knowledge.store: chroma`, server URL and token as `secret://` references) for teams that share one Chroma server; LanceDB stays the default.
 
 ### REQ-KNOW-09 · Security of indexed content
 

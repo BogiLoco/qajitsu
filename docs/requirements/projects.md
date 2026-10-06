@@ -8,7 +8,7 @@ exports; a run sees only its own project, and the user can switch projects and c
 - Status: accepted
 - Priority: must
 - Stage: 2
-- Related: REQ-WS-01, REQ-CTX-04, REQ-PRJ-04
+- Related: REQ-WS-01, REQ-CTX-04, REQ-PRJ-04, ADR-0006
 
 Everything a project owns lives under one folder, so it can be inspected, backed up or removed as a unit.
 
@@ -25,7 +25,7 @@ Everything a project owns lives under one folder, so it can be inspected, backed
 - Status: accepted
 - Priority: must
 - Stage: 2
-- Related: REQ-PRJ-01, REQ-GEN-01, REQ-GEN-03
+- Related: REQ-PRJ-01, REQ-GEN-01, REQ-GEN-03, ADR-0006
 
 **Acceptance criteria**
 
@@ -41,7 +41,7 @@ Everything a project owns lives under one folder, so it can be inspected, backed
 - Status: accepted
 - Priority: must
 - Stage: 2
-- Related: REQ-PRJ-05, REQ-PRJ-06
+- Related: REQ-PRJ-05, REQ-PRJ-06, ADR-0006
 
 **Acceptance criteria**
 
@@ -58,7 +58,7 @@ Everything a project owns lives under one folder, so it can be inspected, backed
 - Status: accepted
 - Priority: must
 - Stage: 2
-- Related: REQ-VER-03, REQ-KNOW-06, INV-2, INV-8, INV-10
+- Related: REQ-VER-03, REQ-KNOW-06, INV-2, INV-8, INV-10, ADR-0006
 
 A run sees only its own project. This protects confidentiality when one person tests systems of different clients.
 
