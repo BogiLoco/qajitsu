@@ -11,7 +11,7 @@ import {
   type RunWorkspace,
   type Ticket,
 } from "@qajitsu/core";
-import { indexTestsRepo, renderTestsRepo, type TestsRepoIndex } from "./tests-repo.js";
+import { cachedTestsIndex, renderTestsRepo, type TestsRepoIndex } from "./tests-repo.js";
 
 /** Diffs longer than this are replaced by a file list; agents read the rest with tools (REQ-CTX-05/AC5). */
 export const DIFF_INLINE_LIMIT = 30_000;
@@ -160,13 +160,19 @@ export async function loadKnowledge(
 export async function buildChangeContext(
   ws: RunWorkspace,
   knowledge: readonly { name: string; text: string }[] = [],
+  /** Project cache of code indexes by `<repo>@<sha>` (REQ-PRJ-08/AC2); without it repositories are indexed again. */
+  options: { readonly indexCache?: string | undefined } = {},
 ): Promise<ChangeContext> {
   const ticket = await readTicketSnapshot(ws.path("ticket", "ticket.json"));
   const repos: ChangeContext["repos"][number][] = [];
   const testsRepos: { alias: string; index: TestsRepoIndex }[] = [];
   for (const [alias, record] of Object.entries(ws.record.repos)) {
     if (record.role === "tests") {
-      testsRepos.push({ alias, index: await indexTestsRepo(ws.path("repos", alias)) });
+      const cache =
+        options.indexCache === undefined
+          ? undefined
+          : { dir: options.indexCache, key: `${record.host}-${record.path}`, sha: record.sha };
+      testsRepos.push({ alias, index: await cachedTestsIndex(ws.path("repos", alias), cache) });
       continue;
     }
     const raw = await readFile(ws.path("repos", `${alias}.diff`), "utf8");

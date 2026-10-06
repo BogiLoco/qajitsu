@@ -162,3 +162,7 @@ export async function registerConfiguredSecrets(
 
 /** Path of the project's knowledge folder (REQ-CTX-07). */
 export const knowledgeDir = (project: LoadedProject): string => join(project.qaDir, "knowledge");
+
+/** The project's cache of code indexes by `<repo>@<sha>` (REQ-PRJ-08/AC2); undefined outside a project home. */
+export const codeIndexCache = (project: LoadedProject): string | undefined =>
+  project.project ? join(project.project.paths.cache, "index") : undefined;

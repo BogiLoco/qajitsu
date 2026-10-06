@@ -244,6 +244,16 @@ async function pruneGitCache(
     }
   };
   await walk(dir, 0);
+  // Code indexes by <repo>@<sha> (REQ-PRJ-08/AC2+AC3): removed when not used within max_age_days.
+  const indexDir = project.project ? join(project.project.paths.cache, "index") : undefined;
+  if (indexDir !== undefined)
+    for (const name of await readdir(indexDir).catch(() => [] as string[])) {
+      const path = join(indexDir, name);
+      if ((await stat(path)).mtimeMs < limit) {
+        removed.push(path);
+        if (!dryRun) await rm(path, { force: true });
+      }
+    }
   return removed;
 }
 
@@ -271,7 +281,9 @@ export async function runClean(
       if (code !== 0) return code;
       const mirrors = await pruneGitCache(project, ports, options.dryRun === true);
       for (const m of mirrors)
-        io.write(`${options.dryRun === true ? "would remove" : "removed"} git mirror ${m}\n`);
+        io.write(
+          `${options.dryRun === true ? "would remove" : "removed"} ${m.endsWith(".json") ? "code index" : "git mirror"} ${m}\n`,
+        );
       return 0;
     }
     if (rawKey === undefined)

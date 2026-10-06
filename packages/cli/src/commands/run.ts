@@ -30,7 +30,7 @@ import {
 import { createMasker } from "@qajitsu/steps";
 import { formatSpecProblems } from "@qajitsu/verifier";
 import { buildAdapters, type RuntimePorts } from "../adapters.js";
-import { openSession, type ModelPorts, type RunSession } from "../session.js";
+import { codeIndexCache, openSession, type ModelPorts, type RunSession } from "../session.js";
 import type { CommandIO } from "./fetch.js";
 import { anchorJournal, computeVerdict, writeReports } from "./verdict.js";
 import { auditRun, runCanary } from "./checks.js";
@@ -452,7 +452,7 @@ async function executeCases(
     const authored = await runAuthor(
       deps,
       { ...plan, cases: missing },
-      await buildChangeContext(ws),
+      await buildChangeContext(ws, [], { indexCache: codeIndexCache(project) }),
       analysis,
       Object.keys(env.profile.accounts),
     );

@@ -19,7 +19,7 @@ import {
 import { renderExploreHtml, renderExploreMarkdown } from "@qajitsu/report";
 import { createMasker } from "@qajitsu/steps";
 import type { RuntimePorts } from "../adapters.js";
-import { openSession, type ModelPorts, type RunSession } from "../session.js";
+import { codeIndexCache, openSession, type ModelPorts, type RunSession } from "../session.js";
 import { createExploreTools } from "./explore-tools.js";
 import type { CommandIO } from "./fetch.js";
 import { chooseEnvironment, type RunPorts } from "./run.js";
@@ -213,7 +213,7 @@ export async function runExplore(
         },
         {
           goal,
-          context: await buildChangeContext(ws),
+          context: await buildChangeContext(ws, [], { indexCache: codeIndexCache(project) }),
           tools: recorder.tools,
           accounts,
           // Looks do not count as actions; the loop gets room for them on top of the action budget.

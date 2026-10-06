@@ -37,7 +37,7 @@ import { approvalContext } from "./context-fingerprint.js";
 import { checkPlanSources, formatSourceIssues } from "@qajitsu/verifier";
 import { parse } from "yaml";
 import type { RuntimePorts } from "../adapters.js";
-import { knowledgeDir, openSession, type ModelPorts, type RunSession } from "../session.js";
+import { codeIndexCache, knowledgeDir, openSession, type ModelPorts, type RunSession } from "../session.js";
 import type { CommandIO } from "./fetch.js";
 import { openRunKnowledge, type KnowledgePorts } from "./knowledge.js";
 
@@ -114,7 +114,12 @@ async function acceptEditedPlan(
       out_of_scope: raw["out_of_scope"],
     });
     const candidate = parsePlan({ schema: 1, ticket: session.ws.ticket, version: 1, ...draft });
-    const issues = checkPlanSources(candidate, sourceContext(await buildChangeContext(session.ws)));
+    const issues = checkPlanSources(
+      candidate,
+      sourceContext(
+        await buildChangeContext(session.ws, [], { indexCache: codeIndexCache(session.project) }),
+      ),
+    );
     if (issues.length > 0) return { problems: formatSourceIssues(issues).split("\n") };
   } catch (error) {
     const issues =
@@ -168,7 +173,9 @@ export async function runPlan(
     closeKnowledge = docs.close;
     const deps = { ...stageDeps(session, ports), ...(docs.access ? { knowledge: docs.access } : {}) };
     const knowledge = await loadKnowledge(knowledgeDir(session.project), (t) => masker.containsSecret(t));
-    const context = await buildChangeContext(ws, knowledge);
+    const context = await buildChangeContext(ws, knowledge, {
+      indexCache: codeIndexCache(session.project),
+    });
     let analysis: Analysis;
     try {
       analysis = AnalysisSchema.parse(JSON.parse(await readFile(ws.path("analysis.json"), "utf8")));
@@ -334,7 +341,12 @@ export async function runApprove(
     }
     const version = options.version === undefined ? undefined : Number(options.version);
     const { plan } = await readPlan(session.ws, version);
-    const issues = checkPlanSources(plan, sourceContext(await buildChangeContext(session.ws)));
+    const issues = checkPlanSources(
+      plan,
+      sourceContext(
+        await buildChangeContext(session.ws, [], { indexCache: codeIndexCache(session.project) }),
+      ),
+    );
     if (issues.length > 0) {
       throw new ConfigError("PLAN_SOURCES_INVALID", "The plan has ungrounded sources.", {
         issues: formatSourceIssues(issues).split("\n"),

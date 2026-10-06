@@ -1,8 +1,8 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { indexTestsRepo, renderTestsRepo } from "./tests-repo.js";
+import { cachedTestsIndex, indexTestsRepo, renderTestsRepo } from "./tests-repo.js";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -96,5 +96,41 @@ describe("tests repository index (REQ-CTX-06)", () => {
       selectorStrategy: { preferred: undefined, counts: { testId: 0, role: 0, label: 0, text: 0, css: 0 } },
       conventions: [],
     });
+  });
+});
+
+describe("code index cache (REQ-PRJ-08)", () => {
+  it("REQ-PRJ-08/AC2: the index of a commit is cached by <repo>@<sha> and reused; another commit is indexed again", async () => {
+    const root = await repo(SHOP_TESTS);
+    const cacheDir = join(await repo({}), "index");
+    const cache = { dir: cacheDir, key: "github-acme/shop-tests", sha: "a1b2c3d" };
+    const first = await cachedTestsIndex(root, cache);
+    expect(await readdir(cacheDir)).toEqual(["github-acme_shop-tests@a1b2c3d.json"]);
+    // The worktree changes, the commit does not: the cached index of that commit is used.
+    await writeFile(join(root, "tests", "new.spec.ts"), 'test("added later", () => {});');
+    expect(await cachedTestsIndex(root, cache)).toEqual(first);
+    const other = await cachedTestsIndex(root, { ...cache, sha: "d4e5f6a" });
+    expect(other.tests.map((t) => t.file)).toContain("tests/new.spec.ts");
+    expect((await readdir(cacheDir)).sort()).toEqual([
+      "github-acme_shop-tests@a1b2c3d.json",
+      "github-acme_shop-tests@d4e5f6a.json",
+    ]);
+  });
+
+  it("REQ-PRJ-08/AC2: a corrupt or tampered cache entry is rebuilt, never trusted", async () => {
+    const root = await repo(SHOP_TESTS);
+    const cacheDir = join(await repo({}), "index");
+    const cache = { dir: cacheDir, key: "k", sha: "a1b2c3d" };
+    const real = await cachedTestsIndex(root, cache);
+    const file = join(cacheDir, "k@a1b2c3d.json");
+    await writeFile(
+      file,
+      JSON.stringify({ tests: [{ file: "invented.spec.ts", titles: ["covers everything"] }] }),
+    );
+    expect(await cachedTestsIndex(root, cache)).toEqual(real);
+    await writeFile(file, "{not json");
+    expect(await cachedTestsIndex(root, cache)).toEqual(real);
+    expect(JSON.parse(await readFile(file, "utf8"))).toEqual(JSON.parse(JSON.stringify(real)));
+    expect(await cachedTestsIndex(root, undefined)).toEqual(real);
   });
 });

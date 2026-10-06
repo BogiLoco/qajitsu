@@ -116,7 +116,7 @@ After a switch the user sees at once what was being done and what to do next.
 
 ### REQ-PRJ-08 · Code cache per project
 
-- Status: in-progress
+- Status: implemented
 - Priority: should
 - Stage: 3
 - Related: REQ-CTX-04, REQ-PRJ-01
@@ -126,7 +126,7 @@ Code fetched for runs is kept per project so repeated runs on the same commit ar
 **Acceptance criteria**
 
 - [x] AC1: Git mirrors live in `<project-home>/cache/git/`; each run gets worktrees at the change's SHA (REQ-CTX-04).
-- [ ] AC2: Code indexes, when built, are cached by `<repo>@<sha>` and reused by later runs on the same commit.
+- [x] AC2: Code indexes, when built, are cached by `<repo>@<sha>` and reused by later runs on the same commit.
 - [x] AC3: Caches follow the retention policy and are removed with the project.
 
 ### REQ-PRJ-09 · Export and import of a project profile

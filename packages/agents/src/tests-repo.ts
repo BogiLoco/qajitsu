@@ -1,5 +1,6 @@
-import { readFile, readdir, stat } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, stat, utimes, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
+import { z } from "zod";
 import { untrusted } from "./context.js";
 
 /** What QAJitsu knows about the project's tests repository, computed by code from its worktree (REQ-CTX-06). */
@@ -21,6 +22,57 @@ export interface TestsRepoIndex {
   };
   /** Convention documents of the repository (README, CONTRIBUTING, testing guides), shortened. */
   readonly conventions: readonly { readonly file: string; readonly text: string }[];
+}
+
+const TestsRepoIndexSchema = z.strictObject({
+  tests: z.array(z.strictObject({ file: z.string(), titles: z.array(z.string()) })),
+  pageObjects: z.array(z.strictObject({ file: z.string(), selectors: z.array(z.string()) })),
+  selectorStrategy: z.strictObject({
+    preferred: z.enum(["getByTestId", "getByRole", "getByLabel", "getByText", "css"]).optional(),
+    counts: z.strictObject({
+      testId: z.number(),
+      role: z.number(),
+      label: z.number(),
+      text: z.number(),
+      css: z.number(),
+    }),
+  }),
+  conventions: z.array(z.strictObject({ file: z.string(), text: z.string() })),
+});
+
+/**
+ * The index of a tests repository at one commit, cached as `<cacheDir>/<key>@<sha>.json` and reused by later runs on
+ * the same commit (REQ-PRJ-08/AC2). A cache entry that does not parse is rebuilt, never trusted.
+ *
+ * @param root - The worktree of the tests repository at `sha`.
+ * @param cache - Cache folder and key (`<host>-<path>`), or undefined to always index.
+ */
+export async function cachedTestsIndex(
+  root: string,
+  cache: { readonly dir: string; readonly key: string; readonly sha: string } | undefined,
+): Promise<TestsRepoIndex> {
+  if (!cache) return indexTestsRepo(root);
+  const file = join(cache.dir, `${cache.key.replace(/[^\w.-]+/g, "_")}@${cache.sha}.json`);
+  const cached = await readFile(file, "utf8").catch(() => undefined);
+  if (cached !== undefined) {
+    try {
+      const parsed = TestsRepoIndexSchema.safeParse(JSON.parse(cached));
+      if (parsed.success) {
+        // Last use, for retention of the cache (REQ-PRJ-08/AC3).
+        const now = new Date();
+        await utimes(file, now, now).catch(() => undefined);
+        return parsed.data as TestsRepoIndex;
+      }
+    } catch {
+      // A corrupt entry is rebuilt below.
+    }
+  }
+  const index = await indexTestsRepo(root);
+  await mkdir(cache.dir, { recursive: true });
+  const tmp = `${file}.tmp-${String(process.pid)}`;
+  await writeFile(tmp, JSON.stringify(index));
+  await rename(tmp, file);
+  return index;
 }
 
 const SKIP_DIRS = new Set([

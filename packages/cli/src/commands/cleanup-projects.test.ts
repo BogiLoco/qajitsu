@@ -66,12 +66,18 @@ describe("start fresh and clean up (REQ-PRJ-07)", () => {
     const old = new Date(Date.now() - 10 * 86_400_000);
     await utimes(join(mirror, "FETCH_HEAD"), old, old).catch(() => utimes(mirror, old, old));
     await utimes(mirror, old, old);
+    const index = join(p.projectHome, "cache", "index", "local-demo-org_demo-shop@abc1234.json");
+    await mkdir(join(p.projectHome, "cache", "index"), { recursive: true });
+    await writeFile(index, "{}");
+    await utimes(index, old, old);
     const dry = await p.run(["clean", "--project", "--dry-run"]);
+    expect(dry.out).toContain(`would remove code index ${index}`);
     expect(dry.out).toMatch(/would remove DEMO-1\/\d{8}-/);
     expect(dry.out).toContain(`would remove git mirror ${mirror}`);
     const done = await p.run(["clean", "--project"]);
     expect(done.exitCode).toBe(0);
     expect(done.out).toContain(`removed git mirror ${mirror}`);
+    expect(done.out).toContain(`removed code index ${index}`);
     expect((await readdir(join(p.runs, "DEMO-1"))).filter((f) => /^\d{8}-/.test(f))).toHaveLength(1);
     await expect(readdir(mirror)).rejects.toThrow();
     expect((await p.run(["clean"])).err).toContain("[TICKET_MISSING]");
