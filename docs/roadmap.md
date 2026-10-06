@@ -65,8 +65,8 @@ Analyst and planner agents on several model providers; plan review loop and free
 - [REQ-LLM-07](requirements/models.md#req-llm-07--cost-and-token-tracking) Cost and token tracking (should, implemented, AC 2/2)
 - [REQ-PRJ-01](requirements/projects.md#req-prj-01--project-home-and-data-layout) Project home and data layout (must, implemented, AC 5/5)
 - [REQ-PRJ-02](requirements/projects.md#req-prj-02--project-initialisation-qj-init) Project initialisation (`qj init`) (must, implemented, AC 6/6)
-- [REQ-PRJ-03](requirements/projects.md#req-prj-03--active-project-and-switching) Active project and switching (must, in-progress, AC 6/7)
-- [REQ-PRJ-04](requirements/projects.md#req-prj-04--isolation-between-projects) Isolation between projects (must, in-progress, AC 2/4)
+- [REQ-PRJ-03](requirements/projects.md#req-prj-03--active-project-and-switching) Active project and switching (must, implemented, AC 7/7)
+- [REQ-PRJ-04](requirements/projects.md#req-prj-04--isolation-between-projects) Isolation between projects (must, in-progress, AC 3/4)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 

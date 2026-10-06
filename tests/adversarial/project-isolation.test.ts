@@ -89,4 +89,71 @@ describe("isolation between projects (REQ-PRJ-04)", () => {
     expect(other.exitCode).toBe(3);
     expect(other.err).toContain("[RUN_OTHER_PROJECT]");
   }, 120_000);
+
+  /** Adds project "bank" next to demo: same code host and repository, its own ticket, profile and .env.local. */
+  const addBank = async (p: Awaited<ReturnType<typeof createBuildProject>>) => {
+    const bank = join(p.home, "bank-app");
+    await mkdir(join(bank, ".qa", "envs"), { recursive: true });
+    await mkdir(join(bank, "tickets"), { recursive: true });
+    const ticket = JSON.parse(
+      await readFile(new URL("../../examples/demo-shop/tickets/DEMO-1.json", import.meta.url), "utf8"),
+    ) as Record<string, unknown>;
+    await writeFile(join(bank, "tickets", "BANK-1.json"), JSON.stringify({ ...ticket, key: "BANK-1" }));
+    await writeFile(
+      join(bank, ".qa", "qa.project.yaml"),
+      [
+        "project: bank",
+        "jira: { type: file, tickets_dir: ../tickets, project_key: BANK }",
+        "code_hosts: { local: { type: local, root: ~/git } }",
+        "repos: { shop: { host: local, path: demo-org/demo-shop } }",
+        "environments: { default: bank, allowlist: ['http://127.0.0.1:9'] }",
+        "models: { roles: { default: mock/scripted } }",
+        "verification: { auditor: off }",
+      ].join("\n"),
+    );
+    await writeFile(join(bank, ".qa", "envs", "bank.yaml"), "base_url: http://127.0.0.1:9\n");
+    await writeFile(join(bank, ".env.local"), "BANK_ONLY_TOKEN=bank-secret-value\n");
+    await registerProject(join(p.home, ".qajitsu"), {
+      slug: "bank",
+      qaDir: join(bank, ".qa"),
+      jiraPrefixes: ["BANK"],
+    });
+    return bank;
+  };
+
+  it("REQ-PRJ-03/AC7: runs of different projects execute at the same time, each in its own home", async () => {
+    const p = await createBuildProject();
+    cleanups.push(p.cleanup);
+    await addBank(p);
+    const [demo, bank] = await Promise.all([
+      p.run(["fetch", "DEMO-1"]),
+      p.run(["fetch", "BANK-1", "--ref", "shop=main"]),
+    ]);
+    expect([demo.exitCode, bank.exitCode]).toEqual([0, 0]);
+    expect(demo.out.split("\n")[0]).toBe("Project: demo (ticket prefix DEMO)");
+    expect(bank.out.split("\n")[0]).toBe("Project: bank (ticket prefix BANK)");
+    expect(await readdir(join(p.home, ".qajitsu", "projects", "bank", "runs"))).toEqual(["BANK-1"]);
+    expect(await readdir(join(p.home, "runs"))).toEqual(["DEMO-1"]);
+  }, 120_000);
+
+  it("REQ-PRJ-04/AC3: secrets, environments and allowlists come from the run's project only", async () => {
+    const p = await createBuildProject();
+    cleanups.push(p.cleanup);
+    await addBank(p);
+    // Project demo refers to a secret only bank's .env.local holds, and to bank's environment profile.
+    const yaml = join(p.project, ".qa", "qa.project.yaml");
+    await writeFile(yaml, `${await readFile(yaml, "utf8")}\nsecrets: {}\n`);
+    await mkdir(join(p.project, ".qa", "envs"), { recursive: true }).catch(() => undefined);
+    await writeFile(
+      join(p.project, ".qa", "envs", "leak.yaml"),
+      "base_url: http://localhost:3000\naccounts:\n  user:x: { username: x, password: secret://env/BANK_ONLY_TOKEN }\n",
+    );
+    const demoCheck = await p.run(["env", "check", "--env", "leak"]);
+    expect(demoCheck.out).toContain("secret://env/BANK_ONLY_TOKEN cannot be resolved");
+    expect(demoCheck.out + demoCheck.err).not.toContain("bank-secret-value");
+    expect((await p.run(["env", "check", "--env", "bank"])).out).toContain("environment bank");
+    // Bank's own allowlist and profile resolve only in bank.
+    const bankCheck = await p.run(["--project", "bank", "env", "check"]);
+    expect(bankCheck.out).toContain("Environment profile: bank");
+  }, 120_000);
 });

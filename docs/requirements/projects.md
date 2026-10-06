@@ -38,7 +38,7 @@ Everything a project owns lives under one folder, so it can be inspected, backed
 
 ### REQ-PRJ-03 · Active project and switching
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 2
 - Related: REQ-PRJ-05, REQ-PRJ-06, ADR-0006
@@ -51,7 +51,7 @@ Everything a project owns lives under one folder, so it can be inspected, backed
 - [x] AC4: Every command prints the resolved project in its first output line and records it in `run.json` and the journal.
 - [x] AC5: After `qj use`, a short summary of the project's open work is shown (REQ-PRJ-05).
 - [x] AC6: A run is bound to its project when it starts; switching the active project never affects running or paused runs.
-- [ ] AC7: Runs of different projects may execute at the same time (separate processes); locks are per run (REQ-WS-04).
+- [x] AC7: Runs of different projects may execute at the same time (separate processes); locks are per run (REQ-WS-04).
 
 ### REQ-PRJ-04 · Isolation between projects
 
@@ -66,7 +66,7 @@ A run sees only its own project. This protects confidentiality when one person t
 
 - [x] AC1: Agent file tools are limited by the guard to the run workspace and the read-only parts of its own project home; paths in other projects are denied and journaled.
 - [ ] AC2: `search_docs` and `search_code` query only the run's project knowledge base and the run's repositories.
-- [ ] AC3: Secrets, environment profiles, URL allowlists and model settings are resolved from the run's project only.
+- [x] AC3: Secrets, environment profiles, URL allowlists and model settings are resolved from the run's project only.
 - [x] AC4: Adversarial test: an agent in project A that asks for a file, document or secret of project B is denied, and nothing from B appears in A's prompts, evidence or reports.
 
 ### REQ-PRJ-05 · Project status: what is in the project and what is in progress
