@@ -131,15 +131,15 @@ Code fetched for runs is kept per project so repeated runs on the same commit ar
 
 ### REQ-PRJ-09 · Export and import of a project profile
 
-- Status: accepted
+- Status: implemented
 - Priority: could
 - Stage: later
 - Related: REQ-PRJ-01, REQ-KNOW-02
 
 **Acceptance criteria**
 
-- [ ] AC1: `qj projects export <slug>` writes the project profile and the list of knowledge sources (not the index, never secrets) to one file.
-- [ ] AC2: `qj projects import <file>` recreates the project on another machine; the knowledge base is rebuilt with `qj knowledge sync`.
+- [x] AC1: `qj projects export <slug>` writes the project profile and the list of knowledge sources (not the index, never secrets) to one file.
+- [x] AC2: `qj projects import <file>` recreates the project on another machine; the knowledge base is rebuilt with `qj knowledge sync`.
 
 ### REQ-PRJ-10 · Evidence, reports and exports stay in the project
 

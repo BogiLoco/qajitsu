@@ -67,6 +67,29 @@ asks to type the slug; non-interactively it refuses.
 
 Exit codes: `0` removed or listed, `3` refused or errors.
 
+### `qajitsu projects export <slug>`
+
+Writes the project profile to one YAML file: slug and Jira prefixes, the text files of its `.qa/` folder and its
+knowledge sources (REQ-PRJ-09/AC1). Never the knowledge index, runs, `.env` files, keys or certificates; refused when
+any `.qa/` file holds a secret value of the project or something that looks like a credential.
+
+- `--out <file>`: where to write it (default: `<project-home>/exports/<slug>.profile.yaml`)
+
+Exit codes: `0` written, `3` refused or errors.
+
+### `qajitsu projects import <file>`
+
+Recreates a project from a profile on another machine (REQ-PRJ-09/AC2): an existing `.qa/` at the target is linked,
+otherwise the profile's `.qa/` files are written there; knowledge sources are registered and rebuilt with
+`qajitsu knowledge sync`. Secrets go into `.env.local` or the secret manager afterwards.
+
+- `--qa-dir <path>`: where the project's `.qa/` folder is or goes (default: the exported path)
+- `--slug <slug>`: register under another name
+- `--map-path <old=new>`: rewrite a path prefix of `.qa/` and knowledge sources (repeatable)
+- `--force`: replace an existing project with that name (runs and knowledge stay)
+
+Exit codes: `0` imported, `2` imported but some knowledge sources are missing, `3` errors.
+
 ### `qajitsu projects archive <slug>`
 
 Hides a project from `projects list`, `status --all` and ticket prefix mapping (REQ-PRJ-07/AC5). Nothing is deleted;

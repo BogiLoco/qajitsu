@@ -24,6 +24,7 @@ import {
   runUse,
 } from "./commands/projects.js";
 import { runNote, runResumable, runStatus } from "./commands/status.js";
+import { runProjectExport, runProjectImport } from "./commands/project-profile.js";
 import {
   runKnowledgeAdd,
   runKnowledgeList,
@@ -108,6 +109,8 @@ export function createProgram(version: string, io: ProgramIO): Command {
     "use",
     "projects list",
     "projects current",
+    "projects export",
+    "projects import",
     "projects remove",
     "projects archive",
     "projects unarchive",
@@ -236,6 +239,39 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .action(async (slug: string) => {
       io.setExitCode(io.ports ? await runProjectArchive(slug, false, commandIO, io.ports) : 3);
     });
+  projects
+    .command("export")
+    .description(
+      "Write the project profile, its .qa/ files and knowledge sources to one file (no index, no secrets)",
+    )
+    .argument("<slug>", "project name")
+    .option("--out <file>", "where to write it (default: <project-home>/exports/<slug>.profile.yaml)")
+    .action(async (slug: string, options: { out?: string }) => {
+      io.setExitCode(io.ports ? await runProjectExport(slug, options, commandIO, io.ports) : 3);
+    });
+  projects
+    .command("import")
+    .description(
+      "Recreate a project from an exported profile; rebuild its knowledge base with 'knowledge sync'",
+    )
+    .argument("<file>", "profile written by 'projects export'")
+    .option("--qa-dir <path>", "where the project's .qa/ folder is or goes (default: the exported path)")
+    .option("--slug <slug>", "register under another name")
+    .option(
+      "--map-path <old=new>",
+      "rewrite a path prefix of .qa/ and knowledge sources (repeatable)",
+      collect,
+      [],
+    )
+    .option("--force", "replace an existing project with that name (runs and knowledge stay)")
+    .action(
+      async (
+        file: string,
+        options: { qaDir?: string; slug?: string; mapPath?: string[]; force?: boolean },
+      ) => {
+        io.setExitCode(io.ports ? await runProjectImport(file, options, commandIO, io.ports) : 3);
+      },
+    );
   projects
     .command("current")
     .description("Print the active project")

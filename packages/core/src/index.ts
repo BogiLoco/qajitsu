@@ -34,3 +34,4 @@ export * from "./observations.js";
 export * from "./projects/registry.js";
 export * from "./knowledge/extract.js";
 export * from "./knowledge/sources.js";
+export * from "./projects/profile.js";

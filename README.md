@@ -341,6 +341,17 @@ When the environment or a secret changed after a plan was approved, `qj run` / `
 | `qj projects archive bank` / `unarchive`      | Hides the project from lists and ticket prefixes; nothing is deleted.                                                                                                                              |
 | `qj projects remove bank [--dry-run] [--yes]` | Deletes the project's home after showing sizes and asking for the slug. `.qa/` in the repository stays; run journals are archived to `~/.qajitsu/audit/bank/` (`--delete-audit` removes them too). |
 
+### Moving a project to another machine
+
+```sh
+qj projects export shop                                   # ~/.qajitsu/projects/shop/exports/shop.profile.yaml
+qj projects import shop.profile.yaml --qa-dir ~/code/shop/.qa --map-path /Users/old/code=/home/me/code
+qj --project shop knowledge sync                          # rebuilds the knowledge base from its sources
+```
+
+The profile carries the `.qa/` files and the knowledge sources, never secrets, the index or runs; an export is
+refused if a `.qa/` file contains a secret value. Put the secrets into `.env.local` on the new machine.
+
 ### In CI
 
 CI jobs use a throwaway home and one project per job:
@@ -518,6 +529,7 @@ Every option and exit code of every command: [docs/cli/commands.md](docs/cli/com
 | `qj clean --project [--dry-run]`                                                                                       | Retention for every run of the project and removal of stale git mirrors.                                                                                                                                                                                          |
 | `qj projects remove <slug> [--dry-run] [--yes]`                                                                        | Deletes a project's home after confirmation; its `.qa/` stays, journals are archived.                                                                                                                                                                             |
 | `qj projects archive <slug>` / `qj projects unarchive <slug>`                                                          | Hides a project from lists and ticket prefixes, or shows it again; nothing is deleted.                                                                                                                                                                            |
+| `qj projects export <slug>` / `qj projects import <file> [--qa-dir] [--map-path old=new]`                              | Moves a project to another machine: profile, `.qa/` files and knowledge sources in one file, never secrets or the index.                                                                                                                                          |
 | `qj knowledge add <path...> [--tag t] [--include g] [--exclude g]` / `qj knowledge add --qa-knowledge`                 | Adds documentation to the project's knowledge base (Markdown, text, HTML, DOCX, PDF, OpenAPI); only new or changed files are processed. Secrets are masked, `.env` and key files never indexed.                                                                   |
 | `qj knowledge sync [--dry-run]` / `qj knowledge remove <source\|file>` / `qj knowledge reset` / `qj knowledge reindex` | Keeps the knowledge base in line with changed files, removes a source or file, empties it, or rebuilds it after changing the embedding model.                                                                                                                     |
 | `qj knowledge list` / `qj knowledge search "<query>" [--tag t]`                                                        | Sources, counts, retrieval mode and embedding model; the ranked chunks agents would get for a query, with source, section and date.                                                                                                                               |

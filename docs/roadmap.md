@@ -256,7 +256,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-PUB-08](requirements/publishing.md#req-pub-08--promote-ticket-cases-to-the-regression-suite) Promote ticket cases to the regression suite (should, proposed, AC 0/4)
 - [REQ-PUB-09](requirements/publishing.md#req-pub-09--release-readiness-report) Release readiness report (could, proposed, AC 0/4)
 - [REQ-OBS-08](requirements/observability.md#req-obs-08--map-as-planner-input) Map as planner input (could, proposed, AC 0/1)
-- [REQ-PRJ-09](requirements/projects.md#req-prj-09--export-and-import-of-a-project-profile) Export and import of a project profile (could, accepted, AC 0/2)
+- [REQ-PRJ-09](requirements/projects.md#req-prj-09--export-and-import-of-a-project-profile) Export and import of a project profile (could, implemented, AC 2/2)
 - [REQ-KNOW-12](requirements/knowledge.md#req-know-12--online-sources) Online sources (could, accepted, AC 0/2)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->

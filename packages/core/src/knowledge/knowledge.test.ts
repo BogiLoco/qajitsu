@@ -148,6 +148,14 @@ describe("knowledge security (REQ-KNOW-09)", () => {
     expect(masked).toContain("Authorization: Bearer ***");
     expect(masked).toContain('password = "***"');
     expect(masked).toContain("The password policy needs 12 characters.");
+    for (const reference of [
+      "token: secret://env/JIRA_TOKEN",
+      'password: "{{password}}"',
+      "password: process.env.DEMO_USER_PASSWORD",
+      "api_key: ${API_KEY}",
+      "token=$CI_TOKEN",
+    ])
+      expect(maskCredentials(reference)).toBe(reference);
   });
 });
 

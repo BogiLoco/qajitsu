@@ -46,8 +46,10 @@ const CREDENTIALS: readonly RegExp[] = [
   /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g,
   /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{16,}/g,
 ];
+// References name a secret without containing it and are left alone: `secret://`, `{{template}}`, `${VAR}`, `$VAR`,
+// `process.env.X`.
 const ASSIGNED =
-  /\b(password|passwd|pwd|secret|api[_-]?key|token|client[_-]?secret)(\s*[:=]\s*)(["']?)([^\s"']{6,})\3/gi;
+  /\b(password|passwd|pwd|secret|api[_-]?key|token|client[_-]?secret)(?!:\/\/)(\s*[:=]\s*)(["']?)(?!secret:\/\/|\{\{|\$\{|\$[A-Z_]|process\.env|env\.)([^\s"']{6,})\3/gi;
 
 /**
  * Masks credential-shaped values: private keys, provider tokens, JWTs, bearer headers and `password: ...`
