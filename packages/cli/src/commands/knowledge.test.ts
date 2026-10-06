@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { apiService, createBuildProject, PASSWORD } from "../../../../tests/support/cli-build.js";
 import { createFakeChroma } from "../../../../tests/support/fake-chroma.js";
+import { makePdf } from "../../../../tests/support/pdf.js";
 import { createFakeEmbedder } from "../../../../tests/support/fake-embedder.js";
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -292,5 +293,22 @@ describe("chroma store (REQ-KNOW-08/AC3)", () => {
     const list = await p.run(["knowledge", "list"], undefined, { env });
     expect(list.out).toContain("store chroma");
     expect(list.out + list.err + added.out + found.out).not.toContain("chroma-team-token");
+  }, 120_000);
+});
+
+describe("PDF sources (REQ-KNOW-02/AC2)", () => {
+  it("REQ-KNOW-02/AC2: PDFs with text are indexed per page; scans are skipped with the reason", async () => {
+    const p = await setup();
+    await writeFile(
+      join(p.docs, "policy.pdf"),
+      makePdf([["Refund policy"], ["Refunds reach the card in five working days."]]),
+    );
+    await writeFile(join(p.docs, "scan.pdf"), makePdf([[]]));
+    const added = await p.run(["knowledge", "add", "docs"]);
+    expect(added.out).toContain("4 added");
+    expect(added.out).toContain("skipped docs/scan.pdf: PDF has no text layer (scanned image?)");
+    expect((await p.run(["knowledge", "search", "refunds card working days"])).out).toMatch(
+      /\d\. docs\/policy\.pdf › page 2 \(20\d\d-\d\d-\d\d\)/,
+    );
   }, 120_000);
 });

@@ -152,7 +152,11 @@ export async function createLanceDbStore(dir: string): Promise<VectorStore> {
       const pool = Math.max(query.limit * 4, 20);
       let byKeyword: Row[] = [];
       if (words !== "") {
-        let q = table.query().fullTextSearch(words, { columns: "text" }).select(CHUNK_COLUMNS).limit(pool);
+        let q = table
+          .query()
+          .fullTextSearch(words, { columns: "text" })
+          .select([...CHUNK_COLUMNS, "_score"])
+          .limit(pool);
         if (filter !== undefined) q = q.where(filter);
         byKeyword = (await q.toArray()) as Row[];
       }
@@ -162,7 +166,7 @@ export async function createLanceDbStore(dir: string): Promise<VectorStore> {
         .query()
         .nearestTo([...query.vector])
         .distanceType("cosine")
-        .select(CHUNK_COLUMNS)
+        .select([...CHUNK_COLUMNS, "_distance"])
         .limit(pool);
       if (filter !== undefined) v = v.where(filter);
       const byVector = (await v.toArray()) as Row[];

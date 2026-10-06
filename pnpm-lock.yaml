@@ -433,6 +433,9 @@ importers:
       playwright-core:
         specifier: ^1.63.0
         version: 1.63.0
+      unpdf:
+        specifier: 1.8.1
+        version: 1.8.1
       yaml:
         specifier: 'catalog:'
         version: 2.9.1
@@ -3236,6 +3239,15 @@ packages:
   unorm@1.6.0:
     resolution: {integrity: sha512-b2/KCUlYZUeA7JFUuRJZPUtr4gZvBh7tavtv4fvk4+KV9pfGiR6CQAQAWl49ZpR3ts2dk4FYkP7EIgDJoiOLDA==}
     engines: {node: '>= 0.4.0'}
+
+  unpdf@1.8.1:
+    resolution: {integrity: sha512-xkURhy2SoGpOIH0a1gLHNkASPIQYonadDJs2AQwPEfUakafeD9EA1WTWWsaR++gfTCXJpV27W7tU1nXuk82UKQ==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@napi-rs/canvas': ^0.1.69 || ^1.0.0
+    peerDependenciesMeta:
+      '@napi-rs/canvas':
+        optional: true
 
   unpipe@1.0.0:
     resolution: {integrity: sha512-pjy2bYhSsufwWlKwPc+l3cN7+wuJlK6uz0YdJEOlQDbl6jo/YlPi4mb8agUkVC8BF7V8NuzeyPNqRksA3hztKQ==}
@@ -6450,6 +6462,8 @@ snapshots:
   undici@7.30.0: {}
 
   unorm@1.6.0: {}
+
+  unpdf@1.8.1: {}
 
   unpipe@1.0.0: {}
 

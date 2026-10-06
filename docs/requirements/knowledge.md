@@ -4,7 +4,7 @@ Documentation a project adds on demand, searchable by agents with cited sources;
 
 ### REQ-KNOW-01 · Knowledge base per project, created on demand
 
-- Status: in-progress
+- Status: implemented
 - Priority: should
 - Stage: 7
 - Related: REQ-PRJ-01, REQ-PRJ-02, REQ-CTX-07, ADR-0007
@@ -14,11 +14,11 @@ Documentation a project adds on demand, searchable by agents with cited sources;
 - [x] AC1: Each project has its own knowledge base in `<project-home>/knowledge/`; it is empty after `init` and created on the first `add`.
 - [x] AC2: Files in the repository's `.qa/knowledge/` (REQ-CTX-07) are a default source that can be added with one command (`qj knowledge add --qa-knowledge`).
 - [x] AC3: Storage is behind a `VectorStore` interface; the default store is LanceDB, embedded in the process (no server to run), one store per project in `<project-home>/knowledge/` (ADR-0007).
-- [ ] AC4: The store handles large documentation and frequent changes: an approximate vector index and a full-text index are built once the knowledge base passes a configurable size, chunks are upserted and deleted by id without rebuilding the store, and search stays under one second for 1 million chunks on a developer machine.
+- [x] AC4: The store handles large documentation and frequent changes: an approximate vector index and a full-text index are built once the knowledge base passes a configurable size, chunks are upserted and deleted by id without rebuilding the store, and search stays under one second for 1 million chunks on a developer machine.
 
 ### REQ-KNOW-02 · Add documents from files and folders
 
-- Status: in-progress
+- Status: implemented
 - Priority: should
 - Stage: 7
 - Related: REQ-KNOW-01, REQ-KNOW-09
@@ -26,7 +26,7 @@ Documentation a project adds on demand, searchable by agents with cited sources;
 **Acceptance criteria**
 
 - [x] AC1: `qj knowledge add <path...>` adds files and folders (recursive) with `--include`/`--exclude` globs and optional `--tag`.
-- [ ] AC2: Supported formats: Markdown, text, HTML, PDF with a text layer, DOCX and OpenAPI (split per operation); other files are skipped and listed in the summary.
+- [x] AC2: Supported formats: Markdown, text, HTML, PDF with a text layer, DOCX and OpenAPI (split per operation); other files are skipped and listed in the summary.
 - [x] AC3: Sources are recorded in `<project-home>/knowledge/sources.yaml` so they can be synced, listed and exported.
 - [x] AC4: Adding the same source again only processes new or changed files; the command prints counts of added, updated, unchanged and skipped files.
 - [x] AC5: Each chunk keeps its source path, section heading, file modification date and content hash.

@@ -239,7 +239,8 @@ export function extractDocument(path: string, bytes: Buffer): Extracted {
         : { ok: false, reason: "only OpenAPI documents are read from YAML and JSON" };
     }
     case ".pdf":
-      return { ok: false, reason: "PDF text extraction is not supported yet" };
+      // PDFs are read asynchronously by the CLI with pdf.js; this synchronous extractor has no PDF parser.
+      return { ok: false, reason: "PDF needs the asynchronous extractor" };
     default:
       return { ok: false, reason: `unsupported format ${ext === "" ? "(no extension)" : ext}` };
   }

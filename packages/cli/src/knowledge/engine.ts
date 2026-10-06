@@ -12,6 +12,7 @@ import {
   sha256,
   writeKnowledgeIndex,
   type Embedder,
+  type Extracted,
   type KnowledgeChunk,
   type KnowledgeIndex,
   type KnowledgeSource,
@@ -103,15 +104,35 @@ async function scanSource(
   return files;
 }
 
+/**
+ * Text of a PDF per page through pdf.js (`unpdf`, loaded only for PDF files); PDFs without a text layer, such as
+ * scans, are skipped with the reason (REQ-KNOW-02/AC2).
+ */
+export async function extractPdf(bytes: Buffer): Promise<Extracted> {
+  const { extractText } = await import("unpdf");
+  let pages: string[];
+  try {
+    pages = (await extractText(new Uint8Array(bytes), { mergePages: false })).text;
+  } catch {
+    return { ok: false, reason: "not a readable PDF file" };
+  }
+  const sections = pages
+    .map((text, i) => ({ section: `page ${String(i + 1)}`, text: text.replace(/[ \t]+/g, " ").trim() }))
+    .filter((p) => p.text !== "");
+  return sections.length === 0
+    ? { ok: false, reason: "PDF has no text layer (scanned image?)" }
+    : { ok: true, format: "text", sections };
+}
+
 /** Chunks of one file, masked before chunking (REQ-KNOW-02/AC5, REQ-KNOW-09/AC1). */
-function chunksOf(
+async function chunksOf(
   file: ScannedFile,
   source: KnowledgeSource,
   bytes: Buffer,
   modifiedAt: string,
   mask: (text: string) => string,
-): KnowledgeChunk[] | string {
-  const extracted = extractDocument(file.rel, bytes);
+): Promise<KnowledgeChunk[] | string> {
+  const extracted = /\.pdf$/i.test(file.rel) ? await extractPdf(bytes) : extractDocument(file.rel, bytes);
   if (!extracted.ok) return extracted.reason;
   const fileHash = sha256(bytes);
   const sections = extracted.sections.map((s) => ({ section: mask(s.section), text: mask(s.text) }));
@@ -190,7 +211,7 @@ export async function syncKnowledge(
         continue;
       }
       const modifiedAt = (await stat(file.abs)).mtime.toISOString();
-      const chunks = chunksOf(file, source, bytes, modifiedAt, mask);
+      const chunks = await chunksOf(file, source, bytes, modifiedAt, mask);
       if (typeof chunks === "string") {
         report.skipped.push({ path: file.display, reason: chunks });
         if (before) {

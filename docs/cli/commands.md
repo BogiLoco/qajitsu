@@ -262,7 +262,7 @@ certificates are never indexed.
 
 ### `qajitsu knowledge add [paths...]`
 
-Registers files and folders (recursive) as sources and indexes them: Markdown, text, HTML, DOCX and OpenAPI (one chunk
+Registers files and folders (recursive) as sources and indexes them: Markdown, text, HTML, DOCX, PDF (with a text layer) and OpenAPI (one chunk
 group per operation); other files are skipped and listed. Adding a registered path again only processes new or
 changed files and prints counts of added, updated, unchanged, skipped and removed files (REQ-KNOW-02).
 
