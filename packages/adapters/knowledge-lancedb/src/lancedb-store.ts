@@ -24,6 +24,7 @@ interface Row {
   /** Tags as `,a,b,` so a tag filter is a plain LIKE. */
   tags: string;
   text: string;
+  chars: number;
   vector?: number[];
   _score?: number;
   _distance?: number;
@@ -43,6 +44,7 @@ const toRow = (c: StoredChunk): Row => ({
   hash: c.hash,
   tags: `,${c.tags.join(",")},`,
   text: c.text,
+  chars: c.text.length,
   ...(c.vector ? { vector: [...c.vector] } : {}),
 });
 
@@ -127,13 +129,17 @@ export async function createLanceDbStore(dir: string): Promise<VectorStore> {
     async files() {
       if (!table) return [];
       const files = new Map<string, KnowledgeFile>();
-      for (const r of (await table.query().select(["path", "source", "file_hash"]).toArray()) as Row[]) {
+      for (const r of (await table
+        .query()
+        .select(["path", "source", "file_hash", "chars"])
+        .toArray()) as Row[]) {
         const known = files.get(r.path);
         files.set(r.path, {
           path: r.path,
           source: r.source,
           fileHash: r.file_hash,
           chunks: (known?.chunks ?? 0) + 1,
+          chars: (known?.chars ?? 0) + r.chars,
         });
       }
       return [...files.values()].sort((a, b) => a.path.localeCompare(b.path));

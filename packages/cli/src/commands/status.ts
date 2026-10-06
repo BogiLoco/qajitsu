@@ -8,6 +8,8 @@ import {
   listProjects,
   projectPaths,
   qajitsuHome,
+  readKnowledgeIndex,
+  readKnowledgeSources,
   readRunIndex,
   type ResolvedProject,
   type RunRecord,
@@ -131,14 +133,23 @@ export async function openWorkOf(
   return { open, done };
 }
 
-/** Summary of a project's knowledge base (REQ-PRJ-05/AC1, REQ-KNOW-05/AC3). */
+/** Summary of a project's knowledge base (REQ-PRJ-05/AC1, REQ-KNOW-05/AC3), from `sources.yaml` and `index.json`. */
 async function knowledgeSummary(project: LoadedProject): Promise<string> {
   const dir = project.project?.paths.knowledge;
   if (dir === undefined) return "not available";
-  const sources = await readFile(join(dir, "sources.yaml"), "utf8").catch(() => undefined);
-  if (sources === undefined) return "empty (add documents with 'qajitsu knowledge add')";
-  const count = sources.split("\n").filter((l) => /^\s*-\s/.test(l)).length;
-  return `${String(count)} source(s)`;
+  const sources = await readKnowledgeSources(dir).catch(() => []);
+  if (sources.length === 0) return "empty (add documents with 'qajitsu knowledge add')";
+  const index = await readKnowledgeIndex(dir);
+  const synced = sources
+    .map((s) => s.synced_at ?? "")
+    .sort()
+    .at(-1);
+  return [
+    `${String(sources.length)} source(s)`,
+    `mode ${index?.mode ?? "not built"}`,
+    ...(index?.embedding ? [`embedding ${index.embedding}`] : []),
+    `last sync ${synced ? synced.slice(0, 16).replace("T", " ") : "never"}`,
+  ].join(", ");
 }
 
 const renderWork = (open: readonly OpenWork[], done: number): string[] => [

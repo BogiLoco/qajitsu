@@ -30,6 +30,8 @@ export interface KnowledgeFile {
   readonly source: string;
   readonly fileHash: string;
   readonly chunks: number;
+  /** Characters of all its chunks; decides the retrieval mode without reading the text (REQ-KNOW-07). */
+  readonly chars: number;
 }
 
 /** A ranked search result. Higher scores rank first; scores are only comparable within one search. */

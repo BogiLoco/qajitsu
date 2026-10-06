@@ -1,3 +1,4 @@
+import type { KnowledgePorts } from "./knowledge.js";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { compareDeployedSha, createRemoteEnvProvider, loginAccounts } from "@qajitsu/adapter-env-remote";
@@ -61,7 +62,7 @@ export interface RunOptions {
 }
 
 /** Ports `run` needs beyond the common ones; the executor is replaceable in tests. */
-export interface RunPorts {
+export interface RunPorts extends KnowledgePorts {
   readonly executor?: AttemptExecutor;
   /** Executor of mobile cases for a device factory (replaced in tests with a fake device). */
   readonly mobileExecutor?: (device: BrowserFactory) => AttemptExecutor;

@@ -1,3 +1,4 @@
+import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import {
   ConfigError,
@@ -148,6 +149,14 @@ export async function registerConfiguredSecrets(
     else if (value !== null && typeof value === "object") Object.values(value).forEach(collect);
   };
   collect(project.config);
+  // Environment profiles hold test account passwords; documents and notes can quote them too.
+  const envDir = join(project.qaDir, "envs");
+  for (const name of await readdir(envDir).catch(() => [] as string[]))
+    if (/\.ya?ml$/.test(name))
+      for (const m of (await readFile(join(envDir, name), "utf8").catch(() => "")).matchAll(
+        /secret:\/\/[a-z0-9-]+\/[^\s"',}\]]+/g,
+      ))
+        refs.add(m[0]);
   await Promise.all([...refs].map((ref) => resolveSecret(ref).catch(() => undefined)));
 }
 

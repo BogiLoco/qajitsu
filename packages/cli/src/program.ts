@@ -24,6 +24,23 @@ import {
   runUse,
 } from "./commands/projects.js";
 import { runNote, runResumable, runStatus } from "./commands/status.js";
+import {
+  runKnowledgeAdd,
+  runKnowledgeList,
+  runKnowledgeReindex,
+  runKnowledgeRemove,
+  runKnowledgeReset,
+  runKnowledgeSearch,
+  runKnowledgeSync,
+} from "./commands/knowledge.js";
+
+interface KnowledgeAddOptions {
+  include?: string[];
+  exclude?: string[];
+  tag?: string[];
+  qaKnowledge?: boolean;
+  yes?: boolean;
+}
 import { runExplore, runExplorePromote } from "./commands/explore.js";
 import { runBench } from "./commands/bench.js";
 import { runAuditVerify } from "./commands/audit.js";
@@ -224,6 +241,69 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .description("Print the active project")
     .action(async () => {
       io.setExitCode(io.ports ? await runProjects("current", commandIO, io.ports) : 3);
+    });
+
+  const knowledge = program
+    .command("knowledge")
+    .description("The project's knowledge base: documents agents can search, with cited sources");
+  knowledge
+    .command("add")
+    .description(
+      "Add files and folders (recursive) to the knowledge base; only new or changed files are processed",
+    )
+    .argument("[paths...]", "files or folders")
+    .option("--include <glob>", "only files matching this glob (repeatable)", collect, [])
+    .option("--exclude <glob>", "skip files matching this glob (repeatable)", collect, [])
+    .option("--tag <tag>", "tag the documents of this source (repeatable)", collect, [])
+    .option("--qa-knowledge", "add the project's .qa/knowledge/ folder")
+    .option("--yes", "confirm sending document text to a cloud embedding model")
+    .action(async (paths: string[], options: KnowledgeAddOptions) => {
+      await withPorts((ports) => runKnowledgeAdd(paths, options, commandIO, ports))();
+    });
+  knowledge
+    .command("sync")
+    .description("Re-process changed files, remove chunks of deleted files and add new files of every source")
+    .option("--dry-run", "only show what would change")
+    .option("--yes", "confirm sending document text to a cloud embedding model")
+    .action(async (options: { dryRun?: boolean; yes?: boolean }) => {
+      await withPorts((ports) => runKnowledgeSync(options, commandIO, ports))();
+    });
+  knowledge
+    .command("remove")
+    .description("Remove a source or one file from the knowledge base")
+    .argument("<source-or-file>", "source name or file path")
+    .action(async (target: string) => {
+      await withPorts((ports) => runKnowledgeRemove(target, commandIO, ports))();
+    });
+  knowledge
+    .command("reset")
+    .description("Empty the knowledge base after confirmation")
+    .option("--keep-sources", "keep the registered sources for a later sync")
+    .option("--yes", "do not ask for confirmation")
+    .action(async (options: { keepSources?: boolean; yes?: boolean }) => {
+      await withPorts((ports) => runKnowledgeReset(options, commandIO, ports))();
+    });
+  knowledge
+    .command("reindex")
+    .description("Store every chunk again with the configured embedding model and retrieval mode")
+    .option("--yes", "confirm sending document text to a cloud embedding model")
+    .action(async (options: { yes?: boolean }) => {
+      await withPorts((ports) => runKnowledgeReindex(options, commandIO, ports))();
+    });
+  knowledge
+    .command("list")
+    .description(
+      "Sources with file and chunk counts, tags, last sync, embedding model, retrieval mode and size",
+    )
+    .action(withPorts((ports) => runKnowledgeList(commandIO, ports)));
+  knowledge
+    .command("search")
+    .description("Print the ranked chunks agents would get for a query, with source, section and date")
+    .argument("<query>", "search text")
+    .option("--tag <tag>", "only documents with this tag (repeatable)", collect, [])
+    .option("--limit <n>", "number of results (default 5)")
+    .action(async (query: string, options: { tag?: string[]; limit?: string }) => {
+      await withPorts((ports) => runKnowledgeSearch(query, options, commandIO, ports))();
     });
 
   program

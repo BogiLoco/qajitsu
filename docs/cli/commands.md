@@ -252,6 +252,80 @@ Application map over every run: tested and never-tested screens and endpoints (`
 
 Exit codes: `0` written, `3` errors.
 
+## Knowledge base
+
+Documents a project adds on demand, searched by the analyst and planner with cited sources (REQ-KNOW, ADR-0007). One
+knowledge base per project in `<project-home>/knowledge/`: a LanceDB store, `sources.yaml` and `index.json`.
+Documentation that fits `knowledge.full_context_tokens` is used without embeddings; above it retrieval is hybrid
+(vectors from `knowledge.embedding` plus keywords). Content is masked before it is stored; `.env` files, keys and
+certificates are never indexed.
+
+### `qajitsu knowledge add [paths...]`
+
+Registers files and folders (recursive) as sources and indexes them: Markdown, text, HTML, DOCX and OpenAPI (one chunk
+group per operation); other files are skipped and listed. Adding a registered path again only processes new or
+changed files and prints counts of added, updated, unchanged, skipped and removed files (REQ-KNOW-02).
+
+- `--include <glob>`: only files matching this glob (repeatable)
+- `--exclude <glob>`: skip files matching this glob (repeatable)
+- `--tag <tag>`: tag the documents of this source (repeatable)
+- `--qa-knowledge`: add the project's `.qa/knowledge/` folder (REQ-KNOW-01/AC2)
+- `--yes`: confirm sending document text to a cloud embedding model (REQ-KNOW-09/AC2)
+
+Exit codes: `0` indexed, `3` errors or no confirmation for a cloud model.
+
+### `qajitsu knowledge sync`
+
+Re-processes changed files (by content hash), removes chunks of deleted files and adds new files of every registered
+source (REQ-KNOW-04).
+
+- `--dry-run`: only show what would change
+- `--yes`: confirm sending document text to a cloud embedding model
+
+Exit codes: `0` synced, `3` errors.
+
+### `qajitsu knowledge remove <source-or-file>`
+
+Removes a source and all its chunks, or one file, which is then excluded from its source so `sync` does not bring it
+back (REQ-KNOW-03/AC1).
+
+Exit codes: `0` removed, `3` unknown source or file.
+
+### `qajitsu knowledge reset`
+
+Empties the knowledge base after confirmation (REQ-KNOW-03/AC2).
+
+- `--keep-sources`: keep the registered sources for a later `sync`
+- `--yes`: do not ask for confirmation
+
+Exit codes: `0` emptied, `3` not confirmed or errors.
+
+### `qajitsu knowledge reindex`
+
+Stores every chunk again with the configured embedding model and retrieval mode; needed after changing
+`knowledge.embedding` (REQ-KNOW-08/AC2).
+
+- `--yes`: confirm sending document text to a cloud embedding model
+
+Exit codes: `0` rebuilt, `3` errors.
+
+### `qajitsu knowledge list`
+
+Sources with file and chunk counts, tags and last sync, plus the embedding model, retrieval mode, store and size on
+disk (REQ-KNOW-05/AC1, REQ-KNOW-07/AC3).
+
+Exit codes: `0` listed, `3` errors.
+
+### `qajitsu knowledge search <query>`
+
+Prints the ranked chunks agents would get, with source path, section, date and chunk id, to check retrieval quality
+(REQ-KNOW-05/AC2).
+
+- `--tag <tag>`: only documents with this tag (repeatable)
+- `--limit <n>`: number of results (default 5)
+
+Exit codes: `0` searched, `3` errors.
+
 ## Environment
 
 ### `qajitsu env check`

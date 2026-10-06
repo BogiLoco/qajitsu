@@ -364,6 +364,9 @@ importers:
       '@qajitsu/adapter-evidence-local':
         specifier: workspace:*
         version: link:../adapters/evidence-local
+      '@qajitsu/adapter-knowledge-lancedb':
+        specifier: workspace:*
+        version: link:../adapters/knowledge-lancedb
       '@qajitsu/adapter-publish-jira':
         specifier: workspace:*
         version: link:../adapters/publish-jira

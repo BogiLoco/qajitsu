@@ -102,10 +102,10 @@ export function vectorStoreContract(name: string, create: (key: string) => Promi
       await store.close();
       const again = await create("upsert");
       expect(await again.count()).toBe(4);
-      expect((await again.files()).map((f) => [f.path, f.chunks, f.fileHash])).toEqual([
-        ["docs/cart.md", 1, "f-docs/cart.md"],
-        ["docs/login.md", 1, "f-docs/login.md"],
-        ["docs/orders.md", 2, "f-docs/orders.md"],
+      expect((await again.files()).map((f) => [f.path, f.chunks, f.fileHash, f.chars])).toEqual([
+        ["docs/cart.md", 1, "f-docs/cart.md", chunks()[2]?.text.length],
+        ["docs/login.md", 1, "f-docs/login.md", chunks()[3]?.text.length],
+        ["docs/orders.md", 2, "f-docs/orders.md", (chunks()[0]?.text.length ?? 0) + changed.text.length],
       ]);
       await again.close();
     });
