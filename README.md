@@ -57,15 +57,17 @@ checks (auditor, canary) can only make a result worse, never better.
 1. [How it works](#1-how-it-works)
 2. [Installation and first setup](#2-installation-and-first-setup)
 3. [The flow, step by step](#3-the-flow-step-by-step)
-4. [Command reference](#4-command-reference)
-5. [Statuses and exit codes](#5-statuses-and-exit-codes)
-6. [What QAJitsu writes to disk](#6-what-qajitsu-writes-to-disk)
-7. [Configuration (`.qa/`)](#7-configuration-qa)
-8. [Additional features](#8-additional-features)
-9. [Why you can trust the results](#9-why-you-can-trust-the-results)
-10. [Try it on the demo shop](#10-try-it-on-the-demo-shop)
-11. [Tuning and extending](#11-tuning-and-extending)
-12. [For contributors](#12-for-contributors)
+4. [Projects](#4-projects)
+5. [Knowledge base](#5-knowledge-base)
+6. [Command reference](#6-command-reference)
+7. [Statuses and exit codes](#7-statuses-and-exit-codes)
+8. [What QAJitsu writes to disk](#8-what-qajitsu-writes-to-disk)
+9. [Configuration (`.qa/`)](#9-configuration-qa)
+10. [Additional features](#10-additional-features)
+11. [Why you can trust the results](#11-why-you-can-trust-the-results)
+12. [Try it on the demo shop](#12-try-it-on-the-demo-shop)
+13. [Tuning and extending](#13-tuning-and-extending)
+14. [For contributors](#14-for-contributors)
 
 ---
 
@@ -129,10 +131,12 @@ Run these in **your** repository (the one with the application or its tests):
 ```sh
 qj init shop           # registers project "shop" in ~/.qajitsu and creates .qa/ (asks for Jira; detects git host,
                        # docker-compose, OpenAPI, test types); the project becomes the active one
+                       # (already have .qa/? `qj init shop --qa-dir ./.qa`; more projects: see "Projects")
 # put the secrets into .env.local next to .qa/ (never commit it):
 #   JIRA_EMAIL=...  JIRA_TOKEN=...  GITHUB_TOKEN=...  ANTHROPIC_API_KEY=...
 qj doctor --online     # checks Node, config, secrets, Docker, mobile tooling, Jira and code host access
 qj doctor --models     # optional: one real call per configured model role
+qj knowledge add docs/ # optional: documentation the agents may search (see "Knowledge base")
 ```
 
 Secrets are never written into `.qa/`: the configuration holds references like `secret://env/JIRA_TOKEN`, resolved
@@ -260,7 +264,209 @@ In Claude Code the same flow is available as `/qa-plan`, `/qa-run` and `/qa-evid
 
 ---
 
-## 4. Command reference
+## 4. Projects
+
+QAJitsu keeps everything that belongs to one tested system together in a **project**. One machine can hold many
+projects (different clients, products or teams), and nothing of one project is visible to another.
+
+### What a project is
+
+A project is a name (slug, e.g. `shop`, `bank-web`) plus two places:
+
+- **its `.qa/` folder** in the repository: configuration you commit (Jira, repositories, environments, models);
+- **its home** in `~/.qajitsu/projects/<slug>/`: everything QAJitsu produces on this machine. Nothing is written
+  to the current directory.
+
+```text
+~/.qajitsu/                      QAJitsu home (QAJITSU_HOME overrides it)
+  config.yaml                    the active project; never secrets
+  projects/shop/
+    project.yaml                 slug, path of the linked .qa/ folder, Jira key prefixes
+    runs/<TICKET>/<RUN-ID>/      run folders (see "What QAJitsu writes to disk")
+    cache/git/                   git mirrors; worktrees of runs are made from them
+    cache/index/                 code indexes by <repo>@<sha>, reused by later runs on the same commit
+    knowledge/                   the knowledge base (see "Knowledge base")
+    exports/                     evidence zips, qj export output, bench results, application maps
+    logs/, context.json          logs; index of open work for `qj status`
+  audit/<slug>/                  run journals kept after `qj projects remove`
+```
+
+### Create or link a project
+
+```sh
+cd ~/code/shop
+qj init shop                              # creates .qa/ by detection (asks for Jira) and registers "shop"
+qj init shop --qa-dir ./.qa               # links an existing .qa/ folder instead
+qj init bank --qa-dir ~/code/bank/.qa --jira-prefix BANK --jira-prefix PAY --no-use
+```
+
+- `--jira-prefix KEY` (repeatable) lets a ticket key choose the project: `qj fetch BANK-12` runs in `bank`.
+- `--no-use` registers without making it the active project; `--force` relinks an existing project (runs and the
+  knowledge base stay); `--yes` never asks (CI).
+- `init` ends with the readiness check: exit `0` ready, `2` registered but something is missing (listed), `3` error.
+
+### Which project a command uses
+
+Every command prints it first, e.g. `Project: shop (ticket prefix SHOP)`. The order is:
+
+1. `--project <slug>` (a global option, before the command: `qj --project bank status`);
+2. the `QAJITSU_PROJECT` environment variable;
+3. the Jira prefix of the ticket in the command;
+4. the active project (`qj use <slug>`).
+
+The current directory never decides. Without a project a command stops with exit code `3` and says how to pick
+one. A run belongs to the project that created it: using it from another project is refused (`RUN_OTHER_PROJECT`).
+
+### Day to day
+
+```sh
+qj projects list                 # every project: readiness, ticket prefixes, open work, .qa/ path; * = active
+qj use bank                      # switch; shows the open work of bank
+qj status                        # readiness, default environment, knowledge base, open tickets and the next command
+qj status --all                  # the same for every project
+qj note BANK-12 "waiting for test data from the PO"   # shown by status next to the ticket
+qj resume                        # resumable work with the command that continues each
+```
+
+When the environment or a secret changed after a plan was approved, `qj run` / `qj resume` asks before continuing
+(non-interactive: stops with `RUN_CONTEXT_CHANGED`).
+
+### Starting over and cleaning up
+
+| Command                                       | Effect                                                                                                                                                                                             |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `qj work reset BANK-12 [--delete]`            | Closes the ticket's open work; the next `fetch` starts a new run. `--delete` also removes its runs.                                                                                                |
+| `qj runs BANK-12 --keep <run-id>`             | Protects a run and its evidence from every retention; `--unkeep` releases it.                                                                                                                      |
+| `qj clean --project [--dry-run]`              | Retention (`cleanup.keep_last`, `max_age_days`) for all runs, stale git mirrors and code indexes.                                                                                                  |
+| `qj projects archive bank` / `unarchive`      | Hides the project from lists and ticket prefixes; nothing is deleted.                                                                                                                              |
+| `qj projects remove bank [--dry-run] [--yes]` | Deletes the project's home after showing sizes and asking for the slug. `.qa/` in the repository stays; run journals are archived to `~/.qajitsu/audit/bank/` (`--delete-audit` removes them too). |
+
+### In CI
+
+CI jobs use a throwaway home and one project per job:
+
+```sh
+export QAJITSU_HOME="$(mktemp -d)"
+qj init ci --qa-dir .qa --yes --force
+export QAJITSU_PROJECT=ci
+```
+
+`ci/qajitsu-ci.sh`, the GitHub Action, the GitLab template and the Jenkinsfile already do this.
+
+---
+
+## 5. Knowledge base
+
+Each project can have a **knowledge base**: documentation that the analyst and the planner search while they plan
+(specifications, business rules, API references, glossaries, regulations). It is empty until you add something, it
+lives only in that project's home, and runs of other projects never see it.
+
+### What you can add
+
+| Format                             | How it is split                               |
+| ---------------------------------- | --------------------------------------------- |
+| Markdown (`.md`, `.mdx`)           | by headings; the section is the heading path  |
+| text (`.txt`, `.rst`, `.adoc`)     | by headings or paragraphs                     |
+| HTML (`.html`, `.htm`)             | by headings; scripts, styles and tags dropped |
+| Word (`.docx`)                     | by heading styles                             |
+| PDF with a text layer (`.pdf`)     | page by page; scans without text are skipped  |
+| OpenAPI (`.yaml`, `.yml`, `.json`) | one part per operation, e.g. `POST /orders`   |
+
+Other files are skipped and listed with the reason. Files that look like secrets are **never** indexed (`.env*`,
+`*.pem`, `*.key`, `*.p12`, `id_rsa*`, `.npmrc`, `credentials`...). Before anything is stored, known secret values of
+the project (including test account passwords from `.qa/envs/`) and credential-shaped strings (tokens, private
+keys, `password: ...`) are replaced with `***`.
+
+### Adding documents
+
+```sh
+qj knowledge add docs/                                   # a folder, recursively
+qj knowledge add specs/payments.pdf rules/limits.docx    # single files
+qj knowledge add api/openapi.yaml --tag api              # tag a source to filter by later
+qj knowledge add ~/wiki-export --include "**/*.md" --exclude "drafts/**" --tag business
+qj knowledge add --qa-knowledge                          # the repository's .qa/knowledge/ folder
+```
+
+Each path becomes a **source** recorded in `~/.qajitsu/projects/<slug>/knowledge/sources.yaml`. The command prints
+what happened:
+
+```text
+Knowledge base of shop: 12 added, 0 updated, 0 unchanged, 2 skipped, 0 removed · 148 chunk(s) · mode full
+  skipped docs/logo.png: unsupported format .png
+  skipped docs/.env: never indexed (environment, key or credential file)
+```
+
+Adding the same path again only processes new or changed files (by content hash).
+
+### Keeping it current
+
+```sh
+qj knowledge sync --dry-run      # what would change in all sources
+qj knowledge sync                # re-index changed files, add new ones, drop deleted ones
+qj knowledge remove docs/old.md  # one file (it stays excluded from its source)
+qj knowledge remove docs         # a whole source
+qj knowledge reset [--keep-sources]   # empty it (asks first); keep the sources to rebuild with sync
+```
+
+With `knowledge: { auto_sync: true }` every `qj plan` syncs first. With `max_age_days` set, documents not modified
+for that long are marked _possibly outdated_ to the agents and in the plan.
+
+### Checking what agents will get
+
+```sh
+qj knowledge list                         # sources, files, chunks, tags, last sync, mode, embedding model, size
+qj knowledge search "cancel a paid order" --tag api --limit 5
+```
+
+`search` shows exactly what the agents receive: rank, file, section, modification date and chunk id. `qj status`
+shows a one-line summary.
+
+### How agents use it
+
+The analyst and the planner get a read-only tool `search_docs(query, tags?)`. A plan may cite documentation:
+
+```text
+TC-03 Cancel a paid order after 24 hours · sources: AC2; docs/orders.md › Orders > Cancel (2026-09-01): "A paid order can be cancelled within 24 hours"
+```
+
+Code checks every such quote word for word against the chunk the agent was given and fills in the file, section and
+date itself; an invented or altered quote rejects the plan. Document text is treated as data, never as
+instructions. When the documentation contradicts the ticket, the planner has to ask an open question instead of
+choosing. Every search and the returned chunk ids are in the run's journal.
+
+### Small or large documentation, embedding model, shared server
+
+Documentation that fits `full_context_tokens` (default 20 000 tokens, about 80 KB of text) is given to the agents in
+full, with keyword search, and needs **no embedding model**. Above that, retrieval is hybrid (vectors plus keywords)
+and needs an embedding model from `models.providers`, by default a local one:
+
+```yaml
+models:
+  providers:
+    local: { type: ollama, base_url: http://localhost:11434 } # `ollama pull nomic-embed-text`
+knowledge:
+  embedding: local/nomic-embed-text # <provider alias>/<model>; Anthropic has no embedding models
+  full_context_tokens: 20000
+  max_age_days: 365
+  auto_sync: false
+```
+
+- Changing `embedding` later requires `qj knowledge reindex`.
+- A cloud embedding model (OpenAI, Google, a remote gateway) sends document text off the machine: `add`/`sync`
+  ask once per project (or need `--yes`).
+- The store is LanceDB inside the project's home (no server to run). Teams that share one Chroma server use
+  `knowledge: { store: chroma, chroma: { url: secret://env/CHROMA_URL, token: secret://env/CHROMA_TOKEN } }`; each
+  project gets its own collection.
+- Search stays fast at scale: p95 under 100 ms for 1 million chunks ([bench/README.md](bench/README.md)).
+- `qj bench --model <ref> --knowledge compare` measures what the knowledge base adds to detection and plan quality.
+
+`.qa/knowledge/*.md` in the repository is different: short notes the whole team commits, always given to the agents
+in full and refused if they contain a secret. Add them to the searchable knowledge base too with
+`qj knowledge add --qa-knowledge`.
+
+---
+
+## 6. Command reference
 
 Options common to most ticket commands: `--run <id>` picks a run (default: the latest run of the ticket).
 Every option and exit code of every command: [docs/cli/commands.md](docs/cli/commands.md).
@@ -335,7 +541,7 @@ Every option and exit code of every command: [docs/cli/commands.md](docs/cli/com
 
 ---
 
-## 5. Statuses and exit codes
+## 7. Statuses and exit codes
 
 | Status           | Meaning                                                                                                                     |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -355,7 +561,10 @@ Every option and exit code of every command: [docs/cli/commands.md](docs/cli/com
 
 ---
 
-## 6. What QAJitsu writes to disk
+## 8. What QAJitsu writes to disk
+
+Everything lives in the project's home (`~/.qajitsu/projects/<project>/`, layout in [Projects](#4-projects)); one
+run folder looks like this:
 
 ```text
 ~/.qajitsu/projects/<project>/runs/  workspace root (workspace.root, or QAJITSU_WORKSPACE)
@@ -374,24 +583,25 @@ Every option and exit code of every command: [docs/cli/commands.md](docs/cli/com
       journal/events.jsonl          hash-chained event journal
       logs/                         QAJitsu and service logs
       env/                          generated secrets during --build (0600, deleted after use)
+      knowledge/chunks.json         documentation chunks the agents were given (documentation quotes are checked against it)
   .audit/                           journals of deleted runs (audit retention)
 ```
 
 ---
 
-## 7. Configuration (`.qa/`)
+## 9. Configuration (`.qa/`)
 
-| File                                         | Purpose                                                                                                                                                                                                                                              |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.qa/qa.project.yaml`                        | the project: Jira, code hosts, repositories, environments, models, services and build, mobile, verification, telemetry, cleanup, audit, web and publish options. Schema: `schemas/qa.project.schema.json`; reference: `templates/qa/qa.project.yaml` |
-| `.qa/envs/<name>.yaml`                       | an environment: `base_url`, health and version paths, test accounts as aliases with `secret://` passwords, login recipe or `auth/` script, web session, feature flags, `production: true` for production                                             |
-| `.qa/knowledge/*.md`                         | domain notes the agents read (business rules, glossary)                                                                                                                                                                                              |
-| `.qa/routes.yaml`                            | route patterns (`/product/:id`) for the transition graph and the application map                                                                                                                                                                     |
-| `.qa/hooks/`                                 | `seed` after `--build` starts the app; `setup`/`teardown` around every run (`hooks:` in the project config); `BASE_URL` and the run marker `QAJITSU_RUN`, no secrets                                                                                 |
-| `.qa/auth/`                                  | login scripts for logins one request cannot do (forms, cookies, SSO): `login: { script: auth/<file> }` in a profile; values are masked                                                                                                               |
-| `.qa/stubs/<name>/`                          | WireMock/Mockoon mappings for stubbed dependencies                                                                                                                                                                                                   |
-| `.qa/bench.yaml`                             | benchmark cases                                                                                                                                                                                                                                      |
-| `.env.local` (next to `.qa/`, not committed) | secret values for `secret://env/NAME`                                                                                                                                                                                                                |
+| File                                         | Purpose                                                                                                                                                                                                                                                              |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.qa/qa.project.yaml`                        | the project: Jira, code hosts, repositories, environments, models, services and build, mobile, verification, telemetry, cleanup, audit, web, publish and knowledge base options. Schema: `schemas/qa.project.schema.json`; reference: `templates/qa/qa.project.yaml` |
+| `.qa/envs/<name>.yaml`                       | an environment: `base_url`, health and version paths, test accounts as aliases with `secret://` passwords, login recipe or `auth/` script, web session, feature flags, `production: true` for production                                                             |
+| `.qa/knowledge/*.md`                         | short domain notes the team commits (business rules, glossary), always given to the agents in full; larger documentation goes into the [knowledge base](#5-knowledge-base)                                                                                           |
+| `.qa/routes.yaml`                            | route patterns (`/product/:id`) for the transition graph and the application map                                                                                                                                                                                     |
+| `.qa/hooks/`                                 | `seed` after `--build` starts the app; `setup`/`teardown` around every run (`hooks:` in the project config); `BASE_URL` and the run marker `QAJITSU_RUN`, no secrets                                                                                                 |
+| `.qa/auth/`                                  | login scripts for logins one request cannot do (forms, cookies, SSO): `login: { script: auth/<file> }` in a profile; values are masked                                                                                                                               |
+| `.qa/stubs/<name>/`                          | WireMock/Mockoon mappings for stubbed dependencies                                                                                                                                                                                                                   |
+| `.qa/bench.yaml`                             | benchmark cases                                                                                                                                                                                                                                                      |
+| `.env.local` (next to `.qa/`, not committed) | secret values for `secret://env/NAME`                                                                                                                                                                                                                                |
 
 Layers, each overriding the previous: defaults → `qa.project.yaml` → `envs/<env>.yaml` → secrets → run options
 (`--env`, `--set`, `QAJITSU_WORKSPACE`). The effective configuration (secrets masked) is stored in `run.json`.
@@ -419,7 +629,7 @@ test_types: [api, web]
 
 ---
 
-## 8. Additional features
+## 10. Additional features
 
 - **API, web, mixed and mobile tests.** Web runs in Chromium (Firefox and WebKit configurable) with a screenshot per
   step, full-page screenshot, DOM, video and trace on failure, HAR and console log. Mixed cases combine API and UI.
@@ -471,7 +681,7 @@ test_types: [api, web]
 
 ---
 
-## 9. Why you can trust the results
+## 11. Why you can trust the results
 
 1. The verdict comes from code reading the runner output; no prompt or model answer can set a status.
 2. Agents never write results or evidence; the guard blocks it.
@@ -488,7 +698,7 @@ adversarial suite (`pnpm test:adversarial`) simulates lying agents, tampered fil
 
 ---
 
-## 10. Try it on the demo shop
+## 12. Try it on the demo shop
 
 `examples/demo-shop` is a fictional shop (API, web UI, Android app) with eight seeded bugs that can be switched on
 (`examples/demo-shop/BUGS.md`). With a bug on, the case that targets it must end FAILED.
@@ -518,7 +728,7 @@ qj evidence DEMO-1 --failed
 
 ---
 
-## 11. Tuning and extending
+## 13. Tuning and extending
 
 **Tuning**
 
@@ -542,7 +752,7 @@ More: [docs/guides/getting-started.md](docs/guides/getting-started.md), [docs/ar
 
 ---
 
-## 12. For contributors
+## 14. For contributors
 
 ```sh
 pnpm install

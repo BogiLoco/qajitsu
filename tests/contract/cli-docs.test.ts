@@ -67,7 +67,7 @@ describe("reference documentation in sync with the code (REQ-NFR-03/AC3)", () =>
 
   it("REQ-NFR-03/AC3: the README command reference names every command", async () => {
     const readme = await read("README.md");
-    const reference = readme.slice(readme.indexOf("## 4. Command reference"), readme.indexOf("## 5."));
+    const reference = readme.slice(readme.indexOf("## 6. Command reference"), readme.indexOf("## 7."));
     for (const { path } of commands()) expect(reference, path).toContain(`\`qj ${path}`);
   });
 
