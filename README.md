@@ -6,7 +6,7 @@
 
 <p align="center">
   <em>AI that tests your tickets, and cannot lie about the result.</em><br>
-  Jira ticket in → a test plan you approve → API, web and mobile tests → evidence and a verified result back in Jira.
+  Ticket in → a test plan you approve → API, web and mobile tests → evidence and a verified result back on the ticket.
 </p>
 
 <p align="center">
