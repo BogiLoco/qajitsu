@@ -158,6 +158,19 @@ environment variables.
 
 ## 3. The flow, step by step
 
+### Step 0: pick the project (and feed it documentation)
+
+```sh
+qj status                                  # which project, is it ready, what is in progress and what to run next
+qj use shop                                # switch project (or pass --project shop, or a ticket key with its prefix)
+qj knowledge add docs/ confluence:SHOP     # optional, once: documentation the analyst and planner may search
+qj knowledge sync                          # later: only changed files and pages are processed
+```
+
+**When:** at the start of the day or when you switch to another system under test. Every command prints the
+project it works in (`Project: shop (active project)`); runs, caches, exports and the knowledge base stay in that
+project's home. Details: [Projects](#4-projects), [Knowledge base](#5-knowledge-base).
+
 ### Step 1: fetch the ticket and the change
 
 ```sh
@@ -168,7 +181,8 @@ qj fetch SHOP-482
 **What it does:** downloads the ticket (summary, description, acceptance criteria, comments), finds the linked PRs/MRs
 (Jira development panel, ticket key in branch names or titles), stores their diffs and review comments, and checks
 out every repository **at the exact commit of the change** into the run folder. If nothing is linked, pass the
-change yourself: `--pr <GitHub URL>`, `--mr <GitLab URL>` or `--ref <repo>=<branch|tag|sha>`.
+change yourself: `--pr <GitHub URL>`, `--mr <GitLab URL>` or `--ref <repo>=<branch|tag|sha>`. A tests repository
+(`role: tests`) is checked out too, so the planner sees what is already covered.
 
 ### Step 2: plan and review
 
@@ -180,8 +194,14 @@ qj plan SHOP-482
 **What it does:** the **analyst** classifies the change (api, web, mobile) and lists endpoints, screens and risks; the
 **planner** writes the plan: cases (`TC-01`...), steps (`S1`...), exact expected results (HTTP status, response fields,
 visible texts, element states), test data as aliases (`user:standard`), open questions. Every case must cite a
-source (an acceptance criterion, a quote from the ticket, changed diff lines or a review comment); code rejects
-invented sources and the planner has to fix them.
+source (an acceptance criterion, a quote from the ticket, changed diff lines, a review comment or a quote from the
+project's documentation); code rejects invented sources and the planner has to fix them.
+
+When the project has a knowledge base, both agents search it with `search_docs` (small documentation is given to
+them in full). A case that relies on documentation cites it, and the plan shows where the quote comes from:
+`docs/orders.md › Orders > Cancel (2026-09-01): "A paid order can be cancelled within 24 hours"`. Code checks the
+quote word for word; outdated documents are marked _possibly outdated_, and a contradiction between documentation
+and ticket becomes an open question. With `knowledge.auto_sync: true` the knowledge base is synced first.
 
 In a terminal you then review it: `[a]ccept`, `[r]evise` (type what should change, a new version is written),
 `[e]dit` (open the draft in `$EDITOR`) or `[q]uit`. Without a terminal (CI) the plan is written and the command ends;
@@ -242,8 +262,8 @@ qj publish SHOP-482
 
 **What it does:** recomputes everything from the files and checks the publish gates (evidence intact, no secrets,
 journal intact, approved plan unchanged, ...). Then it shows a **preview** of the Jira comment and asks
-`Publish this to SHOP-482? [y/N]`. On `y` it posts the matrix with failures and reproduction hints, attaches the
-evidence zip and media; running it again updates the same comment.
+`Publish this to SHOP-482? [y/N]`. On `y` it posts the matrix with failures and reproduction hints, the failure
+hints in their own section, attaches the evidence zip and media; running it again updates the same comment.
 
 ### Optional: keep the cases as regression tests
 
@@ -266,10 +286,12 @@ stays).
 ### The short version
 
 ```sh
+qj status                                  # right project? what is open?
 qj fetch SHOP-482 && qj plan SHOP-482     # review: a
 qj run SHOP-482 --env staging
-qj evidence SHOP-482 --failed
+qj evidence SHOP-482 --failed              # FAILED cases with their hint (product bug, test bug, environment, data)
 qj publish SHOP-482
+qj promote SHOP-482                        # optional: PASSED cases as a PR/MR to the tests repository
 ```
 
 In Claude Code the same flow is available as `/qa-plan`, `/qa-run` and `/qa-evidence` (section 8).
@@ -714,7 +736,21 @@ test_types: [api, web]
   PR/MR comment and status check; JUnit and artifacts. [docs/guides/ci-cd.md](docs/guides/ci-cd.md)
 - **Claude Code plugin.** `/qa-plan`, `/qa-run`, `/qa-evidence` in a Claude Code chat; approval always stays with
   you. Install: `/plugin marketplace add <path or repo of qajitsu>` then `/plugin install qajitsu@qajitsu`.
-- **Run management.** One folder per run, locks so two processes never write one run, `resume`, `clean`, `gc`.
+- **Run management.** One folder per run, locks so two processes never write one run, `resume`, `clean`, `gc`,
+  `work reset`, `runs --keep`.
+- **Projects.** Several systems under test on one machine, each with its own home in `~/.qajitsu/projects/<slug>/`
+  (runs, git mirrors, code index cache, knowledge base, exports, logs); `qj use`, `qj status --all`, ticket prefixes,
+  isolation enforced by the guard; `qj projects export|import` moves a project to another machine. [Projects](#4-projects)
+- **Knowledge base.** Markdown, text, HTML, DOCX, PDF, OpenAPI, Confluence spaces and resolved Jira bugs per project;
+  embedded LanceDB (or a shared Chroma server), full or hybrid retrieval, secrets masked before indexing; the analyst
+  and planner cite it and code checks every quote; `qj bench --knowledge compare` measures what it adds.
+  [Knowledge base](#5-knowledge-base)
+- **Failure hints.** Every FAILED case gets a suggested cause (product bug, test bug, environment, data) citing
+  steps, assertions, evidence or logs; code drops hints without real evidence and a hint never changes a status.
+  [docs/guides/models-and-verification.md](docs/guides/models-and-verification.md)
+- **Regression suite from tickets.** `qj promote` proposes the PASSED cases of a run as a PR/MR to your tests
+  repository: the exact specs that passed (hash checked against the runner record and the journal) and the approved
+  plan's expectations; nothing is pushed without your confirmation.
 
 ---
 
