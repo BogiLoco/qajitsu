@@ -61,6 +61,7 @@ import {
 } from "./build-env.js";
 import type { CommandExec } from "@qajitsu/adapter-env-compose";
 import { headlessFor, prepareLiveRun, type LiveOptions, type LiveRun } from "./live.js";
+import { createProgressPrinter, liveScreenshots, teeEvents } from "./progress.js";
 
 /** Options of `qajitsu run`. */
 export interface RunOptions extends LiveOptions {
@@ -738,8 +739,18 @@ async function executeCases(
     now: ports.now,
   };
   const evidence = createLocalEvidenceStore(ws.path("evidence"));
+  // REQ-OBS-09/AC1+AC2: progress lines for the person running, live screenshots for `qj watch`.
+  const total = plan.cases.filter((c) => !blocked.has(c.id) && specs.has(c.id)).length;
+  const watched = {
+    events: teeEvents(
+      events,
+      createProgressPrinter(io, plan, total, () => ports.now().getTime(), startedAt),
+    ),
+    onScreenshot: liveScreenshots(ws.path("live")),
+  };
   const ran = await runCases({
     ...base,
+    ...watched,
     // REQ-EXEC-16/AC3: only the primary run pauses; one case at a time so the person follows one.
     ...(live?.pause ? { pause: live.pause } : {}),
     plan: { ...plan, cases: plan.cases.filter((c) => !blocked.has(c.id) && c.type !== "mobile") },
@@ -876,6 +887,7 @@ async function executeCases(
             .map((g) =>
               runCases({
                 ...base,
+                ...watched,
                 executor: ports.mobileExecutor?.(g.factory) ?? createSandboxExecutor({ browser: g.factory }),
                 ...(live?.pause ? { pause: live.pause } : {}),
                 plan: { ...plan, cases: g.cases },

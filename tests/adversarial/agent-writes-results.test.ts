@@ -54,6 +54,10 @@ describe("invariant 2: agents never write results or evidence (REQ-VER-03)", () 
       { tool: "write_file", input: { path: "checks/audit.json", content: '{"findings":[]}' } },
     ],
     [
+      "replaces the live screenshot a person is watching (REQ-OBS-09)",
+      { tool: "write_file", input: { path: "live/TC-01.png", content: "fake" } },
+    ],
+    [
       "adds an untested screen to the map around the change (REQ-OBS-08)",
       { tool: "write_file", input: { path: "map/around.json", content: '{"untested":[]}' } },
     ],

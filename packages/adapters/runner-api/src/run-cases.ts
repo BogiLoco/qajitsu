@@ -63,6 +63,8 @@ export interface RunCasesOptions {
   readonly visual?: VisualCheck | undefined;
   /** Pause before every step for a person watching (REQ-EXEC-16/AC3). */
   readonly pause?: StepPause | undefined;
+  /** Live screenshots for a person watching (REQ-OBS-09); never evidence. */
+  readonly onScreenshot?: ((caseId: string, stepId: string, png: Uint8Array) => void) | undefined;
   /** Locale and time zone of a locale run (REQ-EXEC-14); `plan` must be resolved for it. */
   readonly locale?: { readonly name: string; readonly timezone: string } | undefined;
   /** Prefix of evidence paths, e.g. `matrix/firefox-mobile/` for a browser combination (REQ-EXEC-13). */
@@ -183,6 +185,15 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
       ...(options.locale ? { locale: options.locale } : {}),
       ...(options.visual ? { visual: options.visual } : {}),
       ...(options.pause ? { pause: options.pause } : {}),
+      // REQ-OBS-09: step starts go to the journal as they happen, so `qj run` and `qj watch` can show progress.
+      progress: {
+        step: (stepId: string) => {
+          options.events.emit("run", actor, "step.start", { caseId, attempt, step: stepId });
+        },
+        screenshot: (stepId: string, png: Uint8Array) => {
+          options.onScreenshot?.(caseId, stepId, png);
+        },
+      },
       ...(options.messages ? { messages: options.messages(caseId) } : {}),
     });
     const record = applyContract(executed, options.contract);

@@ -35,7 +35,13 @@ const plan = PlanSchema.parse({
 
 const SHOT = new Uint8Array([1, 2, 3]);
 const setup = (
-  opts: { baseline?: Uint8Array; compare?: ImageComparison; threshold?: number; noVisual?: boolean } = {},
+  opts: {
+    baseline?: Uint8Array;
+    compare?: ImageComparison;
+    threshold?: number;
+    noVisual?: boolean;
+    onScreenshot?: (stepId: string, png: Uint8Array) => void;
+  } = {},
 ) => {
   const masksSeen: unknown[] = [];
   const driver = {
@@ -58,6 +64,7 @@ const setup = (
     accounts: {},
     now: () => 0,
     ui: () => Promise.resolve(driver),
+    ...(opts.onScreenshot ? { onScreenshot: opts.onScreenshot } : {}),
     ...(opts.noVisual
       ? {}
       : {
@@ -138,5 +145,35 @@ describe("visual regression in steps (REQ-EXEC-12)", () => {
     const none = await setup({ noVisual: true }).play();
     expect(none.outcome).toBe("error");
     expect(none.error).toContain("no visual comparison");
+  });
+});
+
+describe("live screenshots (REQ-OBS-09)", () => {
+  it("REQ-OBS-09/AC2: the live view gets a copy of each step screenshot; changing it never touches the evidence", async () => {
+    const seen: { stepId: string; png: Uint8Array }[] = [];
+    const { play } = setup({
+      noVisual: true,
+      onScreenshot: (stepId, png) => {
+        seen.push({ stepId, png });
+        png.fill(0);
+      },
+    });
+    const record = await play();
+    expect(seen.map((s) => s.stepId)).toEqual(["S1"]);
+    expect(record.evidence.find((e) => e.name === "S1.png")?.content).toEqual(SHOT);
+    expect(Array.from(SHOT)).toEqual([1, 2, 3]);
+  });
+
+  it("REQ-OBS-09/AC4: a failing live view never affects the attempt", async () => {
+    const { play } = setup({
+      baseline: SHOT,
+      onScreenshot: () => {
+        throw new Error("viewer gone");
+      },
+    });
+    const record = await play();
+    expect(record.error).toBeUndefined();
+    expect(record.assertions.every((a) => a.pass)).toBe(true);
+    expect(record.evidence.map((e) => e.name)).toContain("S1.png");
   });
 });

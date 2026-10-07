@@ -66,6 +66,13 @@ export async function executeAttempt(
     accounts: input.accounts,
     now,
     ...(session ? { ui: session.driver } : {}),
+    ...(input.progress
+      ? {
+          onScreenshot: (stepId: string, png: Uint8Array) => {
+            input.progress?.screenshot(stepId, png);
+          },
+        }
+      : {}),
   });
   let record: AttemptRecord;
   try {
@@ -75,18 +82,22 @@ export async function executeAttempt(
     if (typeof mod.run !== "function") throw new Error("spec must export async function run(context)");
     const run = mod.run as (context: CaseContext) => Promise<void>;
     const pause = input.pause;
+    const progress = input.progress;
     await withTimeout(
       (deadline) =>
         run(
-          pause
+          pause || progress
             ? {
                 ...runtime.context,
                 // REQ-EXEC-16/AC3: same pause as in the sandbox; the time limit stands still while it waits.
                 step: async (stepId, fn) => {
-                  deadline.pause();
-                  const answer = await pause(pausedStep(input.plan, input.caseId, stepId));
-                  deadline.resume();
-                  if (answer === "stop") throw new Error(`stopped by the tester before ${stepId}`);
+                  if (pause) {
+                    deadline.pause();
+                    const answer = await pause(pausedStep(input.plan, input.caseId, stepId));
+                    deadline.resume();
+                    if (answer === "stop") throw new Error(`stopped by the tester before ${stepId}`);
+                  }
+                  progress?.step(stepId);
                   return runtime.context.step(stepId, fn);
                 },
               }

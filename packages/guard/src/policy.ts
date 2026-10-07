@@ -54,6 +54,8 @@ export const DEFAULT_PROTECTED_PATHS: readonly string[] = [
   "imported/",
   // The application map around the change (REQ-OBS-08): plan citations are checked against it.
   "map/",
+  // Live screenshots of a running case for `qj watch` (REQ-OBS-09), written by the trusted parent.
+  "live/",
   "run.json",
 ];
 

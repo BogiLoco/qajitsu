@@ -195,6 +195,13 @@ export function createSandboxExecutor(
       accounts: input.accounts,
       now,
       ...(session ? { ui: session.driver } : {}),
+      ...(input.progress
+        ? {
+            onScreenshot: (stepId: string, png: Uint8Array) => {
+              input.progress?.screenshot(stepId, png);
+            },
+          }
+        : {}),
     });
     let specFile = input.specFile;
     try {
@@ -264,6 +271,7 @@ export function createSandboxExecutor(
                   if (answer === "stop") throw new Error(`stopped by the tester before ${op.stepId}`);
                 }
                 runtime.beginStep(op.stepId);
+                input.progress?.step(op.stepId);
               } else if (op.op === "endStep") await runtime.endStep(op.stepId, op.error);
               else if (op.op === "verify") await runtime.verify(op.stepId, op.field);
               else if (op.op === "ui") await runtime.uiOp(op.operation);

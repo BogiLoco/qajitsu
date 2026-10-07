@@ -135,6 +135,8 @@ export interface CaseRuntimeOptions {
   readonly locale?: string | undefined;
   /** Baselines and image comparison (REQ-EXEC-12); provided by the trusted orchestrator. */
   readonly visual?: VisualCheck | undefined;
+  /** Gets a copy of each step screenshot as soon as it is taken, for the live view (REQ-OBS-09); never evidence. */
+  readonly onScreenshot?: ((stepId: string, png: Uint8Array) => void) | undefined;
 }
 
 /** The recorder of one attempt. Runs in the trusted process; specs only reach it through these operations. */
@@ -366,12 +368,14 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     // REQ-EVD-02/AC1: a screenshot after every step of a case that uses the browser.
     if (driver) {
       try {
-        media.push({
-          stepId,
-          kind: "screenshot",
-          name: `${stepId}.png`,
-          content: await driver.screenshot(false),
-        });
+        const png = await driver.screenshot(false);
+        media.push({ stepId, kind: "screenshot", name: `${stepId}.png`, content: png });
+        // REQ-OBS-09: the live view gets its own copy; what it does with it cannot change the evidence.
+        try {
+          options.onScreenshot?.(stepId, png.slice());
+        } catch {
+          // A failing live view never affects the attempt.
+        }
       } catch {
         // A crashed page has no screenshot; the failure evidence still records the state.
       }

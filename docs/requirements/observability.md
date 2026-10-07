@@ -104,7 +104,7 @@ Built by code from the journal, never drawn by an agent.
 
 ### REQ-OBS-09 · Live progress of a run
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: INV-1, INV-6, INV-8, REQ-OBS-01, REQ-PRJ-10
@@ -114,7 +114,7 @@ local browser page, instead of waiting for the matrix at the end.
 
 **Acceptance criteria**
 
-- [ ] AC1: `qj run` prints when each case starts and ends with a counter (`TC-02 ▶ 2/5`), the step in progress and the elapsed time; outside a terminal (CI) the same as plain lines.
-- [ ] AC2: `qj watch <TICKET>` serves a page on 127.0.0.1 that updates while the run runs: cases, current step, the latest screenshot of a web or mobile case, and a preliminary result per finished case.
-- [ ] AC3: Progress is read from what the runner already wrote (journal, results, evidence); live results are labelled preliminary and the final statuses come only from the computed verdict after the run.
-- [ ] AC4: A run that stopped or stalled is shown as stopped with its last event, never as passed; the page serves only masked progress and evidence, nothing from `env/` or `repos/`.
+- [x] AC1: `qj run` prints when each case starts and ends with a counter (`TC-02 ▶ 2/5`), the step in progress and the elapsed time; outside a terminal (CI) the same as plain lines.
+- [x] AC2: `qj watch <TICKET>` serves a page on 127.0.0.1 that updates while the run runs: cases, current step, the latest screenshot of a web or mobile case, and a preliminary result per finished case.
+- [x] AC3: Progress is read from what the runner already wrote (journal, results, evidence); live results are labelled preliminary and the final statuses come only from the computed verdict after the run.
+- [x] AC4: A run that stopped or stalled is shown as stopped with its last event, never as passed; the page serves only masked progress and evidence, nothing from `env/` or `repos/`.

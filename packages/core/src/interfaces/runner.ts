@@ -146,6 +146,16 @@ export interface AttemptRequest {
    * paused meanwhile; "stop" ends the attempt with an error, so the case can never pass.
    */
   readonly pause?: StepPause;
+  /** Live progress for a person watching (REQ-OBS-09): never part of the record or a status. */
+  readonly progress?: AttemptProgress;
+}
+
+/** What the trusted parent reports while an attempt runs (REQ-OBS-09). */
+export interface AttemptProgress {
+  /** A step starts (after any pause). */
+  step(stepId: string): void;
+  /** The screenshot taken after a step of a browser or device case. */
+  screenshot(stepId: string, png: Uint8Array): void;
 }
 
 /** A step about to run, shown to the person watching (REQ-EXEC-16). */

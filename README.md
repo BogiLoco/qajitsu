@@ -275,6 +275,19 @@ qj run SHOP-482 --build --set api.FEATURE_X=1         # with an overridable vari
 
 The matrix is printed at the end; the exit code tells the result (section 5).
 
+### Optional: watch a run while it runs
+
+`qj run` prints each case as it starts (`[00:42] ▶ TC-02 (2/5)`), each step and how each attempt ended; the same
+plain lines in CI. In a second terminal:
+
+```sh
+qj watch SHOP-482            # http://127.0.0.1:<port>/ : cases, the step running now, latest screenshot
+```
+
+The page reads the run's journal: outcomes are marked preliminary until the run finishes, then the computed
+statuses are shown; a run that stopped is shown as stopped with its last event, never as passed. It serves only
+the progress and the live screenshots (`live/`), nothing else of the run folder, and only on 127.0.0.1.
+
 ### Optional: watch one case live
 
 ```sh
@@ -629,14 +642,15 @@ Every option and exit code of every command: [docs/cli/commands.md](docs/cli/com
 
 ### Inspecting results
 
-| Command                                                                              | What it does                                                                                                                                           |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `qj evidence <TICKET> [--failed] [--case <TC>] [--trace <TC>] [--no-open] [--serve]` | Statuses, failed assertions (expected vs actual), evidence files, cURL commands; opens `report.html`, videos or a Playwright trace unless `--no-open`. |
-| `qj logs <TICKET> [--follow] [--stage <s>] [--agent <role>] [--case <TC>]`           | The structured event journal: stages, agent tool calls (allowed and denied), model usage, attempts. `--follow` while a run is running.                 |
-| `qj runs <TICKET>`                                                                   | All runs of a ticket: status, stage, results, retention.                                                                                               |
-| `qj map [--out <dir>] [--openapi <file>]`                                            | Application map over all runs: tested screens, endpoints and transitions, and the ones never tested (`qa-map/map.html`, `map.json`).                   |
-| `qj export <TICKET> [--out <dir>]`                                                   | Pipeline artifacts: `report.html`, `junit.xml`, `matrix.md/.csv`, `gates.json` and the evidence zip. Exit code = the run's.                            |
-| `qj pull <TICKET> --run <id>`                                                        | Downloads the evidence zip of a run from the Jira ticket (e.g. from a CI run) and verifies it against its manifest.                                    |
+| Command                                                                              | What it does                                                                                                                                            |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `qj evidence <TICKET> [--failed] [--case <TC>] [--trace <TC>] [--no-open] [--serve]` | Statuses, failed assertions (expected vs actual), evidence files, cURL commands; opens `report.html`, videos or a Playwright trace unless `--no-open`.  |
+| `qj logs <TICKET> [--follow] [--stage <s>] [--agent <role>] [--case <TC>]`           | The structured event journal: stages, agent tool calls (allowed and denied), model usage, attempts. `--follow` while a run is running.                  |
+| `qj watch <TICKET> [--port <n>]`                                                     | A page on 127.0.0.1 with the progress of a run while it runs: cases, current step, latest screenshot, preliminary outcomes, then the computed statuses. |
+| `qj runs <TICKET>`                                                                   | All runs of a ticket: status, stage, results, retention.                                                                                                |
+| `qj map [--out <dir>] [--openapi <file>]`                                            | Application map over all runs: tested screens, endpoints and transitions, and the ones never tested (`qa-map/map.html`, `map.json`).                    |
+| `qj export <TICKET> [--out <dir>]`                                                   | Pipeline artifacts: `report.html`, `junit.xml`, `matrix.md/.csv`, `gates.json` and the evidence zip. Exit code = the run's.                             |
+| `qj pull <TICKET> --run <id>`                                                        | Downloads the evidence zip of a run from the Jira ticket (e.g. from a CI run) and verifies it against its manifest.                                     |
 
 ### Run management
 
@@ -719,6 +733,7 @@ run folder looks like this:
       env/                          generated secrets during --build (0600, deleted after use)
       knowledge/chunks.json         documentation chunks the agents were given (documentation quotes are checked against it)
       map/around.json               the application map around the change, computed before planning
+      live/<TC>.png                 latest screenshot of each case while it runs, for qj watch (not evidence)
       imported/cases.json           manual test cases imported by fetch, with the status of each source (plan citations are checked against it)
   .audit/                           journals of deleted runs (audit retention)
 ```
@@ -849,6 +864,9 @@ test_types: [api, web]
   screens and endpoints next to the change that were never tested or failed last time; the planner may propose
   regression cases for them (`{kind: map, id: page:/cart/checkout}`, checked by code). Known screens come from
   `.qa/routes.yaml`, endpoints from the OpenAPI document.
+- **Live progress.** `qj run` prints cases, steps and attempt outcomes as they happen, and `qj watch` serves a local
+  page with the step running now and the latest screenshot of each web or mobile case; outcomes stay preliminary
+  until the statuses are computed after the run.
 - **Watch a case live.** `qj run SHOP-482 --cases TC-02 --headed --step` runs one web or mobile case in a visible
   browser or emulator, pausing before every step (`--slow-mo` slows actions down); unchosen cases are NOT_RUN, a
   stopped case is BLOCKED, never PASSED.

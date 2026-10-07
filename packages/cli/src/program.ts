@@ -29,6 +29,7 @@ import { runBug, type BugOptions } from "./commands/bug.js";
 import { runAnswer } from "./commands/manual.js";
 import { runBaselineAccept } from "./commands/baseline.js";
 import { runRelease, type ReleaseOptions } from "./commands/release.js";
+import { runWatch } from "./commands/watch.js";
 import { runProjectExport, runProjectImport } from "./commands/project-profile.js";
 import {
   runKnowledgeAdd,
@@ -926,6 +927,16 @@ export function createProgram(version: string, io: ProgramIO): Command {
                 ...(io.openTrace ? { openTrace: io.openTrace } : {}),
               }),
         )(),
+    );
+
+  program
+    .command("watch")
+    .description("Watch a run in the browser while it runs: cases, current step, latest screenshot")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .option("--port <n>", "port on 127.0.0.1 (default: a free one)")
+    .action((ticket: string, options: { run?: string; port?: string }) =>
+      withPorts((ports) => runWatch(ticket, options, commandIO, ports))(),
     );
 
   program

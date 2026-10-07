@@ -28,6 +28,7 @@ export type { PublishAttachment, PublishInput, PublishResult, Publisher } from "
 export type {
   AssertionRecord,
   AttemptExecutor,
+  AttemptProgress,
   AttemptRecord,
   AttemptRequest,
   CaseAttempt,

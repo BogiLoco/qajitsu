@@ -343,6 +343,19 @@ Shows statuses, failed assertions, evidence files and cURL commands; opens the r
 
 Exit codes: `0` shown, `3` errors.
 
+### `qajitsu watch <ticket>`
+
+Serves a page on 127.0.0.1 with the progress of a run while it runs (REQ-OBS-09): every case of the approved plan,
+the step running now with its action, the latest screenshot of web and mobile cases (`<run>/live/`, written by the
+trusted runner, not evidence) and the outcome of each finished attempt, marked preliminary. When the run finished the
+page shows the statuses computed by QAJitsu; a run that is neither running nor finished is shown as stopped with
+its last event. Only the page, `progress.json` and the live screenshots are served. Runs until Ctrl+C.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+- `--port <n>`: port (default: a free one)
+
+Exit codes: `0` stopped with Ctrl+C, `3` errors.
+
 ### `qajitsu logs <ticket>`
 
 Shows the structured event log of a run.
