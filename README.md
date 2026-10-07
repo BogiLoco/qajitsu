@@ -12,8 +12,8 @@
 <p align="center">
   <a href="#2-installation-and-first-setup">Install</a> ·
   <a href="#3-the-flow-step-by-step">The flow</a> ·
-  <a href="#4-command-reference">Commands</a> ·
-  <a href="#10-try-it-on-the-demo-shop">Try the demo</a> ·
+  <a href="#6-command-reference">Commands</a> ·
+  <a href="#12-try-it-on-the-demo-shop">Try the demo</a> ·
   <a href="docs/guides/ci-cd.md">CI/CD</a>
 </p>
 
@@ -74,7 +74,7 @@ checks (auditor, canary) can only make a result worse, never better.
 ## 1. How it works
 
 <p align="center">
-  <img src="docs/assets/qajitsu-flow.png" alt="QAJitsu flow: plan (fetch, plan, review), run (frozen plan, author, sandboxed run, verdict by code), report (evidence, publish)" width="900">
+  <img src="docs/assets/qajitsu-flow.png" alt="QAJitsu flow: plan (fetch, plan, review), run (frozen plan, author, sandboxed run, verdict by code, live watch), report (evidence, publish, bug), keep (promote, regression, release)" width="900">
 </p>
 
 <sub>Diagram source: <a href="docs/assets/qajitsu-flow.mmd">docs/assets/qajitsu-flow.mmd</a>, re-render with <code>node scripts/render-diagrams.mjs</code>.</sub>
@@ -83,14 +83,19 @@ checks (auditor, canary) can only make a result worse, never better.
 
 | Step                  | Who                         | What it produces                                      | Where it lives (in the run folder)    |
 | --------------------- | --------------------------- | ----------------------------------------------------- | ------------------------------------- |
-| `qj fetch`            | code                        | the ticket, the change, worktrees at its commit       | `ticket/`, `repos/`                   |
-| `qj plan`             | AI agents                   | analysis and plan versions with sources               | `analysis.json`, `plan/plan.vN.yaml`  |
+| `qj fetch`            | code                        | the ticket, the change, worktrees, manual test cases  | `ticket/`, `repos/`, `imported/`      |
+| `qj plan`             | AI agents                   | analysis and plan versions with sources               | `analysis.json`, `plan/`, `map/`      |
 | review / `qj approve` | **you**                     | the frozen plan and its SHA-256                       | `plan/plan.approved.yaml`, `run.json` |
 | `qj run` (author)     | AI agent                    | one spec per case, checked by code                    | `specs/`                              |
 | `qj run` (execution)  | code                        | assertions, evidence with hashes                      | `results/`, `evidence/`               |
+| `qj watch`            | you                         | live progress and the latest screenshot per case      | `live/` (preview, not evidence)       |
 | `qj run` (verdict)    | code                        | statuses, gates, auditor and canary records, reports  | `checks/`, `report/`                  |
 | `qj evidence`         | you                         | the report, failed steps, screenshots, videos, traces | `report/report.html`                  |
 | `qj publish`          | **you** confirm, code posts | the Jira comment and the evidence zip                 | Jira ticket                           |
+| `qj bug`              | **you** confirm, code posts | a Jira bug per FAILED case, written from the run      | Jira, `run.json`                      |
+| `qj promote`          | **you** confirm, code posts | a PR/MR with the PASSED specs and their expectations  | tests repository                      |
+| `qj regression`       | code                        | the promoted packs run again, no models               | `exports/regression/`                 |
+| `qj release`          | code                        | readiness of every ticket of a fix version or sprint  | `exports/releases/`                   |
 
 Every ticket gets a **run folder** in its project (`~/.qajitsu/projects/<project>/runs/<TICKET>/<RUN-ID>/`). Each command continues the latest run of the
 ticket unless you pass `--run <id>`. A new `qj fetch` starts a new run.
@@ -273,7 +278,7 @@ qj run SHOP-482 --build --set api.FEATURE_X=1         # with an overridable vari
     hint is a suggestion and never changes a status.
 11. Reports are written: `report.html`, `matrix.md/.csv/.xlsx`, `junit.xml`, `gates.json`, the transition graph.
 
-The matrix is printed at the end; the exit code tells the result (section 5).
+The matrix is printed at the end; the exit code tells the result ([section 7](#7-statuses-and-exit-codes)).
 
 ### Optional: watch a run while it runs
 
@@ -309,6 +314,9 @@ qj evidence SHOP-482              # opens report.html
 qj evidence SHOP-482 --failed     # failed cases: expected vs actual, evidence files, cURL to reproduce
 qj evidence SHOP-482 --trace TC-02  # Playwright Trace Viewer of a web case
 qj logs SHOP-482 --case TC-02     # what happened, in order (agents, runner, guard decisions)
+qj evidence SHOP-482 --serve      # report and evidence on http://127.0.0.1:<port>/ (e.g. on a remote machine)
+qj export SHOP-482 --out ./out    # report.html, junit.xml, matrices and the evidence zip for a pipeline
+qj map                            # application map over every run: what was tested, what never was
 ```
 
 ### Step 6: publish to Jira
@@ -394,7 +402,7 @@ qj regression --env staging                # optional: the promoted packs again,
 qj release 2.4.0                           # before a release: every ticket of the fix version, ready or not
 ```
 
-In Claude Code the same flow is available as `/qa-plan`, `/qa-run` and `/qa-evidence` (section 8).
+In Claude Code the same flow is available as `/qa-plan`, `/qa-run` and `/qa-evidence` (the Claude Code plugin in [Additional features](#10-additional-features)).
 
 ---
 
@@ -630,79 +638,162 @@ Every option and exit code of every command: [docs/cli/commands.md](docs/cli/com
 
 ### Setup
 
-| Command                                                                        | When to use it                                     | What it does                                                                                                                                                                                                                                                                                                              |
-| ------------------------------------------------------------------------------ | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `qj init <slug> [--qa-dir <path>] [--jira-prefix <KEY>]... [--yes] [--no-use]` | once per project                                   | Registers the project in `~/.qajitsu/projects/<slug>/` (runs, git cache, knowledge, exports) and links its `.qa/` folder, or creates `.qa/` by detection (git host, compose services and ports, OpenAPI, test types). Validates it, lists every problem and makes it the active project.                                  |
-| `qj use <slug>` / `qj projects list` / `qj projects current`                   | switching between projects                         | Sets the active project and shows its open work; lists every project with readiness and ticket prefixes; prints the active one. Any command takes `--project <slug>`; a ticket key like `BANK-12` selects its project by prefix.                                                                                          |
-| `qj doctor [--online] [--models]`                                              | after setup and whenever something fails           | Checks Node.js, the configuration, every `secret://` reference (by name only), Docker (for `--build`), Android SDK and Appium (for mobile), iOS availability. `--online`: real access checks against Jira and every code host. `--models`: one call per model role and its capabilities. Exit 3 when anything is missing. |
-| `qj env check [--env <profile>]`                                               | before the first `--build`                         | Lists every missing or invalid variable of the environment profile and of the `--build` services (secrets, templates, stub mappings, seed hook, compose file) without starting anything.                                                                                                                                  |
-| `qj env render <TICKET>`                                                       | debugging a build                                  | Recreates the per-service `.env` files (0600) of a run with the ports recorded by `--build`. They contain secrets; `qj clean` removes them.                                                                                                                                                                               |
-| `qj env up <TICKET> [--set <svc.VAR=value>]... [--detach]`                     | checking that the app starts, or poking it by hand | Starts the app from the run's worktree exactly as `run --build` would, without agents or tests, and prints the service URLs. Ctrl+C stops it; `--detach` leaves containers running until `qj clean`.                                                                                                                      |
+| Command                                                                                                     | When to use it                                     | What it does                                                                                                                                                                                                                                                                                                                    |
+| ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `qj init <slug> [--qa-dir <path>] [--jira-prefix <KEY>]... [--jira-url <url>] [--yes] [--force] [--no-use]` | once per project                                   | Registers the project in `~/.qajitsu/projects/<slug>/` (runs, git cache, knowledge, exports) and links its `.qa/` folder, or creates `.qa/` by detection (git host, compose services and ports, OpenAPI, test types). Validates it, lists every problem and makes it the active project. `--force` relinks an existing project. |
+| `qj use <slug>` / `qj projects list [--archived]` / `qj projects current`                                   | switching between projects                         | Sets the active project and shows its open work; lists every project with readiness and ticket prefixes; prints the active one. Any command takes `--project <slug>`; a ticket key like `BANK-12` selects its project by prefix.                                                                                                |
+| `qj doctor [--online] [--models]`                                                                           | after setup and whenever something fails           | Checks Node.js, the configuration, every `secret://` reference (by name only), Docker (for `--build`), Android SDK and Appium (for mobile), iOS availability. `--online`: real access checks against Jira and every code host. `--models`: one call per model role and its capabilities. Exit 3 when anything is missing.       |
+| `qj env check [--env <profile>]`                                                                            | before the first `--build`                         | Lists every missing or invalid variable of the environment profile and of the `--build` services (secrets, templates, stub mappings, seed hook, compose file) without starting anything.                                                                                                                                        |
+| `qj env render <TICKET> [--run <id>]`                                                                       | debugging a build                                  | Recreates the per-service `.env` files (0600) of a run with the ports recorded by `--build`. They contain secrets; `qj clean` removes them.                                                                                                                                                                                     |
+| `qj env up <TICKET> [--set <svc.VAR=value>]... [--detach]`                                                  | checking that the app starts, or poking it by hand | Starts the app from the run's worktree exactly as `run --build` would, without agents or tests, and prints the service URLs. Ctrl+C stops it; `--detach` leaves containers running until `qj clean`.                                                                                                                            |
 
 ### Main flow
 
-| Command                                                                                                                                     | When to use it                                                                  | What it does                                                                                                                                                                                                                                                                                      |
-| ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `qj test <TICKET> [--env ...] [--build] [--dry-run]`                                                                                        | the whole cycle in one go                                                       | `fetch`, `plan` with the review, `run` and `publish` after the preview, on one run. Stops when the plan is not approved (exit 2) or the preview is declined; `--dry-run` stops before publishing. Takes the options of `fetch` and `run`.                                                         |
-| `qj fetch <TICKET> [--pr <url>]... [--mr <url>]... [--ref <[repo=]ref>]...`                                                                 | start of every test cycle                                                       | New run; ticket, linked changes, diffs, review comments, worktrees at the exact commit.                                                                                                                                                                                                           |
-| `qj plan <TICKET> [--revise "<instruction>"]`                                                                                               | after fetch; again for revisions                                                | Analysis and plan (v1, v2, ...) with grounded sources; interactive review in a terminal.                                                                                                                                                                                                          |
-| `qj approve <TICKET> [--version <n>] [--confirm-open-questions] [--approver <name>] [--reuse-from <run\|latest>]`                           | when the plan is right                                                          | Freezes the plan (SHA-256). `--approver` records who approved (CI). `--reuse-from` reuses a plan approved in an earlier run of the same ticket after new commits, only if the ticket text did not change and the approval is in that run's journal.                                               |
-| `qj run <TICKET> [--env <profile\|url>] [--build] [--keep] [--set <svc.VAR=value>]... [--cases TC-02] [--headed] [--slow-mo <ms>] [--step]` | url>] [--build] [--keep] [--set <svc.VAR=value>]...`                            | after approval `--cases` runs only the named cases (others NOT_RUN); `--headed`, `--slow-mo` and `--step` let you watch a web or mobile case live.                                                                                                                                                |
-| `qj publish <TICKET> [--auto-publish]`                                                                                                      | when you want the results in Jira                                               | Gates, preview, `[y/N]`, then the comment, the evidence zip and media. `--auto-publish` (or `publish.auto`) skips the preview in CI and is recorded.                                                                                                                                              |
-| `qj baseline accept <TICKET> [--cases] [--include-failed] [--yes]`                                                                          | after a visual check had no baseline, or the design changed on purpose          | Copies the run's screenshots (checked against the evidence manifest) into `.qa/baselines/`; commit them. Only this command changes baselines.                                                                                                                                                     |
-| `qj answer <TICKET> <TC> <S> --passed\|--failed [--note] [--file]`                                                                          | a run waits for a manual step (CI, another terminal)                            | Answers a manual step; the answer is recorded with your name, the note masked, the file as evidence. A failed answer makes the case FAILED.                                                                                                                                                       |
-| `qj bug <TICKET> [--cases TC-01] [--link <KEY>] [--yes [--force-new]]`                                                                      | when a case FAILED                                                              | Shows similar open bugs, then creates a bug written by code from the run (steps, expected vs actual, version, environment, evidence by hash) and links it to the ticket, or links an existing bug. Asks first.                                                                                    |
-| `qj promote <TICKET> [--cases TC-01,TC-03] [--dry-run] [--yes]`                                                                             | after a good run                                                                | Proposes the PASSED cases as a pull/merge request to the tests repository: the specs that passed, unchanged, and the plan's expectations; asks before pushing.                                                                                                                                    |
-| `qj regression [--env] [--packs T1,T2] [--from <dir>] [--ref] [--publish <KEY>]`                                                            | on a new version, nightly, before a release                                     | Runs every promoted pack of the tests repository again, without agents or models; hash-checked specs and expected values; suite report with regressions in `exports/regression/`.                                                                                                                 |
-| `qj explore <TICKET> --goal "<text>" [--time-box <min>] [--max-steps <n>]`                                                                  | when you want an agent to look around a change, before or besides planned cases | An exploratory session in a browser QAJitsu drives and records: observations with steps and screenshots, `explore/<session>/report.html` for review, no statuses. `qj explore promote <TICKET> --session S01 --observation O1` turns an observation into a draft plan case (runs after approval). |
-| `qj release <fixVersion> [--sprint] [--publish <KEY>] [--yes]`                                                                              | before a release or at the end of a sprint                                      | Collects every ticket of the fix version (or sprint) and its latest executed run: status counts, open cases, tickets without a run, untrusted runs. Writes `exports/releases/<name>.md`; `--publish` comments on a ticket after a preview. Exit 0 only when every ticket is ready.                |
+| Command                                                                                                                                                   | When to use it                                                                  | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `qj test <TICKET> [--pr\|--mr <url>] [--ref <[repo=]ref>] [--env ...] [--build] [--keep] [--set ...] [--dry-run]`                                         | the whole cycle in one go                                                       | `fetch`, `plan` with the review, `run` and `publish` after the preview, on one run. Stops when the plan is not approved (exit 2) or the preview is declined; `--dry-run` stops before publishing. Takes the options of `fetch` and `run`.                                                                                                                                                                                                                                          |
+| `qj fetch <TICKET> [--pr <url>]... [--mr <url>]... [--ref <[repo=]ref>]...`                                                                               | start of every test cycle                                                       | New run; ticket, linked changes, diffs, review comments, worktrees at the exact commit.                                                                                                                                                                                                                                                                                                                                                                                            |
+| `qj plan <TICKET> [--revise "<instruction>"] [--depth smoke\|standard\|full]`                                                                             | after fetch; again for revisions                                                | Analysis and plan (v1, v2, ...) with grounded sources; interactive review in a terminal. `--depth` keeps cases by risk and records why.                                                                                                                                                                                                                                                                                                                                            |
+| `qj approve <TICKET> [--version <n>] [--confirm-open-questions] [--approver <name>] [--reuse-from <run\|latest>]`                                         | when the plan is right                                                          | Freezes the plan (SHA-256). `--approver` records who approved (CI). `--reuse-from` reuses a plan approved in an earlier run of the same ticket after new commits, only if the ticket text did not change and the approval is in that run's journal.                                                                                                                                                                                                                                |
+| `qj run <TICKET> [--env <profile\|url>] [--build] [--keep] [--set <svc.VAR=value>]... [--cases <ids>] [--headed] [--slow-mo <ms>] [--step] [--fix-check]` | after approval                                                                  | Writes missing specs, checks them, executes API, web, mixed and mobile cases, computes statuses, runs the auditor and canary, writes reports. `--build` starts the app from the worktree; `--keep` keeps containers and worktrees; `--set` overrides variables marked `overridable`; `--cases` runs only the named cases (others NOT_RUN); `--headed`, `--slow-mo` and `--step` let you watch a web or mobile case live; `--fix-check` verifies a bug fix before and with the fix. |
+| `qj publish <TICKET> [--auto-publish]`                                                                                                                    | when you want the results in Jira                                               | Gates, preview, `[y/N]`, then the comment, the evidence zip and media. `--auto-publish` (or `publish.auto`) skips the preview in CI and is recorded.                                                                                                                                                                                                                                                                                                                               |
+| `qj baseline accept <TICKET> [--cases] [--include-failed] [--yes]`                                                                                        | after a visual check had no baseline, or the design changed on purpose          | Copies the run's screenshots (checked against the evidence manifest) into `.qa/baselines/`; commit them. Only this command changes baselines.                                                                                                                                                                                                                                                                                                                                      |
+| `qj answer <TICKET> <TC> <S> --passed\|--failed [--note] [--file]`                                                                                        | a run waits for a manual step (CI, another terminal)                            | Answers a manual step; the answer is recorded with your name, the note masked, the file as evidence. A failed answer makes the case FAILED.                                                                                                                                                                                                                                                                                                                                        |
+| `qj bug <TICKET> [--cases TC-01] [--link <KEY>] [--yes [--force-new]]`                                                                                    | when a case FAILED                                                              | Shows similar open bugs, then creates a bug written by code from the run (steps, expected vs actual, version, environment, evidence by hash) and links it to the ticket, or links an existing bug. Asks first.                                                                                                                                                                                                                                                                     |
+| `qj promote <TICKET> [--cases TC-01,TC-03] [--repo <alias>] [--dry-run] [--yes]`                                                                          | after a good run                                                                | Proposes the PASSED cases as a pull/merge request to the tests repository: the specs that passed, unchanged, and the plan's expectations with their hashes; asks before pushing.                                                                                                                                                                                                                                                                                                   |
+| `qj regression [--env ...] [--packs T1,T2] [--from <dir>] [--ref <ref>] [--publish <KEY>] [--yes]`                                                        | on a new version, nightly, before a release                                     | Runs every promoted pack of the tests repository again, without agents or models; hash-checked specs and expected values; suite report with regressions in `exports/regression/`.                                                                                                                                                                                                                                                                                                  |
+| `qj explore <TICKET> --goal "<text>" [--env ...] [--time-box <min>] [--max-steps <n>]` / `qj explore promote <TICKET> --session S01 --observation O1`     | when you want an agent to look around a change, before or besides planned cases | An exploratory session in a browser QAJitsu drives and records: observations with steps and screenshots, `explore/<session>/report.html` for review, no statuses. `explore promote` turns an observation into a draft plan case (it runs only after approval).                                                                                                                                                                                                                     |
+| `qj release <fixVersion> [--sprint] [--publish <KEY>] [--yes]`                                                                                            | before a release or at the end of a sprint                                      | Collects every ticket of the fix version (or sprint) and its latest executed run: status counts, open cases, tickets without a run, untrusted runs. Writes `exports/releases/<name>.md`; `--publish` comments on a ticket after a preview. Exit 0 only when every ticket is ready.                                                                                                                                                                                                 |
 
 ### Inspecting results
 
-| Command                                                                              | What it does                                                                                                                                            |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `qj evidence <TICKET> [--failed] [--case <TC>] [--trace <TC>] [--no-open] [--serve]` | Statuses, failed assertions (expected vs actual), evidence files, cURL commands; opens `report.html`, videos or a Playwright trace unless `--no-open`.  |
-| `qj logs <TICKET> [--follow] [--stage <s>] [--agent <role>] [--case <TC>]`           | The structured event journal: stages, agent tool calls (allowed and denied), model usage, attempts. `--follow` while a run is running.                  |
-| `qj watch <TICKET> [--port <n>]`                                                     | A page on 127.0.0.1 with the progress of a run while it runs: cases, current step, latest screenshot, preliminary outcomes, then the computed statuses. |
-| `qj runs <TICKET>`                                                                   | All runs of a ticket: status, stage, results, retention.                                                                                                |
-| `qj map [--out <dir>] [--openapi <file>]`                                            | Application map over all runs: tested screens, endpoints and transitions, and the ones never tested (`qa-map/map.html`, `map.json`).                    |
-| `qj export <TICKET> [--out <dir>]`                                                   | Pipeline artifacts: `report.html`, `junit.xml`, `matrix.md/.csv`, `gates.json` and the evidence zip. Exit code = the run's.                             |
-| `qj pull <TICKET> --run <id>`                                                        | Downloads the evidence zip of a run from the Jira ticket (e.g. from a CI run) and verifies it against its manifest.                                     |
+| Command                                                                                           | What it does                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `qj evidence <TICKET> [--failed] [--case <TC>] [--trace <TC>] [--no-open] [--serve [--port <n>]]` | Statuses, failed assertions (expected vs actual), evidence files, cURL commands; opens `report.html`, videos or a Playwright trace unless `--no-open`; `--serve` serves the report and evidence on 127.0.0.1. |
+| `qj logs <TICKET> [--follow] [--stage <s>] [--agent <role>] [--case <TC>]`                        | The structured event journal: stages, agent tool calls (allowed and denied), model usage, attempts. `--follow` while a run is running.                                                                        |
+| `qj watch <TICKET> [--port <n>]`                                                                  | A page on 127.0.0.1 with the progress of a run while it runs: cases, current step, latest screenshot, preliminary outcomes, then the computed statuses.                                                       |
+| `qj map [--out <dir>] [--openapi <file>]`                                                         | Application map over all runs: tested screens, endpoints and transitions, and the ones never tested (`qa-map/map.html`, `map.json`).                                                                          |
+| `qj export <TICKET> [--out <dir>]`                                                                | Pipeline artifacts: `report.html`, `junit.xml`, `matrix.md/.csv`, `gates.json` and the evidence zip. Exit code = the run's.                                                                                   |
+| `qj pull <TICKET> --run <id>`                                                                     | Downloads the evidence zip of a run from the Jira ticket (e.g. from a CI run) and verifies it against its manifest.                                                                                           |
 
 ### Run management
 
-| Command                                                                                                                | What it does                                                                                                                                                                                                                                                      |
-| ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `qj status [--all]` / `qj note <TICKET> "<text>"`                                                                      | What is in progress in the project: readiness, default environment, knowledge base, each open ticket with its state and the next command, and its notes. `--all` for every project.                                                                               |
-| `qj resume [<TICKET>] [--env ...] [--build]`                                                                           | Continues a run from its last checkpoint: plans if there is no plan, runs if approved; stops at human steps (approval, publish) and says what to do. Without a ticket: lists resumable work. A changed environment or secret after approval needs a confirmation. |
-| `qj clean <TICKET> [--run <id> \| --all]`                                                                              | Removes containers, volumes and networks of the run (found by QAJitsu labels only), worktrees and `.env` files. Plan, specs, results, evidence, reports and journal stay. Runs used by another process are skipped.                                               |
-| `qj runs <TICKET> [--keep <id> \| --unkeep <id>]`                                                                      | Lists the runs of a ticket; a run marked keep is never removed by retention, with its evidence.                                                                                                                                                                   |
-| `qj gc [--dry-run]`                                                                                                    | Applies retention to every ticket (`cleanup.keep_last`, `cleanup.max_age_days`; runs marked `keep` and running runs are exempt). Journals of deleted runs are archived under `audit.retention_days`.                                                              |
-| `qj work reset <TICKET> [--delete]`                                                                                    | Closes the ticket's open work so the next fetch starts a new run; `--delete` removes its runs.                                                                                                                                                                    |
-| `qj clean --project [--dry-run]`                                                                                       | Retention for every run of the project and removal of stale git mirrors.                                                                                                                                                                                          |
-| `qj projects remove <slug> [--dry-run] [--yes]`                                                                        | Deletes a project's home after confirmation; its `.qa/` stays, journals are archived.                                                                                                                                                                             |
-| `qj projects archive <slug>` / `qj projects unarchive <slug>`                                                          | Hides a project from lists and ticket prefixes, or shows it again; nothing is deleted.                                                                                                                                                                            |
-| `qj projects export <slug>` / `qj projects import <file> [--qa-dir] [--map-path old=new]`                              | Moves a project to another machine: profile, `.qa/` files and knowledge sources in one file, never secrets or the index.                                                                                                                                          |
-| `qj knowledge add <path...> [--tag t] [--include g] [--exclude g]` / `qj knowledge add --qa-knowledge`                 | Adds documentation to the project's knowledge base (Markdown, text, HTML, DOCX, PDF, OpenAPI); only new or changed files are processed. Secrets are masked, `.env` and key files never indexed.                                                                   |
-| `qj knowledge sync [--dry-run]` / `qj knowledge remove <source\|file>` / `qj knowledge reset` / `qj knowledge reindex` | Keeps the knowledge base in line with changed files, removes a source or file, empties it, or rebuilds it after changing the embedding model.                                                                                                                     |
-| `qj knowledge list` / `qj knowledge search "<query>" [--tag t]`                                                        | Sources, counts, retrieval mode and embedding model; the ranked chunks agents would get for a query, with source, section and date.                                                                                                                               |
+| Command                                                                                                                                 | What it does                                                                                                                                                                                                                                                      |
+| --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `qj status [--all] [--rebuild]` / `qj note <TICKET> "<text>"`                                                                           | What is in progress in the project: readiness, default environment, knowledge base, each open ticket with its state and the next command, and its notes. `--all` for every project; `--rebuild` rebuilds the index of open work.                                  |
+| `qj resume [<TICKET>] [--env ...] [--build]`                                                                                            | Continues a run from its last checkpoint: plans if there is no plan, runs if approved; stops at human steps (approval, publish) and says what to do. Without a ticket: lists resumable work. A changed environment or secret after approval needs a confirmation. |
+| `qj clean <TICKET> [--run <id> \| --all]`                                                                                               | Removes containers, volumes and networks of the run (found by QAJitsu labels only), worktrees and `.env` files. Plan, specs, results, evidence, reports and journal stay. Runs used by another process are skipped.                                               |
+| `qj runs <TICKET> [--keep <id> \| --unkeep <id>]`                                                                                       | Lists the runs of a ticket; a run marked keep is never removed by retention, with its evidence.                                                                                                                                                                   |
+| `qj gc [--dry-run]`                                                                                                                     | Applies retention to every ticket (`cleanup.keep_last`, `cleanup.max_age_days`; runs marked `keep` and running runs are exempt). Journals of deleted runs are archived under `audit.retention_days`.                                                              |
+| `qj work reset <TICKET> [--delete]`                                                                                                     | Closes the ticket's open work so the next fetch starts a new run; `--delete` removes its runs.                                                                                                                                                                    |
+| `qj clean --project [--dry-run]`                                                                                                        | Retention for every run of the project and removal of stale git mirrors.                                                                                                                                                                                          |
+| `qj projects remove <slug> [--dry-run] [--yes] [--delete-audit]`                                                                        | Deletes a project's home after confirmation; its `.qa/` stays, journals are archived (`--delete-audit` deletes them too).                                                                                                                                         |
+| `qj projects archive <slug>` / `qj projects unarchive <slug>`                                                                           | Hides a project from lists and ticket prefixes, or shows it again; nothing is deleted.                                                                                                                                                                            |
+| `qj projects export <slug> [--out <file>]` / `qj projects import <file> [--qa-dir] [--slug] [--map-path old=new] [--force]`             | Moves a project to another machine: profile, `.qa/` files and knowledge sources in one file, never secrets or the index.                                                                                                                                          |
+| `qj knowledge add <path...> [--tag t] [--include g] [--exclude g] [--yes]` / `qj knowledge add --qa-knowledge`                          | Adds documentation to the project's knowledge base (Markdown, text, HTML, DOCX, PDF, OpenAPI, `confluence:<SPACE>`, `jira:bugs/<component>`); only new or changed files are processed. Secrets are masked, `.env` and key files never indexed.                    |
+| `qj knowledge sync [--dry-run]` / `qj knowledge remove <source\|file>` / `qj knowledge reset [--keep-sources]` / `qj knowledge reindex` | Keeps the knowledge base in line with changed files, removes a source or file, empties it, or rebuilds it after changing the embedding model.                                                                                                                     |
+| `qj knowledge list` / `qj knowledge search "<query>" [--tag t] [--limit n]`                                                             | Sources, counts, retrieval mode and embedding model; the ranked chunks agents would get for a query, with source, section and date.                                                                                                                               |
 
 ### Quality and operations
 
-| Command                                                                                             | What it does                                                                                                                                                                                                                                                                                                                                            |
-| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `qj bench --model <provider/model> [--role <role>] [--cases <file>] [--knowledge on\|off\|compare]` | Benchmarks a model on the demo-shop seeded bugs (`.qa/bench.yaml`): fresh run per case, `--build` with the bug switched on; reports detection rate, false FAILED, BLOCKED rate, plan acceptance, time, tokens, cost. `--knowledge compare` measures what the knowledge base adds. Real model calls; never in PR CI. Benchmark runs are never published. |
-| `qj metrics [--format prometheus\|json] [--out <file>]`                                             | Metrics over all runs: statuses per environment, BLOCKED reasons, duration, tokens and cost per ticket, plan acceptance, false-FAILED rate, guard denials, stuck runs. For Prometheus (textfile collector) and the example alerts.                                                                                                                      |
-| `qj audit verify [<TICKET>] [--run <id> \| --all] [--file <journal>]`                               | Verifies the SHA-256 hash chain of run journals (also archived ones); exit 1 when a chain is broken.                                                                                                                                                                                                                                                    |
-| `qj telemetry export <TICKET>`                                                                      | Sends journal events not exported yet as OpenTelemetry traces, logs and metrics (backfill, retry). Normally automatic.                                                                                                                                                                                                                                  |
+| Command                                                                                                           | What it does                                                                                                                                                                                                                                                                                                                                            |
+| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `qj bench --model <provider/model> [--role <role>] [--cases <file>] [--out <dir>] [--knowledge on\|off\|compare]` | Benchmarks a model on the demo-shop seeded bugs (`.qa/bench.yaml`): fresh run per case, `--build` with the bug switched on; reports detection rate, false FAILED, BLOCKED rate, plan acceptance, time, tokens, cost. `--knowledge compare` measures what the knowledge base adds. Real model calls; never in PR CI. Benchmark runs are never published. |
+| `qj metrics [--format prometheus\|json] [--out <file>]`                                                           | Metrics over all runs: statuses per environment, BLOCKED reasons, duration, tokens and cost per ticket, plan acceptance, false-FAILED rate, guard denials, stuck runs. For Prometheus (textfile collector) and the example alerts.                                                                                                                      |
+| `qj audit verify [<TICKET>] [--run <id> \| --all] [--file <journal>]`                                             | Verifies the SHA-256 hash chain of run journals (also archived ones); exit 1 when a chain is broken.                                                                                                                                                                                                                                                    |
+| `qj telemetry export <TICKET> [--run <id>]`                                                                       | Sends journal events not exported yet as OpenTelemetry traces, logs and metrics (backfill, retry). Normally automatic.                                                                                                                                                                                                                                  |
 
 ### CI helpers
 
 | Command                                                            | What it does                                                                                                                                                                                                                                                                                                  |
 | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `qj ci detect [--label <name>] [--paths <glob>...] [--format env]` | Works out whether and how to run from the CI environment: labelled PR/MR (ticket key from branch or title), `/qa approve v<N>` and `/qa revise <text>` comments (only from people with write access), manual runs, Jira automation. Writes GitHub outputs; `--format env` prints shell-safe exports (GitLab). |
-| `qj ci comment <TICKET> --change <PR/MR URL>`                      | One updatable PR/MR comment (the plan while waiting for approval, the results afterwards) and the `qajitsu/<TICKET>` status check.                                                                                                                                                                            |
+| `qj ci comment <TICKET> --change <PR/MR URL> [--run <id>]`         | One updatable PR/MR comment (the plan while waiting for approval, the results afterwards) and the `qajitsu/<TICKET>` status check.                                                                                                                                                                            |
 | `qj ci publish-plan <TICKET>`                                      | Posts the latest plan version to the Jira ticket (one updatable comment).                                                                                                                                                                                                                                     |
+
+### Every command with an example
+
+```sh
+# Projects and setup
+qj init shop                                         # register a project, create .qa/ by detection
+qj init bank --qa-dir ~/code/bank/.qa --jira-prefix BANK --no-use
+qj use bank                                          # make it the active project
+qj projects list                                     # all projects (--archived for hidden ones)
+qj projects current                                  # the active project
+qj --project bank status                             # any command in another project
+qj doctor --online --models                          # machine, config, secrets, Jira, code hosts, models
+qj env check --env staging                           # every variable of a profile and of --build services
+qj env up SHOP-482 --set api.FEATURE_X=1 --detach    # start the app from the run's worktree, no tests
+qj env render SHOP-482                               # recreate the run's .env files (debugging a build)
+
+# Knowledge base
+qj knowledge add docs/ api/openapi.yaml --tag api    # files and folders
+qj knowledge add confluence:SHOP jira:bugs/Payments  # online sources
+qj knowledge add --qa-knowledge                      # the repository's .qa/knowledge/
+qj knowledge sync --dry-run                          # what changed in the sources
+qj knowledge search "cancel a paid order" --limit 5  # what the agents would get
+qj knowledge list                                    # sources, chunks, mode, embedding model
+qj knowledge remove docs/old.md                      # a file or a whole source
+qj knowledge reset --keep-sources                    # empty it, rebuild later with sync
+qj knowledge reindex                                 # after changing the embedding model
+
+# The flow
+qj test SHOP-482 --env staging                       # fetch, plan, run, publish in one go
+qj fetch SHOP-482 --pr https://github.com/shop-org/backend/pull/12
+qj fetch SHOP-482 --ref backend=release/2.4          # a branch, tag or SHA instead of a linked PR/MR
+qj plan SHOP-482 --depth smoke                       # plan with review; only high-risk cases
+qj plan SHOP-482 --revise "add a case for expired codes"
+qj approve SHOP-482 --version 2 --approver "Ana Kowalska"
+qj approve SHOP-482 --reuse-from latest              # new commits, same ticket text: reuse the approved plan
+qj run SHOP-482 --env staging                        # a deployed environment
+qj run SHOP-482 --build --set api.FEATURE_X=1        # the app built from the change's commit
+qj run SHOP-482 --build --fix-check                  # a bug fix: FAIL before the fix, PASS with it
+qj run SHOP-482 --cases TC-02 --headed --step        # one case in a visible browser, step by step
+qj watch SHOP-482                                    # live progress page while a run runs
+qj answer SHOP-482 TC-02 S3 --passed --note "code arrived"   # a manual step a CI run waits for
+qj baseline accept SHOP-482                          # screenshots without a baseline become baselines
+qj publish SHOP-482                                  # preview, then the Jira comment and evidence
+qj bug SHOP-482 --cases TC-03                        # FAILED case → Jira bug (similar bugs first)
+qj promote SHOP-482 --dry-run                        # PASSED cases as a pack for the tests repository
+qj regression --env staging --packs SHOP-482         # promoted packs again, no models
+qj release 2.4.0 --publish SHOP-500                  # readiness of every ticket of a fix version
+qj explore SHOP-482 --goal "check the cart around the change" --time-box 15
+qj explore promote SHOP-482 --session S01 --observation O2
+
+# Results
+qj evidence SHOP-482 --failed                        # expected vs actual, evidence, cURL
+qj evidence SHOP-482 --trace TC-02                   # Playwright Trace Viewer of a web case
+qj evidence SHOP-482 --serve --port 8080             # report and evidence over HTTP on 127.0.0.1
+qj logs SHOP-482 --follow --agent author             # the journal while a run runs
+qj export SHOP-482 --out ./artifacts                 # pipeline artifacts
+qj pull SHOP-482 --run 20261004-1046-k7f3            # a CI run's evidence zip from Jira, verified
+qj map --openapi api/openapi.yaml                    # application map over every run
+
+# Runs and cleanup
+qj status --all                                      # open work in every project
+qj note SHOP-482 "waiting for test data"             # shown by status
+qj resume SHOP-482                                   # continue from the last checkpoint
+qj runs SHOP-482 --keep 20261004-1046-k7f3           # protect a run from retention
+qj clean SHOP-482 --all                              # containers, worktrees, .env files of every run
+qj clean --project --dry-run                         # retention and stale mirrors for the project
+qj gc                                                # retention for every ticket
+qj work reset SHOP-482 --delete                      # start the ticket over
+qj projects archive bank                             # hide a project (unarchive shows it again)
+qj projects export shop --out shop.profile.yaml      # move a project to another machine
+qj projects import shop.profile.yaml --qa-dir ~/code/shop/.qa
+qj projects remove bank --dry-run                    # what would be deleted
+
+# Quality and operations
+qj bench --model ollama/qwen3:32b --knowledge compare
+qj metrics --format prometheus --out /var/lib/node_exporter/qajitsu.prom
+qj audit verify --all                                # hash chains of every journal
+qj telemetry export SHOP-482                         # resend journal events as OpenTelemetry
+
+# CI
+qj ci detect --label qa --format env                 # whether and how to run in this pipeline
+qj ci publish-plan SHOP-482                          # the plan as a Jira comment
+qj ci comment SHOP-482 --change https://github.com/shop-org/backend/pull/12
+```
 
 ---
 
@@ -724,6 +815,12 @@ Every option and exit code of every command: [docs/cli/commands.md](docs/cli/com
 | 2         | no FAILED, but something is BLOCKED, FLAKY, NOT_RUN or NEEDS_REVIEW (or a publish gate failed) |
 | 3         | configuration or framework error                                                               |
 
+These are the codes of `qj run`, `qj test`, `qj resume`, `qj export` and `qj regression`. Commands that ask before
+they act use `2` for "not confirmed" (`publish`, `bug`, `promote`, `baseline accept`, `release --publish`);
+`qj release` exits `1` when the release is not ready; `qj audit verify` exits `1` when a chain is broken; `qj doctor`
+and `qj init` exit `2` or `3` when something is missing. Every command:
+[docs/cli/commands.md](docs/cli/commands.md).
+
 ---
 
 ## 8. What QAJitsu writes to disk
@@ -742,9 +839,13 @@ run folder looks like this:
       analysis.json, plan/          analysis, plan versions (.yaml + .md), plan.approved.yaml
       specs/                        generated specs (specs/healed/vN/ for healed ones)
       results/<TC>.json             what the runner recorded, per attempt
-      evidence/                     requests, responses, screenshots, videos, traces, HAR, logs + manifest.json (SHA-256)
-      checks/                       auditor and canary records
-      report/                       report.html, matrix.md/.csv/.xlsx, junit.xml, gates.json, graph.json
+      results/matrix/<combo>/       results of further browser and viewport combinations
+      results/locale/<name>/        results of locale runs
+      evidence/                     requests, responses, screenshots, videos, traces, HAR, logs, messages + manifest.json (SHA-256)
+      checks/                       auditor, canary and failure-hint records
+      manual/                       manual steps waiting for an answer and the answers (qj answer)
+      explore/<session>/            exploratory sessions: actions, observations, recordings, report.html
+      report/                       report.html, matrix.md/.csv/.xlsx, junit.xml, gates.json, graph.json, bugs/, published/
       journal/events.jsonl          hash-chained event journal
       logs/                         QAJitsu and service logs
       env/                          generated secrets during --build (0600, deleted after use)
@@ -759,23 +860,23 @@ run folder looks like this:
 
 ## 9. Configuration (`.qa/`)
 
-| File                                         | Purpose                                                                                                                                                                                                                                                              |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.qa/qa.project.yaml`                        | the project: Jira, code hosts, repositories, environments, models, services and build, mobile, verification, telemetry, cleanup, audit, web, publish and knowledge base options. Schema: `schemas/qa.project.schema.json`; reference: `templates/qa/qa.project.yaml` |
-| `.qa/envs/<name>.yaml`                       | an environment: `base_url`, health and version paths, test accounts as aliases with `secret://` passwords, login recipe or `auth/` script, web session, feature flags, `production: true` for production                                                             |
-| `.qa/knowledge/*.md`                         | short domain notes the team commits (business rules, glossary), always given to the agents in full; larger documentation goes into the [knowledge base](#5-knowledge-base)                                                                                           |
-| `.qa/routes.yaml`                            | route patterns (`/product/:id`) for the transition graph and the application map                                                                                                                                                                                     |
-| `.qa/hooks/`                                 | `seed` after `--build` starts the app; `setup`/`teardown` around every run (`hooks:` in the project config); `BASE_URL` and the run marker `QAJITSU_RUN`, no secrets                                                                                                 |
-| `.qa/auth/`                                  | login scripts for logins one request cannot do (forms, cookies, SSO): `login: { script: auth/<file> }` in a profile; values are masked                                                                                                                               |
-| `.qa/stubs/<name>/`                          | WireMock/Mockoon mappings for stubbed dependencies                                                                                                                                                                                                                   |
-| `.qa/bench.yaml`                             | benchmark cases                                                                                                                                                                                                                                                      |
-| `web.matrix` in `qa.project.yaml`            | browsers (`chromium`, `firefox`, `webkit`) and viewports (`{ name, width, height }`) for web cases; the first combination is the primary run                                                                                                                         |
-| `budget:` in `qa.project.yaml`               | `max_minutes` and `max_cost_usd` per run: once reached, the remaining cases are NOT_RUN with the reason                                                                                                                                                              |
-| `.qa/baselines/`                             | approved screenshots for visual checks, written only by `qj baseline accept`; `visual: { threshold, color_threshold }` in `qa.project.yaml`                                                                                                                          |
-| `locales:` in `qa.project.yaml`              | locales and time zones cases can run in (`{ name: pl-PL, timezone: Europe/Warsaw }`); a plan case lists its own                                                                                                                                                      |
-| `messages:` in `qa.project.yaml`             | message capture for e-mails, SMS gateways and webhooks: `base_url` (webhook.site or self-hosted, must be on `environments.allowlist`), `email_domain`, `api_key: secret://...`, `timeout_s`                                                                          |
-| `test_cases:` in `qa.project.yaml`           | existing manual test cases imported by `qj fetch`: `{ type: xray, client_id, client_secret }`, `{ type: zephyr, token }`, `{ type: testrail, base_url, user, token, project_id }` or `{ type: file, path: cases.csv                                                  | .xlsx }` (columns id, ticket, title, step, expected) |
-| `.env.local` (next to `.qa/`, not committed) | secret values for `secret://env/NAME`                                                                                                                                                                                                                                |
+| File                                         | Purpose                                                                                                                                                                                                                                                                               |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.qa/qa.project.yaml`                        | the project: Jira, code hosts, repositories, environments, models, services and build, mobile, verification, telemetry, cleanup, audit, web, publish and knowledge base options. Schema: `schemas/qa.project.schema.json`; reference: `templates/qa/qa.project.yaml`                  |
+| `.qa/envs/<name>.yaml`                       | an environment: `base_url`, health and version paths, test accounts as aliases with `secret://` passwords, login recipe or `auth/` script, web session, feature flags, `production: true` for production                                                                              |
+| `.qa/knowledge/*.md`                         | short domain notes the team commits (business rules, glossary), always given to the agents in full; larger documentation goes into the [knowledge base](#5-knowledge-base)                                                                                                            |
+| `.qa/routes.yaml`                            | route patterns (`/product/:id`) for the transition graph and the application map                                                                                                                                                                                                      |
+| `.qa/hooks/`                                 | `seed` after `--build` starts the app; `setup`/`teardown` around every run (`hooks:` in the project config); `BASE_URL` and the run marker `QAJITSU_RUN`, no secrets                                                                                                                  |
+| `.qa/auth/`                                  | login scripts for logins one request cannot do (forms, cookies, SSO): `login: { script: auth/<file> }` in a profile; values are masked                                                                                                                                                |
+| `.qa/stubs/<name>/`                          | WireMock/Mockoon mappings for stubbed dependencies                                                                                                                                                                                                                                    |
+| `.qa/bench.yaml`                             | benchmark cases                                                                                                                                                                                                                                                                       |
+| `web.matrix` in `qa.project.yaml`            | browsers (`chromium`, `firefox`, `webkit`) and viewports (`{ name, width, height }`) for web cases; the first combination is the primary run                                                                                                                                          |
+| `budget:` in `qa.project.yaml`               | `max_minutes` and `max_cost_usd` per run: once reached, the remaining cases are NOT_RUN with the reason                                                                                                                                                                               |
+| `.qa/baselines/`                             | approved screenshots for visual checks, written only by `qj baseline accept`; `visual: { threshold, color_threshold }` in `qa.project.yaml`                                                                                                                                           |
+| `locales:` in `qa.project.yaml`              | locales and time zones cases can run in (`{ name: pl-PL, timezone: Europe/Warsaw }`); a plan case lists its own                                                                                                                                                                       |
+| `messages:` in `qa.project.yaml`             | message capture for e-mails, SMS gateways and webhooks: `base_url` (webhook.site or self-hosted, must be on `environments.allowlist`), `email_domain`, `api_key: secret://...`, `timeout_s`                                                                                           |
+| `test_cases:` in `qa.project.yaml`           | existing manual test cases imported by `qj fetch`: `{ type: xray, client_id, client_secret }`, `{ type: zephyr, token }`, `{ type: testrail, base_url, user, token, project_id }` or `{ type: file, path: cases.csv }` (`.csv` or `.xlsx`; columns id, ticket, title, step, expected) |
+| `.env.local` (next to `.qa/`, not committed) | secret values for `secret://env/NAME`                                                                                                                                                                                                                                                 |
 
 Layers, each overriding the previous: defaults → `qa.project.yaml` → `envs/<env>.yaml` → secrets → run options
 (`--env`, `--set`, `QAJITSU_WORKSPACE`). The effective configuration (secrets masked) is stored in `run.json`.
@@ -799,6 +900,34 @@ models:
   providers: { anthropic: { type: anthropic, api_key: secret://env/ANTHROPIC_API_KEY } }
   roles: { default: anthropic/claude-sonnet-5-5 }
 test_types: [api, web]
+```
+
+Optional sections for the newer features (each one is off until it is configured):
+
+```yaml
+web:
+  video: retain-on-failure # always | off
+  matrix:
+    browsers: [chromium, firefox]
+    viewports: [{ name: desktop, width: 1280, height: 800 }, { name: phone, width: 390, height: 844 }]
+locales: [{ name: pl-PL, timezone: Europe/Warsaw }, { name: de-DE, timezone: Europe/Berlin }]
+visual: { threshold: 0.01 }
+messages: { base_url: https://webhook.site, api_key: secret://env/WEBHOOKSITE_KEY } # e-mail, SMS, webhooks
+manual: { timeout_s: 900 } # how long a run waits for a person at a manual step
+budget: { max_minutes: 30, max_cost_usd: 5 }
+test_cases: # existing manual test cases for the planner
+  - {
+      type: testrail,
+      base_url: https://shop.testrail.io,
+      user: qa@shop.example,
+      token: secret://env/TESTRAIL_KEY,
+      project_id: 3,
+    }
+  - { type: file, path: testcases.csv }
+repos:
+  backend: { host: github, path: shop-org/backend, openapi: api/openapi.yaml }
+  tests: { host: github, path: shop-org/e2e-tests, role: tests, promote_dir: tests/qajitsu } # promote / regression
+verification: { auditor: optional, canary: true, triage: on }
 ```
 
 ---
@@ -971,7 +1100,7 @@ qj evidence DEMO-1 --failed
   model for `planner` and `author`, a cheap or local one for `summary` and `auditor` is a good start. Measure with
   `qj bench`. Declare capabilities (`tools`, `structured_output`, `vision`, `context_window`) and `cost_per_mtok`.
 - Cost and time: `models.token_budget`, `environments.retries`, `environments.workers`, `web.action_timeout_ms`.
-- Strictness: `verification.auditor` (`optional`, `required`, `off`), `verification.canary: true`.
+- Strictness: `verification.auditor` (`optional`, `required`, `off`), `verification.canary: true`, `verification.triage` (`on`, `off`) for failure hints.
 - Better plans: domain notes in `.qa/knowledge/`, clear acceptance criteria in tickets, `data-testid` attributes in the UI.
 
 **Extending**

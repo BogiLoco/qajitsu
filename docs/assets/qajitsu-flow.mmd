@@ -1,9 +1,9 @@
 flowchart TB
     subgraph PLAN["① Plan: what to test"]
         direction LR
-        fetch["<b>qj fetch</b><br/>ticket + code change<br/>at its exact commit"]
-        plan["🤖 <b>qj plan</b><br/>analyst + planner<br/>every case cites a source"]
-        review{{"👤 <b>you review</b><br/>accept · revise · edit"}}
+        fetch["<b>qj fetch</b><br/>ticket + code change<br/>at its exact commit<br/>+ existing manual cases"]
+        plan["🤖 <b>qj plan</b><br/>analyst + planner<br/>knowledge base · app map<br/>every case cites a source"]
+        review{{"👤 <b>you review</b><br/>accept · revise · edit<br/>--depth smoke / full"}}
         fetch --> plan --> review
         review -. "revise → v2, v3" .-> plan
     end
@@ -11,24 +11,37 @@ flowchart TB
         direction LR
         freeze["🔒 <b>plan frozen</b><br/>SHA-256"]
         author["🤖 <b>qj run</b><br/>author writes specs<br/>checked by code"]
-        runner["⚙️ <b>sandboxed run</b><br/>--env or --build<br/>evidence recorded"]
-        verdict["⚖️ <b>verdict by code</b><br/>auditor + canary<br/>can only downgrade"]
+        runner["⚙️ <b>sandboxed run</b><br/>--env or --build<br/>API · web · mobile<br/>browsers · locales · visual"]
+        verdict["⚖️ <b>verdict by code</b><br/>auditor + canary<br/>can only downgrade<br/>hints for FAILED"]
         freeze --> author --> runner --> verdict
+        watch["👤 <b>qj watch</b> · --step<br/>live progress<br/>manual steps answered"]
+        runner -. "live" .-> watch
     end
     subgraph REPORT["③ Report: show it"]
         direction LR
         evidence["📊 <b>qj evidence</b><br/>report · screenshots<br/>videos · traces"]
         publish["👤 <b>qj publish</b><br/>you confirm the preview<br/>→ Jira"]
+        bug["👤 <b>qj bug</b><br/>FAILED → Jira bug<br/>similar bugs first"]
         evidence --> publish
+        evidence --> bug
+    end
+    subgraph KEEP["④ Keep it: regression and release"]
+        direction LR
+        promote["👤 <b>qj promote</b><br/>PASSED specs → PR/MR<br/>to the tests repository"]
+        regression["⚙️ <b>qj regression</b><br/>packs run again<br/>no models · hash-checked"]
+        release["⚙️ <b>qj release</b><br/>every ticket of a version<br/>ready or not"]
+        promote --> regression
+        regression -. "before a release" .-> release
     end
     PLAN == "accepted plan" ==> RUN
     RUN == "results + evidence" ==> REPORT
+    REPORT == "good run" ==> KEEP
 
     classDef human fill:#dcfce7,stroke:#16a34a,color:#14532d,stroke-width:2px
     classDef agent fill:#ede9fe,stroke:#7c3aed,color:#3b0764,stroke-width:2px
     classDef code fill:#e0e7ff,stroke:#1f2a5c,color:#1f2a5c,stroke-width:2px
     classDef stage fill:#ffffff,stroke:#94a3b8,color:#1f2a5c,stroke-dasharray:4 4
-    class review,publish human
+    class review,publish,watch,bug,promote human
     class plan,author agent
-    class fetch,freeze,runner,verdict,evidence code
-    class PLAN,RUN,REPORT stage
+    class fetch,freeze,runner,verdict,evidence,regression,release code
+    class PLAN,RUN,REPORT,KEEP stage
