@@ -248,6 +248,8 @@ the evidence bundle as pipeline artifacts.
 - [REQ-EXEC-13](requirements/execution.md#req-exec-13--browser-and-viewport-matrix) Browser and viewport matrix (could, implemented, AC 3/3)
 - [REQ-EXEC-14](requirements/execution.md#req-exec-14--locale-testing) Locale testing (could, implemented, AC 3/3)
 - [REQ-EXEC-15](requirements/execution.md#req-exec-15--exploratory-sessions) Exploratory sessions (could, implemented, AC 6/6)
+- [REQ-EXEC-16](requirements/execution.md#req-exec-16--run-one-case-with-a-live-view) Run one case with a live view (should, accepted, AC 0/4)
+- [REQ-EXEC-17](requirements/execution.md#req-exec-17--regression-runs-of-promoted-packs) Regression runs of promoted packs (should, proposed, AC 0/4)
 - [REQ-VER-11](requirements/verification.md#req-ver-11--bug-fix-verification-fails-before-passes-after) Bug fix verification: fails before, passes after (should, implemented, AC 4/4)
 - [REQ-VER-12](requirements/verification.md#req-ver-12--failure-triage-hints) Failure triage hints (should, implemented, AC 4/4)
 - [REQ-EVD-07](requirements/evidence.md#req-evd-07--passive-observations-during-tests) Passive observations during tests (should, implemented, AC 5/5)
@@ -256,6 +258,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-PUB-08](requirements/publishing.md#req-pub-08--promote-ticket-cases-to-the-regression-suite) Promote ticket cases to the regression suite (should, implemented, AC 4/4)
 - [REQ-PUB-09](requirements/publishing.md#req-pub-09--release-readiness-report) Release readiness report (could, implemented, AC 4/4)
 - [REQ-OBS-08](requirements/observability.md#req-obs-08--map-as-planner-input) Map as planner input (could, accepted, AC 0/1)
+- [REQ-OBS-09](requirements/observability.md#req-obs-09--live-progress-of-a-run) Live progress of a run (should, accepted, AC 0/4)
 - [REQ-PRJ-09](requirements/projects.md#req-prj-09--export-and-import-of-a-project-profile) Export and import of a project profile (could, implemented, AC 2/2)
 - [REQ-KNOW-12](requirements/knowledge.md#req-know-12--online-sources) Online sources (could, implemented, AC 2/2)
 <!-- /req-stage -->
