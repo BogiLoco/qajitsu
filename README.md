@@ -74,28 +74,29 @@ checks (auditor, canary) can only make a result worse, never better.
 ## 1. How it works
 
 <p align="center">
-  <img src="docs/assets/qajitsu-flow.png" alt="QAJitsu flow: plan (fetch, plan, review), run (frozen plan, author, sandboxed run, verdict by code, live watch), report (evidence, publish, bug), keep (promote, regression, release)" width="900">
+  <img src="docs/assets/qajitsu-flow.png" alt="QAJitsu flow: set up (init, secrets, doctor, knowledge, status), plan (fetch, plan, review), run (frozen plan, author, sandboxed run, verdict by code, live watch), report (evidence, publish, bug), keep (promote, regression, release)" width="900">
 </p>
 
 <sub>Diagram source: <a href="docs/assets/qajitsu-flow.mmd">docs/assets/qajitsu-flow.mmd</a>, re-render with <code>node scripts/render-diagrams.mjs</code>.</sub>
 
 <p align="center"><sub>🟩 you decide &nbsp;·&nbsp; 🟪 AI agents propose &nbsp;·&nbsp; 🟦 deterministic code executes and judges</sub></p>
 
-| Step                  | Who                         | What it produces                                      | Where it lives (in the run folder)    |
-| --------------------- | --------------------------- | ----------------------------------------------------- | ------------------------------------- |
-| `qj fetch`            | code                        | the ticket, the change, worktrees, manual test cases  | `ticket/`, `repos/`, `imported/`      |
-| `qj plan`             | AI agents                   | analysis and plan versions with sources               | `analysis.json`, `plan/`, `map/`      |
-| review / `qj approve` | **you**                     | the frozen plan and its SHA-256                       | `plan/plan.approved.yaml`, `run.json` |
-| `qj run` (author)     | AI agent                    | one spec per case, checked by code                    | `specs/`                              |
-| `qj run` (execution)  | code                        | assertions, evidence with hashes                      | `results/`, `evidence/`               |
-| `qj watch`            | you                         | live progress and the latest screenshot per case      | `live/` (preview, not evidence)       |
-| `qj run` (verdict)    | code                        | statuses, gates, auditor and canary records, reports  | `checks/`, `report/`                  |
-| `qj evidence`         | you                         | the report, failed steps, screenshots, videos, traces | `report/report.html`                  |
-| `qj publish`          | **you** confirm, code posts | the ticket comment and the evidence zip               | the ticket                            |
-| `qj bug`              | **you** confirm, code posts | a bug per FAILED case, written from the run           | ticket system, `run.json`             |
-| `qj promote`          | **you** confirm, code posts | a PR/MR with the PASSED specs and their expectations  | tests repository                      |
-| `qj regression`       | code                        | the promoted packs run again, no models               | `exports/regression/`                 |
-| `qj release`          | code                        | readiness of every ticket of a fix version or sprint  | `exports/releases/`                   |
+| Step                    | Who                         | What it produces                                      | Where it lives (in the run folder)    |
+| ----------------------- | --------------------------- | ----------------------------------------------------- | ------------------------------------- |
+| `qj init` / `qj doctor` | **you** once, code checks   | the project, its `.qa/` folder and a readiness check  | `~/.qajitsu/projects/<slug>/`, `.qa/` |
+| `qj fetch`              | code                        | the ticket, the change, worktrees, manual test cases  | `ticket/`, `repos/`, `imported/`      |
+| `qj plan`               | AI agents                   | analysis and plan versions with sources               | `analysis.json`, `plan/`, `map/`      |
+| review / `qj approve`   | **you**                     | the frozen plan and its SHA-256                       | `plan/plan.approved.yaml`, `run.json` |
+| `qj run` (author)       | AI agent                    | one spec per case, checked by code                    | `specs/`                              |
+| `qj run` (execution)    | code                        | assertions, evidence with hashes                      | `results/`, `evidence/`               |
+| `qj watch`              | you                         | live progress and the latest screenshot per case      | `live/` (preview, not evidence)       |
+| `qj run` (verdict)      | code                        | statuses, gates, auditor and canary records, reports  | `checks/`, `report/`                  |
+| `qj evidence`           | you                         | the report, failed steps, screenshots, videos, traces | `report/report.html`                  |
+| `qj publish`            | **you** confirm, code posts | the ticket comment and the evidence zip               | the ticket                            |
+| `qj bug`                | **you** confirm, code posts | a bug per FAILED case, written from the run           | ticket system, `run.json`             |
+| `qj promote`            | **you** confirm, code posts | a PR/MR with the PASSED specs and their expectations  | tests repository                      |
+| `qj regression`         | code                        | the promoted packs run again, no models               | `exports/regression/`                 |
+| `qj release`            | code                        | readiness of every ticket of a fix version or sprint  | `exports/releases/`                   |
 
 Every ticket gets a **run folder** in its project (`~/.qajitsu/projects/<project>/runs/<TICKET>/<RUN-ID>/`). Each command continues the latest run of the
 ticket unless you pass `--run <id>`. A new `qj fetch` starts a new run.

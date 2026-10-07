@@ -1,4 +1,13 @@
 flowchart TB
+    subgraph SETUP["⓪ Set up: once per project"]
+        direction LR
+        init["👤 <b>qj init shop</b><br/>registers the project<br/>creates .qa/ by detection"]
+        secrets["👤 <b>.env.local</b><br/>tokens and keys<br/>as secret:// references"]
+        doctor["⚙️ <b>qj doctor --online</b><br/>config · secrets · access<br/>Docker · mobile · models"]
+        knowledge["⚙️ <b>qj knowledge add</b><br/>optional: docs, OpenAPI<br/>Confluence the agents search"]
+        status["⚙️ <b>qj status</b><br/>ready? what is open?<br/>the next command"]
+        init --> secrets --> doctor --> knowledge --> status
+    end
     subgraph PLAN["① Plan: what to test"]
         direction LR
         fetch["<b>qj fetch</b><br/>ticket + code change<br/>at its exact commit<br/>+ existing manual cases"]
@@ -20,8 +29,8 @@ flowchart TB
     subgraph REPORT["③ Report: show it"]
         direction LR
         evidence["📊 <b>qj evidence</b><br/>report · screenshots<br/>videos · traces"]
-        publish["👤 <b>qj publish</b><br/>you confirm the preview<br/>→ Jira"]
-        bug["👤 <b>qj bug</b><br/>FAILED → Jira bug<br/>similar bugs first"]
+        publish["👤 <b>qj publish</b><br/>you confirm the preview<br/>→ the ticket"]
+        bug["👤 <b>qj bug</b><br/>FAILED → a bug ticket<br/>similar bugs first"]
         evidence --> publish
         evidence --> bug
     end
@@ -33,6 +42,7 @@ flowchart TB
         promote --> regression
         regression -. "before a release" .-> release
     end
+    SETUP == "a ticket to test" ==> PLAN
     PLAN == "accepted plan" ==> RUN
     RUN == "results + evidence" ==> REPORT
     REPORT == "good run" ==> KEEP
@@ -41,7 +51,7 @@ flowchart TB
     classDef agent fill:#ede9fe,stroke:#7c3aed,color:#3b0764,stroke-width:2px
     classDef code fill:#e0e7ff,stroke:#1f2a5c,color:#1f2a5c,stroke-width:2px
     classDef stage fill:#ffffff,stroke:#94a3b8,color:#1f2a5c,stroke-dasharray:4 4
-    class review,publish,watch,bug,promote human
+    class init,secrets,review,publish,watch,bug,promote human
     class plan,author agent
-    class fetch,freeze,runner,verdict,evidence,regression,release code
-    class PLAN,RUN,REPORT,KEEP stage
+    class doctor,knowledge,status,fetch,freeze,runner,verdict,evidence,regression,release code
+    class SETUP,PLAN,RUN,REPORT,KEEP stage
