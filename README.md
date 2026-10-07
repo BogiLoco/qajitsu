@@ -237,11 +237,14 @@ qj run SHOP-482 --build --set api.FEATURE_X=1         # with an overridable vari
 3. Each spec runs in a **sandbox** (no network, no files, no secrets). The trusted parent process performs every API
    call, drives the browser (Playwright) or the mobile app (Appium), records evidence and compares actual values with
    the approved plan.
-4. Failed web steps get up to two **healing** attempts (selectors and waits only; a healed pass is NEEDS_REVIEW).
-5. Statuses are computed by code; then the **auditor** and the optional **canary** may downgrade PASSED to NEEDS_REVIEW,
+4. Steps the plan marks **manual** (an SMS code, a physical device, a printout) pause the run: the instructions are
+   shown and you answer passed or failed with an optional note and file. In CI the run waits for
+   `qj answer SHOP-482 TC-02 S3 --passed` from someone else. No answer in time makes the case BLOCKED, never PASSED.
+5. Failed web steps get up to two **healing** attempts (selectors and waits only; a healed pass is NEEDS_REVIEW).
+6. Statuses are computed by code; then the **auditor** and the optional **canary** may downgrade PASSED to NEEDS_REVIEW,
    and every FAILED case gets a **hint** (likely product bug, test bug, environment or data) citing its evidence; a
    hint is a suggestion and never changes a status.
-6. Reports are written: `report.html`, `matrix.md/.csv/.xlsx`, `junit.xml`, `gates.json`, the transition graph.
+7. Reports are written: `report.html`, `matrix.md/.csv/.xlsx`, `junit.xml`, `gates.json`, the transition graph.
 
 The matrix is printed at the end; the exit code tells the result (section 5).
 
@@ -562,6 +565,7 @@ Every option and exit code of every command: [docs/cli/commands.md](docs/cli/com
 | `qj approve <TICKET> [--version <n>] [--confirm-open-questions] [--approver <name>] [--reuse-from <run\|latest>]` | when the plan is right                                                          | Freezes the plan (SHA-256). `--approver` records who approved (CI). `--reuse-from` reuses a plan approved in an earlier run of the same ticket after new commits, only if the ticket text did not change and the approval is in that run's journal.                                               |
 | `qj run <TICKET> [--env <profile\|url>] [--build] [--keep] [--set <svc.VAR=value>]...`                            | after approval                                                                  | Writes missing specs, checks them, executes API, web, mixed and mobile cases, computes statuses, runs the auditor and canary, writes reports. `--build` starts the app from the worktree; `--keep` keeps containers and worktrees; `--set` overrides variables marked `overridable`.              |
 | `qj publish <TICKET> [--auto-publish]`                                                                            | when you want the results in Jira                                               | Gates, preview, `[y/N]`, then the comment, the evidence zip and media. `--auto-publish` (or `publish.auto`) skips the preview in CI and is recorded.                                                                                                                                              |
+| `qj answer <TICKET> <TC> <S> --passed\|--failed [--note] [--file]`                                                | a run waits for a manual step (CI, another terminal)                            | Answers a manual step; the answer is recorded with your name, the note masked, the file as evidence. A failed answer makes the case FAILED.                                                                                                                                                       |
 | `qj bug <TICKET> [--cases TC-01] [--link <KEY>] [--yes [--force-new]]`                                            | when a case FAILED                                                              | Shows similar open bugs, then creates a bug written by code from the run (steps, expected vs actual, version, environment, evidence by hash) and links it to the ticket, or links an existing bug. Asks first.                                                                                    |
 | `qj promote <TICKET> [--cases TC-01,TC-03] [--dry-run] [--yes]`                                                   | after a good run                                                                | Proposes the PASSED cases as a pull/merge request to the tests repository: the specs that passed, unchanged, and the plan's expectations; asks before pushing.                                                                                                                                    |
 | `qj explore <TICKET> --goal "<text>" [--time-box <min>] [--max-steps <n>]`                                        | when you want an agent to look around a change, before or besides planned cases | An exploratory session in a browser QAJitsu drives and records: observations with steps and screenshots, `explore/<session>/report.html` for review, no statuses. `qj explore promote <TICKET> --session S01 --observation O1` turns an observation into a draft plan case (runs after approval). |
@@ -762,6 +766,10 @@ test_types: [api, web]
 - **Failure hints.** Every FAILED case gets a suggested cause (product bug, test bug, environment, data) citing
   steps, assertions, evidence or logs; code drops hints without real evidence and a hint never changes a status.
   [docs/guides/models-and-verification.md](docs/guides/models-and-verification.md)
+- **Manual steps.** A plan step can be `manual: true` with instructions (2FA or SMS code, physical device,
+  printout). The run pauses and asks you in the terminal, or waits for `qj answer` in CI; the answer is recorded
+  with your name and evidence, a failed answer is FAILED, no answer is BLOCKED. Reports name who performed each
+  manual step; agents can never answer one. [ADR-0008](docs/adr/0008-manual-step-outcomes.md)
 - **Bug reports from failures.** `qj bug` searches for similar open bugs first, then creates a bug written by code
   from the run (steps from the plan and the runner record, expected vs actual, tested version, environment,
   evidence by hash) and links it to the ticket, or links the failure to an existing bug; always after confirmation.

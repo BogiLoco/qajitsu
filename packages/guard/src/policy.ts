@@ -48,6 +48,8 @@ export const DEFAULT_PROTECTED_PATHS: readonly string[] = [
   "explore/",
   // Documentation chunks agents were given; plan quotes are checked against them (REQ-KNOW-06/AC3).
   "knowledge/",
+  // Manual step requests and a person's answers (REQ-EXEC-11/AC4): agents can never answer for a tester.
+  "manual/",
   "run.json",
 ];
 

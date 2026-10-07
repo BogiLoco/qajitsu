@@ -88,3 +88,23 @@ describe("triage hints are checked by code (REQ-VER-12)", () => {
     expect(out).toEqual({ hints: [], dropped: ["TC-01"] });
   });
 });
+
+describe("triage citations (REQ-VER-12/AC2)", () => {
+  it("REQ-VER-12/AC2: a step citation counts; several bad hints for one case are dropped once", () => {
+    const out = checkTriageHints(
+      [
+        {
+          caseId: "TC-01",
+          category: "test-bug",
+          justification: "S1 errored.",
+          cites: [{ kind: "step", ref: "S1" }],
+        },
+        { caseId: "TC-09", category: "data", justification: "x", cites: [{ kind: "step", ref: "S1" }] },
+        { caseId: "TC-09", category: "data", justification: "y", cites: [{ kind: "log", ref: "nope.log" }] },
+      ],
+      evidence,
+    );
+    expect(out.hints.map((h) => h.caseId)).toEqual(["TC-01"]);
+    expect(out.dropped).toEqual(["TC-09"]);
+  });
+});

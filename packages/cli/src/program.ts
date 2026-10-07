@@ -26,6 +26,7 @@ import {
 import { runNote, runResumable, runStatus } from "./commands/status.js";
 import { runPromote, type PromoteOptions } from "./commands/promote.js";
 import { runBug, type BugOptions } from "./commands/bug.js";
+import { runAnswer } from "./commands/manual.js";
 import { runProjectExport, runProjectImport } from "./commands/project-profile.js";
 import {
   runKnowledgeAdd,
@@ -491,7 +492,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
         return withPorts((ports) =>
           fixCheck === true
             ? runFixCheck(ticket, runOptions, commandIO, ports, review)
-            : runRun(ticket, runOptions, commandIO, ports),
+            : runRun(ticket, { ...runOptions, user: io.user }, commandIO, ports),
         )();
       },
     );
@@ -794,6 +795,29 @@ export function createProgram(version: string, io: ProgramIO): Command {
       withPorts((ports) =>
         runPublish(ticket, options, commandIO, ports, io.user ?? "unknown", io.compressVideo),
       )(),
+    );
+
+  program
+    .command("answer")
+    .description("Answer a manual step a running 'qj run' waits for (CI or another terminal)")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .argument("<case>", "case id, e.g. TC-02")
+    .argument("<step>", "step id, e.g. S3")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .option("--passed", "the step behaved as the plan expects")
+    .option("--failed", "the step did not behave as the plan expects")
+    .option("--note <text>", "what you observed (codes and secrets are masked)")
+    .option("--file <path>", "a screenshot or file to attach as evidence")
+    .action(
+      (
+        ticket: string,
+        caseId: string,
+        stepId: string,
+        options: { run?: string; passed?: boolean; failed?: boolean; note?: string; file?: string },
+      ) =>
+        withPorts((ports) =>
+          runAnswer(ticket, caseId, stepId, options, commandIO, ports, io.user ?? "unknown"),
+        )(),
     );
 
   program

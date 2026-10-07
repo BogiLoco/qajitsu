@@ -59,7 +59,8 @@ const calleeName = (call: ts.CallExpression): string | undefined => {
  * - only `import type` from `@qajitsu/steps`; no dynamic import, no `process`, `require`, `fetch`,
  *   `eval`, `globalThis` (the spec cannot reach files, secrets or the network except through `api`);
  * - exports `caseId` equal to the case and `run`;
- * - every plan step has exactly one `step("Sx")` and at least one `verify("Sx", ...)`;
+ * - every plan step has exactly one `step("Sx")` and at least one `verify("Sx", ...)`; a manual step
+ *   (REQ-EXEC-11) has its `step("Sx", () => {})` and no `verify()`;
  * - every `verify()` has 4 arguments and the 4th is `plan.expect("<case>.<step>.<field>")` with the
  *   same step and field as the call, so expected values always come from the approved plan.
  *
@@ -208,6 +209,15 @@ export function checkSpecSource(source: string, caseId: string, plan: Plan): Spe
     const count = stepCalls.get(step.id) ?? 0;
     if (count === 0) add("coverage", `plan step ${step.id} has no step("${step.id}") call`);
     if (count > 1) add("coverage", `step("${step.id}") appears ${String(count)} times`);
+    // REQ-EXEC-11: a manual step is checked by a person; the spec only marks where it happens.
+    if (step.manual === true) {
+      if (verifiedSteps.has(step.id))
+        add(
+          "coverage",
+          `step ${step.id} is manual: a person reports its outcome, the spec must not verify it`,
+        );
+      continue;
+    }
     if (!verifiedSteps.has(step.id))
       add("coverage", `plan step ${step.id} has no verify("${step.id}", ...) call`);
     // Every planned expectation is verified; leaving one out would let the spec pass whatever it is.

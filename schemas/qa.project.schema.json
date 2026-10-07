@@ -1486,6 +1486,21 @@
       },
       "additionalProperties": false
     },
+    "manual": {
+      "default": {
+        "timeout_s": 900
+      },
+      "type": "object",
+      "properties": {
+        "timeout_s": {
+          "default": 900,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        }
+      },
+      "additionalProperties": false
+    },
     "knowledge": {
       "default": {
         "embedding": "ollama/nomic-embed-text",

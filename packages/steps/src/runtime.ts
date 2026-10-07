@@ -1,5 +1,12 @@
 import { isDeepStrictEqual } from "node:util";
-import type { AssertionRecord, AttemptRecord, EvidenceItem, Plan, TestCase } from "@qajitsu/core";
+import type {
+  AssertionRecord,
+  AttemptRecord,
+  EvidenceItem,
+  ManualPrompter,
+  Plan,
+  TestCase,
+} from "@qajitsu/core";
 import type { Masker } from "./masking.js";
 import { assertSelector, type UiClient, type UiDriver, type UiOperation, type UiProperty } from "./ui.js";
 
@@ -95,6 +102,8 @@ export interface CaseRuntimeOptions {
   readonly now: () => number;
   /** Starts the browser on first use; absent for API-only runs (REQ-EXEC-05). */
   readonly ui?: (() => Promise<UiDriver>) | undefined;
+  /** Asks a person at manual steps (REQ-EXEC-11); the trusted orchestrator provides it, never a spec or agent. */
+  readonly manual?: ManualPrompter | undefined;
 }
 
 /** The recorder of one attempt. Runs in the trusted process; specs only reach it through these operations. */
@@ -245,8 +254,71 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     currentStep = stepId;
   };
 
+  const manualSteps = new Map(planCase.steps.filter((s) => s.manual === true).map((s) => [s.id, s] as const));
+  /** One-time codes and secrets a tester may type into a note never leave the runtime (REQ-EXEC-11/AC7). */
+  const maskNote = (note: string): string => masker.maskText(note).replace(/\b\d{4,8}\b/g, "***");
+
+  /**
+   * Asks a person for the outcome of a manual step (REQ-EXEC-11/AC2+AC3, ADR-0008). The answer becomes an assertion
+   * with `source: manual`; the record and any attachment become evidence of the step. No answer is an error.
+   */
+  const askPerson = async (stepId: string): Promise<string | undefined> => {
+    const planStep = manualSteps.get(stepId);
+    if (!planStep) return undefined;
+    if (!options.manual)
+      return `manual step ${stepId} needs a person; run interactively or answer with 'qajitsu answer'`;
+    const answer = await options.manual({
+      caseId,
+      stepId,
+      attempt,
+      action: planStep.action,
+      instructions: planStep.instructions ?? planStep.action,
+      expected: planStep.expect.description,
+    });
+    if (!answer) return `manual step ${stepId} was not answered in time`;
+    const note = answer.note === undefined ? undefined : maskNote(answer.note);
+    const record: AssertionRecord = {
+      stepId,
+      field: "manual",
+      expected: "passed",
+      actual: answer.outcome,
+      pass: answer.outcome === "passed",
+      source: "manual",
+      by: masker.maskText(answer.by),
+      at: answer.at,
+      ...(note === undefined ? {} : { note }),
+    };
+    assertions.push(record);
+    media.push({
+      stepId,
+      kind: "manual",
+      name: `${stepId}-manual.json`,
+      content: `${JSON.stringify({ ...record, instructions: planStep.instructions }, null, 2)}\n`,
+    });
+    if (answer.attachment) {
+      const name = answer.attachment.name.replace(/[^\w.-]+/g, "_").slice(-80);
+      const text = /\.(txt|log|md|json|csv|html?)$/i.test(name);
+      media.push({
+        stepId,
+        kind: "manual",
+        name: `${stepId}-${name}`,
+        content: text
+          ? maskNote(new TextDecoder().decode(answer.attachment.content))
+          : answer.attachment.content,
+      });
+    }
+    return undefined;
+  };
+
   const endStep = async (stepId: string, error?: string): Promise<void> => {
     if (currentStep !== stepId) throw new Error(`step('${stepId}') ended but was not running`);
+    if (error === undefined) {
+      const unanswered = await askPerson(stepId);
+      if (unanswered !== undefined) {
+        error = unanswered;
+        failure ??= unanswered;
+      }
+    }
     steps.push({
       id: stepId,
       ok: error === undefined,
@@ -494,6 +566,9 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     verify,
     finish: async (error) => {
       if (error !== undefined) failure = masker.maskText(describeError(error));
+      // REQ-EXEC-11/AC5: a manual step the spec never ran cannot be skipped into a pass.
+      for (const id of manualSteps.keys())
+        if (!steps.some((s) => s.id === id)) failure ??= `manual step ${id} was not performed`;
       const evidence: EvidenceItem[] = [...media];
       const perStep = new Map<string, number>();
       for (const c of calls) {

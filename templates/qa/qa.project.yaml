@@ -90,6 +90,9 @@ test_types: [api, web]
 # Passive observations while planned cases run (REQ-EVD-07): listed in the report and the Jira comment, never statuses.
 # observations: { console: true, http_errors: true, accessibility: true, ignore: [favicon.ico, color-contrast] }
 
+# Manual steps (REQ-EXEC-11): how long a run waits for a tester's answer per step.
+# manual: { timeout_s: 900 }
+
 # Knowledge base (REQ-KNOW, ADR-0007): documents added with `qj knowledge add`, searched by the analyst and planner.
 # Small documentation is used in full; above full_context_tokens retrieval is hybrid with the embedding model.
 # knowledge:

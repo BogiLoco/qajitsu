@@ -64,6 +64,11 @@ const HINTS_TITLE = "Failure hints (suggestions, not statuses)";
 const hintLines = (m: CommentModel): string[] =>
   m.rows.flatMap((r) => (r.hint === undefined ? [] : [`${r.caseId}: ${r.hint}`]));
 
+/** Manual steps and who performed them (REQ-EXEC-11/AC6). */
+const MANUAL_TITLE = "Manual steps (performed by people)";
+const manualLines = (m: CommentModel): string[] =>
+  m.rows.flatMap((r) => (r.manual === undefined ? [] : [`${r.caseId}: ${r.manual}`]));
+
 const show = (v: unknown): string =>
   typeof v === "string" ? JSON.stringify(v) : JSON.stringify(v) || "undefined";
 
@@ -156,6 +161,10 @@ export function renderJiraAdf(m: CommentModel): { version: 1; type: "doc"; conte
     content.push(heading(4, "Fix verification"));
     content.push(bullets(m.fixCheck.map((l) => [text(l)])));
   }
+  if (manualLines(m).length > 0) {
+    content.push(heading(4, MANUAL_TITLE));
+    content.push(bullets(manualLines(m).map((l) => [text(l)])));
+  }
   if (hintLines(m).length > 0) {
     content.push(heading(4, HINTS_TITLE));
     content.push(bullets(hintLines(m).map((l) => [text(l)])));
@@ -217,6 +226,8 @@ export function renderJiraWiki(m: CommentModel): string {
   }
   if (m.fixCheck && m.fixCheck.length > 0)
     lines.push("", "h4. Fix verification", ...m.fixCheck.map((l) => `* ${wikiEscape(l)}`));
+  if (manualLines(m).length > 0)
+    lines.push("", `h4. ${MANUAL_TITLE}`, ...manualLines(m).map((l) => `* ${wikiEscape(l)}`));
   if (hintLines(m).length > 0)
     lines.push("", `h4. ${HINTS_TITLE}`, ...hintLines(m).map((l) => `* ${wikiEscape(l)}`));
   const observed = observationLines(m);
@@ -245,6 +256,7 @@ export function renderCommentPreview(m: CommentModel): string {
   }
   if (m.fixCheck && m.fixCheck.length > 0)
     lines.push("", "Fix verification:", ...m.fixCheck.map((l) => `  ${l}`));
+  if (manualLines(m).length > 0) lines.push("", `${MANUAL_TITLE}:`, ...manualLines(m).map((l) => `  ${l}`));
   if (hintLines(m).length > 0) lines.push("", `${HINTS_TITLE}:`, ...hintLines(m).map((l) => `  ${l}`));
   const observed = observationLines(m);
   if (observed.length > 0) lines.push("", `${OBSERVATIONS_TITLE}:`, ...observed.map((o) => `  ${o}`));

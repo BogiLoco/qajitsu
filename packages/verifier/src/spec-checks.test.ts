@@ -214,3 +214,42 @@ describe("assertion lock for the healer (REQ-EXEC-09/AC2)", () => {
     expect(assertionLockDiff(original, mutate(original)).length).toBeGreaterThan(0);
   });
 });
+
+describe("manual steps in specs (REQ-EXEC-11)", () => {
+  const first = plan.cases[0];
+  if (!first) throw new Error("fixture");
+  const manualPlan = PlanSchema.parse({
+    ...plan,
+    cases: [
+      {
+        ...first,
+        steps: [
+          ...first.steps,
+          {
+            id: "S9",
+            action: "Check the printout",
+            manual: true,
+            instructions: "Print the receipt",
+            expect: { description: "Total 1.01 printed" },
+          },
+        ],
+      },
+    ],
+  });
+  const tc1 = readFileSync(new URL("../../../fixtures/specs/demo-1/TC-01.spec.ts", import.meta.url), "utf8");
+  const withManual = (body: string) => tc1.replace(/\n}\s*$/, `\n  await step("S9", () => {${body}});\n}\n`);
+
+  it("REQ-EXEC-11/AC1: a manual step needs its step() call with no verify(); verifying it is rejected", () => {
+    expect(checkSpecSource(withManual(""), "TC-01", manualPlan)).toEqual([]);
+    expect(checkSpecSource(tc1, "TC-01", manualPlan).map((p) => p.message)).toContain(
+      'plan step S9 has no step("S9") call',
+    );
+    expect(
+      checkSpecSource(
+        withManual(' verify("S9", "description", 1, plan.expect("TC-01.S9.description")); '),
+        "TC-01",
+        manualPlan,
+      ).map((p) => p.message),
+    ).toContain("step S9 is manual: a person reports its outcome, the spec must not verify it");
+  });
+});

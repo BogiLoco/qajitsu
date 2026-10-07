@@ -192,6 +192,22 @@ Publishes the results comment and attachments to the ticket after a confirmed pr
 
 Exit codes: `0` published, `2` preview declined, `3` refused by the gates or failed.
 
+### `qajitsu answer <ticket> <case> <step>`
+
+Answers a manual step that a running `qajitsu run` waits for (REQ-EXEC-11, ADR-0008): in CI, or from another
+terminal. Manual steps are plan steps marked `manual: true` with instructions; at such a step the run shows the
+instructions and asks in the terminal, or writes `<run>/manual/<TC>.<S>.pending.json` and waits up to
+`manual.timeout_s`. The answer is recorded as an assertion with `source: manual`, who and when; a failed answer
+makes the case FAILED, no answer makes it BLOCKED. Notes are masked, one-time codes included.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+- `--passed`: the step behaved as the plan expects
+- `--failed`: the step did not behave as the plan expects
+- `--note <text>`: what you observed (codes and secrets are masked)
+- `--file <path>`: a screenshot or file to attach as evidence
+
+Exit codes: `0` answered, `3` no step waiting, not exactly one of `--passed`/`--failed`, or errors.
+
 ### `qajitsu bug <ticket>`
 
 Reports FAILED cases as bugs in Jira (REQ-PUB-07). Statuses and gates are computed exactly as for `publish`. For each

@@ -38,6 +38,9 @@ Rules:
 - Case ids TC-01, TC-02, ...; step ids S1, S2, ... per case; type api, web or mobile; priority high, medium or low.
 - Expected results are structured where possible: HTTP "status", response "fields" (JSON path -> exact expected value), visible "texts". Tests read them from the plan, so be exact.
 - Test data uses aliases only, like {"user":"user:standard"}; never passwords, tokens or real personal data.
+- A step that cannot be automated (an SMS or 2FA code, a physical device, a printout, a captcha) may be
+  "manual": true with "instructions" for the tester; its "expect" is a "description" only. Use it only when needed:
+  a tester has to be present when the run reaches it.
 - "evidence" lists what proves the result: request, response, screenshot, video, trace, log, har.
 - Unclear behaviour goes to "open_questions" (Q1, ...); deliberately untested things go to "out_of_scope".
 - For a ticket of type Bug, mark the case(s) that reproduce the reported defect with "reproduces": true: they must

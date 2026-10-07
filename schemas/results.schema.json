@@ -56,6 +56,19 @@
                 "actual": {},
                 "pass": {
                   "type": "boolean"
+                },
+                "source": {
+                  "type": "string",
+                  "const": "manual"
+                },
+                "by": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string"
                 }
               },
               "required": [

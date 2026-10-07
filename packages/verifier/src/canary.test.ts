@@ -103,3 +103,30 @@ describe("canary (REQ-VER-09)", () => {
     expect(canaryCaught(canary, [a(false, "fields.total"), a(false, "status", "S1")])).toBe(false);
   });
 });
+
+describe("canary and manual steps (REQ-EXEC-11)", () => {
+  it("REQ-EXEC-11/AC5: a case with a manual step is never used as the canary, so nobody is asked twice", () => {
+    const plan = withExpect({ status: 200 });
+    const first = plan.cases[0]!;
+    const manual: Plan = {
+      ...plan,
+      cases: [
+        {
+          ...first,
+          steps: [
+            ...first.steps,
+            {
+              id: "S3",
+              action: "Scan the QR code",
+              manual: true,
+              instructions: "Use the phone",
+              expect: { description: "ok" },
+            },
+          ],
+        },
+      ],
+    };
+    expect(buildCanaryPlan(plan, first.id)).toBeDefined();
+    expect(buildCanaryPlan(manual, first.id)).toBeUndefined();
+  });
+});

@@ -13,7 +13,7 @@ const HEADER = [
   "Evidence",
 ] as const;
 
-const values = (r: MatrixRow, hints = false): (string | number)[] => [
+const values = (r: MatrixRow, hints = false, manual = false): (string | number)[] => [
   r.caseId,
   r.title,
   r.requirement,
@@ -22,12 +22,21 @@ const values = (r: MatrixRow, hints = false): (string | number)[] => [
   r.stepsPassed,
   r.stepsTotal,
   r.evidence,
+  ...(manual ? [r.manual ?? ""] : []),
   ...(hints ? [r.hint ?? ""] : []),
 ];
 
-/** Columns of the matrix; the hint column appears only when a FAILED case has a hint (REQ-VER-12/AC3). */
-const headerOf = (rows: readonly MatrixRow[]): readonly string[] =>
-  rows.some((r) => r.hint !== undefined) ? [...HEADER, "Hint (suggestion)"] : HEADER;
+/**
+ * Columns of the matrix: manual steps (REQ-EXEC-11/AC6) and hints (REQ-VER-12/AC3) appear only when a row has them.
+ */
+const flagsOf = (rows: readonly MatrixRow[]): { manual: boolean; hints: boolean } => ({
+  manual: rows.some((r) => r.manual !== undefined),
+  hints: rows.some((r) => r.hint !== undefined),
+});
+const headerOf = (rows: readonly MatrixRow[]): readonly string[] => {
+  const f = flagsOf(rows);
+  return [...HEADER, ...(f.manual ? ["Manual steps"] : []), ...(f.hints ? ["Hint (suggestion)"] : [])];
+};
 
 /** Neutralises spreadsheet formulas in text cells (CSV/formula injection). */
 const safeText = (value: string): string => (/^[=+\-@\t\r]/.test(value) ? `'${value}` : value);
@@ -44,8 +53,8 @@ export function renderMatrixCsv(rows: readonly MatrixRow[]): string {
     return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const header = headerOf(rows);
-  const hints = header.length > HEADER.length;
-  return `${[header, ...rows.map((r) => values(r, hints))].map((r) => r.map(cell).join(",")).join("\r\n")}\r\n`;
+  const f = flagsOf(rows);
+  return `${[header, ...rows.map((r) => values(r, f.hints, f.manual))].map((r) => r.map(cell).join(",")).join("\r\n")}\r\n`;
 }
 
 const xml = (s: string): string =>

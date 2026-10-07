@@ -7,6 +7,12 @@ export const AssertionRecordSchema = z.strictObject({
   expected: z.unknown(),
   actual: z.unknown(),
   pass: z.boolean(),
+  /** `manual`: the outcome of a manual step, reported by a person (REQ-EXEC-11/AC3, ADR-0008). */
+  source: z.literal("manual").optional(),
+  /** Who reported a manual outcome and when. */
+  by: z.string().optional(),
+  at: z.string().optional(),
+  note: z.string().optional(),
 });
 
 /** One attempt of a case as stored in `results/<case>.json` (REQ-VER-02, REQ-EXEC-08/AC3). */

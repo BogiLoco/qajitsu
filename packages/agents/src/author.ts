@@ -46,6 +46,8 @@ Rules (checked by code; a violating spec is rejected):
 - One step("<step id>", async () => { ... }) per plan step, in order; API calls only inside steps through api or api.as("<account alias>").
 - Every step has at least one verify("<step id>", "<field>", <actual value>, plan.expect("<case>.<step>.<field>")).
   Fields are "status", "fields.<key>" (read with res.json("<key>")) or "texts.<n>". The expected value is ALWAYS plan.expect(...) with exactly the same step and field; never a literal.
+- A step with "manual": true is performed by a person: write step("<step id>", () => {}) with an empty body and no
+  verify(); QAJitsu pauses there and asks the tester.
 - Never use process, fetch, require, eval, globalThis or timers. Never write files.
 - Use the read-only tools to look up endpoints, payloads and field names in the code under repos/.
 - When the tests repository's conventions are given, follow them: use its preferred selector strategy and the same

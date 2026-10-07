@@ -12,6 +12,8 @@ export interface MatrixRow {
   readonly evidence: string;
   /** Suggested cause of a FAILED case (REQ-VER-12), shown as a suggestion; never part of the status or counts. */
   readonly hint?: string | undefined;
+  /** Manual steps of the case with who performed them (REQ-EXEC-11/AC6), e.g. `S2 passed by alice`. */
+  readonly manual?: string | undefined;
 }
 
 /** Counts per status, computed by code (REQ-VER-08, invariant 6). */
@@ -49,13 +51,23 @@ const cell = (value: string): string => value.replace(/\|/g, "\\|").replace(/\r?
  */
 export function renderMatrixMarkdown(rows: readonly MatrixRow[]): string {
   const hints = rows.some((r) => r.hint !== undefined);
-  const header = hints
-    ? "| TC | Title | Requirement | Type | Status | Steps OK | Evidence | Hint (suggestion) |\n| --- | --- | --- | --- | --- | --- | --- | --- |"
-    : "| TC | Title | Requirement | Type | Status | Steps OK | Evidence |\n| --- | --- | --- | --- | --- | --- | --- |";
+  const manual = rows.some((r) => r.manual !== undefined);
+  const columns = [
+    "TC",
+    "Title",
+    "Requirement",
+    "Type",
+    "Status",
+    "Steps OK",
+    "Evidence",
+    ...(manual ? ["Manual steps"] : []),
+    ...(hints ? ["Hint (suggestion)"] : []),
+  ];
+  const header = `| ${columns.join(" | ")} |\n|${columns.map(() => " --- |").join("")}`;
   const body = rows
     .map(
       (r) =>
-        `| ${cell(r.caseId)} | ${cell(r.title)} | ${cell(r.requirement)} | ${r.type.toUpperCase()} | ${r.status} | ${r.stepsPassed}/${r.stepsTotal} | ${cell(r.evidence)} |${hints ? ` ${cell(r.hint ?? "")} |` : ""}`,
+        `| ${cell(r.caseId)} | ${cell(r.title)} | ${cell(r.requirement)} | ${r.type.toUpperCase()} | ${r.status} | ${r.stepsPassed}/${r.stepsTotal} | ${cell(r.evidence)} |${manual ? ` ${cell(r.manual ?? "")} |` : ""}${hints ? ` ${cell(r.hint ?? "")} |` : ""}`,
     )
     .join("\n");
   return `**${summaryLine(rows)}**\n\n${header}${body ? `\n${body}` : ""}\n`;

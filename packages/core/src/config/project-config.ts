@@ -350,6 +350,10 @@ export const ProjectConfigSchema = z.strictObject({
         .default({}),
     })
     .default({ servers: {} }),
+  /** Manual steps (REQ-EXEC-11): how long the run waits for a person's answer per step. */
+  manual: z
+    .strictObject({ timeout_s: z.number().int().min(1).max(86_400).default(900) })
+    .default({ timeout_s: 900 }),
   /**
    * The project's knowledge base (REQ-KNOW-01, REQ-KNOW-07, REQ-KNOW-08, ADR-0007): documents added with
    * `qj knowledge add`, searchable by the analyst and planner. Documentation that fits `full_context_tokens` is used

@@ -127,11 +127,40 @@ export const TestCaseSchema = z.strictObject({
     .default({}),
   steps: z
     .array(
-      z.strictObject({
-        id: z.string().regex(/^S\d{1,3}$/),
-        action: z.string().min(1),
-        expect: ExpectationSchema,
-      }),
+      z
+        .strictObject({
+          id: z.string().regex(/^S\d{1,3}$/),
+          action: z.string().min(1),
+          expect: ExpectationSchema,
+          /**
+           * A step a person performs (REQ-EXEC-11): an SMS or 2FA code, a physical device, a printout. The run pauses
+           * and asks a tester for the outcome; its expectation is a description only.
+           */
+          manual: z.boolean().optional(),
+          /** What the tester does and checks; required for a manual step. */
+          instructions: z.string().min(3).max(1000).optional(),
+        })
+        .superRefine((step, ctx) => {
+          if (step.manual !== true) return;
+          if (step.instructions === undefined)
+            ctx.addIssue({
+              code: "custom",
+              path: ["instructions"],
+              message: "A manual step needs instructions",
+            });
+          const e = step.expect;
+          if (
+            e.status !== undefined ||
+            e.fields !== undefined ||
+            e.texts !== undefined ||
+            e.elements !== undefined
+          )
+            ctx.addIssue({
+              code: "custom",
+              path: ["expect"],
+              message: "A manual step is checked by a person: its expectation is a description only",
+            });
+        }),
     )
     .min(1),
   evidence: z.array(z.enum(["request", "response", "screenshot", "video", "trace", "log", "har"])).min(1),

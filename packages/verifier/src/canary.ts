@@ -28,7 +28,8 @@ const invert = (value: unknown): unknown => {
 export function buildCanaryPlan(plan: Plan, caseId: string): CanaryPlan | undefined {
   const index = plan.cases.findIndex((c) => c.id === caseId);
   const testCase = plan.cases[index];
-  if (!testCase) return undefined;
+  // A case with manual steps would ask a person again (REQ-EXEC-11): the canary uses fully automated cases only.
+  if (!testCase || testCase.steps.some((s) => s.manual === true)) return undefined;
   for (const [stepIndex, step] of testCase.steps.entries()) {
     const e = step.expect;
     let field: string | undefined;

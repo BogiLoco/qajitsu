@@ -220,6 +220,19 @@ export async function computeVerdict(
       .filter((c) => c.downgradedBy)
       .map((c) => `${c.caseId} → NEEDS_REVIEW (${c.downgradedBy ?? ""})`),
   ].map((n) => masker.maskText(n));
+  // REQ-EXEC-11/AC6: which steps a person performed, from the runner's record of the last attempt.
+  const manualOf = (caseId: string): { manual?: string } => {
+    const done = (results.get(caseId)?.attempts.at(-1)?.assertions ?? []).filter(
+      (a) => a.source === "manual",
+    );
+    return done.length === 0
+      ? {}
+      : {
+          manual: masker.maskText(
+            done.map((a) => `${a.stepId} ${String(a.actual)} by ${a.by ?? "?"}`).join(", "),
+          ),
+        };
+  };
   const rows: MatrixRow[] = cases.map((c) => {
     const p = plan.cases.find((x) => x.id === c.caseId);
     return {
@@ -233,6 +246,7 @@ export async function computeVerdict(
       stepsPassed: c.stepsPassed,
       stepsTotal: c.stepsTotal,
       ...(c.status === "FAILED" && hintOf.has(c.caseId) ? { hint: hintOf.get(c.caseId) } : {}),
+      ...manualOf(c.caseId),
       evidence:
         c.evidence.length > 0
           ? `${String(c.evidence.length)} file(s)`

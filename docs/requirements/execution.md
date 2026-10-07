@@ -136,10 +136,10 @@ The author agent writes test files for approved cases only. Exploring the app th
 
 ### REQ-EXEC-11 · Human-in-the-loop steps
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: later
-- Related: INV-1, INV-2, INV-8, REQ-VER-01, REQ-VER-04, REQ-EVD-01
+- Related: INV-1, INV-2, INV-8, REQ-VER-01, REQ-VER-04, REQ-EVD-01, ADR-0008
 
 Some steps cannot be automated: an SMS or 2FA code, a physical device, a printout, a captcha. The plan marks such a
 step as manual; the run pauses, a tester performs it and records the outcome, and the run continues. A manual tester
@@ -148,13 +148,13 @@ person, not from the runner.
 
 **Acceptance criteria**
 
-- [ ] AC1: The planner may mark a step `manual: true` with instructions; only steps of the approved plan can be manual.
-- [ ] AC2: At a manual step the run pauses and asks the tester for the outcome (passed or failed), an optional note and an optional screenshot or file, in the terminal or through a pending-step file in CI.
-- [ ] AC3: The step result records `source: manual`, the person's identity and a timestamp; the attachment goes through masking and into the evidence manifest with its SHA-256.
-- [ ] AC4: Agents cannot answer a manual step; a tool call that tries is denied by the guard and journaled.
-- [ ] AC5: A manual step reported failed makes the case FAILED; no answer within the configured timeout makes it BLOCKED, never PASSED.
-- [ ] AC6: Matrix, report and Jira comment mark cases with manual steps and name who performed them.
-- [ ] AC7: Codes and secrets entered by the tester are never written to the journal, logs or evidence.
+- [x] AC1: The planner may mark a step `manual: true` with instructions; only steps of the approved plan can be manual.
+- [x] AC2: At a manual step the run pauses and asks the tester for the outcome (passed or failed), an optional note and an optional screenshot or file, in the terminal or through a pending-step file in CI.
+- [x] AC3: The step result records `source: manual`, the person's identity and a timestamp; the attachment goes through masking and into the evidence manifest with its SHA-256.
+- [x] AC4: Agents cannot answer a manual step; a tool call that tries is denied by the guard and journaled.
+- [x] AC5: A manual step reported failed makes the case FAILED; no answer within the configured timeout makes it BLOCKED, never PASSED.
+- [x] AC6: Matrix, report and Jira comment mark cases with manual steps and name who performed them.
+- [x] AC7: Codes and secrets entered by the tester are never written to the journal, logs or evidence.
 
 ### REQ-EXEC-12 · Visual regression
 

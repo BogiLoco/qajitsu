@@ -34,6 +34,7 @@ import { codeIndexCache, openSession, type ModelPorts, type RunSession } from ".
 import type { CommandIO } from "./fetch.js";
 import { anchorJournal, computeVerdict, writeReports } from "./verdict.js";
 import { auditRun, triageRun, runCanary } from "./checks.js";
+import { createManualPrompter } from "./manual.js";
 import { approvalContext, changedParts, type ApprovalContext } from "./context-fingerprint.js";
 import { runRunHook, type HookExec } from "./hooks.js";
 import { prepareMobile, type PreparedMobile } from "./mobile.js";
@@ -59,6 +60,8 @@ export interface RunOptions {
   readonly keep?: boolean | undefined;
   /** Run overrides `<service>.<VAR>=<value>` (REQ-CFG-02/AC3). */
   readonly set?: readonly string[] | undefined;
+  /** The person running the command; recorded with manual step answers given in this terminal (REQ-EXEC-11). */
+  readonly user?: string | undefined;
 }
 
 /** Ports `run` needs beyond the common ones; the executor is replaceable in tests. */
@@ -330,6 +333,7 @@ export async function runRun(
         );
       } else {
         const pending = await executeCases(session, plan, env, io, ports, results, {
+          user: options.user,
           build: options.build === true,
           onDevice: (stop) => deviceStops.push(stop),
         });
@@ -423,7 +427,11 @@ async function executeCases(
   io: CommandIO,
   ports: RuntimePorts & ModelPorts & RunPorts,
   results: Map<string, CaseResultFile>,
-  run: { readonly build: boolean; readonly onDevice: (stop: () => Promise<void>) => void } = {
+  run: {
+    readonly build: boolean;
+    readonly onDevice: (stop: () => Promise<void>) => void;
+    readonly user?: string | undefined;
+  } = {
     build: false,
     onDevice: () => undefined,
   },
@@ -512,6 +520,12 @@ async function executeCases(
     break;
   }
   const base = {
+    // REQ-EXEC-11: manual steps ask a person here (terminal) or through manual/ files (CI); never an agent.
+    manual: createManualPrompter(session, io, {
+      user: run.user ?? "unknown",
+      timeoutMs: project.config.manual.timeout_s * 1000,
+    }),
+    manualTimeoutMs: project.config.manual.timeout_s * 1000,
     executor,
     baseUrl: env.baseUrl,
     allowedOrigins: [env.origin],

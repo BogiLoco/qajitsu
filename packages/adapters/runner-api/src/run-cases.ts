@@ -6,6 +6,7 @@ import {
   type CaseResultFile,
   type EventLog,
   type EvidenceStore,
+  type ManualPrompter,
   type Plan,
 } from "@qajitsu/core";
 import type { AttemptRecord } from "@qajitsu/steps";
@@ -49,6 +50,10 @@ export interface RunCasesOptions {
   ) => Promise<string | undefined>;
   /** Cases running at the same time (REQ-EXEC-10/AC1, default 1). */
   readonly workers?: number;
+  /** Asks a person at manual steps (REQ-EXEC-11); without it manual steps end the attempt as an error. */
+  readonly manual?: ManualPrompter | undefined;
+  /** How long one manual step may wait for its answer (default 15 minutes). */
+  readonly manualTimeoutMs?: number;
   /** OpenAPI contract of the application; responses that violate it fail the step (REQ-EXEC-04/AC2). */
   readonly contract?: ContractValidator | undefined;
 }
@@ -98,6 +103,9 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
   await mkdir(options.resultsDir, { recursive: true });
   const actor = { kind: "runner", name: "api" } as const;
 
+  const manualCount = (caseId: string): number =>
+    options.plan.cases.find((c) => c.id === caseId)?.steps.filter((st) => st.manual === true).length ?? 0;
+
   const runAttempt = async (
     caseId: string,
     spec: string,
@@ -141,7 +149,9 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
       accounts: session.accounts,
       secrets: session.secrets,
       ...(session.sessions ? { sessions: session.sessions } : {}),
-      timeoutMs: options.timeoutMs ?? 60_000,
+      // A case with manual steps waits for people: its time limit grows by their answer time (REQ-EXEC-11).
+      timeoutMs: (options.timeoutMs ?? 60_000) + manualCount(caseId) * (options.manualTimeoutMs ?? 900_000),
+      ...(options.manual ? { manual: options.manual } : {}),
     });
     const record = applyContract(executed, options.contract);
     const evidencePaths: string[] = [];
@@ -204,14 +214,16 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
       });
     } else {
       let last: AttemptRecord | undefined;
-      for (let attempt = 1; attempt <= 1 + retries; attempt += 1) {
+      // REQ-EXEC-11: a person is never asked twice; cases with manual steps are not retried or healed.
+      const manual = manualCount(caseId) > 0;
+      for (let attempt = 1; attempt <= 1 + (manual ? 0 : retries); attempt += 1) {
         const { entry, record } = await runAttempt(caseId, spec, attempt, false);
         attempts.push(entry);
         last = record;
         if (entry.outcome === "passed") break;
       }
       // REQ-EXEC-09: only a case that could not run (error, not a failed assertion) is healed.
-      for (let heal = 1; options.heal && last?.outcome === "error" && heal <= 2; heal += 1) {
+      for (let heal = 1; !manual && options.heal && last?.outcome === "error" && heal <= 2; heal += 1) {
         const healedSpec = await options.heal(caseId, spec, last, heal);
         if (healedSpec === undefined) break;
         const { entry, record } = await runAttempt(caseId, healedSpec, attempts.length + 1, true);

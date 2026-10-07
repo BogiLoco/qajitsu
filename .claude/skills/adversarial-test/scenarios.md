@@ -71,3 +71,10 @@ Status: `todo` (no test yet) · `covered` (test exists, file name in brackets). 
 
 - done · A plan text carrying a secret value → no bug is created and the value is not repeated (`packages/cli/src/commands/bug.test.ts`).
 - done · A PASSED case requested as a bug → refused; a case is never reported twice.
+
+## Manual steps (REQ-EXEC-11)
+
+- done · An agent writes manual/<TC>.<S>.answer.json → denied by the guard and journaled (`packages/cli/src/commands/manual.test.ts`).
+- done · Nobody answers, or the spec skips the manual step → error, BLOCKED, never PASSED (`packages/steps/src/manual.test.ts`).
+- done · A spec that verifies a manual step itself → rejected by the static checks.
+- done · One-time codes and secrets in a tester's note → masked in the result and evidence.

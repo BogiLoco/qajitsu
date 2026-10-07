@@ -54,6 +54,7 @@ export async function executeAttempt(
   const masker = createMasker({ secrets: input.secrets });
   const runtime = createCaseRuntime({
     plan: input.plan,
+    ...(input.manual ? { manual: input.manual } : {}),
     caseId: input.caseId,
     attempt: input.attempt,
     baseUrl: input.baseUrl,
