@@ -1580,6 +1580,28 @@
       },
       "additionalProperties": false
     },
+    "visual": {
+      "default": {
+        "threshold": 0.001,
+        "color_threshold": 0.1
+      },
+      "type": "object",
+      "properties": {
+        "threshold": {
+          "default": 0.001,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "color_threshold": {
+          "default": 0.1,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "additionalProperties": false
+    },
     "locales": {
       "default": [],
       "type": "array",

@@ -7,6 +7,7 @@ import type {
   EvidenceItem,
   ManualPrompter,
   Plan,
+  VisualCheck,
   TestCase,
 } from "@qajitsu/core";
 import type { Masker } from "./masking.js";
@@ -132,6 +133,8 @@ export interface CaseRuntimeOptions {
   readonly messages?: CaseMessages | undefined;
   /** The locale of this run (REQ-EXEC-14), sent as `Accept-Language`. */
   readonly locale?: string | undefined;
+  /** Baselines and image comparison (REQ-EXEC-12); provided by the trusted orchestrator. */
+  readonly visual?: VisualCheck | undefined;
 }
 
 /** The recorder of one attempt. Runs in the trusted process; specs only reach it through these operations. */
@@ -204,6 +207,7 @@ function expectationOf(planCase: TestCase, stepId: string, field: string, path: 
     const property = rest.at(-1) as UiProperty;
     value = e.elements?.[rest.slice(0, -1).join(".")]?.[property];
   } else if (kind === "message" && rest.length === 0) value = e.message;
+  else if (kind === "visual" && rest.length === 0) value = e.visual;
   else throw new Error(`plan.expect('${path}'): unknown field`);
   if (value === undefined) throw new Error(`plan.expect('${path}'): no expected value`);
   return value;
@@ -546,6 +550,56 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     return kind === "url" ? box.url : box.email;
   };
 
+  /**
+   * Compares the step's screenshot with its approved baseline (REQ-EXEC-12): over the plan's threshold → a failed
+   * assertion with baseline, screenshot and diff as evidence (AC2); no baseline → a passing assertion flagged for
+   * review, so the case is NEEDS_REVIEW and the screenshot is proposed as the baseline (AC3). The threshold and masks
+   * come from the approved plan; baselines change only through `qajitsu baseline accept` (AC4).
+   */
+  const verifyVisual = async (stepId: string, field: string): Promise<void> => {
+    const spec = planCase.steps.find((x) => x.id === stepId)?.expect.visual;
+    if (!spec)
+      throw new Error(`verify('${stepId}', 'visual'): the plan has no visual expectation in ${stepId}`);
+    if (!driver) throw new Error(`verify('${stepId}', 'visual') needs the browser or device to be open`);
+    if (!options.visual) throw new Error("This run has no visual comparison (REQ-EXEC-12)");
+    const visual = options.visual;
+    const key = `${caseId}/${stepId}-${spec.name}.${visual.variant}`;
+    const threshold = spec.threshold ?? visual.threshold;
+    const actual = await driver.screenshot(
+      false,
+      (spec.mask ?? []).map((m) => assertSelector(m)),
+    );
+    media.push({ stepId, kind: "screenshot", name: `${stepId}-visual-actual.png`, content: actual });
+    const baseline = await visual.baseline(key);
+    const expected = { baseline: key, threshold };
+    if (!baseline) {
+      assertions.push({
+        stepId,
+        field,
+        expected,
+        actual: "(no baseline yet: this screenshot is proposed)",
+        pass: true,
+        review: true,
+      });
+      return;
+    }
+    media.push({ stepId, kind: "screenshot", name: `${stepId}-visual-baseline.png`, content: baseline });
+    const result = await visual.compare(baseline, actual);
+    if ("sizeMismatch" in result) {
+      assertions.push({ stepId, field, expected, actual: result.sizeMismatch, pass: false });
+      return;
+    }
+    media.push({ stepId, kind: "screenshot", name: `${stepId}-visual-diff.png`, content: result.diff });
+    const ratio = result.diffPixels / (result.width * result.height);
+    assertions.push({
+      stepId,
+      field,
+      expected,
+      actual: { diffPixels: result.diffPixels, ratio: Number(ratio.toFixed(6)) },
+      pass: ratio <= threshold,
+    });
+  };
+
   const verify = async (stepId: string, field: string): Promise<void> => {
     if (!stepIds.has(stepId)) throw new Error(`verify('${stepId}') is not a step of ${caseId}`);
     if (currentStep !== stepId) throw new Error(`verify('${stepId}') must run inside step('${stepId}')`);
@@ -560,6 +614,10 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         pass: isDeepStrictEqual(actual, expected),
       });
     };
+    if (kind === "visual" && rest.length === 0) {
+      await verifyVisual(stepId, field);
+      return;
+    }
     if (kind === "message" && rest.length === 0) {
       // REQ-ENV-08/AC2: passes only when the planned message arrived in time; a timeout is a failure, never a pass.
       const expected = expectationOf(planCase, stepId, field, `${caseId}.${stepId}.${field}`);

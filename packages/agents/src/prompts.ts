@@ -41,6 +41,8 @@ Rules:
 - When the ticket concerns several languages or regions, a case can list "locales" (names from the project, e.g.
   ["pl-PL","de-DE"]) and a step's expect can give per-locale values of its planned fields, texts or element states:
   "by_locale": {"pl-PL": {"fields": {"price": "1 234,50 zł"}}}. Only planned keys can differ per locale.
+- For a visible layout or design change a web or mobile step can expect "visual": {"name": "checkout", "mask":
+  ["testid:date"]}: its screenshot is compared with an approved baseline; mask regions that change on their own.
 - When the change sends an e-mail, an SMS (through a gateway) or a webhook, the step can expect it:
   "message": {"to": "...", "subject": "...", "body": "...", "within_s": 60} (every part is optional and matched
   as contained text); the case gets its own inbox address to use in the test data.

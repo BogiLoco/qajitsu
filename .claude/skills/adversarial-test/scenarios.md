@@ -90,3 +90,9 @@ Status: `todo` (no test yet) · `covered` (test exists, file name in brackets). 
 
 - done · A case passes on desktop and fails on mobile → FAILED, never PASSED (`packages/cli/src/commands/matrix.test.ts`).
 - done · A browser that is not installed → its combinations BLOCKED; the case is not PASSED.
+
+## Visual regression (REQ-EXEC-12)
+
+- done · No baseline → NEEDS_REVIEW, never PASSED (`packages/verifier/src/compute-status.test.ts`).
+- done · The healer writes a baseline (relative, absolute, or the proposed screenshot) → denied (`tests/adversarial/baseline-tampering.test.ts`).
+- done · A proposed screenshot edited after the run → refused by `qj baseline accept` against the manifest.

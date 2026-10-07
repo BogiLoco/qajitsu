@@ -281,7 +281,13 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
             [origin, storage, key, token] as const,
           );
         },
-        screenshot: async (fullPage) => new Uint8Array(await p.screenshot({ fullPage })),
+        screenshot: async (fullPage, masks) =>
+          new Uint8Array(
+            await p.screenshot({
+              fullPage,
+              ...(masks && masks.length > 0 ? { mask: masks.map((m) => locate(p, m)) } : {}),
+            }),
+          ),
         dom: () => p.content(),
       };
     };

@@ -244,18 +244,22 @@ qj run SHOP-482 --build --set api.FEATURE_X=1         # with an overridable vari
    run once more per locale: the browser gets the locale and time zone, API calls an `Accept-Language` header, and
    the expected number, date and currency formats come from the plan's `by_locale` values. The matrix shows the
    status per locale; the case is PASSED only if every locale passed.
-6. Steps that expect an **e-mail, SMS or webhook** use the case's own inbox (webhook.site, `messages:` in the
+6. Steps with a **visual** expectation compare their screenshot (changing regions masked) with the approved
+   baseline in `.qa/baselines/`: a difference above the threshold is FAILED with baseline, screenshot and diff as
+   evidence; without a baseline the case is NEEDS_REVIEW and `qj baseline accept SHOP-482` makes the screenshot
+   the baseline.
+7. Steps that expect an **e-mail, SMS or webhook** use the case's own inbox (webhook.site, `messages:` in the
    project config): the spec puts the inbox address into the test data, QAJitsu waits for the message the plan
    describes (recipient, subject, body text), keeps it as evidence and deletes the inbox when the run ends. No
    message in time fails the step.
-7. Steps the plan marks **manual** (an SMS code, a physical device, a printout) pause the run: the instructions are
+8. Steps the plan marks **manual** (an SMS code, a physical device, a printout) pause the run: the instructions are
    shown and you answer passed or failed with an optional note and file. In CI the run waits for
    `qj answer SHOP-482 TC-02 S3 --passed` from someone else. No answer in time makes the case BLOCKED, never PASSED.
-8. Failed web steps get up to two **healing** attempts (selectors and waits only; a healed pass is NEEDS_REVIEW).
-9. Statuses are computed by code; then the **auditor** and the optional **canary** may downgrade PASSED to NEEDS_REVIEW,
-   and every FAILED case gets a **hint** (likely product bug, test bug, environment or data) citing its evidence; a
-   hint is a suggestion and never changes a status.
-10. Reports are written: `report.html`, `matrix.md/.csv/.xlsx`, `junit.xml`, `gates.json`, the transition graph.
+9. Failed web steps get up to two **healing** attempts (selectors and waits only; a healed pass is NEEDS_REVIEW).
+10. Statuses are computed by code; then the **auditor** and the optional **canary** may downgrade PASSED to NEEDS_REVIEW,
+    and every FAILED case gets a **hint** (likely product bug, test bug, environment or data) citing its evidence; a
+    hint is a suggestion and never changes a status.
+11. Reports are written: `report.html`, `matrix.md/.csv/.xlsx`, `junit.xml`, `gates.json`, the transition graph.
 
 The matrix is printed at the end; the exit code tells the result (section 5).
 
@@ -576,6 +580,7 @@ Every option and exit code of every command: [docs/cli/commands.md](docs/cli/com
 | `qj approve <TICKET> [--version <n>] [--confirm-open-questions] [--approver <name>] [--reuse-from <run\|latest>]` | when the plan is right                                                          | Freezes the plan (SHA-256). `--approver` records who approved (CI). `--reuse-from` reuses a plan approved in an earlier run of the same ticket after new commits, only if the ticket text did not change and the approval is in that run's journal.                                               |
 | `qj run <TICKET> [--env <profile\|url>] [--build] [--keep] [--set <svc.VAR=value>]...`                            | after approval                                                                  | Writes missing specs, checks them, executes API, web, mixed and mobile cases, computes statuses, runs the auditor and canary, writes reports. `--build` starts the app from the worktree; `--keep` keeps containers and worktrees; `--set` overrides variables marked `overridable`.              |
 | `qj publish <TICKET> [--auto-publish]`                                                                            | when you want the results in Jira                                               | Gates, preview, `[y/N]`, then the comment, the evidence zip and media. `--auto-publish` (or `publish.auto`) skips the preview in CI and is recorded.                                                                                                                                              |
+| `qj baseline accept <TICKET> [--cases] [--include-failed] [--yes]`                                                | after a visual check had no baseline, or the design changed on purpose          | Copies the run's screenshots (checked against the evidence manifest) into `.qa/baselines/`; commit them. Only this command changes baselines.                                                                                                                                                     |
 | `qj answer <TICKET> <TC> <S> --passed\|--failed [--note] [--file]`                                                | a run waits for a manual step (CI, another terminal)                            | Answers a manual step; the answer is recorded with your name, the note masked, the file as evidence. A failed answer makes the case FAILED.                                                                                                                                                       |
 | `qj bug <TICKET> [--cases TC-01] [--link <KEY>] [--yes [--force-new]]`                                            | when a case FAILED                                                              | Shows similar open bugs, then creates a bug written by code from the run (steps, expected vs actual, version, environment, evidence by hash) and links it to the ticket, or links an existing bug. Asks first.                                                                                    |
 | `qj promote <TICKET> [--cases TC-01,TC-03] [--dry-run] [--yes]`                                                   | after a good run                                                                | Proposes the PASSED cases as a pull/merge request to the tests repository: the specs that passed, unchanged, and the plan's expectations; asks before pushing.                                                                                                                                    |
@@ -690,6 +695,7 @@ run folder looks like this:
 | `.qa/stubs/<name>/`                          | WireMock/Mockoon mappings for stubbed dependencies                                                                                                                                                                                                                   |
 | `.qa/bench.yaml`                             | benchmark cases                                                                                                                                                                                                                                                      |
 | `web.matrix` in `qa.project.yaml`            | browsers (`chromium`, `firefox`, `webkit`) and viewports (`{ name, width, height }`) for web cases; the first combination is the primary run                                                                                                                         |
+| `.qa/baselines/`                             | approved screenshots for visual checks, written only by `qj baseline accept`; `visual: { threshold, color_threshold }` in `qa.project.yaml`                                                                                                                          |
 | `locales:` in `qa.project.yaml`              | locales and time zones cases can run in (`{ name: pl-PL, timezone: Europe/Warsaw }`); a plan case lists its own                                                                                                                                                      |
 | `messages:` in `qa.project.yaml`             | message capture for e-mails, SMS gateways and webhooks: `base_url` (webhook.site or self-hosted, must be on `environments.allowlist`), `email_domain`, `api_key: secret://...`, `timeout_s`                                                                          |
 | `.env.local` (next to `.qa/`, not committed) | secret values for `secret://env/NAME`                                                                                                                                                                                                                                |
@@ -784,6 +790,10 @@ test_types: [api, web]
   runs web cases in every combination; the matrix, report and Jira comment show the status per combination, and a
   case is PASSED only when all of them passed. A missing browser is BLOCKED with the install command; cases with
   manual steps run in the first combination only.
+- **Visual regression.** A step can expect `visual: { name, threshold?, mask? }`: its screenshot is compared with the
+  approved baseline of that browser, viewport and locale (pixelmatch, anti-aliasing ignored, masked regions painted
+  over). Above the threshold → FAILED with baseline, screenshot and diff; no baseline → NEEDS_REVIEW with the
+  screenshot proposed; `qj baseline accept` is the only way a baseline changes.
 - **Locales.** `locales: [{ name: pl-PL, timezone: Europe/Warsaw }]` in the project; a plan case lists the locales
   it runs in and gives per-locale expected values (`by_locale`) for formats of numbers, dates and currencies. Each
   locale run has its own results and evidence; the report shows the status per locale.

@@ -11,7 +11,11 @@ import {
   type AttemptExecutor,
   type ContractValidator,
 } from "@qajitsu/adapter-runner-api";
-import { browserUnavailable, createPlaywrightBrowserFactory } from "@qajitsu/adapter-runner-web";
+import {
+  browserUnavailable,
+  compareImages,
+  createPlaywrightBrowserFactory,
+} from "@qajitsu/adapter-runner-web";
 import { buildChangeContext, checkSpec, createUsageTracker, healSpec, runAuthor } from "@qajitsu/agents";
 import {
   AnalysisSchema,
@@ -28,6 +32,7 @@ import {
   type CaseResultFile,
   type Plan,
   type ResolvedEnvironment,
+  type VisualCheck,
   type WebCombination,
 } from "@qajitsu/core";
 import { createMasker } from "@qajitsu/steps";
@@ -624,6 +629,18 @@ async function executeCases(
       }),
     });
   const executor = executorFor(primary);
+  // REQ-EXEC-12: baselines are read from .qa/baselines/ by this trusted code; specs and agents never touch them.
+  const visualFor = (variant: string): VisualCheck => ({
+    variant,
+    threshold: project.config.visual.threshold,
+    baseline: (key) =>
+      readFile(join(project.qaDir, "baselines", `${key}.png`)).then(
+        (b) => new Uint8Array(b),
+        () => undefined,
+      ),
+    compare: (baseline, actual) => compareImages(baseline, actual, project.config.visual.color_threshold),
+  });
+  const primaryVariant = primary?.id ?? "default";
   // The contract is read from the worktree, i.e. from exactly the analysed version of the code.
   let contract: ContractValidator | undefined;
   for (const [alias, repo] of Object.entries(project.config.repos)) {
@@ -640,6 +657,7 @@ async function executeCases(
     }),
     manualTimeoutMs: project.config.manual.timeout_s * 1000,
     ...(run.messages ? { messages: run.messages.forCase } : {}),
+    visual: visualFor(primaryVariant),
     executor,
     baseUrl: env.baseUrl,
     allowedOrigins: [env.origin],
@@ -717,6 +735,7 @@ async function executeCases(
         evidence,
         resultsDir: dir,
         evidencePrefix: `matrix/${combo.id}/`,
+        visual: visualFor(combo.id),
         retries: project.config.environments.retries,
         workers: project.config.environments.workers,
       }),
@@ -739,6 +758,7 @@ async function executeCases(
         evidence,
         resultsDir: dir,
         evidencePrefix: `locale/${locale.name}/`,
+        visual: visualFor(`${primaryVariant}-${locale.name}`),
         locale,
         retries: project.config.environments.retries,
         workers: project.config.environments.workers,

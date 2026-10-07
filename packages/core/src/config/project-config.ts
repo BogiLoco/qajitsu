@@ -388,6 +388,16 @@ export const ProjectConfigSchema = z.strictObject({
     })
     .optional(),
   /**
+   * Visual regression (REQ-EXEC-12): baselines live in `.qa/baselines/`; `threshold` is the default share of differing
+   * pixels that still passes, `color_threshold` the per-pixel sensitivity (0 exact, 1 anything).
+   */
+  visual: z
+    .strictObject({
+      threshold: z.number().min(0).max(1).default(0.001),
+      color_threshold: z.number().min(0).max(1).default(0.1),
+    })
+    .default({ threshold: 0.001, color_threshold: 0.1 }),
+  /**
    * Locales cases can run in (REQ-EXEC-14/AC1): the browser gets the locale and time zone, API calls an
    * `Accept-Language` header. A case lists the ones it runs in (`locales` in the plan).
    */

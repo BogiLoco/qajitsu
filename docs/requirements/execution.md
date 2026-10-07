@@ -158,17 +158,17 @@ person, not from the runner.
 
 ### REQ-EXEC-12 · Visual regression
 
-- Status: accepted
+- Status: implemented
 - Priority: could
 - Stage: later
 - Related: INV-1, INV-4, REQ-EXEC-05, REQ-EVD-01
 
 **Acceptance criteria**
 
-- [ ] AC1: A web or mobile step can compare a screenshot against an approved baseline stored in the project (`.qa/baselines/`), with a configurable threshold and masked regions.
-- [ ] AC2: A difference above the threshold makes the case FAILED with the baseline, the actual image and a diff image as evidence.
-- [ ] AC3: A missing baseline never yields PASSED: the case is NEEDS_REVIEW and the new image is proposed as the baseline.
-- [ ] AC4: Baselines are updated only by an explicit human command (`qj baseline accept`), never by an agent or the healer.
+- [x] AC1: A web or mobile step can compare a screenshot against an approved baseline stored in the project (`.qa/baselines/`), with a configurable threshold and masked regions.
+- [x] AC2: A difference above the threshold makes the case FAILED with the baseline, the actual image and a diff image as evidence.
+- [x] AC3: A missing baseline never yields PASSED: the case is NEEDS_REVIEW and the new image is proposed as the baseline.
+- [x] AC4: Baselines are updated only by an explicit human command (`qj baseline accept`), never by an agent or the healer.
 
 ### REQ-EXEC-13 · Browser and viewport matrix
 

@@ -72,6 +72,10 @@ export async function createDemoPipeline(
     wrapExecutor?: (executor: AttemptExecutor) => AttemptExecutor;
     /** Extra ports, e.g. `browserUnavailable` for the browser matrix. */
     ports?: Partial<RunPorts>;
+    /** Changes the fixture plan draft before planning. */
+    transformPlan?: (draft: string) => string;
+    /** Changes a fixture spec before the run. */
+    transformSpec?: (caseId: string, code: string) => string;
   } = {},
 ) {
   const ticket = options.ticket ?? "DEMO-1";
@@ -146,10 +150,16 @@ export async function createDemoPipeline(
   /** fetch, plan, approve, copy fixture specs and run. */
   const executed = async () => {
     await run(["fetch", ticket, ...(ticket === "DEMO-1" ? [] : ["--ref", "shop=main"])]);
-    await run(["plan", ticket], { script: [{ text: analysis }, { text: draftOf(ticket) }] });
+    const planDraft = (options.transformPlan ?? ((d: string) => d))(draftOf(ticket));
+    await run(["plan", ticket], { script: [{ text: analysis }, { text: planDraft }] });
     await run(["approve", ticket]);
-    const ids = (JSON.parse(draftOf(ticket)) as { cases: { id: string }[] }).cases.map((c) => c.id);
-    for (const id of ids) await copyFile(specFixture(ticket, id), join(runDir, "specs", `${id}.spec.ts`));
+    const ids = (JSON.parse(planDraft) as { cases: { id: string }[] }).cases.map((c) => c.id);
+    for (const id of ids) {
+      const target = join(runDir, "specs", `${id}.spec.ts`);
+      if (options.transformSpec)
+        await writeFile(target, options.transformSpec(id, await readFile(specFixture(ticket, id), "utf8")));
+      else await copyFile(specFixture(ticket, id), target);
+    }
     return run(["run", ticket]);
   };
   const cleanup = async () => {

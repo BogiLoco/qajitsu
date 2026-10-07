@@ -208,6 +208,23 @@ makes the case FAILED, no answer makes it BLOCKED. Notes are masked, one-time co
 
 Exit codes: `0` answered, `3` no step waiting, not exactly one of `--passed`/`--failed`, or errors.
 
+### `qajitsu baseline accept <ticket>`
+
+Makes screenshots of a run the approved visual baselines in `.qa/baselines/` (REQ-EXEC-12). A step with
+`expect.visual` compares its screenshot (changing regions masked) with the baseline of its case, step, name and
+browser/viewport/locale: above the threshold the case is FAILED with baseline, screenshot and diff as evidence;
+without a baseline it is NEEDS_REVIEW and the screenshot is proposed. By default this command accepts the proposed
+screenshots; `--include-failed` also accepts changed ones (an intended design change). Every screenshot is checked
+against the evidence manifest first. Agents and the healer can never change a baseline.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+- `--cases <ids>`: comma-separated case ids (default: every case)
+- `--include-failed`: also accept screenshots that differ from their baseline (an intended change)
+- `--yes`: do not ask for confirmation
+
+Exit codes: `0` accepted (or nothing to accept), `2` not confirmed, `3` a screenshot does not match the manifest, or
+errors.
+
 ### `qajitsu bug <ticket>`
 
 Reports FAILED cases as bugs in Jira (REQ-PUB-07). Statuses and gates are computed exactly as for `publish`. For each

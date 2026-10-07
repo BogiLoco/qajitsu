@@ -11,6 +11,7 @@ export {
   maskHar,
   type WebRunnerOptions,
 } from "./browser.js";
+export { compareImages } from "./visual.js";
 
 /** Adapter metadata used by `qajitsu doctor` and the adapter table in the docs. */
 export const ADAPTER = {

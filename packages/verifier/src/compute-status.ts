@@ -23,7 +23,7 @@ const attemptPassed = (attempt: CaseAttempt): boolean =>
  * 2b. A passing last attempt that ran a healed spec → NEEDS_REVIEW: an agent changed the test, so a
  *    human reviews the heal; a heal never yields PASSED (REQ-EXEC-09/AC3).
  * 3. The first attempt passed with at least one assertion and all assertions true →
- *    PASSED when evidence is complete, otherwise NEEDS_REVIEW.
+ *    PASSED when evidence is complete and no assertion waits for a person (REQ-EXEC-12/AC3), otherwise NEEDS_REVIEW.
  * 4. A later attempt passed after an earlier failure → FLAKY (REQ-EXEC-08).
  * 5. An attempt reported "passed" without assertions → NEEDS_REVIEW (nothing was verified).
  * 6. Otherwise → FAILED. A runner saying "passed" while an assertion failed counts as failed.
@@ -40,7 +40,11 @@ export function computeStatus(result: CaseRunResult, context: StatusContext): Te
   if (last.outcome === "error")
     return attempts.some((a) => a.assertions.some((x) => !x.pass)) ? "FAILED" : "BLOCKED";
   if (attempts.some((a) => a.healed === true) && attemptPassed(last)) return "NEEDS_REVIEW";
-  if (attemptPassed(first)) return context.evidenceComplete ? "PASSED" : "NEEDS_REVIEW";
+  // REQ-EXEC-12/AC3: an assertion that waits for a person (a screenshot without a baseline) keeps the case from PASSED.
+  if (attemptPassed(first))
+    return context.evidenceComplete && !first.assertions.some((a) => a.review === true)
+      ? "PASSED"
+      : "NEEDS_REVIEW";
   if (attemptPassed(last) && attempts.some(attemptFailed)) return "FLAKY";
   if (
     attempts.some((a) => a.outcome === "passed" && a.assertions.length === 0) &&

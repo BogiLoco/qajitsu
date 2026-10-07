@@ -27,6 +27,7 @@ import { runNote, runResumable, runStatus } from "./commands/status.js";
 import { runPromote, type PromoteOptions } from "./commands/promote.js";
 import { runBug, type BugOptions } from "./commands/bug.js";
 import { runAnswer } from "./commands/manual.js";
+import { runBaselineAccept } from "./commands/baseline.js";
 import { runProjectExport, runProjectImport } from "./commands/project-profile.js";
 import {
   runKnowledgeAdd,
@@ -795,6 +796,25 @@ export function createProgram(version: string, io: ProgramIO): Command {
       withPorts((ports) =>
         runPublish(ticket, options, commandIO, ports, io.user ?? "unknown", io.compressVideo),
       )(),
+    );
+
+  const baseline = program.command("baseline").description("Visual regression baselines in .qa/baselines/");
+  baseline
+    .command("accept")
+    .description(
+      "Make screenshots of a run the approved baselines (screenshots without one; changed ones on request)",
+    )
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .option("--cases <ids>", "comma-separated case ids (default: every case)")
+    .option(
+      "--include-failed",
+      "also accept screenshots that differ from their baseline (an intended change)",
+    )
+    .option("--yes", "do not ask for confirmation")
+    .action(
+      (ticket: string, options: { run?: string; cases?: string; includeFailed?: boolean; yes?: boolean }) =>
+        withPorts((ports) => runBaselineAccept(ticket, options, commandIO, ports, io.user ?? "unknown"))(),
     );
 
   program

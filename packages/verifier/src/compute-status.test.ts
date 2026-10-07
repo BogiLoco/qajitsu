@@ -59,3 +59,23 @@ describe("computeStatus (REQ-VER-01, REQ-VER-02)", () => {
     expect(status([attempt("passed", [], 1), attempt("failed", [bad], 2)])).toBe("FAILED");
   });
 });
+
+describe("assertions that need a person (REQ-EXEC-12/AC3)", () => {
+  const review: AssertionRecord = {
+    stepId: "S2",
+    field: "visual",
+    expected: { baseline: "k" },
+    actual: "(no baseline)",
+    pass: true,
+    review: true,
+  };
+  it("REQ-EXEC-12/AC3: a passing attempt with a review assertion is NEEDS_REVIEW, never PASSED", () => {
+    expect(status([attempt("passed", [ok, review])])).toBe("NEEDS_REVIEW");
+  });
+  it("REQ-EXEC-12/AC3: a review assertion never hides a failure", () => {
+    expect(status([attempt("failed", [bad, review])])).toBe("FAILED");
+  });
+  it("REQ-EXEC-12/AC3: a flaky case stays FLAKY when it also needs review", () => {
+    expect(status([attempt("failed", [bad], 1), attempt("passed", [ok, review], 2)])).toBe("FLAKY");
+  });
+});

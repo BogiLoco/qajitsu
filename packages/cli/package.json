@@ -53,5 +53,9 @@
     "unpdf": "1.8.1",
     "yaml": "catalog:",
     "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/pngjs": "^6.0.5",
+    "pngjs": "7.0.0"
   }
 }

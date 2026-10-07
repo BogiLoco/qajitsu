@@ -13,6 +13,8 @@ export const AssertionRecordSchema = z.strictObject({
   by: z.string().optional(),
   at: z.string().optional(),
   note: z.string().optional(),
+  /** Passed but needs a person (REQ-EXEC-12/AC3): the case is NEEDS_REVIEW, never PASSED. */
+  review: z.boolean().optional(),
 });
 
 /** One attempt of a case as stored in `results/<case>.json` (REQ-VER-02, REQ-EXEC-08/AC3). */

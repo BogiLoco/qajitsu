@@ -49,6 +49,8 @@ Rules (checked by code; a violating spec is rejected):
 - A step whose expect has "message": use const email = await inbox.address() (or inbox.address("url") for a webhook)
   as the address in the test data, then const msg = await inbox.wait("<step id>") and
   verify("<step id>", "message", msg, plan.expect("<case>.<step>.message")); msg.links holds the links of the message.
+- A step whose expect has "visual": once the page shows the state to compare, call
+  verify("<step id>", "visual", undefined, plan.expect("<case>.<step>.visual")); QAJitsu takes and compares the screenshot.
 - A step with "manual": true is performed by a person: write step("<step id>", () => {}) with an empty body and no
   verify(); QAJitsu pauses there and asks the tester.
 - Never use process, fetch, require, eval, globalThis or timers. Never write files.

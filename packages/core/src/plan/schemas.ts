@@ -142,6 +142,17 @@ export const ExpectationSchema = z
         within_s: z.number().int().min(1).max(3600).optional(),
       })
       .optional(),
+    /**
+     * The step's screenshot must match an approved baseline (REQ-EXEC-12/AC1): `name` identifies it, `threshold` is
+     * the share of differing pixels that still passes, `mask` lists selectors of changing regions (dates, ads).
+     */
+    visual: z
+      .strictObject({
+        name: z.string().regex(/^[a-z0-9][a-z0-9-]{0,40}$/),
+        threshold: z.number().min(0).max(1).optional(),
+        mask: z.array(z.string().min(1).max(200)).max(20).optional(),
+      })
+      .optional(),
     /** Values that differ per locale, by locale name (REQ-EXEC-14/AC2). */
     by_locale: z.record(LocaleNameSchema, LocaleOverrideSchema).optional(),
   })

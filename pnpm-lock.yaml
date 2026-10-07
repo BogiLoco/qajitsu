@@ -294,9 +294,15 @@ importers:
       axe-core:
         specifier: 'catalog:'
         version: 4.13.0
+      pixelmatch:
+        specifier: 8.0.0
+        version: 8.0.0
       playwright-core:
         specifier: ^1.63.0
         version: 1.63.0
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
     devDependencies:
       '@qajitsu/adapter-evidence-local':
         specifier: workspace:*
@@ -307,6 +313,9 @@ importers:
       '@qajitsu/verifier':
         specifier: workspace:*
         version: link:../../verifier
+      '@types/pngjs':
+        specifier: ^6.0.5
+        version: 6.0.5
 
   packages/adapters/secrets-cli:
     dependencies:
@@ -466,6 +475,13 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 4.6.5
+    devDependencies:
+      '@types/pngjs':
+        specifier: ^6.0.5
+        version: 6.0.5
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
 
   packages/core:
     dependencies:
@@ -1200,6 +1216,9 @@ packages:
 
   '@types/node@22.20.5':
     resolution: {integrity: sha512-U2+DNr+wSjpsTS/wZGYHq7GcwfuSmKiKvoPvK22zwTlRhU91yOniN4qRR5KhIjvif7ysw/dz/hKmfDH0Ris4aA==}
+
+  '@types/pngjs@6.0.5':
+    resolution: {integrity: sha512-0k5eKfrA83JOZPppLtS2C7OUtyNAl2wKNxfyYl9Q5g9lPkgBl/9hNyAu6HuEH2J4XmIv2znEpkDd0SaZVxW6iQ==}
 
   '@types/sinonjs__fake-timers@8.1.5':
     resolution: {integrity: sha512-mQkU2jY8jJEF7YHjHvsQO8+3ughTL1mcnn96igfhONmR+fUPSKIkefQYpSe8bsly2Ep7oQbn/6VG5/9/0qcArQ==}
@@ -2771,6 +2790,10 @@ packages:
     resolution: {integrity: sha512-bk1ZMTwG/Vymx+zPoa28MhNzucFvXJWp3csrSuxuHPSMeUettaCoQ5Jvg07mtC4JGNpcfTwz41oVCnNgBK9+vA==}
     hasBin: true
 
+  pixelmatch@8.0.0:
+    resolution: {integrity: sha512-cIqOLfh5k52us715qf3B3+kTOxZv+WDv77HN7xokLScYQGYQHi4m/ynoDIPpvF2LvCyUJGyvzY64i0QCXtzu1g==}
+    hasBin: true
+
   pkce-challenge@5.0.1:
     resolution: {integrity: sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ==}
     engines: {node: '>=16.20.0'}
@@ -2787,6 +2810,10 @@ packages:
   pluralize@8.0.0:
     resolution: {integrity: sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA==}
     engines: {node: '>=4'}
+
+  pngjs@7.0.0:
+    resolution: {integrity: sha512-LKWqWJRhstyYo9pGvgor/ivk2w94eSjE3RGVuzLGlr3NmD8bf7RcYGze1mNdEHRP6TRP6rMuDHk5t44hnTRyow==}
+    engines: {node: '>=14.19.0'}
 
   postcss@8.5.28:
     resolution: {integrity: sha512-RRuzqDtt5Y9h3quz5hWhK+TPnsmVs6WwSU6LkJMeY4HstUEDuYTG8UJSdawMRzmzAtV+KEoG8N3Qg2qLy5vM/A==}
@@ -4258,6 +4285,10 @@ snapshots:
   '@types/node@22.20.5':
     dependencies:
       undici-types: 6.21.0
+
+  '@types/pngjs@6.0.5':
+    dependencies:
+      '@types/node': 22.20.5
 
   '@types/sinonjs__fake-timers@8.1.5': {}
 
@@ -5910,6 +5941,10 @@ snapshots:
       sonic-boom: 4.2.1
       thread-stream: 4.2.0
 
+  pixelmatch@8.0.0:
+    dependencies:
+      pngjs: 7.0.0
+
   pkce-challenge@5.0.1: {}
 
   playwright-core@1.63.0: {}
@@ -5920,6 +5955,8 @@ snapshots:
       xmlbuilder: 15.1.1
 
   pluralize@8.0.0: {}
+
+  pngjs@7.0.0: {}
 
   postcss@8.5.28:
     dependencies:

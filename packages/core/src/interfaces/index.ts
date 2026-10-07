@@ -33,9 +33,11 @@ export type {
   CaseAttempt,
   CaseRunResult,
   EvidenceItem,
+  ImageComparison,
   ManualAnswer,
   ManualPrompter,
   ManualStepRequest,
+  VisualCheck,
 } from "./runner.js";
 export type { SecretProvider } from "./secret-provider.js";
 export type { DevelopmentLink, Ticket, TicketSource } from "./ticket-source.js";

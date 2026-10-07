@@ -96,6 +96,9 @@ test_types: [api, web]
 #     browsers: [chromium, firefox]
 #     viewports: [{ name: desktop, width: 1280, height: 800 }, { name: mobile, width: 390, height: 844 }]
 
+# Visual regression (REQ-EXEC-12): baselines in .qa/baselines/, accepted with `qj baseline accept`.
+# visual: { threshold: 0.001, color_threshold: 0.1 }
+
 # Locales (REQ-EXEC-14): cases that list a locale run once more in it; expected formats come from the plan.
 # locales: [{ name: pl-PL, timezone: Europe/Warsaw }, { name: de-DE, timezone: Europe/Berlin }]
 

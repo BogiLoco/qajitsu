@@ -21,11 +21,14 @@
     "@qajitsu/adapter-runner-api": "workspace:*",
     "@qajitsu/steps": "workspace:*",
     "axe-core": "catalog:",
-    "playwright-core": "^1.63.0"
+    "pixelmatch": "8.0.0",
+    "playwright-core": "^1.63.0",
+    "pngjs": "7.0.0"
   },
   "devDependencies": {
     "@qajitsu/adapter-evidence-local": "workspace:*",
     "@qajitsu/core": "workspace:*",
-    "@qajitsu/verifier": "workspace:*"
+    "@qajitsu/verifier": "workspace:*",
+    "@types/pngjs": "^6.0.5"
   }
 }

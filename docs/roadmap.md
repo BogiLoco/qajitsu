@@ -244,7 +244,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-PLAN-08](requirements/plan.md#req-plan-08--test-depth-and-budget) Test depth and budget (should, proposed, AC 0/3)
 - [REQ-ENV-08](requirements/environment.md#req-env-08--message-capture-email-sms-and-webhooks) Message capture: email, SMS and webhooks (should, implemented, AC 5/5)
 - [REQ-EXEC-11](requirements/execution.md#req-exec-11--human-in-the-loop-steps) Human-in-the-loop steps (should, implemented, AC 7/7)
-- [REQ-EXEC-12](requirements/execution.md#req-exec-12--visual-regression) Visual regression (could, accepted, AC 0/4)
+- [REQ-EXEC-12](requirements/execution.md#req-exec-12--visual-regression) Visual regression (could, implemented, AC 4/4)
 - [REQ-EXEC-13](requirements/execution.md#req-exec-13--browser-and-viewport-matrix) Browser and viewport matrix (could, implemented, AC 3/3)
 - [REQ-EXEC-14](requirements/execution.md#req-exec-14--locale-testing) Locale testing (could, implemented, AC 3/3)
 - [REQ-EXEC-15](requirements/execution.md#req-exec-15--exploratory-sessions) Exploratory sessions (could, implemented, AC 6/6)

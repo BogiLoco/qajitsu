@@ -7,6 +7,7 @@ import {
   type EventLog,
   type EvidenceStore,
   type ManualPrompter,
+  type VisualCheck,
   type CaseMessages,
   type Plan,
 } from "@qajitsu/core";
@@ -55,6 +56,8 @@ export interface RunCasesOptions {
   readonly manual?: ManualPrompter | undefined;
   /** How long one manual step may wait for its answer (default 15 minutes). */
   readonly manualTimeoutMs?: number;
+  /** Baselines and image comparison of this run's variant (REQ-EXEC-12). */
+  readonly visual?: VisualCheck | undefined;
   /** Locale and time zone of a locale run (REQ-EXEC-14); `plan` must be resolved for it. */
   readonly locale?: { readonly name: string; readonly timezone: string } | undefined;
   /** Prefix of evidence paths, e.g. `matrix/firefox-mobile/` for a browser combination (REQ-EXEC-13). */
@@ -173,6 +176,7 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
         messageWaitMs(caseId),
       ...(options.manual ? { manual: options.manual } : {}),
       ...(options.locale ? { locale: options.locale } : {}),
+      ...(options.visual ? { visual: options.visual } : {}),
       ...(options.messages ? { messages: options.messages(caseId) } : {}),
     });
     const record = applyContract(executed, options.contract);

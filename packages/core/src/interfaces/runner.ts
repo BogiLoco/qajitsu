@@ -13,6 +13,11 @@ export interface AssertionRecord {
   readonly by?: string | undefined;
   readonly at?: string | undefined;
   readonly note?: string | undefined;
+  /**
+   * Passed but needs a person before it counts (REQ-EXEC-12/AC3): a screenshot without an approved baseline. A case
+   * with such an assertion is NEEDS_REVIEW, never PASSED.
+   */
+  readonly review?: boolean | undefined;
 }
 
 /** Raw outcome of one attempt of one test case, as produced by a runner (REQ-VER-02). */
@@ -57,6 +62,28 @@ export interface AttemptRecord {
   }[];
   readonly assertions: readonly AssertionRecord[];
   readonly evidence: readonly EvidenceItem[];
+}
+
+/** Result of comparing a screenshot with its baseline (REQ-EXEC-12). */
+export type ImageComparison =
+  | {
+      readonly width: number;
+      readonly height: number;
+      readonly diffPixels: number;
+      /** PNG of the differences. */
+      readonly diff: Uint8Array;
+    }
+  | { readonly sizeMismatch: string };
+
+/** Visual regression for a run (REQ-EXEC-12): baselines of the project and the comparison of two PNGs. */
+export interface VisualCheck {
+  /** The approved baseline for a key, e.g. `TC-01/S2-checkout.chromium-desktop`, or undefined. */
+  readonly baseline: (key: string) => Promise<Uint8Array | undefined>;
+  readonly compare: (baseline: Uint8Array, actual: Uint8Array) => Promise<ImageComparison>;
+  /** Browser, viewport or locale of this run; part of every baseline key. */
+  readonly variant: string;
+  /** Default share of differing pixels that still passes, e.g. 0.001. */
+  readonly threshold: number;
 }
 
 /** A manual step waiting for a person (REQ-EXEC-11/AC2). */
@@ -112,6 +139,8 @@ export interface AttemptRequest {
   readonly messages?: CaseMessages;
   /** Locale and time zone of a locale run (REQ-EXEC-14); the plan given is already resolved for it. */
   readonly locale?: { readonly name: string; readonly timezone: string };
+  /** Baselines and image comparison (REQ-EXEC-12); absent means visual steps cannot run (BLOCKED). */
+  readonly visual?: VisualCheck;
 }
 
 /**

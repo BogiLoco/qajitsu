@@ -22,7 +22,8 @@ export interface UiDriver {
   readonly property: (selector: UiSelector, property: UiProperty) => Promise<unknown>;
   /** Starts a session as an account (storage set by the framework, never typed by a spec; REQ-CFG-07). */
   readonly useAccount: (alias: string) => Promise<void>;
-  readonly screenshot: (fullPage: boolean) => Promise<Uint8Array>;
+  /** A PNG of the page; `masks` paints over changing regions (REQ-EXEC-12/AC1; ignored on mobile). */
+  readonly screenshot: (fullPage: boolean, masks?: readonly UiSelector[]) => Promise<Uint8Array>;
   readonly dom: () => Promise<string>;
 }
 
