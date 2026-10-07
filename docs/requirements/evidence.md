@@ -96,3 +96,21 @@ Cheap automatic checks computed by code, not by an LLM, collected while the plan
 - [x] AC3: Accessibility is checked with axe-core on every visited screen; violations are recorded with the rule and element.
 - [x] AC4: Observations appear in the report and Jira comment as a separate section; they never change a case status or the counts.
 - [x] AC5: Each check can be turned off or given an ignore list in project config.
+
+### REQ-EVD-08 · Failure screenshots mark the failing element
+
+- Status: accepted
+- Priority: should
+- Stage: later
+- Related: INV-1, INV-7, REQ-EVD-02, REQ-EVD-03, REQ-EXEC-12, REQ-PUB-07
+
+A failed web or mobile step is easier to understand when the screenshot shows where the problem is. The marking is
+drawn by code from the failed assertion; it is an extra picture, never a verdict.
+
+**Acceptance criteria**
+
+- [ ] AC1: When a web or mobile step fails on an element assertion, an annotated copy of the failure screenshot draws a red box around that element with the failed field, expected and actual value.
+- [ ] AC2: When the element is missing and the step has a visual baseline, the box marks where it is on the baseline; without a baseline the annotation says the element was not found and draws no box.
+- [ ] AC3: A visual difference above the threshold is marked with a red box around each changed region (masked regions excluded); a moved element gets a box at the old and at the new place.
+- [ ] AC4: The annotated screenshot is an extra evidence file in the manifest; the original stays unchanged, the annotation is drawn by code from the assertion and never changes a status.
+- [ ] AC5: `report.html`, `qj evidence --failed`, the ticket comment and `qj bug` show the annotated screenshot first.
