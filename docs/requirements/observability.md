@@ -118,3 +118,20 @@ local browser page, instead of waiting for the matrix at the end.
 - [x] AC2: `qj watch <TICKET>` serves a page on 127.0.0.1 that updates while the run runs: cases, current step, the latest screenshot of a web or mobile case, and a preliminary result per finished case.
 - [x] AC3: Progress is read from what the runner already wrote (journal, results, evidence); live results are labelled preliminary and the final statuses come only from the computed verdict after the run.
 - [x] AC4: A run that stopped or stalled is shown as stopped with its last event, never as passed; the page serves only masked progress and evidence, nothing from `env/` or `repos/`.
+
+### REQ-OBS-10 · Tool versions recorded with every run
+
+- Status: proposed
+- Priority: should
+- Stage: later
+- Related: REQ-WS-01, REQ-GEN-03, REQ-PUB-01, REQ-EXEC-17
+
+A result is only reproducible when it is known what produced it. Today a run records the commits it tested but not
+the tools that tested them, so a changed result cannot be told apart from a new browser or runner version.
+
+**Acceptance criteria**
+
+- [ ] AC1: Every run records in `run.json` the versions of QAJitsu, Node.js, the operating system, Playwright and the browsers it used, Appium and its driver, Docker and Compose when `--build` ran, and the model of each agent role.
+- [ ] AC2: `report.html` and the ticket comment show these versions; `qj runs` and `qj evidence` show them for a run.
+- [ ] AC3: `qj regression` and `qj run --fix-check` list the versions that differ from the run they compare with, next to the result.
+- [ ] AC4: A version that cannot be read is recorded as unknown, never guessed.
