@@ -1,4 +1,5 @@
 import type { Plan } from "../plan/schemas.js";
+import type { CaseMessages } from "./message-capture.js";
 
 /** Raw outcome of one assertion as recorded by `verify()` (REQ-EXEC-02). */
 export interface AssertionRecord {
@@ -34,7 +35,8 @@ export interface CaseRunResult {
 export interface EvidenceItem {
   /** Plan step, or `case` for evidence of the whole attempt (video, trace, HAR, console log). */
   readonly stepId: string;
-  readonly kind: "request" | "response" | "screenshot" | "video" | "trace" | "log" | "har" | "dom" | "manual";
+  readonly kind:
+    "request" | "response" | "screenshot" | "video" | "trace" | "log" | "har" | "dom" | "manual" | "message";
   /** File name inside the attempt folder: `S1-01.json`, `S1.png`, `failure.png`, `video.webm`. */
   readonly name: string;
   readonly content: string | Uint8Array;
@@ -106,6 +108,8 @@ export interface AttemptRequest {
   readonly sessions?: Readonly<Record<string, string>>;
   /** Asks a person at manual steps (REQ-EXEC-11); absent means manual steps cannot be answered (BLOCKED). */
   readonly manual?: ManualPrompter;
+  /** The case's message inbox (REQ-ENV-08); absent means message steps cannot run (BLOCKED). */
+  readonly messages?: CaseMessages;
 }
 
 /**

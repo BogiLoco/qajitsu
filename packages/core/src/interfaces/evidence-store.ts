@@ -5,7 +5,17 @@ export interface EvidenceEntry {
   readonly caseId: string;
   readonly stepId?: string;
   readonly kind:
-    "request" | "response" | "screenshot" | "video" | "trace" | "log" | "har" | "dom" | "manual" | "other";
+    | "request"
+    | "response"
+    | "screenshot"
+    | "video"
+    | "trace"
+    | "log"
+    | "har"
+    | "dom"
+    | "manual"
+    | "message"
+    | "other";
   readonly bytes: number;
 }
 

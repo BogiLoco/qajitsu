@@ -232,15 +232,16 @@ export function checkSpecSource(source: string, caseId: string, plan: Plan): Spe
 }
 
 /**
- * Path of the `@qajitsu/steps` type declarations used to type-check specs: the built declarations when
- * present, otherwise the sources (monorepo development).
+ * Path of the `@qajitsu/steps` type declarations used to type-check specs: the sources when present (monorepo
+ * development, always current), otherwise the built declarations (installed package).
  *
  * @param exists - File check, injectable for tests.
  */
 export function stepsTypesEntry(exists: (path: string) => boolean = existsSync): string {
   const here = dirname(new URL(import.meta.url).pathname);
-  const dist = join(here, "../../steps/dist/index.d.ts");
-  return exists(dist) ? dist : join(here, "../../steps/src/index.ts");
+  // Sources first: in the monorepo they are always current, while dist/ may lag behind the last change.
+  const src = join(here, "../../steps/src/index.ts");
+  return exists(src) ? src : join(here, "../../steps/dist/index.d.ts");
 }
 
 /**

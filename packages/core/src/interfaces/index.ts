@@ -22,6 +22,7 @@ export type {
   StoredChunk,
   VectorStore,
 } from "./knowledge-store.js";
+export type { CapturedMessage, CaseMessages, MessageCapture, MessageInbox } from "./message-capture.js";
 export type { ModelCapabilities, ModelProvider, ResolvedModelHandle } from "./model-provider.js";
 export type { PublishAttachment, PublishInput, PublishResult, Publisher } from "./publisher.js";
 export type {

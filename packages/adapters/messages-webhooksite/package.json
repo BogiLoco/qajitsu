@@ -1,0 +1,24 @@
+{
+  "name": "@qajitsu/adapter-messages-webhooksite",
+  "version": "0.0.0",
+  "description": "QAJitsu MessageCapture on webhook.site (hosted or self-hosted): an e-mail address and a URL per run and case.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "qajitsu-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@qajitsu/core": "workspace:*",
+    "zod": "catalog:"
+  }
+}

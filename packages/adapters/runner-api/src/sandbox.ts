@@ -101,6 +101,18 @@ const OpSchema = z.discriminatedUnion("op", [
   z.strictObject({
     type: z.literal("op"),
     id: z.number().int(),
+    op: z.literal("inboxAddress"),
+    kind: z.enum(["email", "url"]),
+  }),
+  z.strictObject({
+    type: z.literal("op"),
+    id: z.number().int(),
+    op: z.literal("inboxWait"),
+    stepId: z.string().max(10),
+  }),
+  z.strictObject({
+    type: z.literal("op"),
+    id: z.number().int(),
     op: z.literal("call"),
     alias: z.string().optional(),
     method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
@@ -169,6 +181,7 @@ export function createSandboxExecutor(
     const session = options.browser?.(input);
     const runtime: CaseRuntime = createCaseRuntime({
       plan: input.plan,
+      ...(input.messages ? { messages: input.messages } : {}),
       ...(input.manual ? { manual: input.manual } : {}),
       caseId: input.caseId,
       attempt: input.attempt,
@@ -243,6 +256,8 @@ export function createSandboxExecutor(
               else if (op.op === "endStep") await runtime.endStep(op.stepId, op.error);
               else if (op.op === "verify") await runtime.verify(op.stepId, op.field);
               else if (op.op === "ui") await runtime.uiOp(op.operation);
+              else if (op.op === "inboxAddress") value = await runtime.inboxAddress(op.kind);
+              else if (op.op === "inboxWait") value = (await runtime.inboxWait(op.stepId)) ?? null;
               else {
                 const r = await runtime.call(op.alias, op.method, op.path, op.body, {
                   ...(op.options.headers ? { headers: op.options.headers } : {}),

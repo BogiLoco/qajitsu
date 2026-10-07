@@ -99,7 +99,7 @@ QAJitsu warns when the environment does not run the code being tested.
 
 ### REQ-ENV-08 · Message capture: email, SMS and webhooks
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: INV-8, INV-10, REQ-ENV-05, REQ-CFG-07
@@ -109,8 +109,8 @@ webhook.site (hosted or self-hosted); the provider sits behind an interface.
 
 **Acceptance criteria**
 
-- [ ] AC1: Project config declares a message capture provider (webhook.site first); the run gets a unique inbox or URL per run and case.
-- [ ] AC2: Steps can wait for a message matching a filter (recipient, subject, body pattern) with a timeout; a timeout makes the step fail, never pass.
-- [ ] AC3: Received messages are stored as evidence after masking and listed in the manifest.
-- [ ] AC4: The provider host must be on the environment allowlist; the API token comes from a secret provider.
-- [ ] AC5: Inboxes created for a run are deleted at cleanup.
+- [x] AC1: Project config declares a message capture provider (webhook.site first); the run gets a unique inbox or URL per run and case.
+- [x] AC2: Steps can wait for a message matching a filter (recipient, subject, body pattern) with a timeout; a timeout makes the step fail, never pass.
+- [x] AC3: Received messages are stored as evidence after masking and listed in the manifest.
+- [x] AC4: The provider host must be on the environment allowlist; the API token comes from a secret provider.
+- [x] AC5: Inboxes created for a run are deleted at cleanup.

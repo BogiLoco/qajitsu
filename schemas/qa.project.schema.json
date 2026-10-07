@@ -1486,6 +1486,43 @@
       },
       "additionalProperties": false
     },
+    "messages": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "default": "webhook.site",
+          "type": "string",
+          "const": "webhook.site"
+        },
+        "base_url": {
+          "default": "https://webhook.site",
+          "type": "string",
+          "format": "uri"
+        },
+        "email_domain": {
+          "default": "email.webhook.site",
+          "type": "string",
+          "pattern": "^[a-z0-9.-]+\\.[a-z]{2,}$"
+        },
+        "api_key": {
+          "type": "string",
+          "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+        },
+        "timeout_s": {
+          "default": 120,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        },
+        "poll_ms": {
+          "default": 2000,
+          "type": "integer",
+          "minimum": 200,
+          "maximum": 60000
+        }
+      },
+      "additionalProperties": false
+    },
     "manual": {
       "default": {
         "timeout_s": 900

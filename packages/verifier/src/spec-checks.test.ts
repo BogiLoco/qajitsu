@@ -153,8 +153,8 @@ describe("static checks of generated specs (REQ-EXEC-03)", () => {
       .replace("res.status, plan", 'res["status"], plan')
       .replace("export async function run", "export const note = 1;\nexport async function run");
     expect(checkSpecSource(src, "TC-02", plan)).toEqual([]);
-    expect(stepsTypesEntry(() => true)).toMatch(/steps\/dist\/index\.d\.ts$/);
-    expect(stepsTypesEntry(() => false)).toMatch(/steps\/src\/index\.ts$/);
+    expect(stepsTypesEntry(() => true)).toMatch(/steps\/src\/index\.ts$/);
+    expect(stepsTypesEntry(() => false)).toMatch(/steps\/dist\/index\.d\.ts$/);
     expect(formatSpecProblems([{ check: "lint", message: "m" }])).toBe("lint: m");
   });
 

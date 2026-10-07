@@ -2,6 +2,8 @@ import { isDeepStrictEqual } from "node:util";
 import type {
   AssertionRecord,
   AttemptRecord,
+  CapturedMessage,
+  CaseMessages,
   EvidenceItem,
   ManualPrompter,
   Plan,
@@ -82,6 +84,28 @@ export interface CaseContext {
   readonly step: (stepId: string, fn: () => Promise<void> | void) => Promise<void>;
   /** Records the assertion `<field>` of the step; it is evaluated before the step ends. */
   readonly verify: (stepId: string, field: string, actual?: unknown, expected?: unknown) => void;
+  /** The case's inbox (REQ-ENV-08): an address for the test data, and the message the plan expects. */
+  readonly inbox: InboxClient;
+}
+
+/** A received message as a spec sees it: masked, with the links it contains. */
+export interface ReceivedMessage {
+  readonly from?: string | undefined;
+  readonly to?: string | undefined;
+  readonly subject?: string | undefined;
+  readonly body: string;
+  readonly links: readonly string[];
+}
+
+/** The inbox of a case (REQ-ENV-08). */
+export interface InboxClient {
+  /** The inbox's e-mail address (default) or webhook URL, to put into test data. */
+  readonly address: (kind?: "email" | "url") => Promise<string>;
+  /**
+   * Waits in step `stepId` for the message the approved plan expects there (`expect.message`); resolves undefined
+   * when none arrived in time. Verify it with `verify(stepId, "message")`.
+   */
+  readonly wait: (stepId: string) => Promise<ReceivedMessage | undefined>;
 }
 
 // Defined in @qajitsu/core (ADR-0005) and re-exported here for spec authors and runners.
@@ -104,6 +128,8 @@ export interface CaseRuntimeOptions {
   readonly ui?: (() => Promise<UiDriver>) | undefined;
   /** Asks a person at manual steps (REQ-EXEC-11); the trusted orchestrator provides it, never a spec or agent. */
   readonly manual?: ManualPrompter | undefined;
+  /** The case's message inbox (REQ-ENV-08); read by the trusted runtime only. */
+  readonly messages?: CaseMessages | undefined;
 }
 
 /** The recorder of one attempt. Runs in the trusted process; specs only reach it through these operations. */
@@ -123,6 +149,10 @@ export interface CaseRuntime {
   readonly uiOp: (operation: UiOperation) => Promise<void>;
   /** Computes and records an assertion from the step's last response or the live page and the approved plan. */
   readonly verify: (stepId: string, field: string) => Promise<void>;
+  /** The inbox address of the case (REQ-ENV-08). */
+  readonly inboxAddress: (kind: "email" | "url") => Promise<string>;
+  /** Waits for the planned message of a step (REQ-ENV-08/AC2). */
+  readonly inboxWait: (stepId: string) => Promise<ReceivedMessage | undefined>;
   readonly finish: (error?: unknown) => Promise<AttemptRecord>;
 }
 
@@ -171,7 +201,8 @@ function expectationOf(planCase: TestCase, stepId: string, field: string, path: 
   else if (kind === "elements" && rest.length >= 2) {
     const property = rest.at(-1) as UiProperty;
     value = e.elements?.[rest.slice(0, -1).join(".")]?.[property];
-  } else throw new Error(`plan.expect('${path}'): unknown field`);
+  } else if (kind === "message" && rest.length === 0) value = e.message;
+  else throw new Error(`plan.expect('${path}'): unknown field`);
   if (value === undefined) throw new Error(`plan.expect('${path}'): no expected value`);
   return value;
 }
@@ -433,6 +464,80 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     }
   };
 
+  /** What each step's wait found: the matching message, or null when none arrived in time. */
+  const waited = new Map<string, CapturedMessage | null>();
+  let inbox: Awaited<ReturnType<CaseMessages["inbox"]>> | undefined;
+  const attemptStart = options.now();
+  const messages = (): CaseMessages => {
+    if (!options.messages)
+      throw new Error(
+        "This run has no message capture; configure `messages` in .qa/qa.project.yaml (REQ-ENV-08)",
+      );
+    return options.messages;
+  };
+  const openInbox = async () => (inbox ??= await messages().inbox());
+  const contains = (value: string | undefined, part: string | undefined): boolean =>
+    part === undefined || (value ?? "").toLowerCase().includes(part.toLowerCase());
+  const view = (m: CapturedMessage): ReceivedMessage => {
+    const body = masker.maskText(m.body);
+    return {
+      ...(m.from ? { from: masker.maskText(m.from) } : {}),
+      ...(m.to ? { to: masker.maskText(m.to) } : {}),
+      ...(m.subject ? { subject: masker.maskText(m.subject) } : {}),
+      body,
+      links: [...new Set(body.match(/https?:\/\/[^\s"'<>)\]]+/g) ?? [])],
+    };
+  };
+
+  /**
+   * Waits for the message the approved plan expects in a step (REQ-ENV-08/AC2+AC3): only messages received after the
+   * attempt started count; the filter comes from the plan, never from the spec. The result and the message (masked)
+   * are evidence of the step.
+   */
+  const inboxWait = async (stepId: string): Promise<ReceivedMessage | undefined> => {
+    if (currentStep !== stepId) throw new Error(`inbox.wait('${stepId}') must run inside step('${stepId}')`);
+    const filter = planCase.steps.find((x) => x.id === stepId)?.expect.message;
+    if (!filter) throw new Error(`inbox.wait('${stepId}'): the plan expects no message in ${stepId}`);
+    const service = messages();
+    const box = await openInbox();
+    const limit = (filter.within_s ?? service.timeoutMs / 1000) * 1000;
+    const deadline = options.now() + limit;
+    let found: CapturedMessage | undefined;
+    let received: number;
+    for (;;) {
+      const all = (await service.capture.messages(box.id)).filter(
+        (m) => Date.parse(m.receivedAt) >= attemptStart,
+      );
+      received = all.length;
+      found = all.find(
+        (m) =>
+          contains(m.to, filter.to) && contains(m.subject, filter.subject) && contains(m.body, filter.body),
+      );
+      if (found || options.now() >= deadline) break;
+      await new Promise((done) => setTimeout(done, service.pollMs ?? 2000));
+    }
+    waited.set(stepId, found ?? null);
+    media.push({
+      stepId,
+      kind: "message",
+      name: `${stepId}-message.json`,
+      content: `${JSON.stringify(
+        found
+          ? { matched: true, receivedAt: found.receivedAt, kind: found.kind, ...view(found) }
+          : { matched: false, received, waitedMs: limit },
+        null,
+        2,
+      )}\n`,
+    });
+    return found ? view(found) : undefined;
+  };
+
+  const inboxAddress = async (kind: "email" | "url"): Promise<string> => {
+    if (currentStep === undefined) throw new Error("inbox.address() must run inside step()");
+    const box = await openInbox();
+    return kind === "url" ? box.url : box.email;
+  };
+
   const verify = async (stepId: string, field: string): Promise<void> => {
     if (!stepIds.has(stepId)) throw new Error(`verify('${stepId}') is not a step of ${caseId}`);
     if (currentStep !== stepId) throw new Error(`verify('${stepId}') must run inside step('${stepId}')`);
@@ -447,6 +552,22 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         pass: isDeepStrictEqual(actual, expected),
       });
     };
+    if (kind === "message" && rest.length === 0) {
+      // REQ-ENV-08/AC2: passes only when the planned message arrived in time; a timeout is a failure, never a pass.
+      const expected = expectationOf(planCase, stepId, field, `${caseId}.${stepId}.${field}`);
+      if (!waited.has(stepId)) await inboxWait(stepId);
+      const m = waited.get(stepId);
+      assertions.push({
+        stepId,
+        field,
+        expected: maskValue(expected),
+        actual: m
+          ? maskValue({ to: m.to, subject: m.subject, receivedAt: m.receivedAt })
+          : "(no matching message in time)",
+        pass: m !== null && m !== undefined,
+      });
+      return;
+    }
     if (kind === "elements") {
       // elements.<selector>.<property>: read from the live page by the parent.
       const property = rest.at(-1) as UiProperty | undefined;
@@ -555,6 +676,10 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       if (currentStep !== stepId) throw new Error(`verify('${stepId}') must run inside step('${stepId}')`);
       pending = pending.then(() => verify(stepId, field));
     },
+    inbox: {
+      address: (kind = "email") => inboxAddress(kind),
+      wait: (stepId) => inboxWait(stepId),
+    },
   };
 
   return {
@@ -564,6 +689,8 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     call,
     uiOp,
     verify,
+    inboxAddress,
+    inboxWait,
     finish: async (error) => {
       if (error !== undefined) failure = masker.maskText(describeError(error));
       // REQ-EXEC-11/AC5: a manual step the spec never ran cannot be skipped into a pass.

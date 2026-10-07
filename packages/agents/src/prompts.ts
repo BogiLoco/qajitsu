@@ -38,6 +38,9 @@ Rules:
 - Case ids TC-01, TC-02, ...; step ids S1, S2, ... per case; type api, web or mobile; priority high, medium or low.
 - Expected results are structured where possible: HTTP "status", response "fields" (JSON path -> exact expected value), visible "texts". Tests read them from the plan, so be exact.
 - Test data uses aliases only, like {"user":"user:standard"}; never passwords, tokens or real personal data.
+- When the change sends an e-mail, an SMS (through a gateway) or a webhook, the step can expect it:
+  "message": {"to": "...", "subject": "...", "body": "...", "within_s": 60} (every part is optional and matched
+  as contained text); the case gets its own inbox address to use in the test data.
 - A step that cannot be automated (an SMS or 2FA code, a physical device, a printout, a captcha) may be
   "manual": true with "instructions" for the tester; its "expect" is a "description" only. Use it only when needed:
   a tester has to be present when the run reaches it.

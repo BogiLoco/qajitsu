@@ -350,6 +350,24 @@ export const ProjectConfigSchema = z.strictObject({
         .default({}),
     })
     .default({ servers: {} }),
+  /**
+   * Message capture for e-mails, SMS gateways and outgoing webhooks (REQ-ENV-08): webhook.site, hosted or
+   * self-hosted. Each case gets its own inbox, deleted when the run ends; the host must be on the allowlist.
+   */
+  messages: z
+    .strictObject({
+      provider: z.literal("webhook.site").default("webhook.site"),
+      base_url: SecureUrl.default("https://webhook.site"),
+      email_domain: z
+        .string()
+        .regex(/^[a-z0-9.-]+\.[a-z]{2,}$/)
+        .default("email.webhook.site"),
+      api_key: SecretRef.optional(),
+      /** Default wait for a planned message when the plan gives no `within_s`. */
+      timeout_s: z.number().int().min(1).max(3600).default(120),
+      poll_ms: z.number().int().min(200).max(60_000).default(2000),
+    })
+    .optional(),
   /** Manual steps (REQ-EXEC-11): how long the run waits for a person's answer per step. */
   manual: z
     .strictObject({ timeout_s: z.number().int().min(1).max(86_400).default(900) })

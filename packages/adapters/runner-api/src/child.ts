@@ -107,6 +107,10 @@ async function start(m: StartMessage): Promise<void> {
     verify: (stepId: string, field: string): void => {
       void rpc({ op: "verify", stepId, field }).catch(() => undefined);
     },
+    inbox: {
+      address: (kind = "email") => rpc({ op: "inboxAddress", kind }),
+      wait: async (stepId: string) => (await rpc({ op: "inboxWait", stepId })) ?? undefined,
+    },
   };
   let error: string | undefined;
   try {

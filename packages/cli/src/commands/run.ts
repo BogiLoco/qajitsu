@@ -35,6 +35,7 @@ import type { CommandIO } from "./fetch.js";
 import { anchorJournal, computeVerdict, writeReports } from "./verdict.js";
 import { auditRun, triageRun, runCanary } from "./checks.js";
 import { createManualPrompter } from "./manual.js";
+import { runMessages, type MessagePorts, type RunMessages } from "./messages.js";
 import { approvalContext, changedParts, type ApprovalContext } from "./context-fingerprint.js";
 import { runRunHook, type HookExec } from "./hooks.js";
 import { prepareMobile, type PreparedMobile } from "./mobile.js";
@@ -65,7 +66,7 @@ export interface RunOptions {
 }
 
 /** Ports `run` needs beyond the common ones; the executor is replaceable in tests. */
-export interface RunPorts extends KnowledgePorts {
+export interface RunPorts extends KnowledgePorts, MessagePorts {
   readonly executor?: AttemptExecutor;
   /** Executor of mobile cases for a device factory (replaced in tests with a fake device). */
   readonly mobileExecutor?: (device: BrowserFactory) => AttemptExecutor;
@@ -151,6 +152,7 @@ export async function runRun(
 ): Promise<number> {
   const masker = createMasker();
   let release: (() => Promise<void>) | undefined;
+  let messages: RunMessages | undefined;
   let stopOnInterrupt: (() => Promise<void>) | undefined;
   // REQ-CFG-05/AC2: an interrupt still stops the environment and deletes the generated .env files.
   // Listening with `on`: a second Ctrl+C during a long `docker compose up` must not skip the cleanup.
@@ -191,6 +193,8 @@ export async function runRun(
         {},
       );
     const overrides = parseOverrides(options.set ?? []);
+    // REQ-ENV-08: message capture is checked against the allowlist before anything runs.
+    messages = runMessages(session, ports);
     // REQ-WS-04/AC2: one process per run; other runs of the ticket may run in parallel.
     release = await acquireRunLock(ws.path("run.lock"));
     const { plan, approval } = await loadApprovedPlan(ws);
@@ -334,6 +338,7 @@ export async function runRun(
       } else {
         const pending = await executeCases(session, plan, env, io, ports, results, {
           user: options.user,
+          messages,
           build: options.build === true,
           onDevice: (stop) => deviceStops.push(stop),
         });
@@ -411,6 +416,9 @@ export async function runRun(
   } finally {
     signals.off("SIGINT", onSignal);
     signals.off("SIGTERM", onSignal);
+    // REQ-ENV-08/AC5: the run's inboxes are deleted when it ends, whatever the result.
+    const problems = (await messages?.deleteAll().catch(() => ["inbox cleanup failed"])) ?? [];
+    for (const p of problems) io.writeError(`Warning: an inbox was not deleted: ${p}\n`);
     await release?.();
   }
 }
@@ -431,6 +439,7 @@ async function executeCases(
     readonly build: boolean;
     readonly onDevice: (stop: () => Promise<void>) => void;
     readonly user?: string | undefined;
+    readonly messages?: RunMessages | undefined;
   } = {
     build: false,
     onDevice: () => undefined,
@@ -526,6 +535,7 @@ async function executeCases(
       timeoutMs: project.config.manual.timeout_s * 1000,
     }),
     manualTimeoutMs: project.config.manual.timeout_s * 1000,
+    ...(run.messages ? { messages: run.messages.forCase } : {}),
     executor,
     baseUrl: env.baseUrl,
     allowedOrigins: [env.origin],

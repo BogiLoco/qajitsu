@@ -103,6 +103,18 @@ export const ExpectationSchema = z.strictObject({
       }),
     )
     .optional(),
+  /**
+   * A message the step must receive in the case's inbox (REQ-ENV-08/AC2): an e-mail, an SMS forwarded to a webhook,
+   * or an outgoing webhook. Every given part must be contained (case-insensitive); none arriving in time fails.
+   */
+  message: z
+    .strictObject({
+      to: z.string().min(1).max(200).optional(),
+      subject: z.string().min(1).max(300).optional(),
+      body: z.string().min(1).max(500).optional(),
+      within_s: z.number().int().min(1).max(3600).optional(),
+    })
+    .optional(),
 });
 
 /** Structured expectation. */

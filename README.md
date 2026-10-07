@@ -237,14 +237,18 @@ qj run SHOP-482 --build --set api.FEATURE_X=1         # with an overridable vari
 3. Each spec runs in a **sandbox** (no network, no files, no secrets). The trusted parent process performs every API
    call, drives the browser (Playwright) or the mobile app (Appium), records evidence and compares actual values with
    the approved plan.
-4. Steps the plan marks **manual** (an SMS code, a physical device, a printout) pause the run: the instructions are
+4. Steps that expect an **e-mail, SMS or webhook** use the case's own inbox (webhook.site, `messages:` in the
+   project config): the spec puts the inbox address into the test data, QAJitsu waits for the message the plan
+   describes (recipient, subject, body text), keeps it as evidence and deletes the inbox when the run ends. No
+   message in time fails the step.
+5. Steps the plan marks **manual** (an SMS code, a physical device, a printout) pause the run: the instructions are
    shown and you answer passed or failed with an optional note and file. In CI the run waits for
    `qj answer SHOP-482 TC-02 S3 --passed` from someone else. No answer in time makes the case BLOCKED, never PASSED.
-5. Failed web steps get up to two **healing** attempts (selectors and waits only; a healed pass is NEEDS_REVIEW).
-6. Statuses are computed by code; then the **auditor** and the optional **canary** may downgrade PASSED to NEEDS_REVIEW,
+6. Failed web steps get up to two **healing** attempts (selectors and waits only; a healed pass is NEEDS_REVIEW).
+7. Statuses are computed by code; then the **auditor** and the optional **canary** may downgrade PASSED to NEEDS_REVIEW,
    and every FAILED case gets a **hint** (likely product bug, test bug, environment or data) citing its evidence; a
    hint is a suggestion and never changes a status.
-7. Reports are written: `report.html`, `matrix.md/.csv/.xlsx`, `junit.xml`, `gates.json`, the transition graph.
+8. Reports are written: `report.html`, `matrix.md/.csv/.xlsx`, `junit.xml`, `gates.json`, the transition graph.
 
 The matrix is printed at the end; the exit code tells the result (section 5).
 
@@ -678,6 +682,7 @@ run folder looks like this:
 | `.qa/auth/`                                  | login scripts for logins one request cannot do (forms, cookies, SSO): `login: { script: auth/<file> }` in a profile; values are masked                                                                                                                               |
 | `.qa/stubs/<name>/`                          | WireMock/Mockoon mappings for stubbed dependencies                                                                                                                                                                                                                   |
 | `.qa/bench.yaml`                             | benchmark cases                                                                                                                                                                                                                                                      |
+| `messages:` in `qa.project.yaml`             | message capture for e-mails, SMS gateways and webhooks: `base_url` (webhook.site or self-hosted, must be on `environments.allowlist`), `email_domain`, `api_key: secret://...`, `timeout_s`                                                                          |
 | `.env.local` (next to `.qa/`, not committed) | secret values for `secret://env/NAME`                                                                                                                                                                                                                                |
 
 Layers, each overriding the previous: defaults → `qa.project.yaml` → `envs/<env>.yaml` → secrets → run options
@@ -766,6 +771,11 @@ test_types: [api, web]
 - **Failure hints.** Every FAILED case gets a suggested cause (product bug, test bug, environment, data) citing
   steps, assertions, evidence or logs; code drops hints without real evidence and a hint never changes a status.
   [docs/guides/models-and-verification.md](docs/guides/models-and-verification.md)
+- **E-mail, SMS and webhooks.** With `messages: { base_url: https://webhook.site }` (hosted or self-hosted, on the
+  allowlist, API key as `secret://`), every case gets its own inbox address and URL; a step waits for the message
+  the plan expects (recipient, subject, body text), the message is masked and kept as evidence, its links are
+  available to the next steps, and inboxes are deleted when the run ends. A message that does not arrive fails the
+  step, never passes it.
 - **Manual steps.** A plan step can be `manual: true` with instructions (2FA or SMS code, physical device,
   printout). The run pauses and asks you in the terminal, or waits for `qj answer` in CI; the answer is recorded
   with your name and evidence, a failed answer is FAILED, no answer is BLOCKED. Reports name who performed each

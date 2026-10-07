@@ -78,3 +78,10 @@ Status: `todo` (no test yet) · `covered` (test exists, file name in brackets). 
 - done · Nobody answers, or the spec skips the manual step → error, BLOCKED, never PASSED (`packages/steps/src/manual.test.ts`).
 - done · A spec that verifies a manual step itself → rejected by the static checks.
 - done · One-time codes and secrets in a tester's note → masked in the result and evidence.
+
+## Message capture (REQ-ENV-08)
+
+- done · No matching message in time → the step's assertion fails, never passes (`packages/steps/src/messages.test.ts`).
+- done · Messages received before the attempt started do not count.
+- done · A secret in a message (an activation token) is masked in the spec's view and in evidence.
+- done · A capture host off the allowlist → the run is refused before anything starts.

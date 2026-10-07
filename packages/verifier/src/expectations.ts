@@ -15,5 +15,6 @@ export function plannedFields(expect: Expectation): string[] {
     ...Object.entries(expect.elements ?? {}).flatMap(([selector, state]) =>
       Object.keys(state).map((prop) => `elements.${selector}.${prop}`),
     ),
+    ...(expect.message === undefined ? [] : ["message"]),
   ];
 }

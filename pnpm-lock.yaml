@@ -225,6 +225,15 @@ importers:
         specifier: 18.1.0
         version: 18.1.0
 
+  packages/adapters/messages-webhooksite:
+    dependencies:
+      '@qajitsu/core':
+        specifier: workspace:*
+        version: link:../../core
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
+
   packages/adapters/publish-jira:
     dependencies:
       '@qajitsu/core':
@@ -391,6 +400,9 @@ importers:
       '@qajitsu/adapter-knowledge-lancedb':
         specifier: workspace:*
         version: link:../adapters/knowledge-lancedb
+      '@qajitsu/adapter-messages-webhooksite':
+        specifier: workspace:*
+        version: link:../adapters/messages-webhooksite
       '@qajitsu/adapter-publish-jira':
         specifier: workspace:*
         version: link:../adapters/publish-jira

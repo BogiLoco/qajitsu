@@ -42,10 +42,13 @@ export const AUTHOR_SYSTEM = `You are the test author of QAJitsu. You write one 
 ${UNTRUSTED_DATA_RULES}
 Rules (checked by code; a violating spec is rejected):
 - Start with: import type { CaseContext } from "@qajitsu/steps"; no other imports, no dynamic import.
-- Export const caseId = "<case id>" and export async function run({ step, verify, plan, api }: CaseContext).
+- Export const caseId = "<case id>" and export async function run({ step, verify, plan, api, inbox }: CaseContext) (take only what you use).
 - One step("<step id>", async () => { ... }) per plan step, in order; API calls only inside steps through api or api.as("<account alias>").
 - Every step has at least one verify("<step id>", "<field>", <actual value>, plan.expect("<case>.<step>.<field>")).
   Fields are "status", "fields.<key>" (read with res.json("<key>")) or "texts.<n>". The expected value is ALWAYS plan.expect(...) with exactly the same step and field; never a literal.
+- A step whose expect has "message": use const email = await inbox.address() (or inbox.address("url") for a webhook)
+  as the address in the test data, then const msg = await inbox.wait("<step id>") and
+  verify("<step id>", "message", msg, plan.expect("<case>.<step>.message")); msg.links holds the links of the message.
 - A step with "manual": true is performed by a person: write step("<step id>", () => {}) with an empty body and no
   verify(); QAJitsu pauses there and asks the tester.
 - Never use process, fetch, require, eval, globalThis or timers. Never write files.

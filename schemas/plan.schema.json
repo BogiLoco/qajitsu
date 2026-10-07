@@ -290,6 +290,32 @@
                         },
                         "additionalProperties": false
                       }
+                    },
+                    "message": {
+                      "type": "object",
+                      "properties": {
+                        "to": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "subject": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300
+                        },
+                        "body": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "within_s": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 3600
+                        }
+                      },
+                      "additionalProperties": false
                     }
                   },
                   "required": [

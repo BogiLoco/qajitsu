@@ -7,6 +7,7 @@ import {
   type EventLog,
   type EvidenceStore,
   type ManualPrompter,
+  type CaseMessages,
   type Plan,
 } from "@qajitsu/core";
 import type { AttemptRecord } from "@qajitsu/steps";
@@ -54,6 +55,8 @@ export interface RunCasesOptions {
   readonly manual?: ManualPrompter | undefined;
   /** How long one manual step may wait for its answer (default 15 minutes). */
   readonly manualTimeoutMs?: number;
+  /** The message inbox of a case (REQ-ENV-08), created on first use and shared by its attempts. */
+  readonly messages?: ((caseId: string) => CaseMessages) | undefined;
   /** OpenAPI contract of the application; responses that violate it fail the step (REQ-EXEC-04/AC2). */
   readonly contract?: ContractValidator | undefined;
 }
@@ -106,6 +109,16 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
   const manualCount = (caseId: string): number =>
     options.plan.cases.find((c) => c.id === caseId)?.steps.filter((st) => st.manual === true).length ?? 0;
 
+  /** Message steps wait for their message (REQ-ENV-08): the attempt's time limit grows by those waits. */
+  const messageWaitMs = (caseId: string): number => {
+    const service = options.messages?.(caseId);
+    return (options.plan.cases.find((c) => c.id === caseId)?.steps ?? []).reduce(
+      (ms, st) =>
+        st.expect.message ? ms + (st.expect.message.within_s ?? (service?.timeoutMs ?? 0) / 1000) * 1000 : ms,
+      0,
+    );
+  };
+
   const runAttempt = async (
     caseId: string,
     spec: string,
@@ -150,8 +163,12 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
       secrets: session.secrets,
       ...(session.sessions ? { sessions: session.sessions } : {}),
       // A case with manual steps waits for people: its time limit grows by their answer time (REQ-EXEC-11).
-      timeoutMs: (options.timeoutMs ?? 60_000) + manualCount(caseId) * (options.manualTimeoutMs ?? 900_000),
+      timeoutMs:
+        (options.timeoutMs ?? 60_000) +
+        manualCount(caseId) * (options.manualTimeoutMs ?? 900_000) +
+        messageWaitMs(caseId),
       ...(options.manual ? { manual: options.manual } : {}),
+      ...(options.messages ? { messages: options.messages(caseId) } : {}),
     });
     const record = applyContract(executed, options.contract);
     const evidencePaths: string[] = [];

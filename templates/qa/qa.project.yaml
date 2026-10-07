@@ -90,6 +90,10 @@ test_types: [api, web]
 # Passive observations while planned cases run (REQ-EVD-07): listed in the report and the Jira comment, never statuses.
 # observations: { console: true, http_errors: true, accessibility: true, ignore: [favicon.ico, color-contrast] }
 
+# Message capture (REQ-ENV-08): an inbox per case for e-mails, SMS gateways and outgoing webhooks. The host must be
+# on environments.allowlist.
+# messages: { base_url: https://webhook.site, email_domain: email.webhook.site, api_key: secret://env/WEBHOOKSITE_KEY, timeout_s: 120 }
+
 # Manual steps (REQ-EXEC-11): how long a run waits for a tester's answer per step.
 # manual: { timeout_s: 900 }
 
