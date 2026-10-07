@@ -344,6 +344,21 @@ qj promote SHOP-482                    # shows the target and asks before pushin
 Only PASSED cases are promoted, with the exact spec that passed and the expected values of the approved plan, into
 the tests repository (`repos.<alias>.role: tests`, folder `promote_dir` or `tests/qajitsu/`).
 
+### Optional: run the regression suite
+
+```sh
+qj regression --env staging                      # every promoted pack of the tests repository (default branch)
+qj regression --packs SHOP-482,SHOP-490          # only these packs
+qj regression --from ./tests/qajitsu             # packs from a local folder instead
+qj regression --publish SHOP-500                 # also as a comment on SHOP-500, after a preview
+```
+
+Each pack from `qj promote` runs again as a run of its ticket, with the same sandboxed runners and **no agent or
+model**: its cases are the approved plan, its specs run unchanged. A spec or an expected value that no longer matches
+the hashes in the pack's `expectations.yaml` makes that case BLOCKED. The suite report (`regression.md`,
+`report.html`, `junit.xml` in `exports/regression/<time>/`) lists as regressions the cases that passed when they
+were promoted and fail now; the exit code follows `qj run`.
+
 ### Optional: is the release ready?
 
 ```sh
@@ -375,6 +390,7 @@ qj evidence SHOP-482 --failed              # FAILED cases with their hint (produ
 qj publish SHOP-482
 qj bug SHOP-482                            # optional: FAILED cases as bugs (similar open bugs shown first)
 qj promote SHOP-482                        # optional: PASSED cases as a PR/MR to the tests repository
+qj regression --env staging                # optional: the promoted packs again, no models involved
 qj release 2.4.0                           # before a release: every ticket of the fix version, ready or not
 ```
 
@@ -404,7 +420,7 @@ A project is a name (slug, e.g. `shop`, `bank-web`) plus two places:
     cache/git/                   git mirrors; worktrees of runs are made from them
     cache/index/                 code indexes by <repo>@<sha>, reused by later runs on the same commit
     knowledge/                   the knowledge base (see "Knowledge base")
-    exports/                     evidence zips, qj export output, bench results, application maps, releases/
+    exports/                     evidence zips, qj export output, bench results, application maps, releases/, regression/
     logs/, context.json          logs; index of open work for `qj status`
   audit/<slug>/                  run journals kept after `qj projects remove`
 ```
@@ -637,6 +653,7 @@ Every option and exit code of every command: [docs/cli/commands.md](docs/cli/com
 | `qj answer <TICKET> <TC> <S> --passed\|--failed [--note] [--file]`                                                                          | a run waits for a manual step (CI, another terminal)                            | Answers a manual step; the answer is recorded with your name, the note masked, the file as evidence. A failed answer makes the case FAILED.                                                                                                                                                       |
 | `qj bug <TICKET> [--cases TC-01] [--link <KEY>] [--yes [--force-new]]`                                                                      | when a case FAILED                                                              | Shows similar open bugs, then creates a bug written by code from the run (steps, expected vs actual, version, environment, evidence by hash) and links it to the ticket, or links an existing bug. Asks first.                                                                                    |
 | `qj promote <TICKET> [--cases TC-01,TC-03] [--dry-run] [--yes]`                                                                             | after a good run                                                                | Proposes the PASSED cases as a pull/merge request to the tests repository: the specs that passed, unchanged, and the plan's expectations; asks before pushing.                                                                                                                                    |
+| `qj regression [--env] [--packs T1,T2] [--from <dir>] [--ref] [--publish <KEY>]`                                                            | on a new version, nightly, before a release                                     | Runs every promoted pack of the tests repository again, without agents or models; hash-checked specs and expected values; suite report with regressions in `exports/regression/`.                                                                                                                 |
 | `qj explore <TICKET> --goal "<text>" [--time-box <min>] [--max-steps <n>]`                                                                  | when you want an agent to look around a change, before or besides planned cases | An exploratory session in a browser QAJitsu drives and records: observations with steps and screenshots, `explore/<session>/report.html` for review, no statuses. `qj explore promote <TICKET> --session S01 --observation O1` turns an observation into a draft plan case (runs after approval). |
 | `qj release <fixVersion> [--sprint] [--publish <KEY>] [--yes]`                                                                              | before a release or at the end of a sprint                                      | Collects every ticket of the fix version (or sprint) and its latest executed run: status counts, open cases, tickets without a run, untrusted runs. Writes `exports/releases/<name>.md`; `--publish` comments on a ticket after a preview. Exit 0 only when every ticket is ready.                |
 
@@ -886,6 +903,9 @@ test_types: [api, web]
 - **Bug reports from failures.** `qj bug` searches for similar open bugs first, then creates a bug written by code
   from the run (steps from the plan and the runner record, expected vs actual, tested version, environment,
   evidence by hash) and links it to the ticket, or links the failure to an existing bug; always after confirmation.
+- **Regression runs.** `qj regression` runs the packs `qj promote` put in the tests repository again on a new
+  version, without agents or models; specs and expected values are checked against the pack's hashes (a change makes
+  the case BLOCKED), and the suite report names every case that passed when promoted and fails now.
 - **Release readiness.** `qj release 2.4.0` (or `--sprint "Sprint 12"`) lists every ticket of the release with its
   latest executed run: status counts, open FAILED and NEEDS_REVIEW cases, tickets never tested and runs whose gates
   fail. Numbers are computed from the results; a ticket without a run is never ready. Written to

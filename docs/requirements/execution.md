@@ -234,7 +234,7 @@ the run can go step by step, to understand a failure or show a case to someone.
 
 ### REQ-EXEC-17 · Regression runs of promoted packs
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: INV-1, INV-3, INV-4, INV-6, REQ-PUB-08, REQ-VER-08
@@ -244,7 +244,7 @@ without agents or models.
 
 **Acceptance criteria**
 
-- [ ] AC1: `qj regression [--env <profile>] [--packs <TICKET>,...]` runs the promoted packs of the tests repository with the same sandboxed runners and no agent or model call.
-- [ ] AC2: Every spec and the expectations are checked against the hashes recorded in the pack's `expectations.yaml`; a mismatch makes that case BLOCKED with the reason, never PASSED.
-- [ ] AC3: Statuses are computed by the verifier; the report (matrix, report.html, junit.xml) covers the whole suite and lists as regressions the cases that passed when promoted and fail now.
-- [ ] AC4: The exit code follows `qj run`; the report can be published to a Jira ticket after preview.
+- [x] AC1: `qj regression [--env <profile>] [--packs <TICKET>,...]` runs the promoted packs of the tests repository with the same sandboxed runners and no agent or model call.
+- [x] AC2: Every spec and the expectations are checked against the hashes recorded in the pack's `expectations.yaml`; a mismatch makes that case BLOCKED with the reason, never PASSED.
+- [x] AC3: Statuses are computed by the verifier; the report (matrix, report.html, junit.xml) covers the whole suite and lists as regressions the cases that passed when promoted and fail now.
+- [x] AC4: The exit code follows `qj run`; the report can be published to a Jira ticket after preview.

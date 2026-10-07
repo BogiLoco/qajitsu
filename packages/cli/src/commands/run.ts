@@ -61,6 +61,7 @@ import {
 } from "./build-env.js";
 import type { CommandExec } from "@qajitsu/adapter-env-compose";
 import { headlessFor, prepareLiveRun, type LiveOptions, type LiveRun } from "./live.js";
+import { RegressionRunSchema } from "./pack.js";
 import { createProgressPrinter, liveScreenshots, teeEvents } from "./progress.js";
 
 /** Options of `qajitsu run`. */
@@ -464,8 +465,10 @@ export async function runRun(
         });
         if (pending.length > 0)
           io.write(`Rejected spec files (not in the approved plan or misplaced): ${pending.join(", ")}\n`);
-        // REQ-VER-06: the independent auditor reviews what PASSED; it can only downgrade.
-        const audit = await auditRun(session, ports.now);
+        // REQ-VER-06: the independent auditor reviews what PASSED; it can only downgrade. Regression runs call no
+        // model (REQ-EXEC-17/AC1): their specs were audited when they passed and were promoted.
+        const audit =
+          ws.record.data["regression"] === undefined ? await auditRun(session, ports.now) : undefined;
         if (audit?.status === "failed")
           io.writeError(`Auditor did not complete (${audit.mode}): ${audit.error}\n`);
       }
@@ -497,7 +500,11 @@ export async function runRun(
     }
     // REQ-VER-12: hints for FAILED cases, after the service logs are in logs/; they never change a status, so the
     // reports are only rendered again with the hints next to the computed results.
-    if (ws.record.data["bench"] === undefined && verdict.cases.some((c) => c.status === "FAILED")) {
+    if (
+      ws.record.data["bench"] === undefined &&
+      ws.record.data["regression"] === undefined &&
+      verdict.cases.some((c) => c.status === "FAILED")
+    ) {
       const triage = await triageRun(session, ports.now);
       if (triage?.status === "failed") io.writeError(`Failure hints not available: ${triage.error}\n`);
       if (triage) await writeReports(session, await computeVerdict(session, ports.now));
@@ -596,7 +603,13 @@ async function executeCases(
     budget.max_minutes !== undefined && ports.now().getTime() - startedAt >= budget.max_minutes * 60_000
       ? `the run's time budget (${String(budget.max_minutes)} min) was reached`
       : undefined;
-  if (missing.length > 0) {
+  // REQ-EXEC-17/AC1+AC2: a regression run calls no agent or model; a case without a verified spec is BLOCKED.
+  const regression = RegressionRunSchema.safeParse(ws.record.data["regression"]);
+  if (regression.success) {
+    for (const [caseId, reason] of Object.entries(regression.data.blocked)) blocked.set(caseId, reason);
+    for (const c of missing)
+      if (!blocked.has(c.id)) blocked.set(c.id, "regression pack has no spec for this case");
+  } else if (missing.length > 0) {
     io.write(`Writing specs for ${missing.map((c) => c.id).join(", ")}…\n`);
     const analysis = AnalysisSchema.parse(JSON.parse(await readFile(ws.path("analysis.json"), "utf8")));
     const usage = createUsageTracker({
@@ -761,7 +774,8 @@ async function executeCases(
     workers: live?.pause || live?.headed ? 1 : project.config.environments.workers,
     // REQ-EXEC-09: web cases that could not run get at most two healed attempts.
     heal: async (caseId, specFile, failed, healAttempt) => {
-      if (plan.cases.find((c) => c.id === caseId)?.type !== "web") return undefined;
+      // Regression runs run the promoted specs as they are: no healing (REQ-EXEC-17/AC1).
+      if (regression.success || plan.cases.find((c) => c.id === caseId)?.type !== "web") return undefined;
       const usage = createUsageTracker({
         events,
         budget: project.config.models.token_budget,

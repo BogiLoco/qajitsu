@@ -282,6 +282,28 @@ Exit codes: `0` promoted (or written with `--dry-run`), `2` not confirmed, `3` r
 
 ## Exploratory testing
 
+### `qajitsu regression`
+
+Runs the regression packs `qj promote` put in the tests repository again (REQ-EXEC-17), without any agent or model.
+The packs come from the tests repository (`repos.<alias>.role: tests`) at its `default_ref` or `--ref`, checked out
+for this command only, or from a folder (`--from`). Every pack becomes a run of its ticket: the pack's cases are the
+approved plan (approved in the name of the pack's original approver), its specs run unchanged with the same sandboxed
+runners, and nothing is written, healed, audited or triaged by a model. Before running, every spec is checked against
+its SHA-256 in `expectations.yaml` and the expected values against `cases_sha256`; a mismatch makes the case BLOCKED
+with the reason. The suite report goes to `exports/regression/<time>/` (`regression.md`, `report.html`,
+`junit.xml`) and names as regressions the cases that passed when promoted and fail now; packs that cannot be read are
+listed and never count as passed.
+
+- `--env <profile|url>`: environment profile from `.qa/envs` or a URL (default: `environments.default`)
+- `--packs <tickets>`: only the packs of these tickets, e.g. `SHOP-482,SHOP-490`
+- `--from <dir>`: a folder with packs instead of the tests repository
+- `--ref <ref>`: branch, tag or commit of the tests repository (default: its `default_ref`)
+- `--publish <ticket>`: after a preview, post the report as a comment on this ticket
+- `--yes`: publish without asking
+
+Exit codes: `0` every case passed, `1` at least one regression (FAILED), `2` otherwise (BLOCKED, NOT_RUN, a pack that
+could not run, no packs found, or publishing not confirmed), `3` errors.
+
 ### `qajitsu release <name>`
 
 Release readiness over every ticket of a fix version or sprint (REQ-PUB-09). The tickets come from the ticket

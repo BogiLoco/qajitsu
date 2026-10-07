@@ -1,6 +1,7 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseEventLines } from "@qajitsu/core";
+import { packCasesSha256 } from "./pack.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { createBuildProject } from "../../../../tests/support/cli-build.js";
@@ -68,7 +69,10 @@ describe("qj promote (REQ-PUB-08, REQ-CTX-06/AC4)", () => {
       plan: { sha256: string; approved_by: string };
       cases: { id: string; steps: unknown[] }[];
       specs: Record<string, string>;
+      cases_sha256: string;
     };
+    // REQ-EXEC-17/AC2: the expected values carry their hash, and it matches them as read back from the YAML.
+    expect(pack.cases_sha256).toBe(packCasesSha256(pack.cases));
     const run = JSON.parse(await readFile(join(p.dir, "run.json"), "utf8")) as {
       data: { approval: { sha256: string }; promotions: { branch: string; cases: string[] }[] };
     };

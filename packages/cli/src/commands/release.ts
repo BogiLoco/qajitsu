@@ -100,8 +100,8 @@ async function ticketRow(
   return { ...base, gatesOk: false };
 }
 
-/** Publisher for the release comment: the configured Jira, or files next to the report for `jira.type: file`. */
-function releasePublisher(
+/** Publisher for a project-level comment (release, regression): the configured Jira, or files in `outDir/published` for `jira.type: file`. */
+export function projectPublisher(
   project: LoadedProject,
   outDir: string,
   ports: RuntimePorts,
@@ -243,7 +243,7 @@ export async function runRelease(
       const runId = RunIdSchema.parse(
         `${now.slice(0, 10).replace(/-/g, "")}-${now.slice(11, 16).replace(":", "")}-rels`,
       );
-      const result = await releasePublisher(project, outDir, ports, {
+      const result = await projectPublisher(project, outDir, ports, {
         logger,
         resolveSecret,
         masker,

@@ -30,6 +30,7 @@ import { runAnswer } from "./commands/manual.js";
 import { runBaselineAccept } from "./commands/baseline.js";
 import { runRelease, type ReleaseOptions } from "./commands/release.js";
 import { runWatch } from "./commands/watch.js";
+import { runRegression, type RegressionOptions } from "./commands/regression.js";
 import { runProjectExport, runProjectImport } from "./commands/project-profile.js";
 import {
   runKnowledgeAdd,
@@ -927,6 +928,22 @@ export function createProgram(version: string, io: ProgramIO): Command {
                 ...(io.openTrace ? { openTrace: io.openTrace } : {}),
               }),
         )(),
+    );
+
+  program
+    .command("regression")
+    .description("Run the promoted regression packs of the tests repository again, without agents or models")
+    .option(
+      "--env <profile|url>",
+      "environment profile from .qa/envs or a URL (default: environments.default)",
+    )
+    .option("--packs <tickets>", "only the packs of these tickets, e.g. SHOP-482,SHOP-490")
+    .option("--from <dir>", "a folder with packs instead of the tests repository")
+    .option("--ref <ref>", "branch, tag or commit of the tests repository (default: its default_ref)")
+    .option("--publish <ticket>", "post the report as a comment on this ticket after a preview")
+    .option("--yes", "publish without asking")
+    .action((options: RegressionOptions) =>
+      withPorts((ports) => runRegression({ ...options, user: io.user }, commandIO, ports))(),
     );
 
   program

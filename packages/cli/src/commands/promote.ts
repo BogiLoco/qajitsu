@@ -17,6 +17,7 @@ import { stringify } from "yaml";
 import { buildAdapters, type RuntimePorts } from "../adapters.js";
 import { openSession, type ModelPorts, type RunSession } from "../session.js";
 import type { CommandIO } from "./fetch.js";
+import { packCasesSha256 } from "./pack.js";
 import { computeVerdict } from "./verdict.js";
 
 /** Options of `qajitsu promote`. */
@@ -189,6 +190,8 @@ export async function runPromote(
           promoted_by: user,
           promoted_at: ports.now().toISOString(),
           specs,
+          // REQ-EXEC-17/AC2: `qj regression` checks the expected values against this hash before running.
+          cases_sha256: packCasesSha256(cases),
           cases,
         },
         { lineWidth: 0 },
