@@ -33,6 +33,8 @@ export interface WebRunnerOptions {
   readonly webSession?:
     { readonly storage: "sessionStorage" | "localStorage"; readonly key: string } | undefined;
   readonly headless?: boolean;
+  /** Delay before every browser action in ms, to watch a headed run (REQ-EXEC-16/AC2). */
+  readonly slowMoMs?: number | undefined;
   /** Timeout of one UI action (click, fill, wait). */
   readonly actionTimeoutMs?: number;
   readonly viewport?: { readonly width: number; readonly height: number };
@@ -142,7 +144,10 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
     const start = async (): Promise<UiDriver> => {
       const dir = await mkdtemp(join(tmpdir(), "qj-web-"));
       const type = options.browser === "firefox" ? firefox : options.browser === "webkit" ? webkit : chromium;
-      const browser = await type.launch({ headless: options.headless ?? true });
+      const browser = await type.launch({
+        headless: options.headless ?? true,
+        ...(options.slowMoMs ? { slowMo: options.slowMoMs } : {}),
+      });
       const context = await browser.newContext({
         baseURL: input.baseUrl,
         viewport: options.viewport ?? { width: 1280, height: 800 },

@@ -69,6 +69,31 @@ describe("sandboxed API runner (REQ-EXEC-04, invariant 2)", () => {
     expect(record.evidence).toHaveLength(2);
   });
 
+  it("REQ-EXEC-16/AC3+AC4: the trusted parent pauses before a step, without counting the wait; stop errors the attempt", async () => {
+    const spec = join(run, "specs", "TC-01.spec.ts");
+    await copyFile(
+      fileURLToPath(new URL("../../fixtures/specs/demo-1/TC-01.spec.ts", import.meta.url)),
+      spec,
+    );
+    const paused = await createSandboxExecutor({ childScript })({
+      ...input,
+      specFile: spec,
+      timeoutMs: 4000,
+      pause: async () => {
+        await new Promise((r) => setTimeout(r, 4500));
+        return "continue";
+      },
+    });
+    expect(paused.outcome).toBe("passed");
+    const stopped = await createSandboxExecutor({ childScript })({
+      ...input,
+      specFile: spec,
+      pause: () => Promise.resolve("stop"),
+    });
+    expect(stopped.outcome).toBe("error");
+    expect(stopped.error).toContain("stopped by the tester before S1");
+  }, 30_000);
+
   it.each([
     [
       "writes a PASSED result file",

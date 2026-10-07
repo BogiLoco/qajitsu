@@ -141,7 +141,23 @@ export interface AttemptRequest {
   readonly locale?: { readonly name: string; readonly timezone: string };
   /** Baselines and image comparison (REQ-EXEC-12); absent means visual steps cannot run (BLOCKED). */
   readonly visual?: VisualCheck;
+  /**
+   * Called before every step when a person watches the run step by step (REQ-EXEC-16/AC3). The case's time limit is
+   * paused meanwhile; "stop" ends the attempt with an error, so the case can never pass.
+   */
+  readonly pause?: StepPause;
 }
+
+/** A step about to run, shown to the person watching (REQ-EXEC-16). */
+export interface PausedStep {
+  readonly caseId: string;
+  readonly stepId: string;
+  readonly action: string;
+  readonly expected: string;
+}
+
+/** Asks whether to run the next step (REQ-EXEC-16/AC3). */
+export type StepPause = (step: PausedStep) => Promise<"continue" | "stop">;
 
 /**
  * Executes one attempt of one case: the runner seam (REQ-GEN-02, ADR-0005). The production implementation runs

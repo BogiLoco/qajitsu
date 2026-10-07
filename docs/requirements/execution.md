@@ -217,7 +217,7 @@ session. It reports observations for a human to assess, never statuses.
 
 ### REQ-EXEC-16 · Run one case with a live view
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: INV-1, INV-3, INV-10, REQ-EXEC-05, REQ-EXEC-06, REQ-OBS-09
@@ -227,10 +227,10 @@ the run can go step by step, to understand a failure or show a case to someone.
 
 **Acceptance criteria**
 
-- [ ] AC1: `qj run <TICKET> --cases TC-02[,TC-03]` runs only the named cases of the approved plan; an id not in the plan is refused; cases not selected are not run and are reported as NOT_RUN ("not selected"), never PASSED.
-- [ ] AC2: `--headed` shows the browser of web cases (with `--slow-mo <ms>`) and the emulator window of mobile cases; without a display it stops with a clear error before anything runs.
-- [ ] AC3: `--step` pauses before every step with its action and expected result and continues on Enter; time spent paused does not count toward step timeouts.
-- [ ] AC4: Statuses are computed exactly as in a normal run; a run interrupted while paused leaves the case NOT_RUN or BLOCKED, never PASSED.
+- [x] AC1: `qj run <TICKET> --cases TC-02[,TC-03]` runs only the named cases of the approved plan; an id not in the plan is refused; cases not selected are not run and are reported as NOT_RUN ("not selected"), never PASSED.
+- [x] AC2: `--headed` shows the browser of web cases (with `--slow-mo <ms>`) and the emulator window of mobile cases; without a display it stops with a clear error before anything runs.
+- [x] AC3: `--step` pauses before every step with its action and expected result and continues on Enter; time spent paused does not count toward step timeouts.
+- [x] AC4: Statuses are computed exactly as in a normal run; a run interrupted while paused leaves the case NOT_RUN or BLOCKED, never PASSED.
 
 ### REQ-EXEC-17 · Regression runs of promoted packs
 

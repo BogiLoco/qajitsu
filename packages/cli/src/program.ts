@@ -476,6 +476,13 @@ export function createProgram(version: string, io: ProgramIO): Command {
       [],
     )
     .option(
+      "--cases <ids>",
+      "run only these cases of the approved plan, e.g. TC-02,TC-03 (others are NOT_RUN)",
+    )
+    .option("--headed", "show the browser of web cases and the emulator window of mobile cases")
+    .option("--slow-mo <ms>", "with --headed: wait this long before every browser action")
+    .option("--step", "pause before every step and continue on Enter (terminal only)")
+    .option(
       "--fix-check",
       "with --build: verify a bug fix: cases marked reproduces must FAIL before the fix and PASS with it",
     )
@@ -489,6 +496,10 @@ export function createProgram(version: string, io: ProgramIO): Command {
           keep?: boolean;
           set: string[];
           fixCheck?: boolean;
+          cases?: string;
+          headed?: boolean;
+          slowMo?: string;
+          step?: boolean;
         },
       ) => {
         const { fixCheck, ...runOptions } = options;

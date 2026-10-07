@@ -112,6 +112,43 @@ describe("API runner (REQ-EXEC-04, REQ-EXEC-08, REQ-EVD-01)", () => {
     expect(parseEventLines(lines.join("")).events.map((e) => e.event)).toContain("verify");
   });
 
+  it("REQ-EXEC-16/AC3+AC4: pauses before every step without counting the wait; stopping errors the case", async () => {
+    const { options } = await setup();
+    const seen: string[] = [];
+    const slow = await runCases({
+      ...options,
+      timeoutMs: 3000,
+      specs: new Map([["TC-02", join(specDir, "TC-02.spec.ts")]]),
+      executor: inProcess,
+      pause: async (step) => {
+        seen.push(`${step.caseId} ${step.stepId}: ${step.action}`);
+        // Longer than the case limit in total: paused time must not count.
+        await new Promise((r) => setTimeout(r, 1800));
+        return "continue";
+      },
+    });
+    expect(seen).toEqual([
+      `TC-02 S1: ${plan.cases[1]?.steps[0]?.action ?? ""}`,
+      `TC-02 S2: ${plan.cases[1]?.steps[1]?.action ?? ""}`,
+    ]);
+    expect(slow.get("TC-02")?.attempts.map((a) => a.outcome)).toEqual(["passed"]);
+
+    const { options: again } = await setup();
+    const stopped = await runCases({
+      ...again,
+      retries: 0,
+      specs: new Map([["TC-02", join(specDir, "TC-02.spec.ts")]]),
+      executor: inProcess,
+      pause: (step) => Promise.resolve(step.stepId === "S2" ? "stop" : "continue"),
+    });
+    expect(stopped.get("TC-02")?.attempts).toEqual([
+      expect.objectContaining({
+        outcome: "error",
+        error: expect.stringContaining("stopped by the tester before S2") as unknown,
+      }),
+    ]);
+  }, 30_000);
+
   it("REQ-NFR-04: the seeded rounding bug makes the assertion fail; every attempt is kept (REQ-EXEC-08/AC3)", async () => {
     const { options } = await setup("BUG_CART_TOTAL_ROUNDING");
     const results = await runCases({

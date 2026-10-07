@@ -7,6 +7,7 @@ import {
   type EventLog,
   type EvidenceStore,
   type ManualPrompter,
+  type StepPause,
   type VisualCheck,
   type CaseMessages,
   type Plan,
@@ -60,6 +61,8 @@ export interface RunCasesOptions {
   readonly stopReason?: (() => string | undefined) | undefined;
   /** Baselines and image comparison of this run's variant (REQ-EXEC-12). */
   readonly visual?: VisualCheck | undefined;
+  /** Pause before every step for a person watching (REQ-EXEC-16/AC3). */
+  readonly pause?: StepPause | undefined;
   /** Locale and time zone of a locale run (REQ-EXEC-14); `plan` must be resolved for it. */
   readonly locale?: { readonly name: string; readonly timezone: string } | undefined;
   /** Prefix of evidence paths, e.g. `matrix/firefox-mobile/` for a browser combination (REQ-EXEC-13). */
@@ -179,6 +182,7 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
       ...(options.manual ? { manual: options.manual } : {}),
       ...(options.locale ? { locale: options.locale } : {}),
       ...(options.visual ? { visual: options.visual } : {}),
+      ...(options.pause ? { pause: options.pause } : {}),
       ...(options.messages ? { messages: options.messages(caseId) } : {}),
     });
     const record = applyContract(executed, options.contract);

@@ -60,9 +60,10 @@ import {
   type PreparedBuild,
 } from "./build-env.js";
 import type { CommandExec } from "@qajitsu/adapter-env-compose";
+import { headlessFor, prepareLiveRun, type LiveOptions, type LiveRun } from "./live.js";
 
 /** Options of `qajitsu run`. */
-export interface RunOptions {
+export interface RunOptions extends LiveOptions {
   readonly run?: string | undefined;
   readonly env?: string | undefined;
   /** Build the application from the fetched worktrees instead of testing a provided environment. */
@@ -94,6 +95,8 @@ export interface RunPorts extends KnowledgePorts, MessagePorts {
   readonly browserUnavailable?: (browser: "chromium" | "firefox" | "webkit") => string | undefined;
   /** Runs setup and teardown hooks (replaced in tests). */
   readonly hookExec?: HookExec;
+  /** Operating system, for the display check of `--headed` (default: the process's). */
+  readonly platform?: string;
 }
 
 const RUNNER = { kind: "runner", name: "api" } as const;
@@ -287,7 +290,9 @@ export async function runRun(
     if (ws.record.data["results"] !== undefined) {
       throw new ConfigError(
         "RUN_ALREADY_EXECUTED",
-        "This run already has results; start a new run to test again.",
+        options.cases === undefined
+          ? "This run already has results; start a new run to test again."
+          : `This run already has results; to watch cases again start a new run: qajitsu fetch ${ws.ticket}, qajitsu approve ${ws.ticket} --reuse-from ${ws.runId}, then qajitsu run ${ws.ticket} --cases ${options.cases}.`,
         {},
       );
     }
@@ -305,6 +310,11 @@ export async function runRun(
     // REQ-WS-04/AC2: one process per run; other runs of the ticket may run in parallel.
     release = await acquireRunLock(ws.path("run.lock"));
     const { plan, approval } = await loadApprovedPlan(ws);
+    // REQ-EXEC-16: chosen cases, a visible browser or emulator and step pauses are checked before anything runs.
+    const live = prepareLiveRun(options, plan, io, events, {
+      platform: ports.platform ?? process.platform,
+      env: ports.env,
+    });
     // REQ-PRJ-06/AC3: a run never continues silently after its environment or secrets changed since approval.
     const approvedContext = ws.record.data["approvalContext"] as ApprovalContext | undefined;
     if (approvedContext) {
@@ -449,6 +459,7 @@ export async function runRun(
           messages,
           build: options.build === true,
           onDevice: (stop) => deviceStops.push(stop),
+          live,
         });
         if (pending.length > 0)
           io.write(`Rejected spec files (not in the approved plan or misplaced): ${pending.join(", ")}\n`);
@@ -550,6 +561,8 @@ async function executeCases(
     readonly messages?: RunMessages | undefined;
     /** When the run started (epoch ms), for the time budget. */
     readonly startedAt?: number | undefined;
+    /** Chosen cases, headed browser and step pauses (REQ-EXEC-16). */
+    readonly live?: LiveRun | undefined;
   } = {
     build: false,
     onDevice: () => undefined,
@@ -562,7 +575,12 @@ async function executeCases(
       .map((f) => /^(TC-\d{2,4})\.spec\.ts$/.exec(f)?.[1])
       .filter((x): x is string => x !== undefined),
   );
-  const missing = plan.cases.filter((c) => !existing.has(c.id));
+  const live = run.live;
+  // REQ-EXEC-16/AC1: cases not chosen with --cases are not run (and get no spec); they are NOT_RUN, never PASSED.
+  const notRun = new Map<string, string>();
+  if (live?.selected)
+    for (const c of plan.cases) if (!live.selected.has(c.id)) notRun.set(c.id, "not selected (--cases)");
+  const missing = plan.cases.filter((c) => !existing.has(c.id) && !notRun.has(c.id));
   const blocked = new Map<string, string>();
   // REQ-PLAN-08/AC2: what this run will take, from the cases and the project's past runs.
   io.write(
@@ -577,7 +595,6 @@ async function executeCases(
     budget.max_minutes !== undefined && ports.now().getTime() - startedAt >= budget.max_minutes * 60_000
       ? `the run's time budget (${String(budget.max_minutes)} min) was reached`
       : undefined;
-  const notRun = new Map<string, string>();
   if (missing.length > 0) {
     io.write(`Writing specs for ${missing.map((c) => c.id).join(", ")}…\n`);
     const analysis = AnalysisSchema.parse(JSON.parse(await readFile(ws.path("analysis.json"), "utf8")));
@@ -625,6 +642,7 @@ async function executeCases(
   for (const file of execute) {
     const caseId = /(TC-\d{2,4})\.spec\.ts$/.exec(file)?.[1] ?? "";
     const problems = await checkSpec(await readFile(file, "utf8"), caseId, plan);
+    if (notRun.has(caseId)) continue;
     if (problems.length > 0)
       blocked.set(caseId, `spec failed static checks: ${formatSpecProblems(problems)}`);
     else specs.set(caseId, file);
@@ -659,7 +677,9 @@ async function executeCases(
         browser: combo?.browser ?? project.config.web.browser,
         ...(combo ? { viewport: { width: combo.viewport.width, height: combo.viewport.height } } : {}),
         video: project.config.web.video,
-        headless: project.config.web.headless,
+        // REQ-EXEC-16/AC2: --headed shows the browser, --slow-mo slows every action down.
+        headless: headlessFor(project.config.web.headless, live),
+        slowMoMs: live?.slowMoMs,
         actionTimeoutMs: project.config.web.action_timeout_ms,
         webSession: env.profile.web_session,
         // REQ-EVD-07/AC5: each passive check can be switched off.
@@ -720,12 +740,14 @@ async function executeCases(
   const evidence = createLocalEvidenceStore(ws.path("evidence"));
   const ran = await runCases({
     ...base,
+    // REQ-EXEC-16/AC3: only the primary run pauses; one case at a time so the person follows one.
+    ...(live?.pause ? { pause: live.pause } : {}),
     plan: { ...plan, cases: plan.cases.filter((c) => !blocked.has(c.id) && c.type !== "mobile") },
     specs,
     evidence,
     resultsDir: ws.path("results"),
     retries: project.config.environments.retries,
-    workers: project.config.environments.workers,
+    workers: live?.pause || live?.headed ? 1 : project.config.environments.workers,
     // REQ-EXEC-09: web cases that could not run get at most two healed attempts.
     heal: async (caseId, specFile, failed, healAttempt) => {
       if (plan.cases.find((c) => c.id === caseId)?.type !== "web") return undefined;
@@ -825,7 +847,11 @@ async function executeCases(
     );
     events.emit("run", SYSTEM, "mobile.prepare", { cases: mobileCases.map((c) => c.id) });
     const device = await (ports.mobileDevice?.() ??
-      prepareMobile(session, env.baseUrl, codeHosts, ports.env["APPIUM_HOME"], { allowBuild: run.build }));
+      prepareMobile(session, env.baseUrl, codeHosts, ports.env["APPIUM_HOME"], {
+        allowBuild: run.build,
+        // REQ-EXEC-16/AC2: --headed shows the emulator window.
+        headed: live?.headed === true,
+      }));
     if (!device.ok) {
       // REQ-ENV-06/AC3: a platform that is not available here is reported, never silently skipped.
       io.writeError(`Mobile cases are BLOCKED: ${device.reason}\n`);
@@ -851,6 +877,7 @@ async function executeCases(
               runCases({
                 ...base,
                 executor: ports.mobileExecutor?.(g.factory) ?? createSandboxExecutor({ browser: g.factory }),
+                ...(live?.pause ? { pause: live.pause } : {}),
                 plan: { ...plan, cases: g.cases },
                 specs: new Map([...specs].filter(([id]) => g.cases.some((c) => c.id === id))),
                 evidence,

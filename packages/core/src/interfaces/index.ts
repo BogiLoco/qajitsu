@@ -37,6 +37,8 @@ export type {
   ManualAnswer,
   ManualPrompter,
   ManualStepRequest,
+  PausedStep,
+  StepPause,
   VisualCheck,
 } from "./runner.js";
 export type { SecretProvider } from "./secret-provider.js";

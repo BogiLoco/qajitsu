@@ -181,6 +181,13 @@ statuses, gates, auditor and canary run, reports are written.
 - `--build`: build the application from the fetched worktrees
 - `--keep`: with `--build`, keep containers and worktrees after the run
 - `--set <service.VAR=value>`: with `--build`, override an overridable service variable (repeatable)
+- `--cases <ids>`: run only these cases of the approved plan, e.g. `TC-02,TC-03`; an id not in the plan is refused, the
+  other cases are NOT_RUN ("not selected") and get no spec written (REQ-EXEC-16)
+- `--headed`: show the browser of web cases and the emulator window of mobile cases; needs a display
+- `--slow-mo <ms>`: wait this long (0–10000 ms) before every browser action
+- `--step`: in a terminal, pause before every step with its action and expected result: Enter runs it, `c` runs the
+  rest without stopping, `q` stops the case (BLOCKED, also in its retries); paused time does not count toward the
+  case's time limit
 - `--fix-check`: with `--build`, verify a bug fix (REQ-VER-11): after this run, a sibling run builds the commit the
   change branched from and runs the same approved plan and specs; every case marked `reproduces` must be FAILED before
   the fix and PASSED with it. Both results appear side by side in the report and the Jira comment.

@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import type { AttemptRequest } from "@qajitsu/core";
+import { pausedStep, startDeadline, type Deadline } from "./deadline.js";
 import type { BrowserFactory } from "./sandbox.js";
 import {
   createCaseRuntime,
@@ -19,19 +20,17 @@ interface SpecModule {
   readonly run?: unknown;
 }
 
-const withTimeout = async <T>(promise: Promise<T>, ms: number): Promise<T> => {
-  let timer: NodeJS.Timeout | undefined;
+const withTimeout = async <T>(run: (deadline: Deadline) => Promise<T>, ms: number): Promise<T> => {
+  let deadline: Deadline | undefined;
   try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          reject(new Error(`case timed out after ${String(ms)} ms`));
-        }, ms);
-      }),
-    ]);
+    return await new Promise<T>((resolve, reject) => {
+      deadline = startDeadline(ms, () => {
+        reject(new Error(`case timed out after ${String(ms)} ms`));
+      });
+      run(deadline).then(resolve, reject);
+    });
   } finally {
-    clearTimeout(timer);
+    deadline?.clear();
   }
 };
 
@@ -75,7 +74,26 @@ export async function executeAttempt(
       throw new Error(`spec exports caseId ${JSON.stringify(mod.caseId)}, expected ${input.caseId}`);
     if (typeof mod.run !== "function") throw new Error("spec must export async function run(context)");
     const run = mod.run as (context: CaseContext) => Promise<void>;
-    await withTimeout(run(runtime.context), input.timeoutMs);
+    const pause = input.pause;
+    await withTimeout(
+      (deadline) =>
+        run(
+          pause
+            ? {
+                ...runtime.context,
+                // REQ-EXEC-16/AC3: same pause as in the sandbox; the time limit stands still while it waits.
+                step: async (stepId, fn) => {
+                  deadline.pause();
+                  const answer = await pause(pausedStep(input.plan, input.caseId, stepId));
+                  deadline.resume();
+                  if (answer === "stop") throw new Error(`stopped by the tester before ${stepId}`);
+                  return runtime.context.step(stepId, fn);
+                },
+              }
+            : runtime.context,
+        ),
+      input.timeoutMs,
+    );
     record = await runtime.finish();
   } catch (error) {
     record = await runtime.finish(error);

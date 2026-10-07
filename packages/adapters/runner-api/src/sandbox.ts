@@ -1,3 +1,4 @@
+import { pausedStep, startDeadline } from "./deadline.js";
 import type { AttemptExecutor as CoreAttemptExecutor } from "@qajitsu/core";
 import { fork } from "node:child_process";
 import { realpathSync } from "node:fs";
@@ -225,16 +226,16 @@ export function createSandboxExecutor(
         const done = (error?: string): void => {
           if (settled) return;
           settled = true;
-          clearTimeout(timer);
+          deadline.clear();
           child.kill("SIGKILL");
           void runtime.finish(fatal ?? error).then(async (record) => {
             const media = session ? await session.close(record.outcome !== "passed").catch(() => []) : [];
             resolve({ ...record, evidence: [...record.evidence, ...media] });
           });
         };
-        const timer = setTimeout(() => {
+        const deadline = startDeadline(input.timeoutMs, () => {
           done(`case timed out after ${String(input.timeoutMs)} ms`);
-        }, input.timeoutMs);
+        });
         // Operations are processed strictly in order, one at a time.
         let queue: Promise<void> = Promise.resolve();
         child.on("message", (raw: unknown) => {
@@ -254,8 +255,16 @@ export function createSandboxExecutor(
             const op = parsed.data;
             try {
               let value: unknown;
-              if (op.op === "beginStep") runtime.beginStep(op.stepId);
-              else if (op.op === "endStep") await runtime.endStep(op.stepId, op.error);
+              if (op.op === "beginStep") {
+                // REQ-EXEC-16/AC3: a person watching decides when the step runs; the time limit stands still.
+                if (input.pause) {
+                  deadline.pause();
+                  const answer = await input.pause(pausedStep(input.plan, input.caseId, op.stepId));
+                  deadline.resume();
+                  if (answer === "stop") throw new Error(`stopped by the tester before ${op.stepId}`);
+                }
+                runtime.beginStep(op.stepId);
+              } else if (op.op === "endStep") await runtime.endStep(op.stepId, op.error);
               else if (op.op === "verify") await runtime.verify(op.stepId, op.field);
               else if (op.op === "ui") await runtime.uiOp(op.operation);
               else if (op.op === "inboxAddress") value = await runtime.inboxAddress(op.kind);

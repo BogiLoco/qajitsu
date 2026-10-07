@@ -16,6 +16,7 @@ import {
 import { AdapterError, type CodeHost, type MobileConfig, type ProjectConfig } from "@qajitsu/core";
 import { unzip } from "@qajitsu/report";
 import type { RunSession } from "../session.js";
+import { headlessFor } from "./live.js";
 
 type AppSource = NonNullable<MobileConfig["android"]>["app"];
 
@@ -159,7 +160,7 @@ export async function prepareMobile(
   baseUrl: string,
   codeHosts: Readonly<Record<string, CodeHost>>,
   appiumHome: string | undefined,
-  options: { readonly allowBuild: boolean } = { allowBuild: false },
+  options: { readonly allowBuild: boolean; readonly headed?: boolean } = { allowBuild: false },
 ): Promise<PreparedMobile> {
   const { project } = session;
   const mobile = project.config.mobile;
@@ -194,7 +195,7 @@ export async function prepareMobile(
             sdkRoot: androidSdkRoot(android.sdk_root),
             avd: android.emulator.avd,
             systemImage: android.emulator.system_image,
-            headless: android.emulator.headless,
+            headless: headlessFor(android.emulator.headless, { headed: options.headed === true }),
             bootTimeoutMs: android.emulator.boot_timeout_s * 1000,
             readOnly: mobile.devices > 1,
           });
