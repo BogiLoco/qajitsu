@@ -25,6 +25,7 @@ import {
 } from "./commands/projects.js";
 import { runNote, runResumable, runStatus } from "./commands/status.js";
 import { runPromote, type PromoteOptions } from "./commands/promote.js";
+import { runBug, type BugOptions } from "./commands/bug.js";
 import { runProjectExport, runProjectImport } from "./commands/project-profile.js";
 import {
   runKnowledgeAdd,
@@ -793,6 +794,21 @@ export function createProgram(version: string, io: ProgramIO): Command {
       withPorts((ports) =>
         runPublish(ticket, options, commandIO, ports, io.user ?? "unknown", io.compressVideo),
       )(),
+    );
+
+  program
+    .command("bug")
+    .description(
+      "Report FAILED cases as bugs: shows similar open bugs first, creates or links after confirmation",
+    )
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .option("--cases <ids>", "comma-separated FAILED case ids (default: every FAILED case)")
+    .option("--link <key>", "link the failure to this existing bug instead of creating one (one case)")
+    .option("--yes", "create without asking when no similar open bug is found")
+    .option("--force-new", "with --yes: create even when similar open bugs exist")
+    .action((ticket: string, options: BugOptions) =>
+      withPorts((ports) => runBug(ticket, options, commandIO, ports, io.user ?? "unknown"))(),
     );
 
   program

@@ -86,7 +86,7 @@ Deferred: AC1-AC3 (Xray/Zephyr import, draft bug tickets, ticket transitions) ar
 
 ### REQ-PUB-07 · Bug reports from failed cases
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-PUB-05, REQ-PUB-03, INV-6, INV-8
@@ -95,11 +95,11 @@ Extends REQ-PUB-05/AC2 (draft bug tickets).
 
 **Acceptance criteria**
 
-- [ ] AC1: Before drafting, QAJitsu searches Jira for similar open bugs (project, component, key words from the failure) and shows matches; the user can link to an existing bug instead.
-- [ ] AC2: Steps to reproduce come from the run's journal and results, not from agent text; expected values come from the plan.
-- [ ] AC3: The draft includes the tested version (commit, build), environment, browser or device, and evidence references by hash.
-- [ ] AC4: The bug is created only after user confirmation and linked to the tested ticket; nothing is created in CI without an explicit setting.
-- [ ] AC5: Everything goes through masking before it reaches Jira.
+- [x] AC1: Before drafting, QAJitsu searches Jira for similar open bugs (project, component, key words from the failure) and shows matches; the user can link to an existing bug instead.
+- [x] AC2: Steps to reproduce come from the run's journal and results, not from agent text; expected values come from the plan.
+- [x] AC3: The draft includes the tested version (commit, build), environment, browser or device, and evidence references by hash.
+- [x] AC4: The bug is created only after user confirmation and linked to the tested ticket; nothing is created in CI without an explicit setting.
+- [x] AC5: Everything goes through masking before it reaches Jira.
 
 ### REQ-PUB-08 · Promote ticket cases to the regression suite
 

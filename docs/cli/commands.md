@@ -192,6 +192,26 @@ Publishes the results comment and attachments to the ticket after a confirmed pr
 
 Exit codes: `0` published, `2` preview declined, `3` refused by the gates or failed.
 
+### `qajitsu bug <ticket>`
+
+Reports FAILED cases as bugs in Jira (REQ-PUB-07). Statuses and gates are computed exactly as for `publish`. For each
+case it first searches for similar open bugs (same project and components, words from the case title and the failed
+field) and shows them; then you create a new bug, link the failure to an existing one, or skip. The report is
+written by code: steps from the approved plan with what the runner recorded, expected values from the plan and
+actual values from the runner, the tested environment and commits, the browser, evidence files by SHA-256, the
+failure hint (labelled as a suggestion) and the command to reproduce. Everything is masked and scanned for secrets.
+A new bug is labelled `qajitsu` and linked to the tested ticket; the run records which bug belongs to which case, so a
+case is never reported twice. With `jira.type: file` bugs are written to `<run>/report/bugs/`.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+- `--cases <ids>`: comma-separated FAILED case ids (default: every FAILED case)
+- `--link <key>`: link the failure to this existing bug instead of creating one (one case)
+- `--yes`: create without asking when no similar open bug is found
+- `--force-new`: with `--yes`, create even when similar open bugs exist
+
+Exit codes: `0` done, `2` nothing created (declined, or similar bugs exist without `--force-new`), `3` refused or
+errors.
+
 ### `qajitsu promote <ticket>`
 
 Proposes the run's PASSED cases as a pull/merge request to the project's tests repository (`repos.<alias>.role:

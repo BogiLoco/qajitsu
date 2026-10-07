@@ -265,6 +265,18 @@ journal intact, approved plan unchanged, ...). Then it shows a **preview** of th
 `Publish this to SHOP-482? [y/N]`. On `y` it posts the matrix with failures and reproduction hints, the failure
 hints in their own section, attaches the evidence zip and media; running it again updates the same comment.
 
+### Optional: report the failures as bugs
+
+```sh
+qj bug SHOP-482                         # each FAILED case: similar open bugs first, then [c]reate, [l]ink <KEY> or [s]kip
+qj bug SHOP-482 --cases TC-03 --yes     # create without asking (refused if a similar open bug exists)
+qj bug SHOP-482 --cases TC-03 --link SHOP-77   # the failure is a known bug: link instead of creating
+```
+
+The bug is written by code, not by a model: steps from the approved plan with what the runner recorded, expected
+values from the plan and actual values from the runner, environment and commits, browser, evidence by SHA-256 and
+the failure hint labelled as a suggestion. It is masked, labelled `qajitsu` and linked to the tested ticket.
+
 ### Optional: keep the cases as regression tests
 
 ```sh
@@ -291,6 +303,7 @@ qj fetch SHOP-482 && qj plan SHOP-482     # review: a
 qj run SHOP-482 --env staging
 qj evidence SHOP-482 --failed              # FAILED cases with their hint (product bug, test bug, environment, data)
 qj publish SHOP-482
+qj bug SHOP-482                            # optional: FAILED cases as bugs (similar open bugs shown first)
 qj promote SHOP-482                        # optional: PASSED cases as a PR/MR to the tests repository
 ```
 
@@ -549,6 +562,7 @@ Every option and exit code of every command: [docs/cli/commands.md](docs/cli/com
 | `qj approve <TICKET> [--version <n>] [--confirm-open-questions] [--approver <name>] [--reuse-from <run\|latest>]` | when the plan is right                                                          | Freezes the plan (SHA-256). `--approver` records who approved (CI). `--reuse-from` reuses a plan approved in an earlier run of the same ticket after new commits, only if the ticket text did not change and the approval is in that run's journal.                                               |
 | `qj run <TICKET> [--env <profile\|url>] [--build] [--keep] [--set <svc.VAR=value>]...`                            | after approval                                                                  | Writes missing specs, checks them, executes API, web, mixed and mobile cases, computes statuses, runs the auditor and canary, writes reports. `--build` starts the app from the worktree; `--keep` keeps containers and worktrees; `--set` overrides variables marked `overridable`.              |
 | `qj publish <TICKET> [--auto-publish]`                                                                            | when you want the results in Jira                                               | Gates, preview, `[y/N]`, then the comment, the evidence zip and media. `--auto-publish` (or `publish.auto`) skips the preview in CI and is recorded.                                                                                                                                              |
+| `qj bug <TICKET> [--cases TC-01] [--link <KEY>] [--yes [--force-new]]`                                            | when a case FAILED                                                              | Shows similar open bugs, then creates a bug written by code from the run (steps, expected vs actual, version, environment, evidence by hash) and links it to the ticket, or links an existing bug. Asks first.                                                                                    |
 | `qj promote <TICKET> [--cases TC-01,TC-03] [--dry-run] [--yes]`                                                   | after a good run                                                                | Proposes the PASSED cases as a pull/merge request to the tests repository: the specs that passed, unchanged, and the plan's expectations; asks before pushing.                                                                                                                                    |
 | `qj explore <TICKET> --goal "<text>" [--time-box <min>] [--max-steps <n>]`                                        | when you want an agent to look around a change, before or besides planned cases | An exploratory session in a browser QAJitsu drives and records: observations with steps and screenshots, `explore/<session>/report.html` for review, no statuses. `qj explore promote <TICKET> --session S01 --observation O1` turns an observation into a draft plan case (runs after approval). |
 
@@ -748,6 +762,9 @@ test_types: [api, web]
 - **Failure hints.** Every FAILED case gets a suggested cause (product bug, test bug, environment, data) citing
   steps, assertions, evidence or logs; code drops hints without real evidence and a hint never changes a status.
   [docs/guides/models-and-verification.md](docs/guides/models-and-verification.md)
+- **Bug reports from failures.** `qj bug` searches for similar open bugs first, then creates a bug written by code
+  from the run (steps from the plan and the runner record, expected vs actual, tested version, environment,
+  evidence by hash) and links it to the ticket, or links the failure to an existing bug; always after confirmation.
 - **Regression suite from tickets.** `qj promote` proposes the PASSED cases of a run as a PR/MR to your tests
   repository: the exact specs that passed (hash checked against the runner record and the journal) and the approved
   plan's expectations; nothing is pushed without your confirmation.

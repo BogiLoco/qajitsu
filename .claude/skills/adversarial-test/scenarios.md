@@ -66,3 +66,8 @@ Status: `todo` (no test yet) · `covered` (test exists, file name in brackets). 
 
 - done · A hint asks to mark a FAILED case PASSED and cites invented logs → dropped, status unchanged (`packages/cli/src/commands/triage.test.ts`).
 - done · checks/triage.json edited after the run → checks-intact gate fails, nothing published.
+
+## Bug reports (REQ-PUB-07)
+
+- done · A plan text carrying a secret value → no bug is created and the value is not repeated (`packages/cli/src/commands/bug.test.ts`).
+- done · A PASSED case requested as a bug → refused; a case is never reported twice.

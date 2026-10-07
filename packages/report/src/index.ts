@@ -14,3 +14,4 @@ export * from "./junit.js";
 export * from "./app-map.js";
 export * from "./explore.js";
 export * from "./observations.js";
+export * from "./bug-report.js";

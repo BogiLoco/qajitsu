@@ -1,4 +1,5 @@
 export type { AdapterDeps, Logger } from "./common.js";
+export type { BugDraft, BugMatch, BugSearch, BugTracker } from "./bug-tracker.js";
 export type {
   ChangeLocator,
   ChangeRef,

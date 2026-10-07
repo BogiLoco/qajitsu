@@ -252,7 +252,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-VER-12](requirements/verification.md#req-ver-12--failure-triage-hints) Failure triage hints (should, implemented, AC 4/4)
 - [REQ-EVD-07](requirements/evidence.md#req-evd-07--passive-observations-during-tests) Passive observations during tests (should, implemented, AC 5/5)
 - [REQ-PUB-05](requirements/publishing.md#req-pub-05--optional-integrations) Optional integrations (could, deferred, AC 1/4)
-- [REQ-PUB-07](requirements/publishing.md#req-pub-07--bug-reports-from-failed-cases) Bug reports from failed cases (should, accepted, AC 0/5)
+- [REQ-PUB-07](requirements/publishing.md#req-pub-07--bug-reports-from-failed-cases) Bug reports from failed cases (should, implemented, AC 5/5)
 - [REQ-PUB-08](requirements/publishing.md#req-pub-08--promote-ticket-cases-to-the-regression-suite) Promote ticket cases to the regression suite (should, implemented, AC 4/4)
 - [REQ-PUB-09](requirements/publishing.md#req-pub-09--release-readiness-report) Release readiness report (could, proposed, AC 0/4)
 - [REQ-OBS-08](requirements/observability.md#req-obs-08--map-as-planner-input) Map as planner input (could, proposed, AC 0/1)
