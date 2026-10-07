@@ -23,5 +23,6 @@ Each adapter implements one interface from `@qajitsu/core` (REQ-GEN-02, ADR-0005
 | `knowledge-chroma`     | VectorStore     | 7             | REQ-KNOW-08/AC3, ADR-0007 | implemented |
 | `knowledge-confluence` | DocumentSource  | 7             | REQ-KNOW-12/AC1           | implemented |
 | `messages-webhooksite` | MessageCapture  | later         | REQ-ENV-08                | implemented |
+| `testcases`            | TestCaseSource  | later         | REQ-CTX-08                | implemented |
 
 Planned later (no package yet): Bitbucket, Azure DevOps, S3/MinIO evidence, Xray, Zephyr, Kubernetes. Jira Data Center is part of `ticket-jira` and `publish-jira`; device farms are part of `runner-mobile`.

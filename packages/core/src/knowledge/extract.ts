@@ -176,6 +176,57 @@ function unzip(bytes: Buffer): Map<string, Buffer> {
   return files;
 }
 
+const xmlText = (s: string): string =>
+  s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
+    .replace(/&amp;/g, "&");
+
+const runText = (xml: string): string =>
+  [...xml.matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g)].map((m) => xmlText(m[1] ?? "")).join("");
+
+/**
+ * Cell texts of the first worksheet of an XLSX file, row by row (shared, inline and plain values; empty cells are
+ * empty strings). Used to import manual test cases from Excel (REQ-CTX-08/AC1).
+ *
+ * @param bytes - The XLSX file.
+ * @returns The rows, or undefined when the file is not a readable workbook.
+ */
+export function xlsxRows(bytes: Buffer): string[][] | undefined {
+  const files = unzip(bytes);
+  const sheetName = [...files.keys()]
+    .filter((n) => /^xl\/worksheets\/sheet\d+\.xml$/.test(n))
+    .sort((a, b) => Number(/\d+/.exec(a)?.[0]) - Number(/\d+/.exec(b)?.[0]))[0];
+  const sheet = sheetName === undefined ? undefined : files.get(sheetName)?.toString("utf8");
+  if (sheet === undefined) return undefined;
+  const shared = [
+    ...(files.get("xl/sharedStrings.xml")?.toString("utf8") ?? "").matchAll(/<si>([\s\S]*?)<\/si>/g),
+  ].map((m) => runText(m[1] ?? ""));
+  const rows: string[][] = [];
+  for (const row of sheet.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
+    const cells: string[] = [];
+    for (const c of (row[1] ?? "").matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+      const attrs = c[1] ?? "";
+      const body = c[2] ?? "";
+      const letters = /\br="([A-Z]+)\d+"/.exec(attrs)?.[1];
+      const col = letters
+        ? Array.from(letters).reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1
+        : cells.length;
+      const type = /\bt="([a-zA-Z]+)"/.exec(attrs)?.[1];
+      const v = /<v>([\s\S]*?)<\/v>/.exec(body)?.[1];
+      const value =
+        type === "s" ? (shared[Number(v)] ?? "") : type === "inlineStr" ? runText(body) : xmlText(v ?? "");
+      while (cells.length < col) cells.push("");
+      cells[col] = value;
+    }
+    rows.push(cells);
+  }
+  return rows;
+}
+
 /** Text of a DOCX file as Markdown: paragraphs, with `Heading N` styles as headings. */
 export function docxToText(bytes: Buffer): string | undefined {
   const xml = unzip(bytes).get("word/document.xml")?.toString("utf8");

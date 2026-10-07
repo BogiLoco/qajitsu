@@ -1580,6 +1580,129 @@
       },
       "additionalProperties": false
     },
+    "test_cases": {
+      "default": [],
+      "maxItems": 10,
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "xray"
+              },
+              "base_url": {
+                "default": "https://xray.cloud.getxray.app",
+                "type": "string",
+                "format": "uri"
+              },
+              "client_id": {
+                "type": "string",
+                "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+              },
+              "client_secret": {
+                "type": "string",
+                "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+              },
+              "jql": {
+                "type": "string",
+                "maxLength": 1000,
+                "format": "includes",
+                "pattern": "\\{ticket\\}"
+              }
+            },
+            "required": [
+              "type",
+              "client_id",
+              "client_secret"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "zephyr"
+              },
+              "base_url": {
+                "default": "https://api.zephyrscale.smartbear.com/v2",
+                "type": "string",
+                "format": "uri"
+              },
+              "token": {
+                "type": "string",
+                "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+              }
+            },
+            "required": [
+              "type",
+              "token"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "testrail"
+              },
+              "base_url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "user": {
+                "type": "string",
+                "minLength": 1
+              },
+              "token": {
+                "type": "string",
+                "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+              },
+              "project_id": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "suite_id": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "type",
+              "base_url",
+              "user",
+              "token",
+              "project_id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "file"
+              },
+              "path": {
+                "type": "string",
+                "pattern": "\\.(csv|xlsx)$"
+              }
+            },
+            "required": [
+              "type",
+              "path"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
     "budget": {
       "default": {},
       "type": "object",

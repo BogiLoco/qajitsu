@@ -50,6 +50,8 @@ export const DEFAULT_PROTECTED_PATHS: readonly string[] = [
   "knowledge/",
   // Manual step requests and a person's answers (REQ-EXEC-11/AC4): agents can never answer for a tester.
   "manual/",
+  // Imported manual test cases (REQ-CTX-08): plan citations are checked against them.
+  "imported/",
   "run.json",
 ];
 

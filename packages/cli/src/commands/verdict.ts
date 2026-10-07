@@ -303,7 +303,13 @@ export async function computeVerdict(
       caseId: c.caseId,
       title: p?.title ?? c.caseId,
       requirement: (p?.source ?? [])
-        .map((s) => (s.kind === "ac" ? s.id : s.kind === "diff" ? `${s.repo}:${s.file}` : s.kind))
+        .map((s) =>
+          s.kind === "ac" || s.kind === "imported"
+            ? s.id
+            : s.kind === "diff"
+              ? `${s.repo}:${s.file}`
+              : s.kind,
+        )
         .join(", "),
       type: p?.type ?? "api",
       status: c.status,

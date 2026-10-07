@@ -134,6 +134,9 @@ Exit codes: the code of `run` (`0`, `1`, `2`); `2` when the plan was not approve
 ### `qajitsu fetch <ticket>`
 
 Fetches the ticket, its PRs/MRs, diffs and the repositories at the change's commit into a new run folder.
+With `test_cases:` in the project configuration it also imports the manual test cases linked to the ticket (Xray
+Cloud, Zephyr Scale, TestRail, CSV/Excel) into `imported/cases.json` (REQ-CTX-08); a source that fails is reported as a
+warning and in the journal, and fetching continues without it.
 
 - `--pr <url>`: use this GitHub pull request (repeatable)
 - `--mr <url>`: use this GitLab merge request (repeatable)

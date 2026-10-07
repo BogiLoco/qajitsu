@@ -108,6 +108,12 @@ test_types: [api, web]
 # Message capture (REQ-ENV-08): an inbox per case for e-mails, SMS gateways and outgoing webhooks. The host must be
 # on environments.allowlist.
 # messages: { base_url: https://webhook.site, email_domain: email.webhook.site, api_key: secret://env/WEBHOOKSITE_KEY, timeout_s: 120 }
+# Existing manual test cases linked to tickets, imported by `qj fetch` for the planner (REQ-CTX-08):
+# test_cases:
+#   - { type: testrail, base_url: https://example.testrail.io, user: qa@example.com, token: secret://env/TESTRAIL_KEY, project_id: 1 }
+#   - { type: xray, client_id: secret://env/XRAY_CLIENT_ID, client_secret: secret://env/XRAY_CLIENT_SECRET }
+#   - { type: zephyr, token: secret://env/ZEPHYR_TOKEN }
+#   - { type: file, path: testcases.csv }   # columns: id, ticket, title, preconditions, step, data, expected
 
 # Manual steps (REQ-EXEC-11): how long a run waits for a tester's answer per step.
 # manual: { timeout_s: 900 }

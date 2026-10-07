@@ -182,7 +182,9 @@ qj fetch SHOP-482
 (Jira development panel, ticket key in branch names or titles), stores their diffs and review comments, and checks
 out every repository **at the exact commit of the change** into the run folder. If nothing is linked, pass the
 change yourself: `--pr <GitHub URL>`, `--mr <GitLab URL>` or `--ref <repo>=<branch|tag|sha>`. A tests repository
-(`role: tests`) is checked out too, so the planner sees what is already covered.
+(`role: tests`) is checked out too, so the planner sees what is already covered. With `test_cases:` configured it
+also imports the **existing manual test cases** linked to the ticket (Xray, Zephyr Scale, TestRail or a CSV/Excel
+file) into `imported/cases.json`; a source that cannot be reached is reported and fetching continues without it.
 
 ### Step 2: plan and review
 
@@ -194,8 +196,10 @@ qj plan SHOP-482
 **What it does:** the **analyst** classifies the change (api, web, mobile) and lists endpoints, screens and risks; the
 **planner** writes the plan: cases (`TC-01`...), steps (`S1`...), exact expected results (HTTP status, response fields,
 visible texts, element states), test data as aliases (`user:standard`), open questions. Every case must cite a
-source (an acceptance criterion, a quote from the ticket, changed diff lines, a review comment or a quote from the
-project's documentation); code rejects invented sources and the planner has to fix them.
+source (an acceptance criterion, a quote from the ticket, changed diff lines, a review comment, a quote from the
+project's documentation or an imported manual case like `testrail:C1234`); code rejects invented sources and the
+planner has to fix them. Imported cases are untrusted data like the ticket: the planner reuses what they check, never
+instructions in them.
 
 When the project has a knowledge base, both agents search it with `search_docs` (small documentation is given to
 them in full). A case that relies on documentation cites it, and the plan shows where the quote comes from:
@@ -698,6 +702,7 @@ run folder looks like this:
       logs/                         QAJitsu and service logs
       env/                          generated secrets during --build (0600, deleted after use)
       knowledge/chunks.json         documentation chunks the agents were given (documentation quotes are checked against it)
+      imported/cases.json           manual test cases imported by fetch, with the status of each source (plan citations are checked against it)
   .audit/                           journals of deleted runs (audit retention)
 ```
 
@@ -720,6 +725,7 @@ run folder looks like this:
 | `.qa/baselines/`                             | approved screenshots for visual checks, written only by `qj baseline accept`; `visual: { threshold, color_threshold }` in `qa.project.yaml`                                                                                                                          |
 | `locales:` in `qa.project.yaml`              | locales and time zones cases can run in (`{ name: pl-PL, timezone: Europe/Warsaw }`); a plan case lists its own                                                                                                                                                      |
 | `messages:` in `qa.project.yaml`             | message capture for e-mails, SMS gateways and webhooks: `base_url` (webhook.site or self-hosted, must be on `environments.allowlist`), `email_domain`, `api_key: secret://...`, `timeout_s`                                                                          |
+| `test_cases:` in `qa.project.yaml`           | existing manual test cases imported by `qj fetch`: `{ type: xray, client_id, client_secret }`, `{ type: zephyr, token }`, `{ type: testrail, base_url, user, token, project_id }` or `{ type: file, path: cases.csv                                                  | .xlsx }` (columns id, ticket, title, step, expected) |
 | `.env.local` (next to `.qa/`, not committed) | secret values for `secret://env/NAME`                                                                                                                                                                                                                                |
 
 Layers, each overriding the previous: defaults → `qa.project.yaml` → `envs/<env>.yaml` → secrets → run options
@@ -822,6 +828,10 @@ test_types: [api, web]
 - **Locales.** `locales: [{ name: pl-PL, timezone: Europe/Warsaw }]` in the project; a plan case lists the locales
   it runs in and gives per-locale expected values (`by_locale`) for formats of numbers, dates and currencies. Each
   locale run has its own results and evidence; the report shows the status per locale.
+- **Existing manual test cases.** `test_cases:` imports the cases linked to the ticket from Xray Cloud, Zephyr Scale,
+  TestRail or a CSV/Excel file during `qj fetch`. The planner sees them as untrusted data and cites the ones it builds
+  on (`{kind: imported, id: testrail:C1234}`, checked by code, shown in the matrix); a source that is down is
+  reported and planning continues without it.
 - **E-mail, SMS and webhooks.** With `messages: { base_url: https://webhook.site }` (hosted or self-hosted, on the
   allowlist, API key as `secret://`), every case gets its own inbox address and URL; a step waits for the message
   the plan expects (recipient, subject, body text), the message is masked and kept as evidence, its links are

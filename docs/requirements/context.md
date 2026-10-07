@@ -118,14 +118,14 @@ Teams can give agents domain knowledge that is not in the code.
 
 ### REQ-CTX-08 · Import existing manual test cases
 
-- Status: accepted
+- Status: implemented
 - Priority: could
 - Stage: later
 - Related: REQ-CTX-01, REQ-PLAN-03, REQ-PUB-05
 
 **Acceptance criteria**
 
-- [ ] AC1: Manual test cases linked to the ticket can be read from Xray, Zephyr Scale, TestRail or an Excel/CSV file.
-- [ ] AC2: They are given to the planner as an additional source; plan cases based on them cite the imported case id.
-- [ ] AC3: Imported text is treated as untrusted data and never as instructions.
-- [ ] AC4: An unreachable source is reported and planning continues without it.
+- [x] AC1: Manual test cases linked to the ticket can be read from Xray, Zephyr Scale, TestRail or an Excel/CSV file.
+- [x] AC2: They are given to the planner as an additional source; plan cases based on them cite the imported case id.
+- [x] AC3: Imported text is treated as untrusted data and never as instructions.
+- [x] AC4: An unreachable source is reported and planning continues without it.

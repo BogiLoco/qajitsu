@@ -40,4 +40,5 @@ export type {
   VisualCheck,
 } from "./runner.js";
 export type { SecretProvider } from "./secret-provider.js";
+export type { TestCaseSource } from "./test-case-source.js";
 export type { DevelopmentLink, ReleaseQuery, ReleaseTicket, Ticket, TicketSource } from "./ticket-source.js";

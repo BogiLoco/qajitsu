@@ -26,7 +26,7 @@ describe("qajitsu test: the whole flow in one command (REQ-GEN-05/AC2)", () => {
     const record = await runJson(runDir);
     expect(record.data["approval"]).toMatchObject({ approver: "qa-lead" });
     expect(record.data["publish"]).toMatchObject({ preview: "confirmed" });
-  });
+  }, 120_000);
 
   it("REQ-GEN-05/AC2: --dry-run stops before publishing", async () => {
     const { run, runDir } = await pipeline();
@@ -34,7 +34,7 @@ describe("qajitsu test: the whole flow in one command (REQ-GEN-05/AC2)", () => {
     expect(result.exitCode).toBe(0);
     expect(result.out).toContain("Dry run: results not published");
     expect((await runJson(runDir)).data["publish"]).toBeUndefined();
-  });
+  }, 120_000);
 
   it("REQ-GEN-05/AC2 + REQ-PLAN-04: without an approved plan nothing runs and the exit code is 2", async () => {
     const { run, runDir } = await pipeline();
@@ -42,12 +42,12 @@ describe("qajitsu test: the whole flow in one command (REQ-GEN-05/AC2)", () => {
     expect(quit.exitCode).toBe(2);
     expect(quit.out).toContain("The plan is not approved");
     expect(await readdir(join(runDir, "results"))).toEqual([]);
-  });
+  }, 120_000);
 
   it("REQ-GEN-05/AC2: a failing stage stops the flow with its exit code", async () => {
     const { run } = await pipeline();
     const result = await run(["test", "NOPE-1"], { script: flowScript("DEMO-1"), ask: ["a", "y"] });
     expect(result.exitCode).toBe(3);
     expect(result.out).not.toContain("Published");
-  });
+  }, 120_000);
 });

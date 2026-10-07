@@ -119,6 +119,45 @@ describe("qajitsu fetch (stage 1 demo: REQ-CTX-01..04, REQ-WS-01, REQ-GEN-05)", 
     expect(await readdir(join(home, "cache", "local", "demo-org"))).toEqual(["demo-shop.git"]);
   });
 
+  it("REQ-CTX-08/AC1+AC4: imports linked manual cases; an unreachable source is reported and fetch continues", async () => {
+    const yaml = join(project, ".qa", "qa.project.yaml");
+    await writeFile(
+      yaml,
+      `${await readFile(yaml, "utf8")}\ntest_cases:\n  - { type: testrail, base_url: https://tr.example.com, user: qa, token: secret://env/TR_KEY, project_id: 1 }\n  - { type: file, path: cases.csv }\n`,
+    );
+    await writeFile(
+      join(project, ".qa", "cases.csv"),
+      "id,ticket,title,step,expected\nM-1,DEMO-1,Rounding,Open cart,Total 10.05\nM-2,DEMO-2,Other,x,y\n",
+    );
+    const result = await run(["fetch", "DEMO-1"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.out).toContain("Imported test cases: file 1");
+    expect(result.err).toMatch(
+      /Warning: test cases from testrail are unavailable \(.+\); planning continues without them\./,
+    );
+    const runDir = join(home, "runs", "DEMO-1", "20261003-1046-aaaa");
+    const imported = JSON.parse(await readFile(join(runDir, "imported", "cases.json"), "utf8")) as {
+      sources: { system: string; ok: boolean; cases: number }[];
+      cases: { id: string; steps: unknown[] }[];
+    };
+    expect(imported.sources.map(({ system, ok, cases }) => ({ system, ok, cases }))).toEqual([
+      { system: "testrail", ok: false, cases: 0 },
+      { system: "file", ok: true, cases: 1 },
+    ]);
+    expect(imported.cases).toEqual([
+      {
+        id: "file:M-1",
+        system: "file",
+        title: "Rounding",
+        steps: [{ action: "Open cart", expected: "Total 10.05" }],
+      },
+    ]);
+    const { events } = parseEventLines(await readFile(join(runDir, "journal", "events.jsonl"), "utf8"));
+    expect(events.map((e) => e.event)).toEqual(
+      expect.arrayContaining(["imported.unavailable", "imported.cases"]),
+    );
+  });
+
   it("REQ-CTX-03/AC3: --ref overrides discovery", async () => {
     const result = await run(["fetch", "DEMO-1", "--ref", "main"]);
     expect(result.exitCode).toBe(0);

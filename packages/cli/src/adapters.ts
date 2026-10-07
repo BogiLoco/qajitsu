@@ -11,6 +11,12 @@ import {
 import { createDopplerSecretProvider } from "@qajitsu/adapter-secrets-doppler";
 import { createEnvSecretProvider } from "@qajitsu/adapter-secrets-env";
 import { createVaultSecretProvider } from "@qajitsu/adapter-secrets-vault";
+import {
+  createFileCaseSource,
+  createTestRailCaseSource,
+  createXrayCaseSource,
+  createZephyrCaseSource,
+} from "@qajitsu/adapter-testcases";
 import { createFileTicketSource, createJiraCloudTicketSource } from "@qajitsu/adapter-ticket-jira";
 import {
   ConfigError,
@@ -19,6 +25,7 @@ import {
   type CodeHost,
   type GitExec,
   type ResolvedProject,
+  type TestCaseSource,
   type TicketSource,
 } from "@qajitsu/core";
 import type { Masker } from "@qajitsu/steps";
@@ -43,6 +50,8 @@ export interface RuntimePorts {
 export interface ProjectAdapters {
   readonly ticketSource: TicketSource;
   readonly codeHosts: Readonly<Record<string, CodeHost>>;
+  /** Sources of manual test cases (REQ-CTX-08), in configuration order. */
+  readonly testCaseSources: readonly TestCaseSource[];
 }
 
 /**
@@ -166,5 +175,23 @@ export function buildAdapters(
         break;
     }
   }
-  return { ticketSource, codeHosts };
+  const testCaseSources = config.test_cases.map((t): TestCaseSource => {
+    switch (t.type) {
+      case "xray":
+        return createXrayCaseSource(
+          { baseUrl: t.base_url, clientId: t.client_id, clientSecret: t.client_secret, jql: t.jql },
+          deps,
+        );
+      case "zephyr":
+        return createZephyrCaseSource({ baseUrl: t.base_url, token: t.token }, deps);
+      case "testrail":
+        return createTestRailCaseSource(
+          { baseUrl: t.base_url, user: t.user, token: t.token, projectId: t.project_id, suiteId: t.suite_id },
+          deps,
+        );
+      case "file":
+        return createFileCaseSource(resolveConfigPath(t.path, qaDir, ports.home));
+    }
+  });
+  return { ticketSource, codeHosts, testCaseSources };
 }

@@ -13,6 +13,7 @@ import { createMasker } from "@qajitsu/steps";
 import { buildAdapters, createCliSecretResolver, type RuntimePorts } from "../adapters.js";
 import { createCliLogger } from "../logger.js";
 import { loadProject, resolveConfigPath } from "../project.js";
+import { importTestCases } from "./import-cases.js";
 
 /** Options of `qajitsu fetch`. */
 export interface FetchOptions {
@@ -76,7 +77,7 @@ export async function runFetch(
         masker.register(value);
       },
     };
-    const { ticketSource, codeHosts } = buildAdapters(project, deps, ports);
+    const { ticketSource, codeHosts, testCaseSources } = buildAdapters(project, deps, ports);
     const git = createGitRepos({
       cacheDir: resolveConfigPath(
         project.config.workspace.git_cache ?? "~/.qa-cache/git",
@@ -121,6 +122,8 @@ export async function runFetch(
     for (const { repoAlias, change } of result.discovery.changes) {
       io.write(`  ${repoAlias}: ${change.kind} ${change.id} @ ${change.headSha.slice(0, 12)}\n`);
     }
+    // REQ-CTX-08: existing manual test cases, an extra untrusted planner source.
+    await importTestCases({ ws, sources: testCaseSources, events, masker, io, now: ports.now });
     io.write(`Context written to ${ws.dir}\n`);
     return 0;
   } catch (error) {

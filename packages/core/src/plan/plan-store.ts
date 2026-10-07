@@ -93,6 +93,8 @@ const formatSource = (s: SourceRef): string => {
       return `${s.repo} review comment #${String(s.index)}`;
     case "observation":
       return `exploratory session ${s.session} ${s.id}`;
+    case "imported":
+      return `imported case ${s.id}`;
     case "doc": {
       const where = `${s.path ?? `doc ${s.chunk}`}${s.section ? ` › ${s.section}` : ""}`;
       const date = s.modified

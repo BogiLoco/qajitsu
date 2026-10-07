@@ -171,6 +171,19 @@ describe("observations as sources (REQ-EXEC-15/AC4)", () => {
   });
 });
 
+describe("imported test cases as sources (REQ-CTX-08/AC2)", () => {
+  it("REQ-CTX-08/AC2: a case may cite a test case imported for the run, and only one that was", () => {
+    const withImported: SourceContext = { ...context, imported: new Set(["testrail:C11"]) };
+    expect(checkSource({ kind: "imported", id: "testrail:C11" }, withImported)).toBeUndefined();
+    expect(checkSource({ kind: "imported", id: "testrail:C12" }, withImported)).toBe(
+      "testrail:C12 is not a test case imported for this run",
+    );
+    expect(checkSource({ kind: "imported", id: "testrail:C11" }, context)).toBe(
+      "testrail:C11 is not a test case imported for this run",
+    );
+  });
+});
+
 describe("documentation as a source (REQ-KNOW-06)", () => {
   const chunk = {
     id: "0123456789abcdef-0",

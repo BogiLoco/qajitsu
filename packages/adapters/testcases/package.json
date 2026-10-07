@@ -1,0 +1,27 @@
+{
+  "name": "@qajitsu/adapter-testcases",
+  "version": "0.0.0",
+  "description": "QAJitsu TestCaseSource adapters: manual test cases from Xray Cloud, Zephyr Scale, TestRail and CSV/Excel files.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "qajitsu-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@qajitsu/core": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@qajitsu/report": "workspace:*"
+  }
+}

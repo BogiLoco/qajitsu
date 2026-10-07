@@ -388,6 +388,44 @@ export const ProjectConfigSchema = z.strictObject({
     })
     .optional(),
   /**
+   * Sources of existing manual test cases linked to tickets (REQ-CTX-08): read by `qj fetch` into
+   * `imported/cases.json` and given to the planner as untrusted data it can cite. A source that fails is reported and
+   * skipped.
+   */
+  test_cases: z
+    .array(
+      z.discriminatedUnion("type", [
+        z.strictObject({
+          type: z.literal("xray"),
+          base_url: SecureUrl.default("https://xray.cloud.getxray.app"),
+          client_id: SecretRef,
+          client_secret: SecretRef,
+          /** JQL with `{ticket}`; default: Test issues linked to the ticket. */
+          jql: z.string().includes("{ticket}").max(1000).optional(),
+        }),
+        z.strictObject({
+          type: z.literal("zephyr"),
+          base_url: SecureUrl.default("https://api.zephyrscale.smartbear.com/v2"),
+          token: SecretRef,
+        }),
+        z.strictObject({
+          type: z.literal("testrail"),
+          base_url: SecureUrl,
+          user: z.string().min(1),
+          token: SecretRef,
+          project_id: z.number().int().positive(),
+          suite_id: z.number().int().positive().optional(),
+        }),
+        z.strictObject({
+          type: z.literal("file"),
+          /** CSV or XLSX, relative to `.qa/`. */
+          path: z.string().regex(/\.(csv|xlsx)$/i, "Expected a .csv or .xlsx file"),
+        }),
+      ]),
+    )
+    .max(10)
+    .default([]),
+  /**
    * Run budget (REQ-PLAN-08/AC3): when the time since the run started or the model cost of the run reaches a limit,
    * the remaining cases are NOT_RUN with the reason (cost is checked before writing each spec, time before each case).
    */

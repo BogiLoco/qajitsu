@@ -240,7 +240,7 @@ the evidence bundle as pipeline artifacts.
 
 <!-- prettier-ignore-start -->
 <!-- req-stage:later -->
-- [REQ-CTX-08](requirements/context.md#req-ctx-08--import-existing-manual-test-cases) Import existing manual test cases (could, accepted, AC 0/4)
+- [REQ-CTX-08](requirements/context.md#req-ctx-08--import-existing-manual-test-cases) Import existing manual test cases (could, implemented, AC 4/4)
 - [REQ-PLAN-08](requirements/plan.md#req-plan-08--test-depth-and-budget) Test depth and budget (should, implemented, AC 3/3)
 - [REQ-ENV-08](requirements/environment.md#req-env-08--message-capture-email-sms-and-webhooks) Message capture: email, SMS and webhooks (should, implemented, AC 5/5)
 - [REQ-EXEC-11](requirements/execution.md#req-exec-11--human-in-the-loop-steps) Human-in-the-loop steps (should, implemented, AC 7/7)

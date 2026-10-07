@@ -36,6 +36,11 @@ export const SourceRefSchema = z.discriminatedUnion("kind", [
     modified: z.string().optional(),
     outdated: z.boolean().optional(),
   }),
+  /** A manual test case imported for this run (REQ-CTX-08/AC2), by its `<system>:<id>`. */
+  z.strictObject({
+    kind: z.literal("imported"),
+    id: z.string().regex(/^(xray|zephyr|testrail|file):[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/),
+  }),
   /** An observation of an exploratory session of this run (REQ-EXEC-15/AC4). */
   z.strictObject({
     kind: z.literal("observation"),

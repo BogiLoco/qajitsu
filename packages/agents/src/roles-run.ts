@@ -149,6 +149,7 @@ export function sourceContext(context: ChangeContext): SourceContext {
     tests: Object.fromEntries(context.testsRepos.map((t) => [t.alias, t.index.tests])),
     observations: Object.fromEntries(context.explorations.map((e) => [e.session, e.observations])),
     docs: context.docs,
+    imported: new Set(context.imported.map((c) => c.id)),
   };
 }
 

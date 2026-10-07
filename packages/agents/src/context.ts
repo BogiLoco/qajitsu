@@ -4,8 +4,10 @@ import {
   ConfigError,
   ExploreSessionSchema,
   readRunDocs,
+  readImportedCases,
   readTicketSnapshot,
   type ChangeRef,
+  type ImportedCase,
   type KnowledgeChunk,
   type ReviewComment,
   type RunWorkspace,
@@ -113,6 +115,8 @@ export interface ChangeContext {
   readonly docs: Map<string, KnowledgeChunk>;
   /** Observation ids of the run's exploratory sessions; plan cases may cite them (REQ-EXEC-15/AC4). */
   readonly explorations: readonly { readonly session: string; readonly observations: readonly string[] }[];
+  /** Manual test cases imported for the run by `qj fetch` (REQ-CTX-08); untrusted, cited by id. */
+  readonly imported: readonly ImportedCase[];
 }
 
 /**
@@ -200,7 +204,21 @@ export async function buildChangeContext(
       explorations.push({ session: parsed.data.id, observations: parsed.data.observations.map((o) => o.id) });
   }
   const docs = await readRunDocs(ws.path("knowledge", "chunks.json"));
-  return { ticket, repos, knowledge, testsRepos, explorations, docs };
+  const imported = await readImportedCases(ws.path("imported", "cases.json"));
+  return { ticket, repos, knowledge, testsRepos, explorations, docs, imported };
+}
+
+/** One imported case as plain text for the planner. */
+export function renderImportedCase(c: ImportedCase): string {
+  return [
+    `Id: ${c.id}`,
+    `Title: ${c.title}`,
+    ...(c.preconditions ? [`Preconditions: ${c.preconditions}`] : []),
+    ...c.steps.map(
+      (s, i) =>
+        `${String(i + 1)}. ${s.action}${s.data ? ` [data: ${s.data}]` : ""}${s.expected ? ` => expected: ${s.expected}` : ""}`,
+    ),
+  ].join("\n");
 }
 
 /**
@@ -270,6 +288,13 @@ export function renderChangeContext(context: ChangeContext): string {
       `## Tests repository '${t.alias}' (existing automated tests; code under repos/${t.alias}/, not part of the change)`,
       renderTestsRepo(t.alias, t.index),
     );
+  }
+  if (context.imported.length > 0) {
+    // REQ-CTX-08/AC2+AC3: an extra source, wrapped as untrusted data like the ticket.
+    parts.push(
+      `## Existing manual test cases (${String(context.imported.length)}, imported from test management; cite as {kind: imported, id})`,
+    );
+    for (const c of context.imported) parts.push(untrusted(`imported/${c.id}`, renderImportedCase(c)));
   }
   if (context.knowledge.length > 0) {
     parts.push("## Project knowledge (from .qa/knowledge, maintained by the team)");

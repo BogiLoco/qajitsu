@@ -49,6 +49,8 @@ export interface SourceContext {
   readonly comments: Readonly<Record<string, readonly ReviewComment[]>>;
   /** Documentation chunks the run's agents were given, by id (REQ-KNOW-06/AC3). */
   readonly docs?: ReadonlyMap<string, KnowledgeChunk>;
+  /** Ids of the manual test cases imported for the run (REQ-CTX-08/AC2). */
+  readonly imported?: ReadonlySet<string>;
   /** Observation ids per exploratory session of the run (REQ-EXEC-15/AC4). */
   readonly observations?: Readonly<Record<string, readonly string[]>>;
   /** Tests per tests-repository alias, from the code index of its worktree (REQ-CTX-06). */
@@ -126,6 +128,10 @@ export function checkSource(source: SourceRef, context: SourceContext): string |
       return context.observations?.[source.session]?.includes(source.id) === true
         ? undefined
         : `observation ${source.id} does not exist in exploratory session ${source.session}`;
+    case "imported":
+      return context.imported?.has(source.id) === true
+        ? undefined
+        : `${source.id} is not a test case imported for this run`;
     case "doc": {
       // REQ-KNOW-06/AC3: the quote must be in the chunk the run's agents were given, verbatim.
       const chunk = context.docs?.get(source.chunk);
