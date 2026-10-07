@@ -248,3 +248,23 @@ without agents or models.
 - [x] AC2: Every spec and the expectations are checked against the hashes recorded in the pack's `expectations.yaml`; a mismatch makes that case BLOCKED with the reason, never PASSED.
 - [x] AC3: Statuses are computed by the verifier; the report (matrix, report.html, junit.xml) covers the whole suite and lists as regressions the cases that passed when promoted and fail now.
 - [x] AC4: The exit code follows `qj run`; the report can be published to a Jira ticket after preview.
+
+### REQ-EXEC-18 · Compare the UI with the design in Figma
+
+- Status: accepted
+- Priority: could
+- Stage: later
+- Related: INV-1, INV-8, INV-10, REQ-EXEC-12, REQ-EVD-08
+- Note: recorded on 2026-10-07 at the owner's request as a future requirement; not scheduled yet.
+
+A step can be checked against its design in Figma: the frame exported from Figma becomes the reference picture, and
+where layers are named like the app's test ids, their position, size, colour, font and text are compared with the
+real elements. A design is not a pixel-exact picture of the running app (fonts, real data, anti-aliasing), so a
+difference asks a person to look; it does not fail the case.
+
+**Acceptance criteria**
+
+- [ ] AC1: A plan step can expect `visual: { name, figma: "<file key>/<node id>" }`; the frame is exported from the Figma API (token as a `secret://` reference, host on the allowlist) and compared with the step's screenshot by the code of REQ-EXEC-12, with masks and the threshold.
+- [ ] AC2: A difference above the threshold makes the case NEEDS_REVIEW (never FAILED, never PASSED) with the design, the screenshot, the diff and the changed regions marked (REQ-EVD-08) as evidence; the exported frame is kept in the evidence with its SHA-256 and the Figma version it came from.
+- [ ] AC3: When a Figma layer is named like an element selector (e.g. `testid:pay`), its position, size, colour, font and text are compared with the element in the browser or on the device within configured tolerances; each difference is listed with expected (design) and actual (app) values and marked on the screenshot.
+- [ ] AC4: Figma not reachable, a missing node or a missing token makes the design check BLOCKED with the reason; the rest of the step is checked as usual.

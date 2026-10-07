@@ -250,6 +250,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-EXEC-15](requirements/execution.md#req-exec-15--exploratory-sessions) Exploratory sessions (could, implemented, AC 6/6)
 - [REQ-EXEC-16](requirements/execution.md#req-exec-16--run-one-case-with-a-live-view) Run one case with a live view (should, implemented, AC 4/4)
 - [REQ-EXEC-17](requirements/execution.md#req-exec-17--regression-runs-of-promoted-packs) Regression runs of promoted packs (should, implemented, AC 4/4)
+- [REQ-EXEC-18](requirements/execution.md#req-exec-18--compare-the-ui-with-the-design-in-figma) Compare the UI with the design in Figma (could, accepted, AC 0/4)
 - [REQ-VER-11](requirements/verification.md#req-ver-11--bug-fix-verification-fails-before-passes-after) Bug fix verification: fails before, passes after (should, implemented, AC 4/4)
 - [REQ-VER-12](requirements/verification.md#req-ver-12--failure-triage-hints) Failure triage hints (should, implemented, AC 4/4)
 - [REQ-EVD-07](requirements/evidence.md#req-evd-07--passive-observations-during-tests) Passive observations during tests (should, implemented, AC 5/5)
