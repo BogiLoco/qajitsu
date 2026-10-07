@@ -1580,6 +1580,22 @@
       },
       "additionalProperties": false
     },
+    "budget": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "max_minutes": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1440
+        },
+        "max_cost_usd": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
     "visual": {
       "default": {
         "threshold": 0.001,

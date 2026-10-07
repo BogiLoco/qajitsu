@@ -523,6 +523,51 @@
         ],
         "additionalProperties": false
       }
+    },
+    "depth": {
+      "type": "string",
+      "enum": [
+        "smoke",
+        "standard",
+        "full"
+      ]
+    },
+    "selection": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "case": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "included": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "case",
+          "title",
+          "priority",
+          "included",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "required": [

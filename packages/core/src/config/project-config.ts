@@ -388,6 +388,16 @@ export const ProjectConfigSchema = z.strictObject({
     })
     .optional(),
   /**
+   * Run budget (REQ-PLAN-08/AC3): when the time since the run started or the model cost of the run reaches a limit,
+   * the remaining cases are NOT_RUN with the reason (cost is checked before writing each spec, time before each case).
+   */
+  budget: z
+    .strictObject({
+      max_minutes: z.number().positive().max(1440).optional(),
+      max_cost_usd: z.number().positive().optional(),
+    })
+    .default({}),
+  /**
    * Visual regression (REQ-EXEC-12): baselines live in `.qa/baselines/`; `threshold` is the default share of differing
    * pixels that still passes, `color_threshold` the per-pixel sensitivity (0 exact, 1 anything).
    */

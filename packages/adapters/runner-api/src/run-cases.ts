@@ -56,6 +56,8 @@ export interface RunCasesOptions {
   readonly manual?: ManualPrompter | undefined;
   /** How long one manual step may wait for its answer (default 15 minutes). */
   readonly manualTimeoutMs?: number;
+  /** Checked before each case; a reason leaves the case NOT_RUN with it (REQ-PLAN-08/AC3, a time budget). */
+  readonly stopReason?: (() => string | undefined) | undefined;
   /** Baselines and image comparison of this run's variant (REQ-EXEC-12). */
   readonly visual?: VisualCheck | undefined;
   /** Locale and time zone of a locale run (REQ-EXEC-14); `plan` must be resolved for it. */
@@ -227,6 +229,20 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
   };
 
   const runCase = async (caseId: string): Promise<CaseResultFile> => {
+    const stop = options.stopReason?.();
+    if (stop !== undefined) {
+      options.events.emit("run", actor, "case.not_run", { caseId, reason: stop });
+      const skipped = CaseResultFileSchema.parse({
+        schema: 1,
+        caseId,
+        runner: "api",
+        attempts: [{ attempt: 1, outcome: "skipped", assertions: [], error: stop, steps: [], evidence: [] }],
+      });
+      await writeFile(join(options.resultsDir, `${caseId}.json`), `${JSON.stringify(skipped, null, 2)}\n`, {
+        flag: "wx",
+      });
+      return skipped;
+    }
     const spec = options.specs.get(caseId);
     const attempts: Attempt[] = [];
     if (spec === undefined) {

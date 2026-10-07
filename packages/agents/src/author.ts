@@ -70,6 +70,8 @@ export interface AuthoredSpec {
   readonly attempts: number;
   /** Problems of the last attempt when no valid spec was produced (the case is BLOCKED). */
   readonly problems: readonly SpecProblem[];
+  /** Why the case was not written at all, e.g. the run's budget was reached (the case is NOT_RUN). */
+  readonly skipped?: string;
 }
 
 /** Extracts the TypeScript code block of an answer. */
@@ -120,6 +122,8 @@ export async function runAuthor(
   context: ChangeContext,
   analysis: Analysis,
   accounts: readonly string[],
+  /** Checked before each case; a reason stops writing further specs (REQ-PLAN-08/AC3). */
+  stopReason?: () => string | undefined,
 ): Promise<AuthoredSpec[]> {
   const role = AGENT_ROLES.find((r) => r.role === "author");
   if (!role) throw new Error("author role missing");
@@ -161,6 +165,12 @@ export async function runAuthor(
   try {
     const out: AuthoredSpec[] = [];
     for (const planCase of plan.cases) {
+      const stop = stopReason?.();
+      if (stop !== undefined) {
+        deps.events.emit("author", actor, "case.skipped", { caseId: planCase.id, reason: stop });
+        out.push({ caseId: planCase.id, attempts: 0, problems: [], skipped: stop });
+        continue;
+      }
       deps.events.emit("author", actor, "case.start", { caseId: planCase.id, model: model.id });
       let messages: ModelMessage[] = [
         {

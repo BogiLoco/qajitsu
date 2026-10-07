@@ -96,6 +96,9 @@ test_types: [api, web]
 #     browsers: [chromium, firefox]
 #     viewports: [{ name: desktop, width: 1280, height: 800 }, { name: mobile, width: 390, height: 844 }]
 
+# Run budget (REQ-PLAN-08): once a limit is reached the remaining cases are NOT_RUN with the reason.
+# budget: { max_minutes: 30, max_cost_usd: 2.00 }
+
 # Visual regression (REQ-EXEC-12): baselines in .qa/baselines/, accepted with `qj baseline accept`.
 # visual: { threshold: 0.001, color_threshold: 0.1 }
 

@@ -14,6 +14,8 @@ import {
 import {
   AnalysisSchema,
   ConfigError,
+  DepthSchema,
+  applyDepth,
   PlanDraftSchema,
   QajitsuError,
   approvePlan,
@@ -45,6 +47,8 @@ import { openRunKnowledge, type KnowledgePorts } from "./knowledge.js";
 export interface PlanOptions {
   readonly run?: string | undefined;
   readonly revise?: string | undefined;
+  /** Test depth (REQ-PLAN-08): smoke, standard or full; remembered for revisions of the run. */
+  readonly depth?: string | undefined;
 }
 
 /** Ports of the review loop (REQ-PLAN-04/AC1). */
@@ -172,6 +176,11 @@ export async function runPlan(
     const docs = await openRunKnowledge(session.project, masker, session.resolveSecret, io, ports);
     closeKnowledge = docs.close;
     const deps = { ...stageDeps(session, ports), ...(docs.access ? { knowledge: docs.access } : {}) };
+    const depthOption = options.depth === undefined ? undefined : DepthSchema.safeParse(options.depth);
+    if (depthOption && !depthOption.success)
+      throw new ConfigError("PLAN_DEPTH_INVALID", "--depth must be smoke, standard or full.", {});
+    const depth = depthOption?.data ?? DepthSchema.optional().parse(ws.record.data["depth"]);
+    if (depthOption?.success) await ws.update({ data: { ...ws.record.data, depth: depthOption.data } });
     const knowledge = await loadKnowledge(knowledgeDir(session.project), (t) => masker.containsSecret(t));
     const context = await buildChangeContext(ws, knowledge, {
       indexCache: codeIndexCache(session.project),
@@ -208,7 +217,8 @@ export async function runPlan(
           current && instruction !== undefined ? { previous: current, instruction } : undefined,
         );
         await deps.save();
-        const next = await writePlanVersion(ws, draft);
+        // REQ-PLAN-08/AC1: code selects the cases for the depth and records why; the person reviews that selection.
+        const next = await writePlanVersion(ws, depth ? applyDepth(draft, depth) : draft);
         session.events.emit("plan", { kind: "agent", name: "planner" }, "plan.version", {
           version: next.version,
           cases: next.cases.length,

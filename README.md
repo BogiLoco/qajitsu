@@ -203,6 +203,10 @@ them in full). A case that relies on documentation cites it, and the plan shows 
 quote word for word; outdated documents are marked _possibly outdated_, and a contradiction between documentation
 and ticket becomes an open question. With `knowledge.auto_sync: true` the knowledge base is synced first.
 
+With `--depth smoke|standard|full` the planner rates each case's risk and QAJitsu keeps only the cases of that
+depth (smoke: high risk, standard: high and medium, full: all); the plan shows the depth and why each case is in or
+out, so you review the selection too.
+
 In a terminal you then review it: `[a]ccept`, `[r]evise` (type what should change, a new version is written),
 `[e]dit` (open the draft in `$EDITOR`) or `[q]uit`. Without a terminal (CI) the plan is written and the command ends;
 use `qj plan SHOP-482 --revise "add a case for expired discount codes"` for a new version.
@@ -231,7 +235,9 @@ qj run SHOP-482 --build --set api.FEATURE_X=1         # with an overridable vari
 **When:** after approval; for every new environment or build.
 **What it does:**
 
-1. Checks the environment (health, allowlist, production ban, the deployed version vs the analysed commit).
+1. Shows an **estimate** (execution time from the cases and their types, model use from the project's past runs)
+   and checks the environment (health, allowlist, production ban, the deployed version vs the analysed commit).
+   With a `budget:` (minutes or dollars), cases left when it runs out are NOT_RUN with the reason.
 2. The **author** agent writes one spec per case (`specs/TC-01.spec.ts`) using the steps API; static checks reject
    specs that do not verify every planned expectation or use forbidden code. A case without a valid spec is BLOCKED.
 3. Each spec runs in a **sandbox** (no network, no files, no secrets). The trusted parent process performs every API
@@ -317,7 +323,7 @@ stays).
 
 ```sh
 qj status                                  # right project? what is open?
-qj fetch SHOP-482 && qj plan SHOP-482     # review: a
+qj fetch SHOP-482 && qj plan SHOP-482     # review: a   (--depth smoke for a quick check)
 qj run SHOP-482 --env staging
 qj evidence SHOP-482 --failed              # FAILED cases with their hint (product bug, test bug, environment, data)
 qj publish SHOP-482
@@ -695,6 +701,7 @@ run folder looks like this:
 | `.qa/stubs/<name>/`                          | WireMock/Mockoon mappings for stubbed dependencies                                                                                                                                                                                                                   |
 | `.qa/bench.yaml`                             | benchmark cases                                                                                                                                                                                                                                                      |
 | `web.matrix` in `qa.project.yaml`            | browsers (`chromium`, `firefox`, `webkit`) and viewports (`{ name, width, height }`) for web cases; the first combination is the primary run                                                                                                                         |
+| `budget:` in `qa.project.yaml`               | `max_minutes` and `max_cost_usd` per run: once reached, the remaining cases are NOT_RUN with the reason                                                                                                                                                              |
 | `.qa/baselines/`                             | approved screenshots for visual checks, written only by `qj baseline accept`; `visual: { threshold, color_threshold }` in `qa.project.yaml`                                                                                                                          |
 | `locales:` in `qa.project.yaml`              | locales and time zones cases can run in (`{ name: pl-PL, timezone: Europe/Warsaw }`); a plan case lists its own                                                                                                                                                      |
 | `messages:` in `qa.project.yaml`             | message capture for e-mails, SMS gateways and webhooks: `base_url` (webhook.site or self-hosted, must be on `environments.allowlist`), `email_domain`, `api_key: secret://...`, `timeout_s`                                                                          |
@@ -790,6 +797,9 @@ test_types: [api, web]
   runs web cases in every combination; the matrix, report and Jira comment show the status per combination, and a
   case is PASSED only when all of them passed. A missing browser is BLOCKED with the install command; cases with
   manual steps run in the first combination only.
+- **Test depth, estimate and budget.** `qj plan --depth smoke|standard|full` keeps cases by risk and records why;
+  every run starts with an estimate of time and model use from past runs; `budget: { max_minutes, max_cost_usd }`
+  stops a run gracefully with NOT_RUN for what is left.
 - **Visual regression.** A step can expect `visual: { name, threshold?, mask? }`: its screenshot is compared with the
   approved baseline of that browser, viewport and locale (pixelmatch, anti-aliasing ignored, masked regions painted
   over). Above the threshold → FAILED with baseline, screenshot and diff; no baseline → NEEDS_REVIEW with the

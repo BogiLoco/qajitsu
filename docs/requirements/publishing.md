@@ -119,7 +119,7 @@ Work spent on one ticket builds the regression suite instead of being lost.
 
 ### REQ-PUB-09 · Release readiness report
 
-- Status: proposed
+- Status: accepted
 - Priority: could
 - Stage: later
 - Related: INV-6, REQ-VER-08, REQ-PUB-01

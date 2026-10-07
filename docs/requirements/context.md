@@ -118,7 +118,7 @@ Teams can give agents domain knowledge that is not in the code.
 
 ### REQ-CTX-08 · Import existing manual test cases
 
-- Status: proposed
+- Status: accepted
 - Priority: could
 - Stage: later
 - Related: REQ-CTX-01, REQ-PLAN-03, REQ-PUB-05

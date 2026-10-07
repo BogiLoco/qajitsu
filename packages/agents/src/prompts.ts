@@ -36,6 +36,9 @@ ${UNTRUSTED_DATA_RULES}
 ${SOURCES}
 Rules:
 - Case ids TC-01, TC-02, ...; step ids S1, S2, ... per case; type api, web or mobile; priority high, medium or low.
+- Priority is the risk the case covers: high = the main flow of the change, money, security or data loss; medium =
+  important variations and error handling; low = rare edge cases and cosmetics. QAJitsu keeps cases by priority for
+  the chosen depth (smoke: high only, standard: high and medium, full: all), so rate risk honestly.
 - Expected results are structured where possible: HTTP "status", response "fields" (JSON path -> exact expected value), visible "texts". Tests read them from the plan, so be exact.
 - Test data uses aliases only, like {"user":"user:standard"}; never passwords, tokens or real personal data.
 - When the ticket concerns several languages or regions, a case can list "locales" (names from the project, e.g.

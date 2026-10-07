@@ -112,13 +112,13 @@ Besides the terminal, plans can be approved where the team already works.
 
 ### REQ-PLAN-08 · Test depth and budget
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-PLAN-02, REQ-LLM-07, REQ-CI-05
 
 **Acceptance criteria**
 
-- [ ] AC1: `qj plan --depth smoke|standard|full` selects cases by risk; the plan records the depth and why each case is in or out.
-- [ ] AC2: Before a run QAJitsu shows an estimate of time and model cost based on case count, types and past runs.
-- [ ] AC3: A configured budget (time or cost) stops further cases when reached; cases not run are NOT_RUN with the reason.
+- [x] AC1: `qj plan --depth smoke|standard|full` selects cases by risk; the plan records the depth and why each case is in or out.
+- [x] AC2: Before a run QAJitsu shows an estimate of time and model cost based on case count, types and past runs.
+- [x] AC3: A configured budget (time or cost) stops further cases when reached; cases not run are NOT_RUN with the reason.

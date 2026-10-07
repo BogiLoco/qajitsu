@@ -93,7 +93,7 @@ Built by code from the journal, never drawn by an agent.
 
 ### REQ-OBS-08 · Map as planner input
 
-- Status: proposed
+- Status: accepted
 - Priority: could
 - Stage: later
 - Related: REQ-OBS-07, REQ-PLAN-02

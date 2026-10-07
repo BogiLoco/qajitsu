@@ -376,6 +376,8 @@ export async function runExplorePromote(
       open_questions: previous?.open_questions ?? [],
       out_of_scope: previous?.out_of_scope ?? [],
       existing_coverage: previous?.existing_coverage ?? [],
+      selection: previous?.selection ?? [],
+      ...(previous?.depth ? { depth: previous.depth } : {}),
     });
     session.events.emit("explore", { kind: "user", name: "cli" }, "explore.promoted", {
       session: record.id,

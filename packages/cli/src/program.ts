@@ -414,7 +414,8 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .argument("<ticket>", "Jira key, e.g. SHOP-482")
     .option("--run <id>", "run id (default: latest run of the ticket)")
     .option("--revise <instruction>", "write a new plan version following this instruction")
-    .action((ticket: string, options: { run?: string; revise?: string }) =>
+    .option("--depth <depth>", "smoke (high-risk cases), standard (high and medium) or full (every case)")
+    .action((ticket: string, options: { run?: string; revise?: string; depth?: string }) =>
       withPorts((ports) => runPlan(ticket, options, commandIO, ports, review))(),
     );
 

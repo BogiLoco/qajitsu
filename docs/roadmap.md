@@ -240,8 +240,8 @@ the evidence bundle as pipeline artifacts.
 
 <!-- prettier-ignore-start -->
 <!-- req-stage:later -->
-- [REQ-CTX-08](requirements/context.md#req-ctx-08--import-existing-manual-test-cases) Import existing manual test cases (could, proposed, AC 0/4)
-- [REQ-PLAN-08](requirements/plan.md#req-plan-08--test-depth-and-budget) Test depth and budget (should, proposed, AC 0/3)
+- [REQ-CTX-08](requirements/context.md#req-ctx-08--import-existing-manual-test-cases) Import existing manual test cases (could, accepted, AC 0/4)
+- [REQ-PLAN-08](requirements/plan.md#req-plan-08--test-depth-and-budget) Test depth and budget (should, implemented, AC 3/3)
 - [REQ-ENV-08](requirements/environment.md#req-env-08--message-capture-email-sms-and-webhooks) Message capture: email, SMS and webhooks (should, implemented, AC 5/5)
 - [REQ-EXEC-11](requirements/execution.md#req-exec-11--human-in-the-loop-steps) Human-in-the-loop steps (should, implemented, AC 7/7)
 - [REQ-EXEC-12](requirements/execution.md#req-exec-12--visual-regression) Visual regression (could, implemented, AC 4/4)
@@ -254,8 +254,8 @@ the evidence bundle as pipeline artifacts.
 - [REQ-PUB-05](requirements/publishing.md#req-pub-05--optional-integrations) Optional integrations (could, deferred, AC 1/4)
 - [REQ-PUB-07](requirements/publishing.md#req-pub-07--bug-reports-from-failed-cases) Bug reports from failed cases (should, implemented, AC 5/5)
 - [REQ-PUB-08](requirements/publishing.md#req-pub-08--promote-ticket-cases-to-the-regression-suite) Promote ticket cases to the regression suite (should, implemented, AC 4/4)
-- [REQ-PUB-09](requirements/publishing.md#req-pub-09--release-readiness-report) Release readiness report (could, proposed, AC 0/4)
-- [REQ-OBS-08](requirements/observability.md#req-obs-08--map-as-planner-input) Map as planner input (could, proposed, AC 0/1)
+- [REQ-PUB-09](requirements/publishing.md#req-pub-09--release-readiness-report) Release readiness report (could, accepted, AC 0/4)
+- [REQ-OBS-08](requirements/observability.md#req-obs-08--map-as-planner-input) Map as planner input (could, accepted, AC 0/1)
 - [REQ-PRJ-09](requirements/projects.md#req-prj-09--export-and-import-of-a-project-profile) Export and import of a project profile (could, implemented, AC 2/2)
 - [REQ-KNOW-12](requirements/knowledge.md#req-know-12--online-sources) Online sources (could, implemented, AC 2/2)
 <!-- /req-stage -->

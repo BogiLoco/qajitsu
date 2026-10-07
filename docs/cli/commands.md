@@ -147,6 +147,9 @@ Analyses the fetched change and writes a plan version; in a terminal, the review
 
 - `--run <id>`: run id (default: latest run of the ticket)
 - `--revise <instruction>`: write a new plan version following this instruction
+- `--depth <depth>`: `smoke` (high-risk cases), `standard` (high and medium) or `full` (every case, the default).
+  The planner rates every case's risk as its priority; code keeps the cases of the depth and records in the plan
+  why each one is in or out (REQ-PLAN-08). The depth is remembered for revisions of the run.
 
 Exit codes: `0` plan written (and approved, if accepted in the review), `2` token budget exceeded, `3` errors.
 

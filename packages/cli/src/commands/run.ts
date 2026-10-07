@@ -43,6 +43,8 @@ import type { CommandIO } from "./fetch.js";
 import { anchorJournal, computeVerdict, writeReports } from "./verdict.js";
 import { auditRun, triageRun, runCanary } from "./checks.js";
 import { createManualPrompter } from "./manual.js";
+import { formatEstimate, readRunHistory } from "./estimate.js";
+import { rootOf } from "./runs.js";
 import { runMessages, type MessagePorts, type RunMessages } from "./messages.js";
 import { approvalContext, changedParts, type ApprovalContext } from "./context-fingerprint.js";
 import { runRunHook, type HookExec } from "./hooks.js";
@@ -255,6 +257,7 @@ export async function runRun(
   ports: RuntimePorts & ModelPorts & RunPorts,
 ): Promise<number> {
   const masker = createMasker();
+  const startedAt = ports.now().getTime();
   let release: (() => Promise<void>) | undefined;
   let messages: RunMessages | undefined;
   let stopOnInterrupt: (() => Promise<void>) | undefined;
@@ -441,6 +444,7 @@ export async function runRun(
         );
       } else {
         const pending = await executeCases(session, plan, env, io, ports, results, {
+          startedAt,
           user: options.user,
           messages,
           build: options.build === true,
@@ -544,6 +548,8 @@ async function executeCases(
     readonly onDevice: (stop: () => Promise<void>) => void;
     readonly user?: string | undefined;
     readonly messages?: RunMessages | undefined;
+    /** When the run started (epoch ms), for the time budget. */
+    readonly startedAt?: number | undefined;
   } = {
     build: false,
     onDevice: () => undefined,
@@ -558,6 +564,20 @@ async function executeCases(
   );
   const missing = plan.cases.filter((c) => !existing.has(c.id));
   const blocked = new Map<string, string>();
+  // REQ-PLAN-08/AC2: what this run will take, from the cases and the project's past runs.
+  io.write(
+    `${formatEstimate(plan, await readRunHistory(rootOf(project, ports), ws.runId), {
+      web: Math.max(0, webCombinations(project.config.web).length - 1),
+    })}\n`,
+  );
+  // REQ-PLAN-08/AC3: the run's budget; remaining cases are NOT_RUN with the reason once a limit is reached.
+  const budget = project.config.budget;
+  const startedAt = run.startedAt ?? ports.now().getTime();
+  const timeStop = (): string | undefined =>
+    budget.max_minutes !== undefined && ports.now().getTime() - startedAt >= budget.max_minutes * 60_000
+      ? `the run's time budget (${String(budget.max_minutes)} min) was reached`
+      : undefined;
+  const notRun = new Map<string, string>();
   if (missing.length > 0) {
     io.write(`Writing specs for ${missing.map((c) => c.id).join(", ")}…\n`);
     const analysis = AnalysisSchema.parse(JSON.parse(await readFile(ws.path("analysis.json"), "utf8")));
@@ -583,10 +603,17 @@ async function executeCases(
       await buildChangeContext(ws, [], { indexCache: codeIndexCache(project) }),
       analysis,
       Object.keys(env.profile.accounts),
+      () =>
+        timeStop() ??
+        (budget.max_cost_usd !== undefined &&
+        Number(ws.record.data["costUsd"] ?? 0) + usage.costUsd >= budget.max_cost_usd
+          ? `the run's cost budget ($${budget.max_cost_usd.toFixed(2)}) was reached`
+          : undefined),
     );
     await ws.update({ data: { ...ws.record.data, tokens: usage.total } });
     for (const a of authored)
-      if (!a.file)
+      if (a.skipped !== undefined) notRun.set(a.caseId, a.skipped);
+      else if (!a.file)
         blocked.set(a.caseId, `author could not produce a valid spec: ${formatSpecProblems(a.problems)}`);
   }
   // Every spec is checked before execution, also hand-written ones (REQ-EXEC-03).
@@ -605,6 +632,21 @@ async function executeCases(
   for (const [caseId, reason] of blocked) {
     events.emit("run", SYSTEM, "case.blocked", { caseId, reason: reason.slice(0, 500) });
     await writeBlocked(session, [caseId], reason, results);
+  }
+  for (const [caseId, reason] of notRun) {
+    events.emit("run", SYSTEM, "case.not_run", { caseId, reason });
+    const result = CaseResultFileSchema.parse({
+      schema: 1,
+      caseId,
+      runner: "api",
+      attempts: [{ attempt: 1, outcome: "skipped", assertions: [], error: reason, steps: [], evidence: [] }],
+    });
+    await writeFile(ws.path("results", `${caseId}.json`), `${JSON.stringify(result, null, 2)}\n`, {
+      flag: "wx",
+    });
+    results.set(caseId, result);
+    // Excluded from every execution below, like a blocked case, but recorded as NOT_RUN.
+    blocked.set(caseId, reason);
   }
   // REQ-EXEC-13: the first browser and viewport combination is the primary run.
   const combos = webCombinations(project.config.web);
@@ -656,6 +698,7 @@ async function executeCases(
       timeoutMs: project.config.manual.timeout_s * 1000,
     }),
     manualTimeoutMs: project.config.manual.timeout_s * 1000,
+    stopReason: timeStop,
     ...(run.messages ? { messages: run.messages.forCase } : {}),
     visual: visualFor(primaryVariant),
     executor,

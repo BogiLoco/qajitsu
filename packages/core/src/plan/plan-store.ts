@@ -111,6 +111,7 @@ const formatSource = (s: SourceRef): string => {
 export function renderPlanMarkdown(plan: Plan): string {
   const out = [`# Test plan ${plan.ticket} v${String(plan.version)}`, ""];
   if (plan.summary) out.push(plan.summary, "");
+  if (plan.depth) out.push(`Depth: **${plan.depth}** (cases selected by priority; see Selection)`, "");
   out.push("| Id | Title | Type | Priority | Source |", "| --- | --- | --- | --- | --- |");
   for (const c of plan.cases) {
     out.push(
@@ -125,6 +126,7 @@ export function renderPlanMarkdown(plan: Plan): string {
         "",
       );
     if (c.preconditions.length > 0) out.push(`Preconditions: ${c.preconditions.join("; ")}`, "");
+    if (c.locales && c.locales.length > 0) out.push(`Also runs in locales: ${c.locales.join(", ")}`, "");
     const data = Object.entries(c.data);
     if (data.length > 0) out.push(`Data: ${data.map(([k, v]) => `${k}=${v}`).join(", ")}`, "");
     c.steps.forEach((s) => {
@@ -132,9 +134,13 @@ export function renderPlanMarkdown(plan: Plan): string {
         s.expect.status === undefined ? undefined : `status ${String(s.expect.status)}`,
         s.expect.fields ? `fields ${JSON.stringify(s.expect.fields)}` : undefined,
         s.expect.texts ? `texts ${JSON.stringify(s.expect.texts)}` : undefined,
+        s.expect.message ? `message ${JSON.stringify(s.expect.message)}` : undefined,
+        s.expect.visual ? `visual ${JSON.stringify(s.expect.visual)}` : undefined,
+        s.expect.by_locale ? `per locale ${JSON.stringify(s.expect.by_locale)}` : undefined,
       ].filter(Boolean);
       out.push(
-        `1. **${s.id}** ${s.action}  `,
+        `1. **${s.id}**${s.manual === true ? " _(manual)_" : ""} ${s.action}  `,
+        ...(s.manual === true && s.instructions ? [`   Tester: ${s.instructions}  `] : []),
         `   Expect: ${s.expect.description}${details.length > 0 ? ` (${details.join(", ")})` : ""}`,
       );
     });
@@ -150,6 +156,12 @@ export function renderPlanMarkdown(plan: Plan): string {
     out.push("", "## Already covered by existing tests", "");
     out.push(
       ...plan.existing_coverage.map((c) => `- ${c.covers.join(", ")}: "${c.title}" in ${c.repo}:${c.file}`),
+    );
+  }
+  if (plan.selection.length > 0) {
+    out.push("", "## Selection", "");
+    out.push(
+      ...plan.selection.map((x) => `- ${x.included ? "in" : "out"}: ${x.case} ${x.title} (${x.reason})`),
     );
   }
   out.push("", "## Out of scope", "");

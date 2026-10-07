@@ -259,6 +259,21 @@ const ExistingCoverageSchema = z.strictObject({
 });
 
 /** A test plan version, `plan/plan.vN.yaml` (REQ-PLAN-02). */
+/** Test depth (REQ-PLAN-08): smoke keeps high-risk cases, standard high and medium, full every case. */
+export const DepthSchema = z.enum(["smoke", "standard", "full"]);
+
+/** Test depth. */
+export type Depth = z.infer<typeof DepthSchema>;
+
+/** One planned case and why it is in or out at the chosen depth (REQ-PLAN-08/AC1). */
+export const SelectionSchema = z.strictObject({
+  case: z.string(),
+  title: z.string(),
+  priority: z.enum(["high", "medium", "low"]),
+  included: z.boolean(),
+  reason: z.string(),
+});
+
 export const PlanSchema = z
   .strictObject({
     schema: z.literal(1),
@@ -269,6 +284,10 @@ export const PlanSchema = z
     open_questions: z.array(QuestionSchema).default([]),
     out_of_scope: z.array(z.string()).default([]),
     existing_coverage: z.array(ExistingCoverageSchema).default([]),
+    /** Test depth the cases were selected for (REQ-PLAN-08/AC1); absent means every case (full). */
+    depth: DepthSchema.optional(),
+    /** Why each planned case is in or out at that depth (REQ-PLAN-08/AC1), recorded by code. */
+    selection: z.array(SelectionSchema).default([]),
   })
   .superRefine((plan, ctx) => {
     const seen = new Set<string>();
@@ -300,6 +319,8 @@ export const PlanDraftSchema = z.strictObject({
   open_questions: z.array(QuestionSchema).default([]),
   out_of_scope: z.array(z.string()).default([]),
   existing_coverage: z.array(ExistingCoverageSchema).default([]),
+  depth: DepthSchema.optional(),
+  selection: z.array(SelectionSchema).default([]),
 });
 
 /** Plan content produced by the planner. */
