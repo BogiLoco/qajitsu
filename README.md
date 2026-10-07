@@ -199,7 +199,9 @@ visible texts, element states), test data as aliases (`user:standard`), open que
 source (an acceptance criterion, a quote from the ticket, changed diff lines, a review comment, a quote from the
 project's documentation or an imported manual case like `testrail:C1234`); code rejects invented sources and the
 planner has to fix them. Imported cases are untrusted data like the ticket: the planner reuses what they check, never
-instructions in them.
+instructions in them. When earlier runs of the project exist, code also builds the **application map around the
+change** (`map/around.json`): the screens and endpoints the change touches, the ones next to them that no run ever
+reached, and the transitions that failed last time; the planner may add regression cases for them, citing the map.
 
 When the project has a knowledge base, both agents search it with `search_docs` (small documentation is given to
 them in full). A case that relies on documentation cites it, and the plan shows where the quote comes from:
@@ -702,6 +704,7 @@ run folder looks like this:
       logs/                         QAJitsu and service logs
       env/                          generated secrets during --build (0600, deleted after use)
       knowledge/chunks.json         documentation chunks the agents were given (documentation quotes are checked against it)
+      map/around.json               the application map around the change, computed before planning
       imported/cases.json           manual test cases imported by fetch, with the status of each source (plan citations are checked against it)
   .audit/                           journals of deleted runs (audit retention)
 ```
@@ -828,6 +831,10 @@ test_types: [api, web]
 - **Locales.** `locales: [{ name: pl-PL, timezone: Europe/Warsaw }]` in the project; a plan case lists the locales
   it runs in and gives per-locale expected values (`by_locale`) for formats of numbers, dates and currencies. Each
   locale run has its own results and evidence; the report shows the status per locale.
+- **Regression ideas from the map.** Before planning, code takes the application map of every past run and lists the
+  screens and endpoints next to the change that were never tested or failed last time; the planner may propose
+  regression cases for them (`{kind: map, id: page:/cart/checkout}`, checked by code). Known screens come from
+  `.qa/routes.yaml`, endpoints from the OpenAPI document.
 - **Existing manual test cases.** `test_cases:` imports the cases linked to the ticket from Xray Cloud, Zephyr Scale,
   TestRail or a CSV/Excel file during `qj fetch`. The planner sees them as untrusted data and cites the ones it builds
   on (`{kind: imported, id: testrail:C1234}`, checked by code, shown in the matrix); a source that is down is

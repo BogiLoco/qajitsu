@@ -95,6 +95,8 @@ const formatSource = (s: SourceRef): string => {
       return `exploratory session ${s.session} ${s.id}`;
     case "imported":
       return `imported case ${s.id}`;
+    case "map":
+      return `application map ${s.id}`;
     case "doc": {
       const where = `${s.path ?? `doc ${s.chunk}`}${s.section ? ` › ${s.section}` : ""}`;
       const date = s.modified

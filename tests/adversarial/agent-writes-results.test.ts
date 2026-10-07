@@ -54,6 +54,10 @@ describe("invariant 2: agents never write results or evidence (REQ-VER-03)", () 
       { tool: "write_file", input: { path: "checks/audit.json", content: '{"findings":[]}' } },
     ],
     [
+      "adds an untested screen to the map around the change (REQ-OBS-08)",
+      { tool: "write_file", input: { path: "map/around.json", content: '{"untested":[]}' } },
+    ],
+    [
       "adds an imported test case it can then cite (REQ-CTX-08)",
       { tool: "write_file", input: { path: "imported/cases.json", content: '{"cases":[]}' } },
     ],

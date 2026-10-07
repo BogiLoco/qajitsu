@@ -1,5 +1,6 @@
 import type { GraphEdge, GraphNode, TransitionGraph } from "./graph.js";
 import { renderGraphSvg } from "./graph.js";
+import type { MapAround } from "@qajitsu/core";
 
 /** One run's transition graph (`report/graph.json`) with where it came from. */
 export interface MapRun {
@@ -153,4 +154,108 @@ export function renderAppMapHtml(map: AppMap, project: string): string {
 <h2>Transitions</h2><table><tr><th>From</th><th>To</th><th>Passed</th><th>Failed</th><th>Last</th><th>Last tested</th><th>Tickets</th></tr>${rows}</table>
 </body></html>
 `;
+}
+
+/** What a change touches, from the analysis and the diff. */
+export interface ChangeFootprint {
+  /** Endpoints as `METHOD /path` or `/path` (any method). */
+  readonly endpoints: readonly string[];
+  /** Screen names from the analysis. */
+  readonly screens: readonly string[];
+  /** Changed file paths. */
+  readonly files: readonly string[];
+}
+
+const PARAM = /^(\{[^}]+\}|:[^/]+)$/;
+const segments = (path: string): string[] => path.split("?")[0]?.split("/").filter(Boolean) ?? [];
+const staticSegments = (path: string): string[] =>
+  segments(path)
+    .filter((s) => !PARAM.test(s))
+    .map((s) => s.toLowerCase());
+
+/** True when a concrete or templated path matches a map path (`{id}` and `:id` match any segment). */
+const samePath = (a: string, b: string): boolean => {
+  const x = segments(a);
+  const y = segments(b);
+  return x.length === y.length && x.every((s, i) => s === y[i] || PARAM.test(s) || PARAM.test(y[i] ?? ""));
+};
+
+const words = (text: string): Set<string> =>
+  new Set(
+    text
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean),
+  );
+
+/**
+ * The part of the application map around a change (REQ-OBS-08), computed by code: map nodes the change touches
+ * (endpoints of the analysis; screens whose route words appear in a screen name or a changed file path), known
+ * screens and endpoints in the same area that no run reached, and the transitions from or to a touched node.
+ *
+ * @param map - The project's application map.
+ * @param change - What the change touches.
+ * @returns The map around the change; empty lists when nothing matches.
+ */
+export function mapAroundChange(map: AppMap, change: ChangeFootprint): MapAround {
+  const changedIds = new Set<string>();
+  for (const n of map.nodes) {
+    const label = n.label;
+    if (n.kind === "api") {
+      const [method, path = ""] = label.includes(" ") ? label.split(" ", 2) : ["", label];
+      if (
+        change.endpoints.some((e) => {
+          const [m, p] = e.includes(" ") ? e.split(" ", 2) : ["", e];
+          return (m === "" || m?.toUpperCase() === method) && samePath(p ?? "", path);
+        })
+      )
+        changedIds.add(n.id);
+    } else {
+      const route = staticSegments(label);
+      if (route.length === 0) continue;
+      const haystacks = [...change.screens, ...change.files].map(words);
+      if (haystacks.some((w) => route.every((s) => [...words(s)].every((x) => w.has(x)))))
+        changedIds.add(n.id);
+    }
+  }
+  const areas = new Set(
+    [...changedIds].map((id) => staticSegments(id.slice(id.indexOf(":") + 1).replace(/^[A-Z]+ /, ""))[0]),
+  );
+  const nodeById = new Map(map.nodes.map((n) => [n.id, n]));
+  const untested = map.nodes
+    .filter((n) => !n.tested && !changedIds.has(n.id))
+    .flatMap((n) => {
+      const area = staticSegments(n.label.replace(/^[A-Z]+ /, ""))[0];
+      if (area === undefined || !areas.has(area)) return [];
+      // The closest touched node: same kind first, then in id order, so the result does not depend on map order.
+      const near = [...changedIds]
+        .filter((id) => staticSegments(id.slice(id.indexOf(":") + 1).replace(/^[A-Z]+ /, ""))[0] === area)
+        .sort(
+          (x, y) => Number(!x.startsWith(n.kind)) - Number(!y.startsWith(n.kind)) || x.localeCompare(y),
+        )[0];
+      return near === undefined ? [] : [{ id: n.id, near }];
+    });
+  return {
+    generatedAt: map.generatedAt,
+    runs: map.runs,
+    changed: [...changedIds].sort().map((id) => {
+      const n = nodeById.get(id);
+      return {
+        id,
+        tested: n?.tested === true,
+        tickets: [...(n?.tickets ?? [])],
+        ...(n?.lastTested ? { lastTested: n.lastTested } : {}),
+      };
+    }),
+    untested: untested.sort((a, b) => a.id.localeCompare(b.id)),
+    transitions: map.edges
+      .filter((e) => changedIds.has(e.from) || changedIds.has(e.to))
+      .map((e) => ({
+        from: e.from,
+        to: e.to,
+        passed: e.passed,
+        failed: e.failed,
+        lastOutcome: e.lastOutcome,
+      })),
+  };
 }

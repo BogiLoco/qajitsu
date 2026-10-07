@@ -41,6 +41,11 @@ export const SourceRefSchema = z.discriminatedUnion("kind", [
     kind: z.literal("imported"),
     id: z.string().regex(/^(xray|zephyr|testrail|file):[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/),
   }),
+  /** A screen, endpoint or transition end of the application map around the change (REQ-OBS-08). */
+  z.strictObject({
+    kind: z.literal("map"),
+    id: z.string().regex(/^(page|api):\S.{0,300}$/),
+  }),
   /** An observation of an exploratory session of this run (REQ-EXEC-15/AC4). */
   z.strictObject({
     kind: z.literal("observation"),

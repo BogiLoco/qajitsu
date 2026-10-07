@@ -1,4 +1,4 @@
-import { copyFile, readFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   AgentOutputError,
@@ -10,6 +10,7 @@ import {
   runPlanner,
   sourceContext,
   type AgentStageDeps,
+  type ChangeContext,
 } from "@qajitsu/agents";
 import {
   AnalysisSchema,
@@ -30,8 +31,10 @@ import {
   sha256,
   writePlanVersion,
   type Analysis,
+  type MapAround,
   type Plan,
 } from "@qajitsu/core";
+import { mapAroundChange } from "@qajitsu/report";
 import { createMasker } from "@qajitsu/steps";
 import { exportRunTelemetry } from "./telemetry.js";
 import { anchorJournal } from "./verdict.js";
@@ -42,6 +45,7 @@ import type { RuntimePorts } from "../adapters.js";
 import { codeIndexCache, knowledgeDir, openSession, type ModelPorts, type RunSession } from "../session.js";
 import type { CommandIO } from "./fetch.js";
 import { openRunKnowledge, type KnowledgePorts } from "./knowledge.js";
+import { collectAppMap } from "./map.js";
 
 /** Options of `qajitsu plan`. */
 export interface PlanOptions {
@@ -146,6 +150,47 @@ async function acceptEditedPlan(
  *
  * @returns Exit code: 0 plan written (or approved), 2 token budget exceeded, 3 errors.
  */
+
+/**
+ * Computes the application map around the change from every past run of the project and stores it in
+ * `map/around.json` (REQ-OBS-08). The planner may propose regression cases for it; a map that cannot be built is
+ * reported and planning continues without it.
+ */
+async function writeMapAround(
+  session: RunSession,
+  ports: RuntimePorts,
+  analysis: Analysis,
+  context: ChangeContext,
+  io: CommandIO,
+): Promise<MapAround | undefined> {
+  try {
+    const map = await collectAppMap(session.project, ports);
+    if (map.nodes.length === 0) return undefined;
+    const around = mapAroundChange(map, {
+      endpoints: analysis.endpoints.map((e) => (e.method ? `${e.method.toUpperCase()} ${e.path}` : e.path)),
+      screens: analysis.screens.map((s) => s.name),
+      files: context.repos.flatMap((r) => r.files.map((f) => f.path)),
+    });
+    await mkdir(session.ws.path("map"), { recursive: true });
+    await writeFile(session.ws.path("map", "around.json"), `${JSON.stringify(around, null, 2)}\n`);
+    session.events.emit("plan", { kind: "system", name: "orchestrator" }, "map.around", {
+      changed: around.changed.length,
+      untested: around.untested.length,
+      transitions: around.transitions.length,
+    });
+    if (around.untested.length > 0)
+      io.write(
+        `Application map: ${String(around.untested.length)} never tested screen(s) or endpoint(s) next to the change.\n`,
+      );
+    return around;
+  } catch (error) {
+    io.writeError(
+      `Warning: the application map is not available (${session.masker.maskText(error instanceof Error ? error.message : String(error))}); planning continues without it.\n`,
+    );
+    return undefined;
+  }
+}
+
 export async function runPlan(
   rawKey: string,
   options: PlanOptions,
@@ -182,7 +227,7 @@ export async function runPlan(
     const depth = depthOption?.data ?? DepthSchema.optional().parse(ws.record.data["depth"]);
     if (depthOption?.success) await ws.update({ data: { ...ws.record.data, depth: depthOption.data } });
     const knowledge = await loadKnowledge(knowledgeDir(session.project), (t) => masker.containsSecret(t));
-    const context = await buildChangeContext(ws, knowledge, {
+    let context = await buildChangeContext(ws, knowledge, {
       indexCache: codeIndexCache(session.project),
     });
     let analysis: Analysis;
@@ -193,6 +238,8 @@ export async function runPlan(
       analysis = await runAnalyst(deps, context);
       await deps.save();
     }
+    const mapAround = await writeMapAround(session, ports, analysis, context, io);
+    if (mapAround) context = { ...context, mapAround };
 
     let current: Plan | undefined;
     try {

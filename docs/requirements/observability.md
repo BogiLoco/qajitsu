@@ -93,14 +93,14 @@ Built by code from the journal, never drawn by an agent.
 
 ### REQ-OBS-08 · Map as planner input
 
-- Status: accepted
+- Status: implemented
 - Priority: could
 - Stage: later
 - Related: REQ-OBS-07, REQ-PLAN-02
 
 **Acceptance criteria**
 
-- [ ] AC1: The planner receives untested paths around changed screens and may propose regression cases for them.
+- [x] AC1: The planner receives untested paths around changed screens and may propose regression cases for them.
 
 ### REQ-OBS-09 · Live progress of a run
 

@@ -5,9 +5,11 @@ import {
   ExploreSessionSchema,
   readRunDocs,
   readImportedCases,
+  readMapAround,
   readTicketSnapshot,
   type ChangeRef,
   type ImportedCase,
+  type MapAround,
   type KnowledgeChunk,
   type ReviewComment,
   type RunWorkspace,
@@ -117,6 +119,8 @@ export interface ChangeContext {
   readonly explorations: readonly { readonly session: string; readonly observations: readonly string[] }[];
   /** Manual test cases imported for the run by `qj fetch` (REQ-CTX-08); untrusted, cited by id. */
   readonly imported: readonly ImportedCase[];
+  /** The application map around the change, computed by code before planning (REQ-OBS-08). */
+  readonly mapAround?: MapAround | undefined;
 }
 
 /**
@@ -205,7 +209,37 @@ export async function buildChangeContext(
   }
   const docs = await readRunDocs(ws.path("knowledge", "chunks.json"));
   const imported = await readImportedCases(ws.path("imported", "cases.json"));
-  return { ticket, repos, knowledge, testsRepos, explorations, docs, imported };
+  const mapAround = await readMapAround(ws.path("map", "around.json"));
+  return {
+    ticket,
+    repos,
+    knowledge,
+    testsRepos,
+    explorations,
+    docs,
+    imported,
+    ...(mapAround ? { mapAround } : {}),
+  };
+}
+
+/** The map around a change as plain text for the planner. */
+export function renderMapAround(around: MapAround): string {
+  return [
+    "Touched by the change:",
+    ...around.changed.map(
+      (c) =>
+        `- ${c.id}: ${c.tested ? `tested (${c.tickets.join(", ")}${c.lastTested ? `, last ${c.lastTested.slice(0, 10)}` : ""})` : "never tested"}`,
+    ),
+    "Never tested, next to the change:",
+    ...(around.untested.length > 0 ? around.untested.map((u) => `- ${u.id} (near ${u.near})`) : ["- none"]),
+    "Transitions from or to the change in past runs:",
+    ...(around.transitions.length > 0
+      ? around.transitions.map(
+          (t) =>
+            `- ${t.from} -> ${t.to}: ${String(t.passed)} passed, ${String(t.failed)} failed, last ${t.lastOutcome}`,
+        )
+      : ["- none"]),
+  ].join("\n");
 }
 
 /** One imported case as plain text for the planner. */
@@ -295,6 +329,14 @@ export function renderChangeContext(context: ChangeContext): string {
       `## Existing manual test cases (${String(context.imported.length)}, imported from test management; cite as {kind: imported, id})`,
     );
     for (const c of context.imported) parts.push(untrusted(`imported/${c.id}`, renderImportedCase(c)));
+  }
+  const around = context.mapAround;
+  if (around && (around.changed.length > 0 || around.untested.length > 0)) {
+    // REQ-OBS-08: computed by code from past runs; labels come from routes, OpenAPI and visited URLs, so wrapped.
+    parts.push(
+      `## Application map around the change (from ${String(around.runs)} past run(s); cite as {kind: map, id})`,
+      untrusted("map/around", renderMapAround(around)),
+    );
   }
   if (context.knowledge.length > 0) {
     parts.push("## Project knowledge (from .qa/knowledge, maintained by the team)");

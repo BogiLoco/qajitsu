@@ -184,6 +184,19 @@ describe("imported test cases as sources (REQ-CTX-08/AC2)", () => {
   });
 });
 
+describe("application map as a source (REQ-OBS-08)", () => {
+  it("REQ-OBS-08/AC1: a case may cite a map id given to the planner, and only one that was", () => {
+    const withMap: SourceContext = { ...context, map: new Set(["page:/cart/checkout"]) };
+    expect(checkSource({ kind: "map", id: "page:/cart/checkout" }, withMap)).toBeUndefined();
+    expect(checkSource({ kind: "map", id: "page:/admin" }, withMap)).toBe(
+      "page:/admin is not in the application map around this change",
+    );
+    expect(checkSource({ kind: "map", id: "page:/cart/checkout" }, context)).toBe(
+      "page:/cart/checkout is not in the application map around this change",
+    );
+  });
+});
+
 describe("documentation as a source (REQ-KNOW-06)", () => {
   const chunk = {
     id: "0123456789abcdef-0",

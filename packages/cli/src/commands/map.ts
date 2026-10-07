@@ -11,12 +11,13 @@ import {
   buildAppMap,
   normalizeRoute,
   renderAppMapHtml,
+  type AppMap,
   type MapRun,
   type TransitionGraph,
 } from "@qajitsu/report";
 import { parse } from "yaml";
 import type { RuntimePorts } from "../adapters.js";
-import { loadProject } from "../project.js";
+import { loadProject, type LoadedProject } from "../project.js";
 import type { CommandIO } from "./fetch.js";
 
 const METHODS = ["get", "post", "put", "patch", "delete"];
@@ -51,6 +52,61 @@ const normalizeGraph = (graph: TransitionGraph, rules: readonly string[]): Trans
 };
 
 /**
+ * Builds the project's application map from the transition graphs of every run (REQ-OBS-07), with the known screens
+ * of `.qa/routes.yaml` and the API operations of the given OpenAPI text (or the newest worktree that has one).
+ *
+ * @param project - Loaded project.
+ * @param ports - Runtime ports (home, clock).
+ * @param openapi - OpenAPI document text; read from the run worktrees when undefined.
+ */
+export async function collectAppMap(
+  project: LoadedProject,
+  ports: RuntimePorts,
+  openapi?: string,
+): Promise<AppMap> {
+  const root = resolveWorkspaceRoot({
+    configured: project.config.workspace.root,
+    home: ports.home,
+    cwd: project.qaDir,
+  });
+  const routesRaw = parse(
+    await readFile(join(project.qaDir, "routes.yaml"), "utf8").catch(() => "[]"),
+  ) as unknown;
+  const routeList = Array.isArray(routesRaw) ? routesRaw : (routesRaw as { routes?: unknown } | null)?.routes;
+  const pages = (Array.isArray(routeList) ? routeList : []).filter(
+    (r): r is string => typeof r === "string" && r.startsWith("/"),
+  );
+  const runs: MapRun[] = [];
+  let openapiText = openapi;
+  for (const ticket of await listTickets(root)) {
+    for (const entry of (await readRunIndex(root, ticket)).runs) {
+      const dir = join(root, ticket, entry.runId);
+      const graph = JSON.parse(
+        await readFile(join(dir, "report", "graph.json"), "utf8").catch(() => "null"),
+      ) as TransitionGraph | null;
+      const record = RunRecordSchema.safeParse(
+        JSON.parse(await readFile(join(dir, "run.json"), "utf8").catch(() => "null")) as unknown,
+      );
+      if (graph && record.success && Array.isArray(graph.nodes))
+        runs.push({ ticket, runId: entry.runId, at: record.data.createdAt, graph });
+      // The newest worktree that still has the OpenAPI document gives the known API operations.
+      for (const [alias, repo] of Object.entries(project.config.repos))
+        if (openapi === undefined && repo.openapi !== undefined)
+          openapiText =
+            (await readFile(join(dir, "repos", alias, repo.openapi), "utf8").catch(() => undefined)) ??
+            openapiText;
+    }
+  }
+  const api = openapiText === undefined ? [] : openApiOperations(parse(openapiText) as unknown);
+  const rules = [...pages, ...api.map((a) => a.slice(a.indexOf(" ") + 1))];
+  return buildAppMap(
+    runs.map((r) => ({ ...r, graph: normalizeGraph(r.graph, rules) })),
+    { pages, api },
+    ports.now(),
+  );
+}
+
+/**
  * `qajitsu map [--out <dir>] [--openapi <file>]`: aggregates the transition graphs of every run into the
  * project's application map (REQ-OBS-07): what was tested, how it last ended, and which known screens
  * (`.qa/routes.yaml`) and API operations (OpenAPI) were never reached. Writes `map.json` and `map.html`.
@@ -62,48 +118,10 @@ export async function runMap(
 ): Promise<number> {
   try {
     const project = await loadProject(io.cwd, ports.project);
-    const root = resolveWorkspaceRoot({
-      configured: project.config.workspace.root,
-      home: ports.home,
-      cwd: project.qaDir,
-    });
-    const routesRaw = parse(
-      await readFile(join(project.qaDir, "routes.yaml"), "utf8").catch(() => "[]"),
-    ) as unknown;
-    const routeList = Array.isArray(routesRaw)
-      ? routesRaw
-      : (routesRaw as { routes?: unknown } | null)?.routes;
-    const pages = (Array.isArray(routeList) ? routeList : []).filter(
-      (r): r is string => typeof r === "string" && r.startsWith("/"),
-    );
-    const runs: MapRun[] = [];
-    let openapiText: string | undefined =
-      options.openapi === undefined ? undefined : await readFile(resolve(io.cwd, options.openapi), "utf8");
-    for (const ticket of await listTickets(root)) {
-      for (const entry of (await readRunIndex(root, ticket)).runs) {
-        const dir = join(root, ticket, entry.runId);
-        const graph = JSON.parse(
-          await readFile(join(dir, "report", "graph.json"), "utf8").catch(() => "null"),
-        ) as TransitionGraph | null;
-        const record = RunRecordSchema.safeParse(
-          JSON.parse(await readFile(join(dir, "run.json"), "utf8").catch(() => "null")) as unknown,
-        );
-        if (graph && record.success && Array.isArray(graph.nodes))
-          runs.push({ ticket, runId: entry.runId, at: record.data.createdAt, graph });
-        // The newest worktree that still has the OpenAPI document gives the known API operations.
-        for (const [alias, repo] of Object.entries(project.config.repos))
-          if (options.openapi === undefined && repo.openapi !== undefined)
-            openapiText =
-              (await readFile(join(dir, "repos", alias, repo.openapi), "utf8").catch(() => undefined)) ??
-              openapiText;
-      }
-    }
-    const api = openapiText === undefined ? [] : openApiOperations(parse(openapiText) as unknown);
-    const rules = [...pages, ...api.map((a) => a.slice(a.indexOf(" ") + 1))];
-    const map = buildAppMap(
-      runs.map((r) => ({ ...r, graph: normalizeGraph(r.graph, rules) })),
-      { pages, api },
-      ports.now(),
+    const map = await collectAppMap(
+      project,
+      ports,
+      options.openapi === undefined ? undefined : await readFile(resolve(io.cwd, options.openapi), "utf8"),
     );
     // REQ-PRJ-01/AC4, REQ-PRJ-10/AC2: outputs go to the project's exports/, never into the repository.
     const out = resolve(

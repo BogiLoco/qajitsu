@@ -52,6 +52,8 @@ export const DEFAULT_PROTECTED_PATHS: readonly string[] = [
   "manual/",
   // Imported manual test cases (REQ-CTX-08): plan citations are checked against them.
   "imported/",
+  // The application map around the change (REQ-OBS-08): plan citations are checked against it.
+  "map/",
   "run.json",
 ];
 

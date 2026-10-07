@@ -147,6 +147,9 @@ Exit codes: `0` fetched, `3` configuration, access or ticket errors.
 ### `qajitsu plan <ticket>`
 
 Analyses the fetched change and writes a plan version; in a terminal, the review loop accepts, revises or edits it.
+When the project has earlier runs, the application map around the change (`map/around.json`: touched, never tested
+and last failed screens, endpoints and transitions) is given to the planner, which may add regression cases citing it
+(REQ-OBS-08); a map that cannot be built is a warning and planning continues.
 
 - `--run <id>`: run id (default: latest run of the ticket)
 - `--revise <instruction>`: write a new plan version following this instruction

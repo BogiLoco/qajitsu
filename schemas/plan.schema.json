@@ -203,6 +203,24 @@
                   "properties": {
                     "kind": {
                       "type": "string",
+                      "const": "map"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^(page|api):\\S.{0,300}$"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "id"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
                       "const": "observation"
                     },
                     "session": {

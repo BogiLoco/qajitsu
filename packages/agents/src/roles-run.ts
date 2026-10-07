@@ -5,6 +5,7 @@ import {
   ConfigError,
   PlanDraftSchema,
   PlanSchema,
+  mapAroundIds,
   recordRunDocs,
   type Analysis,
   type EventLog,
@@ -150,6 +151,7 @@ export function sourceContext(context: ChangeContext): SourceContext {
     observations: Object.fromEntries(context.explorations.map((e) => [e.session, e.observations])),
     docs: context.docs,
     imported: new Set(context.imported.map((c) => c.id)),
+    map: mapAroundIds(context.mapAround),
   };
 }
 
