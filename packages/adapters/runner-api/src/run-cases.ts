@@ -55,6 +55,8 @@ export interface RunCasesOptions {
   readonly manual?: ManualPrompter | undefined;
   /** How long one manual step may wait for its answer (default 15 minutes). */
   readonly manualTimeoutMs?: number;
+  /** Locale and time zone of a locale run (REQ-EXEC-14); `plan` must be resolved for it. */
+  readonly locale?: { readonly name: string; readonly timezone: string } | undefined;
   /** Prefix of evidence paths, e.g. `matrix/firefox-mobile/` for a browser combination (REQ-EXEC-13). */
   readonly evidencePrefix?: string;
   /** The message inbox of a case (REQ-ENV-08), created on first use and shared by its attempts. */
@@ -170,6 +172,7 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
         manualCount(caseId) * (options.manualTimeoutMs ?? 900_000) +
         messageWaitMs(caseId),
       ...(options.manual ? { manual: options.manual } : {}),
+      ...(options.locale ? { locale: options.locale } : {}),
       ...(options.messages ? { messages: options.messages(caseId) } : {}),
     });
     const record = applyContract(executed, options.contract);

@@ -1580,6 +1580,28 @@
       },
       "additionalProperties": false
     },
+    "locales": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z]{2,3}(-[A-Z][A-Za-z]{1,3})?$"
+          },
+          "timezone": {
+            "type": "string",
+            "pattern": "^[A-Za-z]+(?:\\/[A-Za-z0-9_+-]+)*$"
+          }
+        },
+        "required": [
+          "name",
+          "timezone"
+        ],
+        "additionalProperties": false
+      }
+    },
     "manual": {
       "default": {
         "timeout_s": 900

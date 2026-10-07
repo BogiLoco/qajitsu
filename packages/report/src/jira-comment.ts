@@ -69,6 +69,11 @@ const COMBOS_TITLE = "Browsers and viewports";
 const comboLines = (m: CommentModel): string[] =>
   m.rows.flatMap((r) => (r.combinations === undefined ? [] : [`${r.caseId}: ${r.combinations}`]));
 
+/** Status per locale (REQ-EXEC-14/AC3). */
+const LOCALES_TITLE = "Locales";
+const localeLines = (m: CommentModel): string[] =>
+  m.rows.flatMap((r) => (r.locales === undefined ? [] : [`${r.caseId}: ${r.locales}`]));
+
 /** Manual steps and who performed them (REQ-EXEC-11/AC6). */
 const MANUAL_TITLE = "Manual steps (performed by people)";
 const manualLines = (m: CommentModel): string[] =>
@@ -170,6 +175,10 @@ export function renderJiraAdf(m: CommentModel): { version: 1; type: "doc"; conte
     content.push(heading(4, COMBOS_TITLE));
     content.push(bullets(comboLines(m).map((l) => [text(l)])));
   }
+  if (localeLines(m).length > 0) {
+    content.push(heading(4, LOCALES_TITLE));
+    content.push(bullets(localeLines(m).map((l) => [text(l)])));
+  }
   if (manualLines(m).length > 0) {
     content.push(heading(4, MANUAL_TITLE));
     content.push(bullets(manualLines(m).map((l) => [text(l)])));
@@ -237,6 +246,8 @@ export function renderJiraWiki(m: CommentModel): string {
     lines.push("", "h4. Fix verification", ...m.fixCheck.map((l) => `* ${wikiEscape(l)}`));
   if (comboLines(m).length > 0)
     lines.push("", `h4. ${COMBOS_TITLE}`, ...comboLines(m).map((l) => `* ${wikiEscape(l)}`));
+  if (localeLines(m).length > 0)
+    lines.push("", `h4. ${LOCALES_TITLE}`, ...localeLines(m).map((l) => `* ${wikiEscape(l)}`));
   if (manualLines(m).length > 0)
     lines.push("", `h4. ${MANUAL_TITLE}`, ...manualLines(m).map((l) => `* ${wikiEscape(l)}`));
   if (hintLines(m).length > 0)
@@ -268,6 +279,7 @@ export function renderCommentPreview(m: CommentModel): string {
   if (m.fixCheck && m.fixCheck.length > 0)
     lines.push("", "Fix verification:", ...m.fixCheck.map((l) => `  ${l}`));
   if (comboLines(m).length > 0) lines.push("", `${COMBOS_TITLE}:`, ...comboLines(m).map((l) => `  ${l}`));
+  if (localeLines(m).length > 0) lines.push("", `${LOCALES_TITLE}:`, ...localeLines(m).map((l) => `  ${l}`));
   if (manualLines(m).length > 0) lines.push("", `${MANUAL_TITLE}:`, ...manualLines(m).map((l) => `  ${l}`));
   if (hintLines(m).length > 0) lines.push("", `${HINTS_TITLE}:`, ...hintLines(m).map((l) => `  ${l}`));
   const observed = observationLines(m);

@@ -96,6 +96,9 @@ test_types: [api, web]
 #     browsers: [chromium, firefox]
 #     viewports: [{ name: desktop, width: 1280, height: 800 }, { name: mobile, width: 390, height: 844 }]
 
+# Locales (REQ-EXEC-14): cases that list a locale run once more in it; expected formats come from the plan.
+# locales: [{ name: pl-PL, timezone: Europe/Warsaw }, { name: de-DE, timezone: Europe/Berlin }]
+
 # Message capture (REQ-ENV-08): an inbox per case for e-mails, SMS gateways and outgoing webhooks. The host must be
 # on environments.allowlist.
 # messages: { base_url: https://webhook.site, email_domain: email.webhook.site, api_key: secret://env/WEBHOOKSITE_KEY, timeout_s: 120 }

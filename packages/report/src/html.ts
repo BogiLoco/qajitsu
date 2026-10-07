@@ -128,7 +128,7 @@ export function renderReportHtml(input: ReportInput): string {
   const matrix = input.rows
     .map(
       (r) =>
-        `<tr><td><a href="#${esc(r.caseId)}">${esc(r.caseId)}</a></td><td>${esc(r.title)}</td><td>${esc(r.requirement)}</td><td>${r.type.toUpperCase()}</td><td>${badge(r.status)}${r.combinations ? `<div class="muted">Browsers: ${esc(r.combinations)}</div>` : ""}${r.manual ? `<div class="muted">Manual: ${esc(r.manual)}</div>` : ""}${r.hint ? `<div class="muted">Hint (suggestion): ${esc(r.hint)}</div>` : ""}</td><td>${String(r.stepsPassed)}/${String(r.stepsTotal)}</td><td>${esc(r.evidence)}</td></tr>`,
+        `<tr><td><a href="#${esc(r.caseId)}">${esc(r.caseId)}</a></td><td>${esc(r.title)}</td><td>${esc(r.requirement)}</td><td>${r.type.toUpperCase()}</td><td>${badge(r.status)}${r.combinations ? `<div class="muted">Browsers: ${esc(r.combinations)}</div>` : ""}${r.locales ? `<div class="muted">Locales: ${esc(r.locales)}</div>` : ""}${r.manual ? `<div class="muted">Manual: ${esc(r.manual)}</div>` : ""}${r.hint ? `<div class="muted">Hint (suggestion): ${esc(r.hint)}</div>` : ""}</td><td>${String(r.stepsPassed)}/${String(r.stepsTotal)}</td><td>${esc(r.evidence)}</td></tr>`,
     )
     .join("");
   const cases = input.plan.cases

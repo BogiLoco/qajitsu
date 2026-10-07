@@ -13,7 +13,13 @@ const HEADER = [
   "Evidence",
 ] as const;
 
-const values = (r: MatrixRow, hints = false, manual = false, combos = false): (string | number)[] => [
+const values = (
+  r: MatrixRow,
+  hints = false,
+  manual = false,
+  combos = false,
+  locales = false,
+): (string | number)[] => [
   r.caseId,
   r.title,
   r.requirement,
@@ -23,6 +29,7 @@ const values = (r: MatrixRow, hints = false, manual = false, combos = false): (s
   r.stepsTotal,
   r.evidence,
   ...(combos ? [r.combinations ?? ""] : []),
+  ...(locales ? [r.locales ?? ""] : []),
   ...(manual ? [r.manual ?? ""] : []),
   ...(hints ? [r.hint ?? ""] : []),
 ];
@@ -30,8 +37,11 @@ const values = (r: MatrixRow, hints = false, manual = false, combos = false): (s
 /**
  * Columns of the matrix: manual steps (REQ-EXEC-11/AC6) and hints (REQ-VER-12/AC3) appear only when a row has them.
  */
-const flagsOf = (rows: readonly MatrixRow[]): { combos: boolean; manual: boolean; hints: boolean } => ({
+const flagsOf = (
+  rows: readonly MatrixRow[],
+): { combos: boolean; locales: boolean; manual: boolean; hints: boolean } => ({
   combos: rows.some((r) => r.combinations !== undefined),
+  locales: rows.some((r) => r.locales !== undefined),
   manual: rows.some((r) => r.manual !== undefined),
   hints: rows.some((r) => r.hint !== undefined),
 });
@@ -40,6 +50,7 @@ const headerOf = (rows: readonly MatrixRow[]): readonly string[] => {
   return [
     ...HEADER,
     ...(f.combos ? ["Browsers"] : []),
+    ...(f.locales ? ["Locales"] : []),
     ...(f.manual ? ["Manual steps"] : []),
     ...(f.hints ? ["Hint (suggestion)"] : []),
   ];
@@ -61,7 +72,7 @@ export function renderMatrixCsv(rows: readonly MatrixRow[]): string {
   };
   const header = headerOf(rows);
   const f = flagsOf(rows);
-  return `${[header, ...rows.map((r) => values(r, f.hints, f.manual, f.combos))].map((r) => r.map(cell).join(",")).join("\r\n")}\r\n`;
+  return `${[header, ...rows.map((r) => values(r, f.hints, f.manual, f.combos, f.locales))].map((r) => r.map(cell).join(",")).join("\r\n")}\r\n`;
 }
 
 const xml = (s: string): string =>

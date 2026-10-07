@@ -35,3 +35,4 @@ export * from "./projects/registry.js";
 export * from "./knowledge/extract.js";
 export * from "./knowledge/sources.js";
 export * from "./projects/profile.js";
+export * from "./plan/locale.js";

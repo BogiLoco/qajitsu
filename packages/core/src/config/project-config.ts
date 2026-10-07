@@ -387,6 +387,18 @@ export const ProjectConfigSchema = z.strictObject({
       poll_ms: z.number().int().min(200).max(60_000).default(2000),
     })
     .optional(),
+  /**
+   * Locales cases can run in (REQ-EXEC-14/AC1): the browser gets the locale and time zone, API calls an
+   * `Accept-Language` header. A case lists the ones it runs in (`locales` in the plan).
+   */
+  locales: z
+    .array(
+      z.strictObject({
+        name: z.string().regex(/^[a-z]{2,3}(-[A-Z][A-Za-z]{1,3})?$/, "Locale like pl-PL"),
+        timezone: z.string().regex(/^[A-Za-z]+(?:\/[A-Za-z0-9_+-]+)*$/, "IANA time zone like Europe/Warsaw"),
+      }),
+    )
+    .default([]),
   /** Manual steps (REQ-EXEC-11): how long the run waits for a person's answer per step. */
   manual: z
     .strictObject({ timeout_s: z.number().int().min(1).max(86_400).default(900) })

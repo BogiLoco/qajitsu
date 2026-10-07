@@ -76,24 +76,19 @@ export const AnalysisSchema = z
 /** Parsed analysis. */
 export type Analysis = z.infer<typeof AnalysisSchema>;
 
+/** A locale name, e.g. `pl-PL` or `de` (REQ-EXEC-14). */
+export const LocaleNameSchema = z.string().regex(/^[a-z]{2,3}(-[A-Z][A-Za-z]{1,3})?$/, "Locale like pl-PL");
+
 /**
- * Structured expectation of a step (REQ-PLAN-02/AC2). Generated tests read these through
- * `plan.expect(caseId, stepId)` (invariant 4); `description` is the human wording.
+ * Per-locale values of an expectation (REQ-EXEC-14/AC2): the same fields, texts and element states with the values
+ * this locale shows (number, date and currency formats). Only keys of the base expectation can be overridden.
  */
-export const ExpectationSchema = z.strictObject({
-  description: z.string().min(1),
-  status: z.number().int().min(100).max(599).optional(),
-  /** JSON paths in a response body with their expected values, e.g. `{"total": 10.05}`. */
+const LocaleOverrideSchema = z.strictObject({
   fields: z.record(z.string(), z.unknown()).optional(),
-  /** Texts that must be visible (web/mobile). */
   texts: z.array(z.string()).optional(),
-  /**
-   * Expected state of UI elements by selector (`testid:place-order`, `role:button:Pay`, `label:Email`,
-   * `text:Total`), e.g. `{ "testid:place-order": { "enabled": true } }` (REQ-EXEC-05).
-   */
   elements: z
     .record(
-      z.string().regex(/^(testid|role|label|text|css):[^.]+$/, "Selector like testid:place-order (no dots)"),
+      z.string(),
       z.strictObject({
         visible: z.boolean().optional(),
         enabled: z.boolean().optional(),
@@ -103,19 +98,78 @@ export const ExpectationSchema = z.strictObject({
       }),
     )
     .optional(),
-  /**
-   * A message the step must receive in the case's inbox (REQ-ENV-08/AC2): an e-mail, an SMS forwarded to a webhook,
-   * or an outgoing webhook. Every given part must be contained (case-insensitive); none arriving in time fails.
-   */
-  message: z
-    .strictObject({
-      to: z.string().min(1).max(200).optional(),
-      subject: z.string().min(1).max(300).optional(),
-      body: z.string().min(1).max(500).optional(),
-      within_s: z.number().int().min(1).max(3600).optional(),
-    })
-    .optional(),
 });
+
+/**
+ * Structured expectation of a step (REQ-PLAN-02/AC2). Generated tests read these through
+ * `plan.expect(caseId, stepId)` (invariant 4); `description` is the human wording.
+ */
+export const ExpectationSchema = z
+  .strictObject({
+    description: z.string().min(1),
+    status: z.number().int().min(100).max(599).optional(),
+    /** JSON paths in a response body with their expected values, e.g. `{"total": 10.05}`. */
+    fields: z.record(z.string(), z.unknown()).optional(),
+    /** Texts that must be visible (web/mobile). */
+    texts: z.array(z.string()).optional(),
+    /**
+     * Expected state of UI elements by selector (`testid:place-order`, `role:button:Pay`, `label:Email`,
+     * `text:Total`), e.g. `{ "testid:place-order": { "enabled": true } }` (REQ-EXEC-05).
+     */
+    elements: z
+      .record(
+        z
+          .string()
+          .regex(/^(testid|role|label|text|css):[^.]+$/, "Selector like testid:place-order (no dots)"),
+        z.strictObject({
+          visible: z.boolean().optional(),
+          enabled: z.boolean().optional(),
+          checked: z.boolean().optional(),
+          text: z.string().optional(),
+          value: z.string().optional(),
+        }),
+      )
+      .optional(),
+    /**
+     * A message the step must receive in the case's inbox (REQ-ENV-08/AC2): an e-mail, an SMS forwarded to a webhook,
+     * or an outgoing webhook. Every given part must be contained (case-insensitive); none arriving in time fails.
+     */
+    message: z
+      .strictObject({
+        to: z.string().min(1).max(200).optional(),
+        subject: z.string().min(1).max(300).optional(),
+        body: z.string().min(1).max(500).optional(),
+        within_s: z.number().int().min(1).max(3600).optional(),
+      })
+      .optional(),
+    /** Values that differ per locale, by locale name (REQ-EXEC-14/AC2). */
+    by_locale: z.record(LocaleNameSchema, LocaleOverrideSchema).optional(),
+  })
+  .superRefine((e, ctx) => {
+    for (const [locale, o] of Object.entries(e.by_locale ?? {})) {
+      for (const key of Object.keys(o.fields ?? {}))
+        if (!(key in (e.fields ?? {})))
+          ctx.addIssue({
+            code: "custom",
+            path: ["by_locale", locale, "fields", key],
+            message: "Only planned fields can differ per locale",
+          });
+      if (o.texts && o.texts.length !== (e.texts ?? []).length)
+        ctx.addIssue({
+          code: "custom",
+          path: ["by_locale", locale, "texts"],
+          message: "Give one text per planned text",
+        });
+      for (const [selector, state] of Object.entries(o.elements ?? {}))
+        for (const prop of Object.keys(state))
+          if (!(prop in (e.elements?.[selector] ?? {})))
+            ctx.addIssue({
+              code: "custom",
+              path: ["by_locale", locale, "elements", selector],
+              message: "Only planned element states can differ per locale",
+            });
+    }
+  });
 
 /** Structured expectation. */
 export type Expectation = z.infer<typeof ExpectationSchema>;
@@ -137,6 +191,8 @@ export const TestCaseSchema = z.strictObject({
   data: z
     .record(z.string(), z.string().regex(/^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$/, "Use aliases like user:standard"))
     .default({}),
+  /** Locales of the project this case also runs in (REQ-EXEC-14/AC1); expectations per locale in `by_locale`. */
+  locales: z.array(LocaleNameSchema).optional(),
   steps: z
     .array(
       z

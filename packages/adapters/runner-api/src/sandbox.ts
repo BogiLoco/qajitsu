@@ -181,6 +181,7 @@ export function createSandboxExecutor(
     const session = options.browser?.(input);
     const runtime: CaseRuntime = createCaseRuntime({
       plan: input.plan,
+      ...(input.locale ? { locale: input.locale.name } : {}),
       ...(input.messages ? { messages: input.messages } : {}),
       ...(input.manual ? { manual: input.manual } : {}),
       caseId: input.caseId,

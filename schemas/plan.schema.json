@@ -224,6 +224,13 @@
               "pattern": "^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$"
             }
           },
+          "locales": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z]{2,3}(-[A-Z][A-Za-z]{1,3})?$"
+            }
+          },
           "steps": {
             "minItems": 1,
             "type": "array",
@@ -316,6 +323,59 @@
                         }
                       },
                       "additionalProperties": false
+                    },
+                    "by_locale": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "pattern": "^[a-z]{2,3}(-[A-Z][A-Za-z]{1,3})?$"
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "fields": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {}
+                          },
+                          "texts": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "elements": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "object",
+                              "properties": {
+                                "visible": {
+                                  "type": "boolean"
+                                },
+                                "enabled": {
+                                  "type": "boolean"
+                                },
+                                "checked": {
+                                  "type": "boolean"
+                                },
+                                "text": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [

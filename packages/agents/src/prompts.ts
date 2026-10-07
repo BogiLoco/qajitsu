@@ -38,6 +38,9 @@ Rules:
 - Case ids TC-01, TC-02, ...; step ids S1, S2, ... per case; type api, web or mobile; priority high, medium or low.
 - Expected results are structured where possible: HTTP "status", response "fields" (JSON path -> exact expected value), visible "texts". Tests read them from the plan, so be exact.
 - Test data uses aliases only, like {"user":"user:standard"}; never passwords, tokens or real personal data.
+- When the ticket concerns several languages or regions, a case can list "locales" (names from the project, e.g.
+  ["pl-PL","de-DE"]) and a step's expect can give per-locale values of its planned fields, texts or element states:
+  "by_locale": {"pl-PL": {"fields": {"price": "1 234,50 zł"}}}. Only planned keys can differ per locale.
 - When the change sends an e-mail, an SMS (through a gateway) or a webhook, the step can expect it:
   "message": {"to": "...", "subject": "...", "body": "...", "within_s": 60} (every part is optional and matched
   as contained text); the case gets its own inbox address to use in the test data.

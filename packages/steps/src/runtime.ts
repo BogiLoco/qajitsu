@@ -130,6 +130,8 @@ export interface CaseRuntimeOptions {
   readonly manual?: ManualPrompter | undefined;
   /** The case's message inbox (REQ-ENV-08); read by the trusted runtime only. */
   readonly messages?: CaseMessages | undefined;
+  /** The locale of this run (REQ-EXEC-14), sent as `Accept-Language`. */
+  readonly locale?: string | undefined;
 }
 
 /** The recorder of one attempt. Runs in the trusted process; specs only reach it through these operations. */
@@ -383,7 +385,13 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     const accountHeaders = alias === undefined ? {} : options.accounts[alias];
     if (accountHeaders === undefined) throw new Error(`Unknown account alias '${alias ?? ""}'`);
     // Account headers win: a spec cannot replace the session of an alias.
-    const headers = { "content-type": "application/json", ...opts.headers, ...accountHeaders };
+    const headers = {
+      "content-type": "application/json",
+      // REQ-EXEC-14: a locale run asks the API for that locale; a spec may still set its own header.
+      ...(options.locale ? { "accept-language": options.locale } : {}),
+      ...opts.headers,
+      ...accountHeaders,
+    };
     const started = options.now();
     const response = await options.transport({
       method,

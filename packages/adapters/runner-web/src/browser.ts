@@ -146,6 +146,8 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
       const context = await browser.newContext({
         baseURL: input.baseUrl,
         viewport: options.viewport ?? { width: 1280, height: 800 },
+        // REQ-EXEC-14: a locale run renders numbers, dates and currencies of its locale and time zone.
+        ...(input.locale ? { locale: input.locale.name, timezoneId: input.locale.timezone } : {}),
         ...(video === "off"
           ? {}
           : { recordVideo: { dir: join(dir, "video"), size: { width: 1280, height: 800 } } }),

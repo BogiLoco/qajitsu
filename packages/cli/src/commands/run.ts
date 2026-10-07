@@ -23,6 +23,7 @@ import {
   loadApprovedPlan,
   resolveEnvironment,
   selectExecutableSpecs,
+  planForLocale,
   webCombinations,
   type CaseResultFile,
   type Plan,
@@ -144,6 +145,52 @@ async function runMatrix(
       continue;
     }
     await deps.run(combo, cases, dir);
+  }
+}
+
+/**
+ * Runs the cases that list locales once more per locale (REQ-EXEC-14/AC1): the plan is resolved for the locale, so
+ * expectations are that locale's formats from the approved plan (AC2); results go to `results/locale/<name>/`,
+ * evidence under `locale/<name>/`. A locale missing from the project's `locales` makes those cases BLOCKED.
+ * Mobile cases and cases with manual steps run in the primary run only.
+ */
+async function runLocales(
+  session: RunSession,
+  plan: Plan,
+  deps: {
+    readonly specs: ReadonlyMap<string, string>;
+    readonly blocked: ReadonlyMap<string, string>;
+    readonly run: (
+      localePlan: Plan,
+      locale: { name: string; timezone: string },
+      dir: string,
+    ) => Promise<unknown>;
+  },
+): Promise<void> {
+  const runnable = plan.cases.filter(
+    (c) =>
+      c.type !== "mobile" &&
+      !deps.blocked.has(c.id) &&
+      deps.specs.has(c.id) &&
+      !c.steps.some((s) => s.manual === true),
+  );
+  for (const name of [...new Set(runnable.flatMap((c) => c.locales ?? []))].sort()) {
+    const localePlan = planForLocale({ ...plan, cases: runnable }, name);
+    if (localePlan.cases.length === 0) continue;
+    const dir = session.ws.path("results", "locale", name);
+    await mkdir(dir, { recursive: true });
+    const locale = session.project.config.locales.find((l) => l.name === name);
+    session.events.emit("run", SYSTEM, "locale.run", { locale: name, cases: localePlan.cases.length });
+    if (!locale) {
+      for (const c of localePlan.cases)
+        await writeFile(
+          join(dir, `${c.id}.json`),
+          `${JSON.stringify(blockedResult(c.id, `locale ${name} is not in the project's locales (qa.project.yaml)`), null, 2)}\n`,
+          { flag: "wx" },
+        );
+      continue;
+    }
+    await deps.run(localePlan, locale, dir);
   }
 }
 
@@ -679,6 +726,23 @@ async function executeCases(
         : ports.executor
           ? undefined
           : browserUnavailable(combo.browser),
+  });
+  await runLocales(session, plan, {
+    specs,
+    blocked,
+    run: (localePlan, locale, dir) =>
+      runCases({
+        ...base,
+        executor: executorFor(primary),
+        plan: localePlan,
+        specs,
+        evidence,
+        resultsDir: dir,
+        evidencePrefix: `locale/${locale.name}/`,
+        locale,
+        retries: project.config.environments.retries,
+        workers: project.config.environments.workers,
+      }),
   });
   // REQ-EXEC-06/AC3, REQ-EXEC-10/AC2: mobile cases run after the others, one at a time per device.
   const mobileCases = plan.cases.filter((c) => c.type === "mobile" && !blocked.has(c.id) && specs.has(c.id));

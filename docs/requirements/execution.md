@@ -185,16 +185,16 @@ person, not from the runner.
 
 ### REQ-EXEC-14 · Locale testing
 
-- Status: accepted
+- Status: implemented
 - Priority: could
 - Stage: later
 - Related: INV-4, REQ-EXEC-05, REQ-PLAN-02
 
 **Acceptance criteria**
 
-- [ ] AC1: Project config lists locales and time zones; a case can run per locale.
-- [ ] AC2: Expected number, date and currency formats come from the plan per locale (`plan.expect(...)`), never from the agent.
-- [ ] AC3: The report shows a status per case and locale.
+- [x] AC1: Project config lists locales and time zones; a case can run per locale.
+- [x] AC2: Expected number, date and currency formats come from the plan per locale (`plan.expect(...)`), never from the agent.
+- [x] AC3: The report shows a status per case and locale.
 
 ### REQ-EXEC-15 · Exploratory sessions
 

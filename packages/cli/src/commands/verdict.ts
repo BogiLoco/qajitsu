@@ -13,6 +13,7 @@ import {
   checkJournal,
   journalAnchor,
   OBSERVATIONS_FILE,
+  planForLocale,
   webCombinations,
   type CaseResultFile,
   type TestStatus,
@@ -175,10 +176,35 @@ export async function computeVerdict(
           { combo: combo.id, status: c.status },
         ]);
   }
+  // REQ-EXEC-14: each locale run is evaluated against the plan resolved for that locale.
+  const perLocale = new Map<string, { locale: string; status: TestStatus }[]>();
+  for (const name of (await readdir(ws.path("results", "locale")).catch(() => [] as string[])).sort()) {
+    const dir = ws.path("results", "locale", name);
+    const localeResults = new Map<string, CaseResultFile>();
+    for (const file of (await readdir(dir).catch(() => [] as string[])).filter((f) => f.endsWith(".json"))) {
+      const text = await readFile(join(dir, file), "utf8");
+      const parsed = CaseResultFileSchema.safeParse(JSON.parse(text) as unknown);
+      if (parsed.success && parsed.data.caseId === file.slice(0, -5)) {
+        localeResults.set(parsed.data.caseId, parsed.data);
+        matrixResults.push({ name: `results/locale/${name}/${file}`, text });
+      } else malformed.push(`results/locale/${name}/${file}: not a valid results file`);
+    }
+    for (const c of evaluateCases(planForLocale(plan, name), localeResults, manifest, manifestCheck))
+      if (localeResults.has(c.caseId))
+        perLocale.set(c.caseId, [...(perLocale.get(c.caseId) ?? []), { locale: name, status: c.status }]);
+  }
   const combined = evaluated.cases.map((c) => {
-    const others = perCombination.get(c.caseId);
-    return others ? { ...c, status: combineStatuses([c.status, ...others.map((o) => o.status)]) } : c;
+    const others = [...(perCombination.get(c.caseId) ?? []), ...(perLocale.get(c.caseId) ?? [])];
+    return others.length > 0
+      ? { ...c, status: combineStatuses([c.status, ...others.map((o) => o.status)]) }
+      : c;
   });
+  const localesOf = (caseId: string, primaryStatus: TestStatus): string | undefined => {
+    const runs = perLocale.get(caseId);
+    return runs
+      ? [`default ${primaryStatus}`, ...runs.map((r) => `${r.locale} ${r.status}`)].join(", ")
+      : undefined;
+  };
   const combinationsOf = (caseId: string, primaryStatus: TestStatus): string | undefined => {
     const others = perCombination.get(caseId);
     return others && combos[0]
@@ -288,7 +314,8 @@ export async function computeVerdict(
       ...(() => {
         const primaryStatus = evaluated.cases.find((e) => e.caseId === c.caseId)?.status ?? c.status;
         const combinations = combinationsOf(c.caseId, primaryStatus);
-        return combinations ? { combinations } : {};
+        const locales = localesOf(c.caseId, primaryStatus);
+        return { ...(combinations ? { combinations } : {}), ...(locales ? { locales } : {}) };
       })(),
       evidence:
         c.evidence.length > 0

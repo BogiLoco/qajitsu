@@ -110,6 +110,8 @@ export interface AttemptRequest {
   readonly manual?: ManualPrompter;
   /** The case's message inbox (REQ-ENV-08); absent means message steps cannot run (BLOCKED). */
   readonly messages?: CaseMessages;
+  /** Locale and time zone of a locale run (REQ-EXEC-14); the plan given is already resolved for it. */
+  readonly locale?: { readonly name: string; readonly timezone: string };
 }
 
 /**
