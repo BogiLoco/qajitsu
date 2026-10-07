@@ -28,6 +28,7 @@ import { runPromote, type PromoteOptions } from "./commands/promote.js";
 import { runBug, type BugOptions } from "./commands/bug.js";
 import { runAnswer } from "./commands/manual.js";
 import { runBaselineAccept } from "./commands/baseline.js";
+import { runRelease, type ReleaseOptions } from "./commands/release.js";
 import { runProjectExport, runProjectImport } from "./commands/project-profile.js";
 import {
   runKnowledgeAdd,
@@ -816,6 +817,19 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .action(
       (ticket: string, options: { run?: string; cases?: string; includeFailed?: boolean; yes?: boolean }) =>
         withPorts((ports) => runBaselineAccept(ticket, options, commandIO, ports, io.user ?? "unknown"))(),
+    );
+
+  program
+    .command("release")
+    .description(
+      "Release readiness over every ticket of a fix version or sprint, from each ticket's latest executed run",
+    )
+    .argument("<name>", "fix version, e.g. 2.4.0 (a sprint name with --sprint)")
+    .option("--sprint", "the name is a sprint, not a fix version")
+    .option("--publish <ticket>", "post the report as a comment on this ticket after a preview")
+    .option("--yes", "publish without asking")
+    .action((name: string, options: ReleaseOptions) =>
+      withPorts((ports) => runRelease(name, options, commandIO, ports))(),
     );
 
   program

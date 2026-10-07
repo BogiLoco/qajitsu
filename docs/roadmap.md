@@ -254,7 +254,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-PUB-05](requirements/publishing.md#req-pub-05--optional-integrations) Optional integrations (could, deferred, AC 1/4)
 - [REQ-PUB-07](requirements/publishing.md#req-pub-07--bug-reports-from-failed-cases) Bug reports from failed cases (should, implemented, AC 5/5)
 - [REQ-PUB-08](requirements/publishing.md#req-pub-08--promote-ticket-cases-to-the-regression-suite) Promote ticket cases to the regression suite (should, implemented, AC 4/4)
-- [REQ-PUB-09](requirements/publishing.md#req-pub-09--release-readiness-report) Release readiness report (could, accepted, AC 0/4)
+- [REQ-PUB-09](requirements/publishing.md#req-pub-09--release-readiness-report) Release readiness report (could, implemented, AC 4/4)
 - [REQ-OBS-08](requirements/observability.md#req-obs-08--map-as-planner-input) Map as planner input (could, accepted, AC 0/1)
 - [REQ-PRJ-09](requirements/projects.md#req-prj-09--export-and-import-of-a-project-profile) Export and import of a project profile (could, implemented, AC 2/2)
 - [REQ-KNOW-12](requirements/knowledge.md#req-know-12--online-sources) Online sources (could, implemented, AC 2/2)

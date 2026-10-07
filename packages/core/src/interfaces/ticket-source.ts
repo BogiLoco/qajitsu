@@ -28,8 +28,23 @@ export interface Ticket {
 }
 
 /** Source of tickets: Jira Cloud first, Jira Data Center and others later (REQ-CTX-01, REQ-GEN-02). */
+/** Tickets of a release or sprint (REQ-PUB-09/AC1). */
+export interface ReleaseQuery {
+  readonly fixVersion?: string | undefined;
+  readonly sprint?: string | undefined;
+}
+
+/** One ticket of a release, as listed by the tracker. */
+export interface ReleaseTicket {
+  readonly key: string;
+  readonly summary: string;
+  readonly status: string;
+}
+
 export interface TicketSource {
   getTicket(key: TicketKey, signal?: AbortSignal): Promise<Ticket>;
+  /** Tickets of the project in a fix version or sprint (REQ-PUB-09/AC1). */
+  findTickets?(query: ReleaseQuery, signal?: AbortSignal): Promise<readonly ReleaseTicket[]>;
   /** Cheap access check for `qajitsu doctor --online` (REQ-GEN-03/AC2); never returns secrets. */
   check?(signal?: AbortSignal): Promise<{ readonly ok: boolean; readonly detail: string }>;
 }

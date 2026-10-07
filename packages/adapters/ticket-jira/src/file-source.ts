@@ -1,4 +1,4 @@
-import { readFile, stat } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { AdapterError, TicketKeySchema, type Ticket, type TicketKey, type TicketSource } from "@qajitsu/core";
 import { z } from "zod";
@@ -32,6 +32,9 @@ const FileTicketSchema = z.object({
     .default({ issues: [], pullRequests: [] }),
   attachments: z.array(z.object({ name: z.string(), mimeType: z.string(), url: z.string() })).default([]),
   comments: z.array(z.object({ author: z.string(), created: z.string(), body: z.string() })).default([]),
+  /** Release fields for `qj release` (REQ-PUB-09). */
+  fixVersions: z.array(z.string()).default([]),
+  sprint: z.string().optional(),
 });
 
 /**
@@ -50,6 +53,21 @@ export function createFileTicketSource(dir: string): TicketSource {
         () => false,
       );
       return { ok, detail: ok ? `ticket files in ${dir}` : `${dir} not found` };
+    },
+    async findTickets(query) {
+      const out: { key: string; summary: string; status: string }[] = [];
+      for (const name of (await readdir(dir).catch(() => [] as string[]))
+        .filter((n) => n.endsWith(".json"))
+        .sort()) {
+        const parsed = FileTicketSchema.safeParse(JSON.parse(await readFile(join(dir, name), "utf8")));
+        if (!parsed.success) continue;
+        const t = parsed.data;
+        const match =
+          (query.fixVersion !== undefined && t.fixVersions.includes(query.fixVersion)) ||
+          (query.sprint !== undefined && t.sprint === query.sprint);
+        if (match) out.push({ key: t.key, summary: t.summary, status: t.status });
+      }
+      return out;
     },
     async getTicket(key: TicketKey, signal?: AbortSignal): Promise<Ticket> {
       const safeKey = TicketKeySchema.parse(key);

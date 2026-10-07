@@ -22,6 +22,8 @@ export interface JiraCloudConfig {
   readonly token: string;
   /** Custom field holding acceptance criteria, e.g. `customfield_10042`. */
   readonly acceptanceCriteriaField?: string | undefined;
+  /** The project key; release queries are limited to it (REQ-PUB-09). */
+  readonly projectKey?: string | undefined;
 }
 
 const RichText = z.union([AdfNodeSchema, z.string(), z.null()]).optional();
@@ -178,6 +180,57 @@ export function createJiraCloudTicketSource(
         () => http.json(`${api}/myself`, z.object({}).loose(), { signal }),
         `Jira ${dc ? "Data Center" : "Cloud"} reachable, token accepted`,
       ),
+    async findTickets(query, signal) {
+      if (config.projectKey === undefined || !/^[A-Z][A-Z0-9_]+$/.test(config.projectKey))
+        throw new AdapterError("JIRA_PROJECT_INVALID", "A release query needs the project key.", {});
+      const quote = (v: string): string => `"${v.replace(/[\\"]/g, (c) => `\\${c}`)}"`;
+      const filter =
+        query.fixVersion !== undefined
+          ? `fixVersion = ${quote(query.fixVersion)}`
+          : query.sprint !== undefined
+            ? `sprint = ${quote(query.sprint)}`
+            : undefined;
+      if (filter === undefined)
+        throw new AdapterError("JIRA_RELEASE_QUERY", "Give a fix version or a sprint.", {});
+      const jql = `project = ${quote(config.projectKey)} AND ${filter} ORDER BY key ASC`;
+      const Listed = z.object({
+        key: z.string(),
+        fields: z.object({ summary: z.string(), status: z.object({ name: z.string() }).optional() }),
+      });
+      const out: { key: string; summary: string; status: string }[] = [];
+      const add = (issues: readonly z.infer<typeof Listed>[]): void => {
+        for (const i of issues)
+          out.push({ key: i.key, summary: i.fields.summary, status: i.fields.status?.name ?? "?" });
+      };
+      const params = (extra: Record<string, string>): string =>
+        new URLSearchParams({ jql, fields: "summary,status", maxResults: "100", ...extra }).toString();
+      if (dc) {
+        for (let startAt = 0; out.length < 1000; startAt += 100) {
+          const page = await http.json(
+            `${api}/search?${params({ startAt: String(startAt) })}`,
+            z.object({ issues: z.array(Listed) }),
+            {
+              signal,
+            },
+          );
+          add(page.issues);
+          if (page.issues.length < 100) break;
+        }
+      } else {
+        let token: string | undefined;
+        do {
+          const page = await http.json(
+            `${api}/search/jql?${params(token ? { nextPageToken: token } : {})}`,
+            z.object({ issues: z.array(Listed), nextPageToken: z.string().optional() }),
+            { signal },
+          );
+          add(page.issues);
+          token = page.nextPageToken;
+        } while (token !== undefined && out.length < 1000);
+      }
+      return out;
+    },
+
     async getTicket(key: TicketKey, signal?: AbortSignal): Promise<Ticket> {
       const safeKey = TicketKeySchema.parse(key);
       const fields = [

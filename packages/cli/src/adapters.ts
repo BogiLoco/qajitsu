@@ -126,6 +126,7 @@ export function buildAdapters(
             email: jira.email,
             token: jira.token ?? "",
             acceptanceCriteriaField: jira.acceptance_criteria_field,
+            projectKey: jira.project_key,
           },
           deps,
         );

@@ -119,14 +119,14 @@ Work spent on one ticket builds the regression suite instead of being lost.
 
 ### REQ-PUB-09 · Release readiness report
 
-- Status: accepted
+- Status: implemented
 - Priority: could
 - Stage: later
 - Related: INV-6, REQ-VER-08, REQ-PUB-01
 
 **Acceptance criteria**
 
-- [ ] AC1: `qj release <fixVersion | sprint>` collects the tickets and their latest runs into one report.
-- [ ] AC2: The report shows per ticket the status counts, open FAILED and NEEDS_REVIEW cases, and tickets with no run.
-- [ ] AC3: All numbers are computed from structured results; a ticket without results is never counted as passed.
-- [ ] AC4: The report can be published to Jira (a version page or comment) after preview.
+- [x] AC1: `qj release <fixVersion | sprint>` collects the tickets and their latest runs into one report.
+- [x] AC2: The report shows per ticket the status counts, open FAILED and NEEDS_REVIEW cases, and tickets with no run.
+- [x] AC3: All numbers are computed from structured results; a ticket without results is never counted as passed.
+- [x] AC4: The report can be published to Jira (a version page or comment) after preview.

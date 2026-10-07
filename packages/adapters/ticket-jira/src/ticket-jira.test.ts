@@ -1,3 +1,6 @@
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TicketKeySchema } from "@qajitsu/core";
 import { describe, expect, it } from "vitest";
@@ -212,5 +215,81 @@ describe("doctor access check (REQ-GEN-03/AC2)", () => {
     expect((await failing.source.check?.())?.ok).toBe(false);
     const { createFileTicketSource } = await import("./file-source.js");
     expect((await createFileTicketSource("/definitely/missing").check?.())?.ok).toBe(false);
+  });
+});
+
+describe("release queries (REQ-PUB-09)", () => {
+  const listed = (keys: string[]) =>
+    keys.map((key) => ({ key, fields: { summary: `Story ${key}`, status: { name: "Done" } } }));
+
+  it("REQ-PUB-09/AC1: Cloud searches by fix version with JQL limited to the project and follows page tokens", async () => {
+    const fake = createFakeFetch([
+      {
+        match: /^\/rest\/api\/3\/search\/jql\?.*nextPageToken=p2/,
+        reply: jsonReply({ issues: listed(["SHOP-3"]) }),
+      },
+      {
+        match: /^\/rest\/api\/3\/search\/jql\?/,
+        reply: jsonReply({ issues: listed(["SHOP-1", "SHOP-2"]), nextPageToken: "p2" }),
+      },
+    ]);
+    const source = createJiraCloudTicketSource(
+      { ...config, projectKey: "SHOP" },
+      testDeps(fake.fetch, secrets),
+    );
+    const found = await source.findTickets?.({ fixVersion: 'v2.4 "spring"' });
+    expect(found?.map((t) => t.key)).toEqual(["SHOP-1", "SHOP-2", "SHOP-3"]);
+    expect(found?.[0]).toEqual({ key: "SHOP-1", summary: "Story SHOP-1", status: "Done" });
+    expect(fake.requests[0]?.url.searchParams.get("jql")).toBe(
+      'project = "SHOP" AND fixVersion = "v2.4 \\"spring\\"" ORDER BY key ASC',
+    );
+  });
+
+  it("REQ-PUB-09/AC1: Data Center searches by sprint with startAt paging", async () => {
+    const page1 = listed(Array.from({ length: 100 }, (_, i) => `SHOP-${String(i + 1)}`));
+    const fake = createFakeFetch([
+      { match: /^\/rest\/api\/2\/search\?.*startAt=100/, reply: jsonReply({ issues: listed(["SHOP-101"]) }) },
+      { match: /^\/rest\/api\/2\/search\?.*startAt=0/, reply: jsonReply({ issues: page1 }) },
+    ]);
+    const source = createJiraCloudTicketSource(
+      { baseUrl: BASE, flavor: "datacenter", token: "secret://env/JIRA_TOKEN", projectKey: "SHOP" },
+      testDeps(fake.fetch, secrets),
+    );
+    const found = await source.findTickets?.({ sprint: "Sprint 12" });
+    expect(found).toHaveLength(101);
+    expect(fake.requests[0]?.url.searchParams.get("jql")).toBe(
+      'project = "SHOP" AND sprint = "Sprint 12" ORDER BY key ASC',
+    );
+  });
+
+  it("REQ-PUB-09/AC1: refuses a query without a project key or without a version or sprint", async () => {
+    const fake = createFakeFetch([]);
+    const noProject = createJiraCloudTicketSource(config, testDeps(fake.fetch, secrets));
+    await expect(noProject.findTickets?.({ fixVersion: "1.0" })).rejects.toMatchObject({
+      code: "JIRA_PROJECT_INVALID",
+    });
+    const empty = createJiraCloudTicketSource(
+      { ...config, projectKey: "SHOP" },
+      testDeps(fake.fetch, secrets),
+    );
+    await expect(empty.findTickets?.({})).rejects.toMatchObject({ code: "JIRA_RELEASE_QUERY" });
+    expect(fake.requests).toHaveLength(0);
+  });
+
+  it("REQ-PUB-09/AC1: the file source matches fixVersions and sprint fields", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "qj-release-"));
+    const ticket = (key: string, extra: object) =>
+      writeFile(
+        join(dir, `${key}.json`),
+        JSON.stringify({ key, summary: `Story ${key}`, status: "Done", description: "", ...extra }),
+      );
+    await ticket("DEMO-1", { fixVersions: ["1.0"], sprint: "S1" });
+    await ticket("DEMO-2", { fixVersions: ["1.1"], sprint: "S1" });
+    await ticket("DEMO-3", {});
+    await writeFile(join(dir, "broken.json"), JSON.stringify({ nope: true }));
+    const source = createFileTicketSource(dir);
+    expect((await source.findTickets?.({ fixVersion: "1.0" }))?.map((t) => t.key)).toEqual(["DEMO-1"]);
+    expect((await source.findTickets?.({ sprint: "S1" }))?.map((t) => t.key)).toEqual(["DEMO-1", "DEMO-2"]);
+    expect(await createFileTicketSource(join(dir, "missing")).findTickets?.({ sprint: "S1" })).toEqual([]);
   });
 });

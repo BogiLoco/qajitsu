@@ -15,3 +15,4 @@ export * from "./app-map.js";
 export * from "./explore.js";
 export * from "./observations.js";
 export * from "./bug-report.js";
+export * from "./release.js";

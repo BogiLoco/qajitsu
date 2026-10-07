@@ -269,6 +269,24 @@ Exit codes: `0` promoted (or written with `--dry-run`), `2` not confirmed, `3` r
 
 ## Exploratory testing
 
+### `qajitsu release <name>`
+
+Release readiness over every ticket of a fix version or sprint (REQ-PUB-09). The tickets come from the ticket
+source: Jira searches `project = <jira.project_key> AND fixVersion = "<name>"` (or `sprint = "<name>"`); a file
+source matches the tickets' `fixVersions` and `sprint` fields. For each ticket the latest executed run (not closed by
+`qj work reset`) is evaluated by the same code as `publish`. The report shows per ticket the status counts, the open
+cases (FAILED, FLAKY, BLOCKED, NEEDS_REVIEW, NOT_RUN), tickets without a run and runs whose publish gates fail
+(untrusted). Every number is computed from structured results; a ticket is ready only when its run is trusted and
+every case PASSED, and a ticket without a run is never ready. The report is written to
+`exports/releases/<name>.md` (`sprint-<name>.md` for a sprint).
+
+- `--sprint`: the name is a sprint, not a fix version
+- `--publish <ticket>`: after a preview, post the report as a comment on this ticket (ADF on Cloud, wiki markup on
+  Data Center; files with `jira.type: file`); publishing the same release to the same ticket again updates the comment
+- `--yes`: publish without asking
+
+Exit codes: `0` every ticket ready, `1` not ready (or no tickets), `2` publishing not confirmed, `3` errors.
+
 ### `qajitsu explore <ticket>`
 
 An exploratory session (REQ-EXEC-15): the explorer agent explores the application towards a goal through browser

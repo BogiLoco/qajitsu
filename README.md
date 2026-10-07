@@ -311,6 +311,19 @@ qj promote SHOP-482                    # shows the target and asks before pushin
 Only PASSED cases are promoted, with the exact spec that passed and the expected values of the approved plan, into
 the tests repository (`repos.<alias>.role: tests`, folder `promote_dir` or `tests/qajitsu/`).
 
+### Optional: is the release ready?
+
+```sh
+qj release 2.4.0                          # every ticket with fix version 2.4.0 (jira.project_key)
+qj release "Sprint 12" --sprint           # every ticket of a sprint
+qj release 2.4.0 --publish SHOP-500       # also as a comment on SHOP-500, after a preview
+```
+
+For each ticket the latest executed run is evaluated by the same code as `qj publish`: status counts, open FAILED,
+NEEDS_REVIEW, BLOCKED and NOT_RUN cases, tickets with no run (never counted as ready) and runs whose publish gates
+fail (untrusted). The report goes to `exports/releases/2.4.0.md`; the exit code is 0 only when every ticket is
+ready.
+
 ### Step 7: clean up
 
 Cleanup follows `cleanup.policy` automatically after `run --build`. Manually: `qj clean SHOP-482` (containers,
@@ -329,6 +342,7 @@ qj evidence SHOP-482 --failed              # FAILED cases with their hint (produ
 qj publish SHOP-482
 qj bug SHOP-482                            # optional: FAILED cases as bugs (similar open bugs shown first)
 qj promote SHOP-482                        # optional: PASSED cases as a PR/MR to the tests repository
+qj release 2.4.0                           # before a release: every ticket of the fix version, ready or not
 ```
 
 In Claude Code the same flow is available as `/qa-plan`, `/qa-run` and `/qa-evidence` (section 8).
@@ -357,7 +371,7 @@ A project is a name (slug, e.g. `shop`, `bank-web`) plus two places:
     cache/git/                   git mirrors; worktrees of runs are made from them
     cache/index/                 code indexes by <repo>@<sha>, reused by later runs on the same commit
     knowledge/                   the knowledge base (see "Knowledge base")
-    exports/                     evidence zips, qj export output, bench results, application maps
+    exports/                     evidence zips, qj export output, bench results, application maps, releases/
     logs/, context.json          logs; index of open work for `qj status`
   audit/<slug>/                  run journals kept after `qj projects remove`
 ```
@@ -591,6 +605,7 @@ Every option and exit code of every command: [docs/cli/commands.md](docs/cli/com
 | `qj bug <TICKET> [--cases TC-01] [--link <KEY>] [--yes [--force-new]]`                                            | when a case FAILED                                                              | Shows similar open bugs, then creates a bug written by code from the run (steps, expected vs actual, version, environment, evidence by hash) and links it to the ticket, or links an existing bug. Asks first.                                                                                    |
 | `qj promote <TICKET> [--cases TC-01,TC-03] [--dry-run] [--yes]`                                                   | after a good run                                                                | Proposes the PASSED cases as a pull/merge request to the tests repository: the specs that passed, unchanged, and the plan's expectations; asks before pushing.                                                                                                                                    |
 | `qj explore <TICKET> --goal "<text>" [--time-box <min>] [--max-steps <n>]`                                        | when you want an agent to look around a change, before or besides planned cases | An exploratory session in a browser QAJitsu drives and records: observations with steps and screenshots, `explore/<session>/report.html` for review, no statuses. `qj explore promote <TICKET> --session S01 --observation O1` turns an observation into a draft plan case (runs after approval). |
+| `qj release <fixVersion> [--sprint] [--publish <KEY>] [--yes]`                                                    | before a release or at the end of a sprint                                      | Collects every ticket of the fix version (or sprint) and its latest executed run: status counts, open cases, tickets without a run, untrusted runs. Writes `exports/releases/<name>.md`; `--publish` comments on a ticket after a preview. Exit 0 only when every ticket is ready.                |
 
 ### Inspecting results
 
@@ -819,6 +834,10 @@ test_types: [api, web]
 - **Bug reports from failures.** `qj bug` searches for similar open bugs first, then creates a bug written by code
   from the run (steps from the plan and the runner record, expected vs actual, tested version, environment,
   evidence by hash) and links it to the ticket, or links the failure to an existing bug; always after confirmation.
+- **Release readiness.** `qj release 2.4.0` (or `--sprint "Sprint 12"`) lists every ticket of the release with its
+  latest executed run: status counts, open FAILED and NEEDS_REVIEW cases, tickets never tested and runs whose gates
+  fail. Numbers are computed from the results; a ticket without a run is never ready. Written to
+  `exports/releases/`, optionally commented on a Jira ticket after a preview.
 - **Regression suite from tickets.** `qj promote` proposes the PASSED cases of a run as a PR/MR to your tests
   repository: the exact specs that passed (hash checked against the runner record and the journal) and the approved
   plan's expectations; nothing is pushed without your confirmation.
