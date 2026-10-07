@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
@@ -342,4 +343,26 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
       },
     };
   };
+}
+
+/**
+ * Why a browser cannot run here, or undefined when its Playwright build is installed (REQ-EXEC-13/AC3).
+ *
+ * @param name - Browser of the matrix.
+ * @param exists - File check, injectable for tests.
+ */
+export function browserUnavailable(
+  name: "chromium" | "firefox" | "webkit",
+  exists: (path: string) => boolean = existsSync,
+): string | undefined {
+  const type = name === "firefox" ? firefox : name === "webkit" ? webkit : chromium;
+  let path: string;
+  try {
+    path = type.executablePath();
+  } catch {
+    path = "";
+  }
+  return path !== "" && exists(path)
+    ? undefined
+    : `${name} is not installed; install it with 'pnpm --filter @qajitsu/cli exec playwright-core install ${name}'`;
 }

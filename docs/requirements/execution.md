@@ -172,16 +172,16 @@ person, not from the runner.
 
 ### REQ-EXEC-13 · Browser and viewport matrix
 
-- Status: accepted
+- Status: implemented
 - Priority: could
 - Stage: later
 - Related: REQ-EXEC-05, REQ-EXEC-10
 
 **Acceptance criteria**
 
-- [ ] AC1: Project config lists browsers (Chromium, Firefox, WebKit) and viewports; web cases run for each combination.
-- [ ] AC2: The matrix and report show a status per case and combination; a case is PASSED only if every combination passed.
-- [ ] AC3: An unavailable browser makes its combinations BLOCKED with the reason.
+- [x] AC1: Project config lists browsers (Chromium, Firefox, WebKit) and viewports; web cases run for each combination.
+- [x] AC2: The matrix and report show a status per case and combination; a case is PASSED only if every combination passed.
+- [x] AC3: An unavailable browser makes its combinations BLOCKED with the reason.
 
 ### REQ-EXEC-14 · Locale testing
 

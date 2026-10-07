@@ -237,18 +237,21 @@ qj run SHOP-482 --build --set api.FEATURE_X=1         # with an overridable vari
 3. Each spec runs in a **sandbox** (no network, no files, no secrets). The trusted parent process performs every API
    call, drives the browser (Playwright) or the mobile app (Appium), records evidence and compares actual values with
    the approved plan.
-4. Steps that expect an **e-mail, SMS or webhook** use the case's own inbox (webhook.site, `messages:` in the
+4. With a **browser matrix** (`web.matrix`), web cases run again in every browser and viewport combination
+   (results and evidence per combination); a case is PASSED only if every combination passed, and a browser that is
+   not installed makes its combinations BLOCKED with the install command.
+5. Steps that expect an **e-mail, SMS or webhook** use the case's own inbox (webhook.site, `messages:` in the
    project config): the spec puts the inbox address into the test data, QAJitsu waits for the message the plan
    describes (recipient, subject, body text), keeps it as evidence and deletes the inbox when the run ends. No
    message in time fails the step.
-5. Steps the plan marks **manual** (an SMS code, a physical device, a printout) pause the run: the instructions are
+6. Steps the plan marks **manual** (an SMS code, a physical device, a printout) pause the run: the instructions are
    shown and you answer passed or failed with an optional note and file. In CI the run waits for
    `qj answer SHOP-482 TC-02 S3 --passed` from someone else. No answer in time makes the case BLOCKED, never PASSED.
-6. Failed web steps get up to two **healing** attempts (selectors and waits only; a healed pass is NEEDS_REVIEW).
-7. Statuses are computed by code; then the **auditor** and the optional **canary** may downgrade PASSED to NEEDS_REVIEW,
+7. Failed web steps get up to two **healing** attempts (selectors and waits only; a healed pass is NEEDS_REVIEW).
+8. Statuses are computed by code; then the **auditor** and the optional **canary** may downgrade PASSED to NEEDS_REVIEW,
    and every FAILED case gets a **hint** (likely product bug, test bug, environment or data) citing its evidence; a
    hint is a suggestion and never changes a status.
-8. Reports are written: `report.html`, `matrix.md/.csv/.xlsx`, `junit.xml`, `gates.json`, the transition graph.
+9. Reports are written: `report.html`, `matrix.md/.csv/.xlsx`, `junit.xml`, `gates.json`, the transition graph.
 
 The matrix is printed at the end; the exit code tells the result (section 5).
 
@@ -682,6 +685,7 @@ run folder looks like this:
 | `.qa/auth/`                                  | login scripts for logins one request cannot do (forms, cookies, SSO): `login: { script: auth/<file> }` in a profile; values are masked                                                                                                                               |
 | `.qa/stubs/<name>/`                          | WireMock/Mockoon mappings for stubbed dependencies                                                                                                                                                                                                                   |
 | `.qa/bench.yaml`                             | benchmark cases                                                                                                                                                                                                                                                      |
+| `web.matrix` in `qa.project.yaml`            | browsers (`chromium`, `firefox`, `webkit`) and viewports (`{ name, width, height }`) for web cases; the first combination is the primary run                                                                                                                         |
 | `messages:` in `qa.project.yaml`             | message capture for e-mails, SMS gateways and webhooks: `base_url` (webhook.site or self-hosted, must be on `environments.allowlist`), `email_domain`, `api_key: secret://...`, `timeout_s`                                                                          |
 | `.env.local` (next to `.qa/`, not committed) | secret values for `secret://env/NAME`                                                                                                                                                                                                                                |
 
@@ -771,6 +775,10 @@ test_types: [api, web]
 - **Failure hints.** Every FAILED case gets a suggested cause (product bug, test bug, environment, data) citing
   steps, assertions, evidence or logs; code drops hints without real evidence and a hint never changes a status.
   [docs/guides/models-and-verification.md](docs/guides/models-and-verification.md)
+- **Browser and viewport matrix.** `web: { matrix: { browsers: [chromium, firefox, webkit], viewports: [...] } }`
+  runs web cases in every combination; the matrix, report and Jira comment show the status per combination, and a
+  case is PASSED only when all of them passed. A missing browser is BLOCKED with the install command; cases with
+  manual steps run in the first combination only.
 - **E-mail, SMS and webhooks.** With `messages: { base_url: https://webhook.site }` (hosted or self-hosted, on the
   allowlist, API key as `secret://`), every case gets its own inbox address and URL; a step waits for the message
   the plan expects (recipient, subject, body text), the message is masked and kept as evidence, its links are

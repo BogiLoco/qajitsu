@@ -85,3 +85,8 @@ Status: `todo` (no test yet) · `covered` (test exists, file name in brackets). 
 - done · Messages received before the attempt started do not count.
 - done · A secret in a message (an activation token) is masked in the spec's view and in evidence.
 - done · A capture host off the allowlist → the run is refused before anything starts.
+
+## Browser matrix (REQ-EXEC-13)
+
+- done · A case passes on desktop and fails on mobile → FAILED, never PASSED (`packages/cli/src/commands/matrix.test.ts`).
+- done · A browser that is not installed → its combinations BLOCKED; the case is not PASSED.

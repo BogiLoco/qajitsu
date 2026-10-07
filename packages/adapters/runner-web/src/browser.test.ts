@@ -14,7 +14,7 @@ import {
 import { PlanSchema, createEventLog } from "@qajitsu/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { startShop } from "../../../../examples/demo-shop/api/server.mjs";
-import { createPlaywrightBrowserFactory, maskHar } from "./browser.js";
+import { browserUnavailable, createPlaywrightBrowserFactory, maskHar } from "./browser.js";
 
 const PASSWORD = "fictional-demo-password";
 const plan = (ticket: string) =>
@@ -315,4 +315,13 @@ describe("passive observations (REQ-EVD-07)", () => {
     const items = await visit(await site(), { console: false, httpErrors: false, accessibility: false });
     expect(items.map((i) => i.name)).not.toContain("observations.json");
   }, 60_000);
+});
+
+describe("browser availability (REQ-EXEC-13/AC3)", () => {
+  it("REQ-EXEC-13/AC3: a browser whose build is missing is unavailable, with the install command", () => {
+    expect(browserUnavailable("firefox", () => false)).toBe(
+      "firefox is not installed; install it with 'pnpm --filter @qajitsu/cli exec playwright-core install firefox'",
+    );
+    expect(browserUnavailable("chromium", () => true)).toBeUndefined();
+  });
 });

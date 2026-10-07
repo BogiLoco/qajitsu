@@ -1,5 +1,5 @@
 import type { KnowledgePorts } from "./knowledge.js";
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { compareDeployedSha, createRemoteEnvProvider, loginAccounts } from "@qajitsu/adapter-env-remote";
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
@@ -11,7 +11,7 @@ import {
   type AttemptExecutor,
   type ContractValidator,
 } from "@qajitsu/adapter-runner-api";
-import { createPlaywrightBrowserFactory } from "@qajitsu/adapter-runner-web";
+import { browserUnavailable, createPlaywrightBrowserFactory } from "@qajitsu/adapter-runner-web";
 import { buildChangeContext, checkSpec, createUsageTracker, healSpec, runAuthor } from "@qajitsu/agents";
 import {
   AnalysisSchema,
@@ -23,9 +23,11 @@ import {
   loadApprovedPlan,
   resolveEnvironment,
   selectExecutableSpecs,
+  webCombinations,
   type CaseResultFile,
   type Plan,
   type ResolvedEnvironment,
+  type WebCombination,
 } from "@qajitsu/core";
 import { createMasker } from "@qajitsu/steps";
 import { formatSpecProblems } from "@qajitsu/verifier";
@@ -80,6 +82,8 @@ export interface RunPorts extends KnowledgePorts, MessagePorts {
     off(event: "SIGINT" | "SIGTERM", listener: () => void): unknown;
   };
   readonly exit?: (code: number) => void;
+  /** Why a browser of the matrix cannot run (replaced in tests); default: its Playwright build is missing. */
+  readonly browserUnavailable?: (browser: "chromium" | "firefox" | "webkit") => string | undefined;
   /** Runs setup and teardown hooks (replaced in tests). */
   readonly hookExec?: HookExec;
 }
@@ -94,6 +98,54 @@ const blockedResult = (caseId: string, reason: string): CaseResultFile =>
     runner: "api",
     attempts: [{ attempt: 1, outcome: "error", assertions: [], error: reason, steps: [], evidence: [] }],
   });
+
+/**
+ * Runs the web cases again in every further browser and viewport combination (REQ-EXEC-13/AC1): results go to
+ * `results/matrix/<combo>/`, evidence under `matrix/<combo>/`. A browser that is not installed makes its
+ * combinations BLOCKED with the reason (AC3). Cases with manual steps run in the primary combination only, so
+ * nobody is asked once per browser; healing stays with the primary run.
+ */
+async function runMatrix(
+  session: RunSession,
+  plan: Plan,
+  combos: readonly WebCombination[],
+  deps: {
+    readonly specs: ReadonlyMap<string, string>;
+    readonly blocked: ReadonlyMap<string, string>;
+    readonly run: (combo: WebCombination, cases: Plan["cases"], dir: string) => Promise<unknown>;
+    readonly unavailable: (combo: WebCombination) => string | undefined;
+  },
+): Promise<void> {
+  const cases = plan.cases.filter(
+    (c) =>
+      c.type === "web" &&
+      !deps.blocked.has(c.id) &&
+      deps.specs.has(c.id) &&
+      !c.steps.some((s) => s.manual === true),
+  );
+  if (cases.length === 0) return;
+  for (const combo of combos) {
+    const dir = session.ws.path("results", "matrix", combo.id);
+    await mkdir(dir, { recursive: true });
+    const reason = deps.unavailable(combo);
+    session.events.emit("run", SYSTEM, "matrix.combination", {
+      combination: combo.id,
+      blocked: reason !== undefined,
+    });
+    if (reason !== undefined) {
+      for (const c of cases)
+        await writeFile(
+          join(dir, `${c.id}.json`),
+          `${JSON.stringify(blockedResult(c.id, reason), null, 2)}\n`,
+          {
+            flag: "wx",
+          },
+        );
+      continue;
+    }
+    await deps.run(combo, cases, dir);
+  }
+}
 
 async function writeBlocked(
   session: RunSession,
@@ -502,12 +554,16 @@ async function executeCases(
     events.emit("run", SYSTEM, "case.blocked", { caseId, reason: reason.slice(0, 500) });
     await writeBlocked(session, [caseId], reason, results);
   }
-  const executor =
+  // REQ-EXEC-13: the first browser and viewport combination is the primary run.
+  const combos = webCombinations(project.config.web);
+  const [primary] = combos;
+  const executorFor = (combo: WebCombination | undefined): AttemptExecutor =>
     ports.executor ??
     createSandboxExecutor({
       // The browser starts only when a spec uses ui.* (REQ-EXEC-05, REQ-EXEC-07).
       browser: createPlaywrightBrowserFactory({
-        browser: project.config.web.browser,
+        browser: combo?.browser ?? project.config.web.browser,
+        ...(combo ? { viewport: { width: combo.viewport.width, height: combo.viewport.height } } : {}),
         video: project.config.web.video,
         headless: project.config.web.headless,
         actionTimeoutMs: project.config.web.action_timeout_ms,
@@ -520,6 +576,7 @@ async function executeCases(
         },
       }),
     });
+  const executor = executorFor(primary);
   // The contract is read from the worktree, i.e. from exactly the analysed version of the code.
   let contract: ContractValidator | undefined;
   for (const [alias, repo] of Object.entries(project.config.repos)) {
@@ -601,6 +658,28 @@ async function executeCases(
   // REQ-VER-09: the canary re-runs one PASSED case with an inverted expectation; it must fail.
   if (project.config.verification.canary) await runCanary(session, plan, ran, specs, base);
   for (const [id, r] of ran) results.set(id, r);
+  await runMatrix(session, plan, combos.slice(1), {
+    specs,
+    blocked,
+    run: (combo, cases, dir) =>
+      runCases({
+        ...base,
+        executor: executorFor(combo),
+        plan: { ...plan, cases },
+        specs,
+        evidence,
+        resultsDir: dir,
+        evidencePrefix: `matrix/${combo.id}/`,
+        retries: project.config.environments.retries,
+        workers: project.config.environments.workers,
+      }),
+    unavailable: (combo) =>
+      ports.browserUnavailable
+        ? ports.browserUnavailable(combo.browser)
+        : ports.executor
+          ? undefined
+          : browserUnavailable(combo.browser),
+  });
   // REQ-EXEC-06/AC3, REQ-EXEC-10/AC2: mobile cases run after the others, one at a time per device.
   const mobileCases = plan.cases.filter((c) => c.type === "mobile" && !blocked.has(c.id) && specs.has(c.id));
   if (mobileCases.length > 0) {

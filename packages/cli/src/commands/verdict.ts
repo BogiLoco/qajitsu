@@ -1,4 +1,5 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { readManifest } from "@qajitsu/adapter-evidence-local";
 import {
   APPROVED_PLAN_FILE,
@@ -12,7 +13,9 @@ import {
   checkJournal,
   journalAnchor,
   OBSERVATIONS_FILE,
+  webCombinations,
   type CaseResultFile,
+  type TestStatus,
   type RunObservation,
   type EvidenceEntry,
   type Plan,
@@ -37,6 +40,8 @@ import {
   applyVerificationChecks,
   checkManifest,
   combineGates,
+  combineStatuses,
+  evaluateCases,
   evaluateRun,
   gateNoSecrets,
   type CaseEvaluation,
@@ -147,11 +152,44 @@ export async function computeVerdict(
     approvedSha256: approval.sha256,
     currentSha256: currentSha,
   });
+  // REQ-EXEC-13: every further browser and viewport combination is evaluated by the same code; a case is PASSED
+  // only when every combination it ran in passed.
+  const combos = webCombinations(session.project.config.web);
+  const perCombination = new Map<string, { combo: string; status: TestStatus }[]>();
+  const matrixResults: { name: string; text: string }[] = [];
+  for (const combo of combos.slice(1)) {
+    const dir = ws.path("results", "matrix", combo.id);
+    const comboResults = new Map<string, CaseResultFile>();
+    for (const file of (await readdir(dir).catch(() => [] as string[])).filter((f) => f.endsWith(".json"))) {
+      const text = await readFile(join(dir, file), "utf8");
+      const parsed = CaseResultFileSchema.safeParse(JSON.parse(text) as unknown);
+      if (parsed.success && parsed.data.caseId === file.slice(0, -5)) {
+        comboResults.set(parsed.data.caseId, parsed.data);
+        matrixResults.push({ name: `results/matrix/${combo.id}/${file}`, text });
+      } else malformed.push(`results/matrix/${combo.id}/${file}: not a valid results file`);
+    }
+    for (const c of evaluateCases(plan, comboResults, manifest, manifestCheck))
+      if (comboResults.has(c.caseId))
+        perCombination.set(c.caseId, [
+          ...(perCombination.get(c.caseId) ?? []),
+          { combo: combo.id, status: c.status },
+        ]);
+  }
+  const combined = evaluated.cases.map((c) => {
+    const others = perCombination.get(c.caseId);
+    return others ? { ...c, status: combineStatuses([c.status, ...others.map((o) => o.status)]) } : c;
+  });
+  const combinationsOf = (caseId: string, primaryStatus: TestStatus): string | undefined => {
+    const others = perCombination.get(caseId);
+    return others && combos[0]
+      ? [`${combos[0].id} ${primaryStatus}`, ...others.map((o) => `${o.combo} ${o.status}`)].join(", ")
+      : undefined;
+  };
   // REQ-VER-06, REQ-VER-09: the auditor and the canary can only move PASSED to NEEDS_REVIEW.
   // Records are hashed into run.json when written; a missing, unreadable or changed record fails
   // closed when the configuration says the check runs and something PASSED.
   const hashes = (ws.record.data["checks"] ?? {}) as Record<string, string | undefined>;
-  const anyPassed = evaluated.cases.some((c) => c.status === "PASSED");
+  const anyPassed = combined.some((c) => c.status === "PASSED");
   const verification = session.project.config.verification;
   const integrity: string[] = [];
   const readChecked = async <T>(
@@ -190,8 +228,8 @@ export async function computeVerdict(
       masker.maskText(`${h.category}: ${h.justification}`),
     ]),
   );
-  const checked = applyVerificationChecks(evaluated.cases, audit, canary, integrity);
-  const cases = evaluated.cases.map((c, i) => ({ ...c, status: checked[i]?.status ?? c.status }));
+  const checked = applyVerificationChecks(combined, audit, canary, integrity);
+  const cases = combined.map((c, i) => ({ ...c, status: checked[i]?.status ?? c.status }));
   const checkNotes = [
     ...(audit?.status === "done"
       ? [
@@ -247,6 +285,11 @@ export async function computeVerdict(
       stepsTotal: c.stepsTotal,
       ...(c.status === "FAILED" && hintOf.has(c.caseId) ? { hint: hintOf.get(c.caseId) } : {}),
       ...manualOf(c.caseId),
+      ...(() => {
+        const primaryStatus = evaluated.cases.find((e) => e.caseId === c.caseId)?.status ?? c.status;
+        const combinations = combinationsOf(c.caseId, primaryStatus);
+        return combinations ? { combinations } : {};
+      })(),
       evidence:
         c.evidence.length > 0
           ? `${String(c.evidence.length)} file(s)`
@@ -406,6 +449,7 @@ export async function computeVerdict(
           text: await readFile(ws.path("results", `${id}.json`), "utf8"),
         })),
       )),
+      ...matrixResults,
     ],
     (t) => masker.containsSecret(t),
   );

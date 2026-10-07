@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ConfigError } from "../errors.js";
-import { parseProjectConfig } from "./project-config.js";
+import { webCombinations, parseProjectConfig } from "./project-config.js";
 
 const valid = {
   project: "shop",
@@ -174,5 +174,31 @@ describe("parseProjectConfig (REQ-GEN-01, REQ-CTX-02)", () => {
     expect(() =>
       parseProjectConfig({ ...valid, models: { providers: { a: { type: "openai", api_key: "sk-plain" } } } }),
     ).toThrow(ConfigError);
+  });
+});
+
+describe("web matrix (REQ-EXEC-13)", () => {
+  it("REQ-EXEC-13/AC1: every browser × viewport, primary first; without a matrix one combination of web.browser", () => {
+    const base = { project: "demo", jira: { type: "file", tickets_dir: "t", project_key: "DEMO" } };
+    expect(webCombinations(parseProjectConfig(base).web).map((c) => c.id)).toEqual(["chromium-desktop"]);
+    const matrix = parseProjectConfig({
+      ...base,
+      web: {
+        matrix: {
+          browsers: ["chromium", "webkit"],
+          viewports: [
+            { name: "desktop", width: 1280, height: 800 },
+            { name: "mobile", width: 390, height: 844 },
+          ],
+        },
+      },
+    }).web;
+    expect(webCombinations(matrix).map((c) => c.id)).toEqual([
+      "chromium-desktop",
+      "chromium-mobile",
+      "webkit-desktop",
+      "webkit-mobile",
+    ]);
+    expect(webCombinations(matrix)[1]?.viewport).toEqual({ name: "mobile", width: 390, height: 844 });
   });
 });

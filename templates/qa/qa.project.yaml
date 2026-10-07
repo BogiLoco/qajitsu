@@ -90,6 +90,12 @@ test_types: [api, web]
 # Passive observations while planned cases run (REQ-EVD-07): listed in the report and the Jira comment, never statuses.
 # observations: { console: true, http_errors: true, accessibility: true, ignore: [favicon.ico, color-contrast] }
 
+# Browser and viewport matrix (REQ-EXEC-13): web cases run in every combination, the first is the primary run.
+# web:
+#   matrix:
+#     browsers: [chromium, firefox]
+#     viewports: [{ name: desktop, width: 1280, height: 800 }, { name: mobile, width: 390, height: 844 }]
+
 # Message capture (REQ-ENV-08): an inbox per case for e-mails, SMS gateways and outgoing webhooks. The host must be
 # on environments.allowlist.
 # messages: { base_url: https://webhook.site, email_domain: email.webhook.site, api_key: secret://env/WEBHOOKSITE_KEY, timeout_s: 120 }

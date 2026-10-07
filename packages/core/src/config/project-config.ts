@@ -209,6 +209,25 @@ export const ProjectConfigSchema = z.strictObject({
       video: z.enum(["retain-on-failure", "always", "off"]).default("retain-on-failure"),
       headless: z.boolean().default(true),
       action_timeout_ms: z.number().int().min(500).max(120_000).default(5_000),
+      /**
+       * Browser and viewport matrix (REQ-EXEC-13): web cases run in every combination; the first combination is the
+       * primary run. Without it web cases run once in `browser` at 1280×800.
+       */
+      matrix: z
+        .strictObject({
+          browsers: z.array(z.enum(["chromium", "firefox", "webkit"])).min(1),
+          viewports: z
+            .array(
+              z.strictObject({
+                name: z.string().regex(/^[a-z][a-z0-9-]{0,19}$/),
+                width: z.number().int().min(200).max(7680),
+                height: z.number().int().min(200).max(4320),
+              }),
+            )
+            .min(1)
+            .default([{ name: "desktop", width: 1280, height: 800 }]),
+        })
+        .optional(),
     })
     .default({ browser: "chromium", video: "retain-on-failure", headless: true, action_timeout_ms: 5_000 }),
   /** Publishing results to the ticket (REQ-PUB-01..04, REQ-VER-10). */
@@ -471,4 +490,23 @@ export function parseProjectConfig(raw: unknown, source = ".qa/qa.project.yaml")
   }
   const issues = result.error.issues.map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`);
   throw new ConfigError("CONFIG_INVALID", `Invalid configuration in ${source}`, { source, issues });
+}
+
+/** One browser and viewport combination of the web matrix (REQ-EXEC-13). */
+export interface WebCombination {
+  /** `<browser>-<viewport>`, e.g. `firefox-mobile`; names result and evidence folders. */
+  readonly id: string;
+  readonly browser: "chromium" | "firefox" | "webkit";
+  readonly viewport: { readonly name: string; readonly width: number; readonly height: number };
+}
+
+/**
+ * The web combinations of a project, primary first (REQ-EXEC-13/AC1): every browser × viewport of `web.matrix`, or
+ * the single `web.browser` at 1280×800.
+ */
+export function webCombinations(web: ProjectConfig["web"]): WebCombination[] {
+  const viewports = web.matrix?.viewports ?? [{ name: "desktop", width: 1280, height: 800 }];
+  return (web.matrix?.browsers ?? [web.browser]).flatMap((browser) =>
+    viewports.map((viewport) => ({ id: `${browser}-${viewport.name}`, browser, viewport })),
+  );
 }

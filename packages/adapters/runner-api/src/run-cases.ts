@@ -55,6 +55,8 @@ export interface RunCasesOptions {
   readonly manual?: ManualPrompter | undefined;
   /** How long one manual step may wait for its answer (default 15 minutes). */
   readonly manualTimeoutMs?: number;
+  /** Prefix of evidence paths, e.g. `matrix/firefox-mobile/` for a browser combination (REQ-EXEC-13). */
+  readonly evidencePrefix?: string;
   /** The message inbox of a case (REQ-ENV-08), created on first use and shared by its attempts. */
   readonly messages?: ((caseId: string) => CaseMessages) | undefined;
   /** OpenAPI contract of the application; responses that violate it fail the step (REQ-EXEC-04/AC2). */
@@ -175,7 +177,7 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
     for (const item of record.evidence) {
       const stored = await options.evidence.put(
         {
-          path: `${caseId}/attempt-${String(attempt)}/${item.name}`,
+          path: `${options.evidencePrefix ?? ""}${caseId}/attempt-${String(attempt)}/${item.name}`,
           caseId,
           stepId: item.stepId,
           kind: item.kind,

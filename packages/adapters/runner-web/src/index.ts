@@ -4,7 +4,13 @@
  *
  * @packageDocumentation
  */
-export { createPlaywrightBrowserFactory, locate, maskHar, type WebRunnerOptions } from "./browser.js";
+export {
+  browserUnavailable,
+  createPlaywrightBrowserFactory,
+  locate,
+  maskHar,
+  type WebRunnerOptions,
+} from "./browser.js";
 
 /** Adapter metadata used by `qajitsu doctor` and the adapter table in the docs. */
 export const ADAPTER = {

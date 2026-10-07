@@ -70,6 +70,8 @@ export async function createDemoPipeline(
     flag?: string;
     ticket?: string;
     wrapExecutor?: (executor: AttemptExecutor) => AttemptExecutor;
+    /** Extra ports, e.g. `browserUnavailable` for the browser matrix. */
+    ports?: Partial<RunPorts>;
   } = {},
 ) {
   const ticket = options.ticket ?? "DEMO-1";
@@ -133,6 +135,7 @@ export async function createDemoPipeline(
         executor: (options.wrapExecutor ?? ((e: AttemptExecutor) => e))(
           web ? inProcessWebExecutor : inProcessExecutor,
         ),
+        ...options.ports,
       },
     })
       .exitOverride()

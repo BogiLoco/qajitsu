@@ -927,6 +927,63 @@
           "type": "integer",
           "minimum": 500,
           "maximum": 120000
+        },
+        "matrix": {
+          "type": "object",
+          "properties": {
+            "browsers": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "chromium",
+                  "firefox",
+                  "webkit"
+                ]
+              }
+            },
+            "viewports": {
+              "default": [
+                {
+                  "name": "desktop",
+                  "width": 1280,
+                  "height": 800
+                }
+              ],
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9-]{0,19}$"
+                  },
+                  "width": {
+                    "type": "integer",
+                    "minimum": 200,
+                    "maximum": 7680
+                  },
+                  "height": {
+                    "type": "integer",
+                    "minimum": 200,
+                    "maximum": 4320
+                  }
+                },
+                "required": [
+                  "name",
+                  "width",
+                  "height"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "browsers"
+          ],
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
