@@ -1,4 +1,16 @@
 import type { ScreenBox } from "@qajitsu/core";
+/**
+ * Width and height of a PNG from its header, without decoding it; undefined when the bytes are not a PNG.
+ *
+ * @param png - PNG bytes.
+ */
+export function pngDimensions(png: Uint8Array): { width: number; height: number } | undefined {
+  const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+  if (png.length < 24 || signature.some((b, i) => png[i] !== b)) return undefined;
+  const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+  return { width: view.getUint32(16), height: view.getUint32(20) };
+}
+
 /** Element selector of a spec: `testid:<id>`, `role:<role>[:<name>]`, `label:<text>`, `text:<text>` or `css:<selector>`. */
 export type UiSelector = string;
 

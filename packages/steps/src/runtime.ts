@@ -13,7 +13,14 @@ import type {
   TestCase,
 } from "@qajitsu/core";
 import type { Masker } from "./masking.js";
-import { assertSelector, type UiClient, type UiDriver, type UiOperation, type UiProperty } from "./ui.js";
+import {
+  assertSelector,
+  pngDimensions,
+  type UiClient,
+  type UiDriver,
+  type UiOperation,
+  type UiProperty,
+} from "./ui.js";
 
 /** HTTP methods the API client supports. */
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -584,6 +591,11 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     if (elementFails.length === 0 && !visualFail) return;
     const marks: ScreenMark[] = [];
     const notes: Record<string, unknown>[] = [];
+    const size = pngDimensions(png);
+    // A box that lies outside the screenshot (e.g. a long page scrolled elsewhere) cannot be drawn; it is named.
+    const visible = (b: ScreenBox): boolean =>
+      size === undefined ||
+      (b.x < size.width && b.y < size.height && b.x + b.width > 0 && b.y + b.height > 0);
     for (const a of elementFails) {
       const n = notes.length + 1;
       const selector = a.field.slice("elements.".length).split(".").slice(0, -1).join(".");
@@ -593,13 +605,15 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       } catch {
         box = undefined;
       }
-      if (box) marks.push({ n, box });
+      if (box && visible(box)) marks.push({ n, box });
       notes.push({
         n,
         field: a.field,
         expected: a.expected,
         actual: a.actual,
-        ...(box ? { box } : { note: "element not found on the screen" }),
+        ...(box
+          ? { box, ...(visible(box) ? {} : { note: "element is outside the visible screenshot" }) }
+          : { note: "element not found on the screen" }),
       });
     }
     const visualMarks: ScreenMark[] = [];

@@ -1007,7 +1007,10 @@ verification: { auditor: optional, canary: true, triage: on }
 - **Failures marked on screenshots.** A failed web or mobile step gets a copy of its screenshot with a numbered red
   box around each failing element (wrong text, disabled, hidden) and each region that changed against the visual
   baseline (a moved element gets a box at both places). A missing element is named in the notes; with a baseline
-  the baseline copy shows what disappeared. Drawn by code from the failed checks, never changing a status.
+  the baseline copy shows what disappeared. Drawn by code from the failed checks, never changing a status. It works
+  for any web or mobile app: boxes come from the plan's element checks (`elements.<selector>`) and visual checks,
+  are scaled to the screenshot (iOS points to pixels), and an element outside the visible screenshot is named
+  instead of drawn; a failed page-text check has no element, so it has no box.
 - **Visual regression.** A step can expect `visual: { name, threshold?, mask? }`: its screenshot is compared with the
   approved baseline of that browser, viewport and locale (pixelmatch, anti-aliasing ignored, masked regions painted
   over). Above the threshold → FAILED with baseline, screenshot and diff; no baseline → NEEDS_REVIEW with the

@@ -149,4 +149,37 @@ describe("Appium device driver (REQ-EXEC-06, REQ-EVD-03)", () => {
     })(input);
     await expect(session.driver()).rejects.toThrow("401 for user *** key ***");
   });
+
+  it("REQ-EVD-08/AC1: element rectangles are scaled to the screenshot's pixels (iOS points); Android stays 1:1", async () => {
+    // A screenshot 1170 px wide of a screen 390 points wide: iOS at 3×.
+    const shot = Buffer.from([
+      137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 4, 146, 0, 0, 9, 216,
+    ]);
+    const device = async (window?: { width: number; height: number }, exists = true) => {
+      const { client } = fakeClient();
+      const geometry: AppiumClient = {
+        ...client,
+        takeScreenshot: () => Promise.resolve(shot.toString("base64")),
+        ...(window ? { getWindowSize: () => Promise.resolve(window) } : {}),
+        $: async (sel) => ({
+          ...(await client.$(sel)),
+          isExisting: () => Promise.resolve(exists),
+          getLocation: () => Promise.resolve({ x: 10, y: 20 }),
+          getSize: () => Promise.resolve({ width: 100, height: 40 }),
+        }),
+      };
+      const factory = createAppiumDeviceFactory({
+        platform: window ? "ios" : "android",
+        connect: () => Promise.resolve(geometry),
+        capabilities: {},
+        recording: "off",
+      });
+      const driver = await factory(input).driver();
+      await driver.screenshot(false);
+      return driver.bounds?.("testid:pay");
+    };
+    expect(await device({ width: 390, height: 844 })).toEqual({ x: 30, y: 60, width: 300, height: 120 });
+    expect(await device()).toEqual({ x: 10, y: 20, width: 100, height: 40 });
+    expect(await device(undefined, false)).toBeUndefined();
+  });
 });

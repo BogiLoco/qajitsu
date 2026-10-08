@@ -1,5 +1,11 @@
 import type { AttemptInput, BrowserFactory, BrowserSession } from "@qajitsu/adapter-runner-api";
-import { createMasker, type EvidenceItem, type UiDriver, type UiProperty } from "@qajitsu/steps";
+import {
+  createMasker,
+  pngDimensions,
+  type EvidenceItem,
+  type UiDriver,
+  type UiProperty,
+} from "@qajitsu/steps";
 
 /** The part of a WebdriverIO element the driver uses. */
 export interface AppiumElement {
@@ -24,6 +30,8 @@ export interface AppiumClient {
   keys(value: string | string[]): Promise<unknown>;
   getPageSource(): Promise<string>;
   takeScreenshot(): Promise<string>;
+  /** Screen size in the units of element rectangles (points on iOS), to scale them to screenshot pixels. */
+  getWindowSize?(): Promise<{ width: number; height: number }>;
   startRecordingScreen(): Promise<unknown>;
   stopRecordingScreen(): Promise<string>;
   getLogs(type: string): Promise<unknown[]>;
@@ -119,6 +127,9 @@ export function createAppiumDeviceFactory(options: MobileRunnerOptions): Browser
         await el.waitForDisplayed({ timeout });
         return el;
       };
+      // REQ-EVD-08: screenshot width and screen width, so element rectangles land on the screenshot's pixels.
+      let shotWidth: number | undefined;
+      let windowWidth: number | undefined;
       return {
         goto: async (url) => {
           if (!options.deepLinkScheme)
@@ -170,7 +181,11 @@ export function createAppiumDeviceFactory(options: MobileRunnerOptions): Browser
           Promise.reject(
             new Error("ui.as is not available in native apps: log in through the app's own screens"),
           ),
-        screenshot: async () => base64(await c.takeScreenshot()),
+        screenshot: async () => {
+          const png = base64(await c.takeScreenshot());
+          shotWidth = pngDimensions(png)?.width ?? shotWidth;
+          return png;
+        },
         dom: () => c.getPageSource(),
         // REQ-EVD-08: the element's rectangle in screen pixels, as on the screenshot.
         bounds: async (s) => {
@@ -181,7 +196,11 @@ export function createAppiumDeviceFactory(options: MobileRunnerOptions): Browser
             undefined,
             undefined,
           ]);
-          return at && size ? { x: at.x, y: at.y, width: size.width, height: size.height } : undefined;
+          if (!at || !size) return undefined;
+          // iOS reports points, the screenshot has pixels (2× or 3×); Android reports pixels (scale 1).
+          windowWidth ??= (await c.getWindowSize?.().catch(() => undefined))?.width;
+          const scale = shotWidth !== undefined && windowWidth ? shotWidth / windowWidth : 1;
+          return { x: at.x * scale, y: at.y * scale, width: size.width * scale, height: size.height * scale };
         },
       };
     };

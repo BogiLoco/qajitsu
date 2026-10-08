@@ -2,7 +2,7 @@ import { PlanSchema, type ImageComparison, type ScreenMark } from "@qajitsu/core
 import { describe, expect, it } from "vitest";
 import { createMasker } from "./masking.js";
 import { createCaseRuntime } from "./runtime.js";
-import type { UiDriver } from "./ui.js";
+import { pngDimensions, type UiDriver } from "./ui.js";
 
 const plan = PlanSchema.parse({
   schema: 1,
@@ -216,5 +216,60 @@ describe("annotated failure screenshots (REQ-EVD-08)", () => {
     expect(broken.error).toBeUndefined();
     expect(named(broken, "S1.png")?.content).toEqual(SHOT);
     expect(broken.evidence.some((e) => e.name.includes("annotat"))).toBe(false);
+  });
+
+  it("REQ-EVD-08/AC1: an element outside the visible screenshot is named, not drawn off the picture", async () => {
+    // A PNG header of a 100×50 screenshot; the element sits far below it (a long page scrolled elsewhere).
+    const header = new Uint8Array([
+      137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 100, 0, 0, 0, 50,
+    ]);
+    const drawn: unknown[] = [];
+    const driver = {
+      goto: () => Promise.resolve(),
+      url: () => "http://127.0.0.1:3000/",
+      screenshot: () => Promise.resolve(header),
+      property: () => Promise.resolve(false),
+      bounds: () => Promise.resolve({ x: 10, y: 400, width: 50, height: 20 }),
+    } as unknown as UiDriver;
+    const runtime = createCaseRuntime({
+      plan,
+      caseId: "TC-01",
+      attempt: 1,
+      baseUrl: "http://127.0.0.1:3000",
+      transport: () => Promise.reject(new Error("no API")),
+      masker: createMasker(),
+      allowedOrigins: ["http://127.0.0.1:3000"],
+      accounts: {},
+      now: () => 0,
+      ui: () => Promise.resolve(driver),
+      annotate: (png, marks) => {
+        drawn.push(marks);
+        return Promise.resolve(png);
+      },
+    });
+    await runtime.context.step("S1", async () => {
+      await runtime.context.ui.goto("/");
+      runtime.context.verify("S1", "elements.testid:pay.enabled");
+    });
+    const record = await runtime.finish();
+    expect(drawn).toEqual([]);
+    expect(marksOf(record)).toEqual([
+      expect.objectContaining({
+        n: 1,
+        note: "element is outside the visible screenshot",
+        box: { x: 10, y: 400, width: 50, height: 20 },
+      }),
+    ]);
+  });
+});
+
+describe("PNG size from the header", () => {
+  it("reads width and height; anything else is not a PNG", () => {
+    const header = new Uint8Array([
+      137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 4, 146, 0, 0, 9, 216,
+    ]);
+    expect(pngDimensions(header)).toEqual({ width: 1170, height: 2520 });
+    expect(pngDimensions(new Uint8Array([1, 2, 3]))).toBeUndefined();
+    expect(pngDimensions(new Uint8Array(24))).toBeUndefined();
   });
 });
