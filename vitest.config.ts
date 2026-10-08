@@ -23,6 +23,8 @@ export default defineConfig({
     ],
     environment: "node",
     restoreMocks: true,
+    // Many tests drive the CLI end to end (a real demo shop, git, a browser); 5 s is too short on CI runners.
+    testTimeout: 30_000,
     coverage: {
       provider: "v8",
       // Add a package here when it gets its first implementation.
