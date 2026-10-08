@@ -3,6 +3,7 @@ import { QajitsuError } from "@qajitsu/core";
 import { createMasker } from "@qajitsu/steps";
 import type { RuntimePorts } from "../adapters.js";
 import { openSession, type ModelPorts } from "../session.js";
+import { annotatedFirst } from "./annotated.js";
 import type { CommandIO } from "./fetch.js";
 import { computeVerdict } from "./verdict.js";
 
@@ -51,7 +52,20 @@ export async function runEvidence(
         io.write(
           `  ✘ ${f.stepId} ${f.field}: expected ${JSON.stringify(f.expected)}, actual ${JSON.stringify(f.actual)}\n`,
         );
-      for (const e of c.evidence) {
+      // REQ-EVD-08/AC5: annotated screenshots first, with what each numbered box marks.
+      for (const e of annotatedFirst(c.evidence, (x) => x.path)) {
+        if (e.path.endsWith("-annotations.json")) {
+          const marks = (
+            JSON.parse(await readFile(session.ws.path("evidence", e.path), "utf8").catch(() => "{}")) as {
+              marks?: { n: number; field: string; expected?: unknown; actual?: unknown; note?: string }[];
+            }
+          ).marks;
+          for (const m of marks ?? [])
+            io.write(
+              `  [${String(m.n)}] ${e.stepId ?? ""} ${m.field}${m.note ? `: ${m.note}` : ""}${m.expected !== undefined ? ` (expected ${JSON.stringify(m.expected)}, actual ${JSON.stringify(m.actual)})` : ""}\n`,
+            );
+          continue;
+        }
         io.write(
           `  ${e.stepId ?? ""} ${session.ws.path("evidence", e.path)} (sha256 ${e.sha256.slice(0, 12)})\n`,
         );
@@ -86,9 +100,9 @@ export async function runEvidence(
           );
         await open.openTrace?.(ws.path("evidence", trace.path));
       } else if (options.failed) {
-        // REQ-PUB-06/AC2: failure videos open in the system player.
+        // REQ-PUB-06/AC2: failure videos open in the system player; REQ-EVD-08: annotated screenshots too.
         for (const c of cases)
-          for (const e of c.evidence.filter((x) => x.kind === "video"))
+          for (const e of c.evidence.filter((x) => x.kind === "video" || x.path.endsWith("-annotated.png")))
             await open.openFile?.(ws.path("evidence", e.path));
       } else {
         // REQ-PUB-06/AC1: the report of the run.

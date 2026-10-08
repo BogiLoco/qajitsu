@@ -7,6 +7,8 @@ import type {
   EvidenceItem,
   ManualPrompter,
   Plan,
+  ScreenBox,
+  ScreenMark,
   VisualCheck,
   TestCase,
 } from "@qajitsu/core";
@@ -137,6 +139,8 @@ export interface CaseRuntimeOptions {
   readonly visual?: VisualCheck | undefined;
   /** Gets a copy of each step screenshot as soon as it is taken, for the live view (REQ-OBS-09); never evidence. */
   readonly onScreenshot?: ((stepId: string, png: Uint8Array) => void) | undefined;
+  /** Draws numbered red boxes on a copy of a PNG (REQ-EVD-08); provided by the trusted runner. */
+  readonly annotate?: ((png: Uint8Array, marks: readonly ScreenMark[]) => Promise<Uint8Array>) | undefined;
 }
 
 /** The recorder of one attempt. Runs in the trusted process; specs only reach it through these operations. */
@@ -370,6 +374,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       try {
         const png = await driver.screenshot(false);
         media.push({ stepId, kind: "screenshot", name: `${stepId}.png`, content: png });
+        await annotateStep(stepId, png);
         // REQ-OBS-09: the live view gets its own copy; what it does with it cannot change the evidence.
         try {
           options.onScreenshot?.(stepId, png.slice());
@@ -560,6 +565,81 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
    * review, so the case is NEEDS_REVIEW and the screenshot is proposed as the baseline (AC3). The threshold and masks
    * come from the approved plan; baselines change only through `qajitsu baseline accept` (AC4).
    */
+  /** Differing regions of a failed visual check per step, for the annotated screenshot (REQ-EVD-08/AC3). */
+  const visualFailures = new Map<string, { regions: readonly ScreenBox[]; baseline: Uint8Array }>();
+
+  /**
+   * Marks where a failed step went wrong (REQ-EVD-08): a copy of the step screenshot with a numbered red box around
+   * each element whose assertion failed and each region that differs from the visual baseline, and a JSON with the
+   * field, expected and actual value of every mark. A missing element gets no box, only a note; with a visual
+   * baseline the baseline copy shows the changed regions (AC2). The original screenshot is never changed and nothing
+   * here changes an assertion or a status (AC4).
+   */
+  const annotateStep = async (stepId: string, png: Uint8Array): Promise<void> => {
+    if (!options.annotate || !driver) return;
+    const elementFails = assertions.filter(
+      (a) => a.stepId === stepId && !a.pass && a.field.startsWith("elements."),
+    );
+    const visualFail = visualFailures.get(stepId);
+    if (elementFails.length === 0 && !visualFail) return;
+    const marks: ScreenMark[] = [];
+    const notes: Record<string, unknown>[] = [];
+    for (const a of elementFails) {
+      const n = notes.length + 1;
+      const selector = a.field.slice("elements.".length).split(".").slice(0, -1).join(".");
+      let box: ScreenBox | undefined;
+      try {
+        box = await driver.bounds?.(assertSelector(selector));
+      } catch {
+        box = undefined;
+      }
+      if (box) marks.push({ n, box });
+      notes.push({
+        n,
+        field: a.field,
+        expected: a.expected,
+        actual: a.actual,
+        ...(box ? { box } : { note: "element not found on the screen" }),
+      });
+    }
+    const visualMarks: ScreenMark[] = [];
+    for (const box of visualFail?.regions ?? []) {
+      const n = notes.length + 1;
+      visualMarks.push({ n, box });
+      marks.push({ n, box });
+      notes.push({ n, field: "visual", note: "differs from the baseline", box });
+    }
+    try {
+      if (marks.length > 0)
+        media.push({
+          stepId,
+          kind: "screenshot",
+          name: `${stepId}-annotated.png`,
+          // A copy: the drawing can never change the original screenshot evidence (AC4).
+          content: await options.annotate(png.slice(), marks),
+        });
+      if (
+        visualFail &&
+        visualMarks.length > 0 &&
+        notes.some((x) => x["note"] === "element not found on the screen")
+      )
+        media.push({
+          stepId,
+          kind: "screenshot",
+          name: `${stepId}-annotated-baseline.png`,
+          content: await options.annotate(visualFail.baseline.slice(), visualMarks),
+        });
+      media.push({
+        stepId,
+        kind: "other",
+        name: `${stepId}-annotations.json`,
+        content: `${JSON.stringify({ step: stepId, marks: notes }, null, 2)}\n`,
+      });
+    } catch {
+      // A drawing that fails leaves the evidence as it is; it never affects the attempt.
+    }
+  };
+
   const verifyVisual = async (stepId: string, field: string): Promise<void> => {
     const spec = planCase.steps.find((x) => x.id === stepId)?.expect.visual;
     if (!spec)
@@ -602,6 +682,8 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       actual: { diffPixels: result.diffPixels, ratio: Number(ratio.toFixed(6)) },
       pass: ratio <= threshold,
     });
+    // REQ-EVD-08/AC3: the regions of a difference above the threshold are marked on the annotated screenshot.
+    if (ratio > threshold) visualFailures.set(stepId, { regions: result.regions ?? [], baseline });
   };
 
   const verify = async (stepId: string, field: string): Promise<void> => {

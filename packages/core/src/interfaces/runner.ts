@@ -41,7 +41,17 @@ export interface EvidenceItem {
   /** Plan step, or `case` for evidence of the whole attempt (video, trace, HAR, console log). */
   readonly stepId: string;
   readonly kind:
-    "request" | "response" | "screenshot" | "video" | "trace" | "log" | "har" | "dom" | "manual" | "message";
+    | "request"
+    | "response"
+    | "screenshot"
+    | "video"
+    | "trace"
+    | "log"
+    | "har"
+    | "dom"
+    | "manual"
+    | "message"
+    | "other";
   /** File name inside the attempt folder: `S1-01.json`, `S1.png`, `failure.png`, `video.webm`. */
   readonly name: string;
   readonly content: string | Uint8Array;
@@ -72,8 +82,24 @@ export type ImageComparison =
       readonly diffPixels: number;
       /** PNG of the differences. */
       readonly diff: Uint8Array;
+      /** Rectangles around the groups of differing pixels (REQ-EVD-08/AC3). */
+      readonly regions?: readonly ScreenBox[];
     }
   | { readonly sizeMismatch: string };
+
+/** A rectangle on a screenshot, in the screenshot's pixels (REQ-EVD-08). */
+export interface ScreenBox {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** A numbered box drawn on a copy of a screenshot (REQ-EVD-08). */
+export interface ScreenMark {
+  readonly n: number;
+  readonly box: ScreenBox;
+}
 
 /** Visual regression for a run (REQ-EXEC-12): baselines of the project and the comparison of two PNGs. */
 export interface VisualCheck {

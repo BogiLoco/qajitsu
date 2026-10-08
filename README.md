@@ -273,11 +273,15 @@ qj run SHOP-482 --build --set api.FEATURE_X=1         # with an overridable vari
 8. Steps the plan marks **manual** (an SMS code, a physical device, a printout) pause the run: the instructions are
    shown and you answer passed or failed with an optional note and file. In CI the run waits for
    `qj answer SHOP-482 TC-02 S3 --passed` from someone else. No answer in time makes the case BLOCKED, never PASSED.
-9. Failed web steps get up to two **healing** attempts (selectors and waits only; a healed pass is NEEDS_REVIEW).
-10. Statuses are computed by code; then the **auditor** and the optional **canary** may downgrade PASSED to NEEDS_REVIEW,
+9. When a web or mobile step fails, a copy of its screenshot **marks where**: a numbered red box around each
+   element whose check failed and around each region that differs from the visual baseline (`S3-annotated.png`,
+   with `S3-annotations.json` listing field, expected and actual value per box). The original screenshot stays as
+   it was; reports, the ticket comment and `qj bug` show the marked copy first.
+10. Failed web steps get up to two **healing** attempts (selectors and waits only; a healed pass is NEEDS_REVIEW).
+11. Statuses are computed by code; then the **auditor** and the optional **canary** may downgrade PASSED to NEEDS_REVIEW,
     and every FAILED case gets a **hint** (likely product bug, test bug, environment or data) citing its evidence; a
     hint is a suggestion and never changes a status.
-11. Reports are written: `report.html`, `matrix.md/.csv/.xlsx`, `junit.xml`, `gates.json`, the transition graph.
+12. Reports are written: `report.html`, `matrix.md/.csv/.xlsx`, `junit.xml`, `gates.json`, the transition graph.
 
 The matrix is printed at the end; the exit code tells the result ([section 7](#7-statuses-and-exit-codes)).
 
@@ -312,7 +316,7 @@ run. A run folder runs once: to watch a case of a finished run again, start a ne
 
 ```sh
 qj evidence SHOP-482              # opens report.html
-qj evidence SHOP-482 --failed     # failed cases: expected vs actual, evidence files, cURL to reproduce
+qj evidence SHOP-482 --failed     # failed cases: expected vs actual, red-boxed screenshots first, cURL to reproduce
 qj evidence SHOP-482 --trace TC-02  # Playwright Trace Viewer of a web case
 qj logs SHOP-482 --case TC-02     # what happened, in order (agents, runner, guard decisions)
 qj evidence SHOP-482 --serve      # report and evidence on http://127.0.0.1:<port>/ (e.g. on a remote machine)
@@ -1000,6 +1004,10 @@ verification: { auditor: optional, canary: true, triage: on }
 - **Test depth, estimate and budget.** `qj plan --depth smoke|standard|full` keeps cases by risk and records why;
   every run starts with an estimate of time and model use from past runs; `budget: { max_minutes, max_cost_usd }`
   stops a run gracefully with NOT_RUN for what is left.
+- **Failures marked on screenshots.** A failed web or mobile step gets a copy of its screenshot with a numbered red
+  box around each failing element (wrong text, disabled, hidden) and each region that changed against the visual
+  baseline (a moved element gets a box at both places). A missing element is named in the notes; with a baseline
+  the baseline copy shows what disappeared. Drawn by code from the failed checks, never changing a status.
 - **Visual regression.** A step can expect `visual: { name, threshold?, mask? }`: its screenshot is compared with the
   approved baseline of that browser, viewport and locale (pixelmatch, anti-aliasing ignored, masked regions painted
   over). Above the threshold → FAILED with baseline, screenshot and diff; no baseline → NEEDS_REVIEW with the

@@ -21,6 +21,7 @@ import { createMasker } from "@qajitsu/steps";
 import { gateNoSecrets } from "@qajitsu/verifier";
 import type { RuntimePorts } from "../adapters.js";
 import { openSession, type ModelPorts, type RunSession } from "../session.js";
+import { annotatedFirst } from "./annotated.js";
 import type { CommandIO } from "./fetch.js";
 import { exportRunTelemetry } from "./telemetry.js";
 import { anchorJournal, computeVerdict, writeReports, type RunVerdict } from "./verdict.js";
@@ -206,8 +207,12 @@ export async function runPublish(
       verdict.cases.filter((c) => c.status === "FAILED" || c.status === "FLAKY").map((c) => c.caseId),
     );
     const media: PublishAttachment[] = [];
-    for (const m of verdict.manifest.filter(
-      (e) => failing.has(e.caseId) && (e.kind === "screenshot" || e.kind === "video"),
+    // REQ-EVD-08/AC5: annotated screenshots first, so the comment shows where a step failed.
+    for (const m of annotatedFirst(
+      verdict.manifest.filter(
+        (e) => failing.has(e.caseId) && (e.kind === "screenshot" || e.kind === "video"),
+      ),
+      (e) => e.path,
     )) {
       const ext = m.path.split(".").at(-1) ?? "bin";
       media.push({

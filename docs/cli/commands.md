@@ -354,6 +354,9 @@ Exit codes: `0` plan version written, `3` unknown session or observation, approv
 
 Shows statuses, failed assertions, evidence files and cURL commands; opens the report, videos or a trace.
 
+Screenshots marked by code for failed web and mobile steps (`<step>-annotated.png`, REQ-EVD-08) come first, with
+what each numbered red box marks (field, expected, actual); `--failed` also opens them.
+
 - `--run <id>`: run id (default: latest run of the ticket)
 - `--failed`: only cases that did not pass
 - `--case <id>`: only this case

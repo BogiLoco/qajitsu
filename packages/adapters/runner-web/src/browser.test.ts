@@ -93,9 +93,12 @@ describe("web runner (REQ-EXEC-05, REQ-EXEC-07, REQ-EVD-02)", () => {
     const { record } = await attempt("DEMO-4", "TC-01", "BUG_CHECKOUT_BUTTON_DISABLED");
     expect(record.outcome).toBe("failed");
     expect(record.assertions[1]).toMatchObject({ actual: false, expected: true, pass: false });
+    // REQ-EVD-08: the step that failed also gets its screenshot with the disabled button boxed, and the notes.
     expect(record.evidence.map((e) => e.name)).toEqual([
       "S1.png",
       "S2.png",
+      "S2-annotated.png",
+      "S2-annotations.json",
       "failure.png",
       "failure.html",
       "trace.zip",

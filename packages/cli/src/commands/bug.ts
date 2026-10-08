@@ -14,6 +14,7 @@ import { renderBugReport, type BugReportModel } from "@qajitsu/report";
 import { createMasker } from "@qajitsu/steps";
 import type { RuntimePorts } from "../adapters.js";
 import { openSession, type ModelPorts, type RunSession } from "../session.js";
+import { annotatedFirst } from "./annotated.js";
 import type { CommandIO } from "./fetch.js";
 import { computeVerdict, type RunVerdict } from "./verdict.js";
 
@@ -113,7 +114,12 @@ function reportModel(
     ...(planCase?.type === "web" || planCase?.type === "mobile"
       ? { client: planCase.type === "web" ? project.config.web.browser : "android" }
       : {}),
-    evidence: (evaluated?.evidence ?? []).map((e) => ({ path: e.path, kind: e.kind, sha256: e.sha256 })),
+    // REQ-EVD-08/AC5: the annotated screenshot is the first evidence of the bug.
+    evidence: annotatedFirst(evaluated?.evidence ?? [], (e) => e.path).map((e) => ({
+      path: e.path,
+      kind: e.kind,
+      sha256: e.sha256,
+    })),
     hint,
     reproduce: `qajitsu evidence ${ws.ticket} --run ${ws.runId} --failed`,
   };

@@ -23,9 +23,11 @@
     "ajv": "^8.20.0",
     "playwright-core": "^1.63.0",
     "yaml": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "pngjs": "7.0.0"
   },
   "devDependencies": {
-    "@qajitsu/adapter-evidence-local": "workspace:*"
+    "@qajitsu/adapter-evidence-local": "workspace:*",
+    "@types/pngjs": "^6.0.5"
   }
 }

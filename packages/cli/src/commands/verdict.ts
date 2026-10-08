@@ -1,3 +1,4 @@
+import { annotatedFirst } from "./annotated.js";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readManifest } from "@qajitsu/adapter-evidence-local";
@@ -405,21 +406,23 @@ export async function computeVerdict(
       outcome: a.outcome,
       error: a.error,
       assertions: a.assertions,
-      evidence: manifest
-        .filter((m) => a.evidence.includes(m.path))
-        .map((m) => ({
-          path: m.path,
-          sha256: m.sha256,
-          kind: m.kind,
-          stepId: m.stepId,
-          ...(m.kind === "screenshot"
-            ? {
-                dataUri: `data:image/png;base64,${(evidenceBytes.get(m.path) ?? Buffer.alloc(0)).toString("base64")}`,
-              }
-            : m.kind === "video" || m.kind === "trace"
-              ? {}
-              : { text: masker.maskText(evidenceText.get(m.path) ?? "") }),
-        })),
+      // REQ-EVD-08/AC5: the screenshots that mark where the step failed come first.
+      evidence: annotatedFirst(
+        manifest.filter((m) => a.evidence.includes(m.path)),
+        (m) => m.path,
+      ).map((m) => ({
+        path: m.path,
+        sha256: m.sha256,
+        kind: m.kind,
+        stepId: m.stepId,
+        ...(m.kind === "screenshot"
+          ? {
+              dataUri: `data:image/png;base64,${(evidenceBytes.get(m.path) ?? Buffer.alloc(0)).toString("base64")}`,
+            }
+          : m.kind === "video" || m.kind === "trace"
+            ? {}
+            : { text: masker.maskText(evidenceText.get(m.path) ?? "") }),
+      })),
     }));
   }
   // REQ-EVD-07: observations from the last attempt of every case, computed by code, filtered by the config.

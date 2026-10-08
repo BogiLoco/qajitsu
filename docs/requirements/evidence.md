@@ -99,7 +99,7 @@ Cheap automatic checks computed by code, not by an LLM, collected while the plan
 
 ### REQ-EVD-08 · Failure screenshots mark the failing element
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: INV-1, INV-7, REQ-EVD-02, REQ-EVD-03, REQ-EXEC-12, REQ-PUB-07
@@ -109,8 +109,8 @@ drawn by code from the failed assertion; it is an extra picture, never a verdict
 
 **Acceptance criteria**
 
-- [ ] AC1: When a web or mobile step fails on an element assertion, an annotated copy of the failure screenshot draws a red box around that element with the failed field, expected and actual value.
-- [ ] AC2: When the element is missing and the step has a visual baseline, the box marks where it is on the baseline; without a baseline the annotation says the element was not found and draws no box.
-- [ ] AC3: A visual difference above the threshold is marked with a red box around each changed region (masked regions excluded); a moved element gets a box at the old and at the new place.
-- [ ] AC4: The annotated screenshot is an extra evidence file in the manifest; the original stays unchanged, the annotation is drawn by code from the assertion and never changes a status.
-- [ ] AC5: `report.html`, `qj evidence --failed`, the ticket comment and `qj bug` show the annotated screenshot first.
+- [x] AC1: When a web or mobile step fails on an element assertion, an annotated copy of the failure screenshot draws a red box around that element with the failed field, expected and actual value.
+- [x] AC2: When the element is missing and the step has a visual baseline, the box marks where it is on the baseline; without a baseline the annotation says the element was not found and draws no box.
+- [x] AC3: A visual difference above the threshold is marked with a red box around each changed region (masked regions excluded); a moved element gets a box at the old and at the new place.
+- [x] AC4: The annotated screenshot is an extra evidence file in the manifest; the original stays unchanged, the annotation is drawn by code from the assertion and never changes a status.
+- [x] AC5: `report.html`, `qj evidence --failed`, the ticket comment and `qj bug` show the annotated screenshot first.

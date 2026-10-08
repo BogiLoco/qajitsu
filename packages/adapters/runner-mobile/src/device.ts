@@ -10,6 +10,10 @@ export interface AppiumElement {
   getAttribute(name: string): Promise<string | null>;
   getText(): Promise<string>;
   waitForDisplayed(options: { timeout?: number; reverse?: boolean }): Promise<unknown>;
+  /** Position and size on the screen, for marking a failed element (REQ-EVD-08). */
+  isExisting?(): Promise<boolean>;
+  getLocation?(): Promise<{ x: number; y: number }>;
+  getSize?(): Promise<{ width: number; height: number }>;
 }
 
 /** The part of a WebdriverIO session the driver uses (an Appium session in production). */
@@ -168,6 +172,17 @@ export function createAppiumDeviceFactory(options: MobileRunnerOptions): Browser
           ),
         screenshot: async () => base64(await c.takeScreenshot()),
         dom: () => c.getPageSource(),
+        // REQ-EVD-08: the element's rectangle in screen pixels, as on the screenshot.
+        bounds: async (s) => {
+          const el = await c.$(appiumLocator(s, options.platform));
+          if (!el.getLocation || !el.getSize || !(await el.isExisting?.().catch(() => false)))
+            return undefined;
+          const [at, size] = await Promise.all([el.getLocation(), el.getSize()]).catch(() => [
+            undefined,
+            undefined,
+          ]);
+          return at && size ? { x: at.x, y: at.y, width: size.width, height: size.height } : undefined;
+        },
       };
     };
     return {

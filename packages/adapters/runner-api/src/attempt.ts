@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import type { AttemptRequest } from "@qajitsu/core";
+import { annotateImage } from "./annotate.js";
 import { pausedStep, startDeadline, type Deadline } from "./deadline.js";
 import type { BrowserFactory } from "./sandbox.js";
 import {
@@ -66,6 +67,8 @@ export async function executeAttempt(
     accounts: input.accounts,
     now,
     ...(session ? { ui: session.driver } : {}),
+    // REQ-EVD-08: the trusted runner draws the boxes on copies of failure screenshots.
+    annotate: annotateImage,
     ...(input.progress
       ? {
           onScreenshot: (stepId: string, png: Uint8Array) => {

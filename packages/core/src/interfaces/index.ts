@@ -39,6 +39,8 @@ export type {
   ManualPrompter,
   ManualStepRequest,
   PausedStep,
+  ScreenBox,
+  ScreenMark,
   StepPause,
   VisualCheck,
 } from "./runner.js";

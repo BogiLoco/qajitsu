@@ -1,3 +1,4 @@
+import type { ScreenBox } from "@qajitsu/core";
 /** Element selector of a spec: `testid:<id>`, `role:<role>[:<name>]`, `label:<text>`, `text:<text>` or `css:<selector>`. */
 export type UiSelector = string;
 
@@ -25,6 +26,8 @@ export interface UiDriver {
   /** A PNG of the page; `masks` paints over changing regions (REQ-EXEC-12/AC1; ignored on mobile). */
   readonly screenshot: (fullPage: boolean, masks?: readonly UiSelector[]) => Promise<Uint8Array>;
   readonly dom: () => Promise<string>;
+  /** Where an element is on the screenshot, in its pixels; undefined when it is not on the screen (REQ-EVD-08). */
+  readonly bounds?: (selector: UiSelector) => Promise<ScreenBox | undefined>;
 }
 
 /** The browser API a spec sees (the parent performs every action). */

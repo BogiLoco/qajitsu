@@ -294,6 +294,12 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
             }),
           ),
         dom: () => p.content(),
+        // REQ-EVD-08: the element's box on the viewport screenshot (device scale factor 1).
+        bounds: async (s) =>
+          (await locate(p, s)
+            .first()
+            .boundingBox({ timeout: 1000 })
+            .catch(() => null)) ?? undefined,
       };
     };
 

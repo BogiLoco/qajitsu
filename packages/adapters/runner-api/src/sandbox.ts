@@ -1,3 +1,4 @@
+import { annotateImage } from "./annotate.js";
 import { pausedStep, startDeadline } from "./deadline.js";
 import type { AttemptExecutor as CoreAttemptExecutor } from "@qajitsu/core";
 import { fork } from "node:child_process";
@@ -195,6 +196,8 @@ export function createSandboxExecutor(
       accounts: input.accounts,
       now,
       ...(session ? { ui: session.driver } : {}),
+      // REQ-EVD-08: the trusted runner draws the boxes on copies of failure screenshots.
+      annotate: annotateImage,
       ...(input.progress
         ? {
             onScreenshot: (stepId: string, png: Uint8Array) => {
