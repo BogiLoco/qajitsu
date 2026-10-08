@@ -58,7 +58,7 @@ Analyst and planner agents on several model providers; plan review loop and free
 - [REQ-PLAN-04](requirements/plan.md#req-plan-04--human-review-loop) Human review loop (must, implemented, AC 3/3)
 - [REQ-PLAN-05](requirements/plan.md#req-plan-05--open-questions-instead-of-guessing) Open questions instead of guessing (must, implemented, AC 2/2)
 - [REQ-PLAN-06](requirements/plan.md#req-plan-06--plan-freeze) Plan freeze (must, implemented, AC 4/4)
-- [REQ-LLM-01](requirements/models.md#req-llm-01--multiple-providers) Multiple providers (must, deferred, AC 4/5)
+- [REQ-LLM-01](requirements/models.md#req-llm-01--multiple-providers) Multiple providers (must, deferred, AC 5/6)
 - [REQ-LLM-02](requirements/models.md#req-llm-02--model-per-role) Model per role (must, implemented, AC 2/2)
 - [REQ-LLM-03](requirements/models.md#req-llm-03--capability-profiles) Capability profiles (must, implemented, AC 3/3)
 - [REQ-LLM-04](requirements/models.md#req-llm-04--structured-output-with-repair) Structured output with repair (must, implemented, AC 3/3)

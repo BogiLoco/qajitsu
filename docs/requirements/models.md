@@ -9,7 +9,7 @@ QAJitsu works with any capable model: cloud APIs, company gateways and local mod
 - Stage: 2
 - Related: ADR-0003, INV-11
 
-Deferred: AC4 (a verified run with a cloud provider) is parked until a cloud key is available; Ollama and the other providers work and stay tested.
+Deferred: AC4 (a verified run with a cloud provider) is parked until a cloud key is available; Ollama and the other providers work and stay tested. Until then AC6 checks the Anthropic path against the provider's published API documentation (retrieved 2026-10-08).
 
 **Acceptance criteria**
 
@@ -18,6 +18,7 @@ Deferred: AC4 (a verified run with a cloud provider) is parked until a cloud key
 - [x] AC3: Any OpenAI-compatible endpoint (LiteLLM, vLLM, LM Studio) through the OpenAI-compatible provider.
 - [ ] AC4: At least one cloud provider and Ollama work in stage 2.
 - [x] AC5: Only `packages/models` imports provider SDKs.
+- [x] AC6: The Anthropic path is verified against the documented Claude Messages API without a key or network: documented headers and fields, no assistant prefill or forced tool use, structured outputs through `output_config.format`, the `tool_use` / `tool_result` round trip, usage of every step, documented 429 and 529 retried and 401 failing at once without the key, and the whole fetch, plan, approve and run flow on the demo shop.
 
 ### REQ-LLM-02 · Model per role
 

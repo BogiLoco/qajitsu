@@ -24,6 +24,26 @@ models:
 `qajitsu doctor --models` probes every role and lists missing capabilities. A role refuses a model without a
 capability it needs (tools, structured output, vision for the auditor, context window).
 
+## Cloud providers: what is verified (REQ-LLM-01)
+
+The Anthropic path is checked against the published Claude Messages API documentation, without a key or network
+(`tests/contract/anthropic-api.test.ts`, `tests/support/anthropic-api.ts`). A stand-in answers like the API and
+refuses every request the documentation does not allow, so the tests prove that QAJitsu:
+
+- calls `POST /v1/messages` with `x-api-key` and `anthropic-version: 2023-06-01`, and always `model`, `max_tokens`
+  and `messages`;
+- never prefills an assistant message and never forces tool use (`tool_choice` `any`/`tool`), which current Claude
+  models reject; a second attempt at valid JSON uses structured outputs (`output_config.format`, JSON Schema);
+- answers a `tool_use` with a `tool_result` for the same id, and counts the tokens of every step;
+- retries the documented `429 rate_limit_error` and `529 overloaded_error`, and stops at once on
+  `401 authentication_error` without the key in the error;
+- runs the whole flow (fetch, analyst and planner, approve, run on the demo shop) with the key only in `.env.local`
+  and nowhere in the journal, logs or `run.json`.
+
+What this cannot prove is how a real Claude model plans: the answers are scripted. A run with a real key
+(`qj doctor --models`, then `qj bench --model anthropic/<model>`) is still open (REQ-LLM-01/AC4). OpenAI and Google
+are built through the same AI SDK and covered by the registry tests, not yet by a contract like this one.
+
 ## Local models, honestly (REQ-LLM-05)
 
 Local models are good at the roles that read and classify: **summary**, **analyst** on small changes and
