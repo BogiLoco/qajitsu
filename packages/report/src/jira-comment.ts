@@ -1,3 +1,4 @@
+import { formatVersions } from "./versions.js";
 import type { RunObservation } from "@qajitsu/core";
 import { countStatuses, summaryLine, type MatrixRow } from "./matrix.js";
 
@@ -28,6 +29,8 @@ export interface CommentModel {
   };
   /** Tested repositories and SHAs (REQ-CTX-04/AC3). */
   readonly repos: Readonly<Record<string, string>>;
+  /** Versions of the tools the run used (REQ-OBS-10/AC2). */
+  readonly versions?: Readonly<Record<string, string>> | undefined;
   readonly executor: string;
   readonly planVersion: number;
   readonly planSha256: string;
@@ -115,6 +118,7 @@ const header = (m: CommentModel): string[] => [
       .join(", ") || "–"
   }`,
   `Plan v${String(m.planVersion)} (sha256 ${m.planSha256.slice(0, 12)}) · executed by ${m.executor} with QAJitsu`,
+  ...(m.versions ? [`Tools: ${formatVersions(m.versions)}`] : []),
 ];
 
 const MATRIX_HEADER = ["TC", "Title", "Requirement", "Type", "Status", "Steps OK"];

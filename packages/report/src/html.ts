@@ -1,3 +1,4 @@
+import { formatVersions } from "./versions.js";
 import type { AssertionRecord, Plan, RunObservation, TestStatus } from "@qajitsu/core";
 import { countStatuses, type MatrixRow } from "./matrix.js";
 
@@ -40,6 +41,8 @@ export interface ReportInput {
     readonly stubs?: readonly string[] | undefined;
   };
   readonly repos: Readonly<Record<string, string>>;
+  /** Versions of the tools the run used (REQ-OBS-10/AC2). */
+  readonly versions?: Readonly<Record<string, string>> | undefined;
   /** Auditor and canary notes (REQ-VER-06, REQ-VER-09). */
   readonly checks?: readonly string[] | undefined;
   /** Fix verification: the same reproduction cases before and with the fix (REQ-VER-11/AC4). */
@@ -197,7 +200,7 @@ section{border-top:1px solid #d0d7de;margin-top:16px}img,video{max-width:100%}
 :target{outline:3px solid #0969da}figure{margin:8px 0}.timeline td{font-size:12px}
 </style></head><body>
 <h1>${esc(input.ticket)} test report</h1>
-<p class="muted">Run ${esc(input.runId)} · ${esc(input.generatedAt)} · environment ${esc(input.environment.name)} (${esc(input.environment.baseUrl)})${input.environment.deployedSha ? ` · deployed <code>${esc(input.environment.deployedSha)}</code>` : ""}${input.environment.stubs?.length ? ` · <strong>stubbed (not real):</strong> ${esc(input.environment.stubs.join(", "))}` : ""}<br>Code: ${repos || "–"} · plan sha256 <code>${esc(input.planSha256.slice(0, 16))}…</code></p>
+<p class="muted">Run ${esc(input.runId)} · ${esc(input.generatedAt)} · environment ${esc(input.environment.name)} (${esc(input.environment.baseUrl)})${input.environment.deployedSha ? ` · deployed <code>${esc(input.environment.deployedSha)}</code>` : ""}${input.environment.stubs?.length ? ` · <strong>stubbed (not real):</strong> ${esc(input.environment.stubs.join(", "))}` : ""}<br>Code: ${repos || "–"} · plan sha256 <code>${esc(input.planSha256.slice(0, 16))}…</code>${input.versions ? `<br>Tools: ${esc(formatVersions(input.versions))}` : ""}</p>
 <div class="tiles">${tiles}</div>
 <h2>Summary</h2><p>${esc(input.summary).replace(/\n/g, "<br>")}</p>
 ${

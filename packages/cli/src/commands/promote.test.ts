@@ -73,6 +73,10 @@ describe("qj promote (REQ-PUB-08, REQ-CTX-06/AC4)", () => {
     };
     // REQ-EXEC-17/AC2: the expected values carry their hash, and it matches them as read back from the YAML.
     expect(pack.cases_sha256).toBe(packCasesSha256(pack.cases));
+    // REQ-OBS-10/AC3: the pack keeps what its cases passed with, for later regression runs to compare.
+    expect((pack as unknown as { versions: Record<string, string> }).versions["model default"]).toBe(
+      "mock/scripted",
+    );
     const run = JSON.parse(await readFile(join(p.dir, "run.json"), "utf8")) as {
       data: { approval: { sha256: string }; promotions: { branch: string; cases: string[] }[] };
     };

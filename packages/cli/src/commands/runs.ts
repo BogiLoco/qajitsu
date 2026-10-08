@@ -1,3 +1,4 @@
+import { formatVersions } from "@qajitsu/report";
 import { readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { removeRunResources, type CommandExec } from "@qajitsu/adapter-env-compose";
@@ -76,6 +77,7 @@ export async function runRuns(
       return 0;
     }
     io.write("| Run | Created | Status | Stage | Results | Retention |\n|---|---|---|---|---|---|\n");
+    const tools: string[] = [];
     for (const entry of index.runs) {
       const ws = await openRunWorkspace(root, ticket, entry.runId).catch(() => undefined);
       const results = ws?.record.data["results"] as Record<string, string> | undefined;
@@ -93,7 +95,11 @@ export async function runRuns(
       io.write(
         `| ${entry.runId}${latest} | ${entry.createdAt} | ${entry.status} | ${ws?.record.stage ?? "?"} | ${counts} | ${entry.retention} |\n`,
       );
+      // REQ-OBS-10/AC2: the tools and models each run used.
+      const versions = ws?.record.data["versions"] as Record<string, string> | undefined;
+      if (versions) tools.push(`  ${entry.runId}: ${formatVersions(versions)}`);
     }
+    if (tools.length > 0) io.write(`\nTools:\n${tools.join("\n")}\n`);
     return 0;
   } catch (error) {
     return fail(io, error);

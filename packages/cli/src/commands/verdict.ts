@@ -87,6 +87,8 @@ export interface RunVerdict {
   readonly observations: readonly RunObservation[];
   /** Fix verification lines for the Jira comment (REQ-VER-11/AC4); empty without `--fix-check`. */
   readonly fixCheck: readonly string[];
+  /** Versions of the tools and models the run used (REQ-OBS-10); undefined for runs that did not record them. */
+  readonly versions?: Readonly<Record<string, string>> | undefined;
 }
 
 /** `data.fixCheck` of `run.json`, written by `qj run --fix-check` (REQ-VER-11). */
@@ -126,6 +128,11 @@ export async function computeVerdict(
 ): Promise<RunVerdict> {
   const { ws, masker } = session;
   const { plan, approval } = await loadApprovedPlan(ws);
+  const versions = z
+    .record(z.string(), z.string())
+    .optional()
+    .catch(undefined)
+    .parse(ws.record.data["versions"]);
   const environment = (ws.record.data["environment"] as RunEnvironment | undefined) ?? {
     name: "–",
     baseUrl: "–",
@@ -465,6 +472,7 @@ export async function computeVerdict(
       attempts,
       environment,
       repos: Object.fromEntries(Object.entries(ws.record.repos).map(([k, v]) => [k, v.sha])),
+      ...(versions ? { versions } : {}),
       gates: g,
       timeline,
       graphSvg: graph.edges.length > 0 ? renderGraphSvg(graph) : undefined,
@@ -532,6 +540,7 @@ export async function computeVerdict(
     checks: checkNotes,
     observations,
     fixCheck: fixCheckLines,
+    ...(versions ? { versions } : {}),
     junit: masker.maskText(
       renderJUnit(
         { ticket: ws.ticket, runId: ws.runId },

@@ -17,3 +17,4 @@ export * from "./observations.js";
 export * from "./bug-report.js";
 export * from "./release.js";
 export * from "./regression.js";
+export * from "./versions.js";

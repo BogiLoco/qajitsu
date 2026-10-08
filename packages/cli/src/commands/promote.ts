@@ -192,6 +192,8 @@ export async function runPromote(
           specs,
           // REQ-EXEC-17/AC2: `qj regression` checks the expected values against this hash before running.
           cases_sha256: packCasesSha256(cases),
+          // REQ-OBS-10/AC3: what the cases passed with, so a regression run can list what changed since.
+          ...(ws.record.data["versions"] ? { versions: ws.record.data["versions"] } : {}),
           cases,
         },
         { lineWidth: 0 },

@@ -1,3 +1,4 @@
+import { diffVersions } from "@qajitsu/report";
 import { copyFile, readFile, readdir } from "node:fs/promises";
 import {
   ConfigError,
@@ -199,11 +200,19 @@ export async function runFixCheck(
     fixRun.events.emit("run", SYSTEM, "fix_check.result", { ...record });
     // REQ-VER-11/AC4: the fix run's report shows both results side by side.
     await writeReports(fixRun, await computeVerdict(fixRun, ports.now));
+    // REQ-OBS-10/AC3: tools and models that differ between the run before and the run with the fix.
+    const changes = diffVersions(
+      baseRun.ws.record.data["versions"] as Record<string, string> | undefined,
+      fixRun.ws.record.data["versions"] as Record<string, string> | undefined,
+    );
     io.write(
       [
         "",
         `Fix ${result.verified ? "VERIFIED" : "NOT verified"}: before ${baseSha.slice(0, 12)} (run ${base.runId}), with the fix ${fixed.sha.slice(0, 12)} (run ${ws.runId})`,
         ...result.cases.map((c) => `  ${c.caseId}: ${c.before} → ${c.after} · ${c.reason}`),
+        changes.length > 0
+          ? `Versions that differ between the two runs: ${changes.join("; ")}`
+          : "Same tool and model versions in both runs.",
         `Report: ${fixRun.ws.path("report", "report.html")}`,
         "",
       ].join("\n"),

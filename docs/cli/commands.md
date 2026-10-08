@@ -113,6 +113,14 @@ Exit codes: `0` printed, `3` no active project.
 
 Checks Node.js, the project configuration, secrets, Docker and mobile tooling.
 
+It ends with two sections (REQ-GEN-03/AC4+AC5). **Versions**: QAJitsu, the operating system, Node.js, git, Docker
+and Compose, Playwright and each browser, Java, the Android SDK, emulator, Appium and its drivers; ✔ found, ✘ missing
+and needed by this project (an error, with the install command), · missing and not needed. **Application under
+test**: for each repository whether its git mirror exists, when it was last updated, the commit of its default branch
+and of the latest run (an unreadable mirror is an error with the fix); with `--online` also the commit on the remote
+and, for each environment profile with a `version_path`, the deployed version compared with the latest run; and where
+the mobile app binary comes from.
+
 - `--models`: probe the configured model of every role (makes real model calls)
 - `--online`: check access to Jira and every code host (makes real requests)
 
@@ -357,6 +365,8 @@ Shows statuses, failed assertions, evidence files and cURL commands; opens the r
 Screenshots marked by code for failed web and mobile steps (`<step>-annotated.png`, REQ-EVD-08) come first, with
 what each numbered red box marks (field, expected, actual); `--failed` also opens them.
 
+The first line names the tool and model versions the run used (REQ-OBS-10).
+
 - `--run <id>`: run id (default: latest run of the ticket)
 - `--failed`: only cases that did not pass
 - `--case <id>`: only this case
@@ -533,6 +543,8 @@ Exit codes: `0` written, `3` errors.
 ### `qajitsu runs <ticket>`
 
 Lists the runs of a ticket with stage, status, results and retention.
+
+Below the table, the tool and model versions each run recorded (REQ-OBS-10).
 
 - `--keep <id>`: mark a run keep: `gc`, `clean --project` and `work reset --delete` never remove it or its evidence
   (REQ-PRJ-10/AC6)

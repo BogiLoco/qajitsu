@@ -57,10 +57,12 @@ import { runMetrics } from "./commands/metrics.js";
 import { runExport } from "./commands/export.js";
 import { runMap } from "./commands/map.js";
 import { runCiComment, runCiDetect, runCiPublishPlan } from "./commands/ci.js";
-import { loadProject } from "./project.js";
+import { loadProject, type LoadedProject } from "./project.js";
 import type { ModelPorts } from "./session.js";
 import { formatDoctor, runDoctor } from "./doctor.js";
 import { projectChecks } from "./doctor-project.js";
+import { appVersions, formatAppVersions } from "./app-versions.js";
+import { formatToolVersions, toolVersions } from "./versions.js";
 
 /** Output and environment ports, injected for tests. */
 export interface ProgramIO {
@@ -386,7 +388,38 @@ export function createProgram(version: string, io: ProgramIO): Command {
           });
         }
       }
-      io.write(`${formatDoctor(checks)}\n`);
+      // REQ-GEN-03/AC4+AC5: versions of every tool and of the application under test.
+      let loaded: LoadedProject | undefined;
+      if (resolved !== undefined && projectError === undefined)
+        loaded = await loadProject(io.cwd, resolved).catch(() => undefined);
+      const tools = await toolVersions({
+        qajitsu: version,
+        node: io.nodeVersion,
+        project: loaded,
+        ...(io.ports?.versionExec ? { exec: io.ports.versionExec } : {}),
+        ...(io.ports?.playwright ? { playwright: io.ports.playwright } : {}),
+      });
+      // docker and appium are already checks of their own above; the others fail here when needed and missing.
+      for (const t of tools)
+        if (t.needed && t.version === undefined && !checks.some((c) => c.name === t.name))
+          checks.push({
+            name: t.name,
+            ok: false,
+            detail: `not found (needed for ${t.why ?? "this project"})${t.install ? `; install: ${t.install}` : ""}`,
+          });
+      const app =
+        loaded && io.ports
+          ? await appVersions(
+              loaded,
+              { ...io.ports, ...(resolved ? { project: resolved } : {}) },
+              {
+                online: options.online === true,
+              },
+            ).catch(() => [])
+          : [];
+      for (const line of app) if (!line.ok) checks.push({ name: line.name, ok: false, detail: line.detail });
+      io.write(`${formatDoctor(checks)}\n\n${formatToolVersions(tools)}\n`);
+      if (loaded) io.write(`\n${formatAppVersions(app)}\n`);
       let ok = checks.every((c) => c.ok);
       if (options.models === true && io.ports) {
         try {

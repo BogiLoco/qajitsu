@@ -121,7 +121,7 @@ local browser page, instead of waiting for the matrix at the end.
 
 ### REQ-OBS-10 · Tool versions recorded with every run
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-WS-01, REQ-GEN-03, REQ-PUB-01, REQ-EXEC-17
@@ -131,7 +131,7 @@ the tools that tested them, so a changed result cannot be told apart from a new 
 
 **Acceptance criteria**
 
-- [ ] AC1: Every run records in `run.json` the versions of QAJitsu, Node.js, the operating system, Playwright and the browsers it used, Appium and its driver, Docker and Compose when `--build` ran, and the model of each agent role.
-- [ ] AC2: `report.html` and the ticket comment show these versions; `qj runs` and `qj evidence` show them for a run.
-- [ ] AC3: `qj regression` and `qj run --fix-check` list the versions that differ from the run they compare with, next to the result.
-- [ ] AC4: A version that cannot be read is recorded as unknown, never guessed.
+- [x] AC1: Every run records in `run.json` the versions of QAJitsu, Node.js, the operating system, Playwright and the browsers it used, Appium and its driver, Docker and Compose when `--build` ran, and the model of each agent role.
+- [x] AC2: `report.html` and the ticket comment show these versions; `qj runs` and `qj evidence` show them for a run.
+- [x] AC3: `qj regression` and `qj run --fix-check` list the versions that differ from the run they compare with, next to the result.
+- [x] AC4: A version that cannot be read is recorded as unknown, never guessed.

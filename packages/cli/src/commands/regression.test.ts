@@ -174,4 +174,16 @@ describe("qj regression (REQ-EXEC-17)", () => {
     const bad = await p.run(["regression", "--from", root, "--publish", "nope"]);
     expect(bad.err).toContain("[TICKET_KEY_INVALID]");
   }, 240_000);
+
+  it("REQ-OBS-10/AC3: the report lists the tool versions that differ from when the pack was promoted", async () => {
+    const p = await setup();
+    const { root } = await writePack((pack) => {
+      pack["versions"] = { qajitsu: "0.0.1", node: "v20.0.0", "model default": "mock/scripted", gone: "1.0" };
+    });
+    const r = await p.run(["regression", "--from", root]);
+    expect(r.out).toContain("## Versions changed since the packs were promoted");
+    expect(r.out).toContain(`- DEMO-1: node v20.0.0 → ${process.version}`);
+    expect(r.out).not.toContain("model default mock/scripted →");
+    expect(r.out).not.toContain("gone");
+  }, 240_000);
 });

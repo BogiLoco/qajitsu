@@ -214,7 +214,7 @@ documentation site and the Claude Code plugin are available.
 - [REQ-OBS-04](requirements/observability.md#req-obs-04--metrics-dashboards-and-alerts) Metrics, dashboards and alerts (could, implemented, AC 3/3)
 - [REQ-OBS-05](requirements/observability.md#req-obs-05--tamper-evident-audit-log) Tamper-evident audit log (should, implemented, AC 2/2)
 - [REQ-OBS-07](requirements/observability.md#req-obs-07--application-map-across-runs) Application map across runs (could, implemented, AC 2/2)
-- [REQ-GEN-03](requirements/generic.md#req-gen-03--init-and-doctor) `init` and `doctor` (must, in-progress, AC 3/5)
+- [REQ-GEN-03](requirements/generic.md#req-gen-03--init-and-doctor) `init` and `doctor` (must, implemented, AC 5/5)
 - [REQ-GEN-04](requirements/generic.md#req-gen-04--claude-code-plugin-interface) Claude Code plugin interface (could, implemented, AC 1/1)
 - [REQ-NFR-07](requirements/non-functional.md#req-nfr-07--platforms) Platforms (should, implemented, AC 2/2)
 <!-- /req-stage -->
@@ -261,7 +261,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-PUB-09](requirements/publishing.md#req-pub-09--release-readiness-report) Release readiness report (could, implemented, AC 4/4)
 - [REQ-OBS-08](requirements/observability.md#req-obs-08--map-as-planner-input) Map as planner input (could, implemented, AC 1/1)
 - [REQ-OBS-09](requirements/observability.md#req-obs-09--live-progress-of-a-run) Live progress of a run (should, implemented, AC 4/4)
-- [REQ-OBS-10](requirements/observability.md#req-obs-10--tool-versions-recorded-with-every-run) Tool versions recorded with every run (should, proposed, AC 0/4)
+- [REQ-OBS-10](requirements/observability.md#req-obs-10--tool-versions-recorded-with-every-run) Tool versions recorded with every run (should, implemented, AC 4/4)
 - [REQ-PRJ-09](requirements/projects.md#req-prj-09--export-and-import-of-a-project-profile) Export and import of a project profile (could, implemented, AC 2/2)
 - [REQ-KNOW-12](requirements/knowledge.md#req-know-12--online-sources) Online sources (could, implemented, AC 2/2)
 <!-- /req-stage -->

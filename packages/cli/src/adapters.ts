@@ -30,6 +30,7 @@ import {
 } from "@qajitsu/core";
 import type { Masker } from "@qajitsu/steps";
 import type { LoadedProject } from "./project.js";
+import type { PlaywrightInfo, VersionExec } from "./versions.js";
 import { resolveConfigPath } from "./project.js";
 
 /** Process-level ports the CLI injects into adapters. */
@@ -44,6 +45,10 @@ export interface RuntimePorts {
   readonly project?: ResolvedProject;
   /** Runs the `op`, `aws` and `gcloud` CLIs of secret managers (replaced in tests). */
   readonly secretCliExec?: SecretCliExec;
+  /** Asks tools for their versions (replaced in tests; REQ-GEN-03/AC4, REQ-OBS-10). */
+  readonly versionExec?: VersionExec;
+  /** Playwright and its browsers (replaced in tests). */
+  readonly playwright?: () => PlaywrightInfo;
 }
 
 /** Adapters for one project. */

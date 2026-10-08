@@ -62,6 +62,7 @@ import {
 import type { CommandExec } from "@qajitsu/adapter-env-compose";
 import { headlessFor, prepareLiveRun, type LiveOptions, type LiveRun } from "./live.js";
 import { RegressionRunSchema } from "./pack.js";
+import { runVersions } from "../versions.js";
 import { createProgressPrinter, liveScreenshots, teeEvents } from "./progress.js";
 
 /** Options of `qajitsu run`. */
@@ -455,6 +456,13 @@ export async function runRun(
           results,
         );
       } else {
+        // REQ-OBS-10/AC1: the versions of every tool and model this run uses, recorded before anything runs.
+        await ws.update({
+          data: {
+            ...ws.record.data,
+            versions: await runVersions(project, { exec: ports.versionExec, playwright: ports.playwright }),
+          },
+        });
         const pending = await executeCases(session, plan, env, io, ports, results, {
           startedAt,
           user: options.user,

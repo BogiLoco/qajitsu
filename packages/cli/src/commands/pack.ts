@@ -43,6 +43,8 @@ export const RegressionPackSchema = z.object({
     .string()
     .regex(/^[0-9a-f]{64}$/)
     .optional(),
+  /** Versions of the tools and models the cases passed with (REQ-OBS-10/AC3). */
+  versions: z.record(z.string(), z.string()).optional(),
   cases: z.array(TestCaseSchema).min(1),
 });
 

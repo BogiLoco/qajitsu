@@ -27,7 +27,13 @@ export interface RegressionModel {
   readonly environment: string;
   readonly cases: readonly RegressionCaseRow[];
   readonly problems: readonly RegressionPackProblem[];
+  /** Per pack, the tool and model versions that differ from when it was promoted (REQ-OBS-10/AC3). */
+  readonly versionChanges?:
+    readonly { readonly ticket: string; readonly changes: readonly string[] }[] | undefined;
 }
+
+const changeLines = (m: RegressionModel): string[] =>
+  (m.versionChanges ?? []).flatMap((p) => p.changes.map((c) => `${p.ticket}: ${c}`));
 
 const ORDER: readonly TestStatus[] = ["PASSED", "FAILED", "FLAKY", "BLOCKED", "NEEDS_REVIEW", "NOT_RUN"];
 
@@ -102,6 +108,9 @@ export function renderRegressionMarkdown(m: RegressionModel): string {
     out.push("", "## Not verified", "", ...lines(s.notVerified).map((l) => `- ${l}`));
   if (m.problems.length > 0)
     out.push("", "## Packs that could not run", "", ...m.problems.map((p) => `- ${p.path}: ${p.problem}`));
+  const changes = changeLines(m);
+  if (changes.length > 0)
+    out.push("", "## Versions changed since the packs were promoted", "", ...changes.map((l) => `- ${l}`));
   out.push(
     "",
     "Statuses are computed by QAJitsu from runner output; no agent or model took part in this run.",
@@ -146,6 +155,7 @@ ${list(
   "Packs that could not run",
   m.problems.map((p) => `${p.path}: ${p.problem}`),
 )}
+${list("Versions changed since the packs were promoted", changeLines(m))}
 <p>Statuses are computed by QAJitsu from runner output; no agent or model took part in this run.</p>
 </body></html>
 `;
@@ -192,6 +202,7 @@ export function renderRegressionComment(m: RegressionModel): { wiki: string; adf
     ["Regressions (passed when promoted, fail now)", lines(s.regressions)],
     ["Not verified", lines(s.notVerified)],
     ["Packs that could not run", m.problems.map((p) => `${p.path}: ${p.problem}`)],
+    ["Versions changed since the packs were promoted", changeLines(m)],
   ];
   const wiki = [
     "h3. QAJitsu regression run",

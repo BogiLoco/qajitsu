@@ -65,6 +65,8 @@ describe("qajitsu run --fix-check (REQ-VER-11)", () => {
     expect(result.err).toBe("");
     expect(result.exitCode).toBe(0);
     expect(result.out).toContain("Fix VERIFIED");
+    // REQ-OBS-10/AC3: both runs used the same tools and models, and the result says so.
+    expect(result.out).toContain("Same tool and model versions in both runs.");
     expect(result.out).toContain("TC-01: FAILED → PASSED · failed before the fix and passed with it");
     const fix = await runJson(dir);
     const check = fix.data["fixCheck"] as {

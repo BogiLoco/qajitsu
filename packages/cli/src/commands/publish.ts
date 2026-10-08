@@ -135,6 +135,7 @@ function commentModel(
     notes,
     observations: v.observations,
     fixCheck: v.fixCheck,
+    ...(v.versions ? { versions: v.versions } : {}),
   };
 }
 

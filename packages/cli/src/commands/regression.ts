@@ -18,6 +18,7 @@ import {
   type Ticket,
 } from "@qajitsu/core";
 import {
+  diffVersions,
   renderRegressionComment,
   renderRegressionHtml,
   renderRegressionJUnit,
@@ -270,6 +271,7 @@ export async function runRegression(
     }
 
     const cases: RegressionCaseRow[] = [];
+    const versionChanges: { ticket: string; changes: string[] }[] = [];
     let environment = options.env ?? project.config.environments.default ?? "-";
     for (const found of packs) {
       const { pack } = found;
@@ -324,6 +326,9 @@ export async function runRegression(
       const session = await openSession(pack.ticket, ws.runId, io.cwd, ports, masker);
       const verdict = await computeVerdict(session, ports.now);
       environment = verdict.environment.name;
+      // REQ-OBS-10/AC3: tools and models that differ from when the pack's cases passed.
+      const changes = diffVersions(pack.versions, verdict.versions);
+      if (changes.length > 0) versionChanges.push({ ticket: pack.ticket, changes });
       for (const c of verdict.cases) {
         const first = c.failures[0];
         const reason =
@@ -349,6 +354,7 @@ export async function runRegression(
       environment,
       cases,
       problems,
+      ...(versionChanges.length > 0 ? { versionChanges } : {}),
     };
     const markdown = masker.maskText(renderRegressionMarkdown(model));
     await writeFile(join(outDir, "regression.md"), markdown);

@@ -30,7 +30,7 @@ QAJitsu plugs into any project through configuration; differences between projec
 
 ### REQ-GEN-03 · `init` and `doctor`
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 9
 - Related: REQ-LLM-03, REQ-CFG-04, REQ-PRJ-02, REQ-CTX-04, REQ-OBS-10
@@ -40,8 +40,8 @@ QAJitsu plugs into any project through configuration; differences between projec
 - [x] AC1: `qajitsu doctor` checks Node.js and project configuration (stage 1).
 - [x] AC2: `doctor` grows with stages: Jira and code host access, Docker, emulators, secrets, model capabilities.
 - [x] AC3: `qajitsu init` (basic version in REQ-PRJ-02, stage 2) learns to detect `docker-compose.yml`, repos and test types when creating `.qa/`.
-- [ ] AC4: `doctor` prints the versions of QAJitsu, the operating system, Node.js, git, Docker and Compose, Playwright and each installed browser, Java, the Android SDK components and emulator, Appium and its drivers. A tool the project does not need is shown as information; a missing tool the project needs is an error with the command that installs it.
-- [ ] AC5: `doctor` shows the versions of the application under test the project knows: for each of its repositories whether the git mirror exists, when it was last updated, the commit of its default branch and the commit of the latest run; with `--online` also whether the remote has newer commits and, for each environment profile with a `version_path`, the version deployed there and whether it matches the commit of the latest run; for a mobile app, where its binary comes from (path, build or CI artifact). A mirror that cannot be read is an error with the fix (`qj clean --project`, then `qj fetch` downloads it again); an environment that does not answer is shown as unknown.
+- [x] AC4: `doctor` prints the versions of QAJitsu, the operating system, Node.js, git, Docker and Compose, Playwright and each installed browser, Java, the Android SDK components and emulator, Appium and its drivers. A tool the project does not need is shown as information; a missing tool the project needs is an error with the command that installs it.
+- [x] AC5: `doctor` shows the versions of the application under test the project knows: for each of its repositories whether the git mirror exists, when it was last updated, the commit of its default branch and the commit of the latest run; with `--online` also whether the remote has newer commits and, for each environment profile with a `version_path`, the version deployed there and whether it matches the commit of the latest run; for a mobile app, where its binary comes from (path, build or CI artifact). A mirror that cannot be read is an error with the fix (`qj clean --project`, then `qj fetch` downloads it again); an environment that does not answer is shown as unknown.
 
 ### REQ-GEN-04 · Claude Code plugin interface
 
