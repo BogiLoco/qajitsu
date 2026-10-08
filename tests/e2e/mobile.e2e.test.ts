@@ -27,6 +27,7 @@ import {
   type RunningEmulator,
 } from "@qajitsu/adapter-runner-mobile";
 import { PlanSchema, readRunIndex, type TicketKey } from "@qajitsu/core";
+import { PNG } from "pngjs";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { apiService, createBuildProject } from "../support/cli-build.js";
 import { startShop } from "../../examples/demo-shop/api/server.mjs";
@@ -151,6 +152,29 @@ describe.skipIf(!available)("Android app on an emulator (stage 8)", () => {
     expect(record.evidence.map((e) => e.name)).toEqual(
       expect.arrayContaining(["S3.png", "failure.png", "screen.mp4", "logcat.log", "page-source.xml"]),
     );
+    // REQ-EVD-08/AC1+AC4: on the device too, the cart counter is boxed in red on a copy of the S3 screenshot.
+    const notes = record.evidence.find((e) => e.name === "S3-annotations.json")?.content;
+    const marks = (
+      JSON.parse(typeof notes === "string" ? notes : "{}") as {
+        marks?: { n: number; field: string; box?: { x: number; y: number; width: number; height: number } }[];
+      }
+    ).marks;
+    expect(marks?.[0]).toMatchObject({ n: 1, field: "elements.testid:cart-count.text" });
+    const box = marks?.[0]?.box;
+    expect(box).toBeDefined();
+    const png = (name: string) => {
+      const c = record.evidence.find((e) => e.name === name)?.content;
+      return PNG.sync.read(Buffer.from(c instanceof Uint8Array ? c : new Uint8Array()));
+    };
+    const isRed = (img: PNG, x: number, y: number) => {
+      const i = (Math.round(y) * img.width + Math.round(x)) * 4;
+      return img.data[i] === 225 && img.data[i + 1] === 29 && img.data[i + 2] === 72;
+    };
+    const b = box ?? { x: 0, y: 0, width: 0, height: 0 };
+    const annotated = png("S3-annotated.png");
+    expect(annotated.width).toBe(png("S3.png").width);
+    expect(isRed(annotated, b.x - 2, b.y + b.height / 2)).toBe(true);
+    expect(isRed(png("S3.png"), b.x - 2, b.y + b.height / 2)).toBe(false);
   }, 300_000);
 });
 
