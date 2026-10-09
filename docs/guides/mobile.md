@@ -18,6 +18,16 @@ and web cases.
 ## Setup (macOS, Android)
 
 ```sh
+qj setup --check     # what the project's mobile section needs and what is already there
+qj setup --smoke     # Java 17, the SDK packages, the emulator, system image and AVD, Appium and UiAutomator2;
+                     # --smoke boots the emulator once
+```
+
+`qj setup` installs into `~/.qajitsu/toolchain/` and passes the tools to the emulator, Appium and the app build;
+`mobile.android.sdk_root`, `mobile.appium.bin` and `mobile.appium.home` still win when set. The system image must
+match the processor (`arm64-v8a` on Apple silicon, `x86_64` on Intel and most Linux machines). By hand instead:
+
+```sh
 brew install openjdk@17 --cask android-commandlinetools
 export JAVA_HOME=/opt/homebrew/opt/openjdk@17
 sdkmanager --sdk_root=$HOME/Library/Android/sdk "cmdline-tools;latest" "platform-tools" "emulator" \

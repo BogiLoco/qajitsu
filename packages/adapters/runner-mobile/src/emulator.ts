@@ -18,7 +18,20 @@ export type Spawn = (
   env?: Readonly<Record<string, string>>,
 ) => ChildProcess;
 
-const ENV_KEYS = ["PATH", "HOME", "TMPDIR", "USER", "LANG", "JAVA_HOME", "ANDROID_SDK_ROOT", "ANDROID_HOME"];
+// ANDROID_AVD_HOME and APPIUM_HOME point to QAJitsu's toolchain when `qj setup` installed the tools (REQ-GEN-06/AC3).
+const ENV_KEYS = [
+  "PATH",
+  "HOME",
+  "TMPDIR",
+  "USER",
+  "LANG",
+  "JAVA_HOME",
+  "ANDROID_SDK_ROOT",
+  "ANDROID_HOME",
+  "ANDROID_AVD_HOME",
+  "APPIUM_HOME",
+  "DO_NOT_TRACK",
+];
 const baseEnv = (): Record<string, string> =>
   Object.fromEntries(
     ENV_KEYS.flatMap((k) => (process.env[k] === undefined ? [] : [[k, process.env[k] ?? ""]])),
@@ -84,6 +97,8 @@ export interface EmulatorOptions {
   readonly exec?: Exec;
   readonly spawn?: Spawn;
   readonly sleep?: (ms: number) => Promise<void>;
+  /** AVD folder; default `$ANDROID_AVD_HOME` or the emulator's own (`~/.android/avd`). */
+  readonly avdHome?: string;
   /** avdmanager binary; default `cmdline-tools/latest/bin/avdmanager` in the SDK, else `avdmanager` on PATH. */
   readonly avdmanager?: string;
 }
@@ -99,7 +114,11 @@ export async function startAndroidEmulator(options: EmulatorOptions): Promise<Ru
   const exec = options.exec ?? execTool;
   const start = options.spawn ?? spawnTool;
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-  const env = { ANDROID_SDK_ROOT: options.sdkRoot, ANDROID_HOME: options.sdkRoot };
+  const env = {
+    ANDROID_SDK_ROOT: options.sdkRoot,
+    ANDROID_HOME: options.sdkRoot,
+    ...(options.avdHome !== undefined ? { ANDROID_AVD_HOME: options.avdHome } : {}),
+  };
   const adb = join(options.sdkRoot, "platform-tools", "adb");
   const emulator = join(options.sdkRoot, "emulator", "emulator");
   const sdkAvdmanager = join(options.sdkRoot, "cmdline-tools", "latest", "bin", "avdmanager");
@@ -131,6 +150,8 @@ export async function startAndroidEmulator(options: EmulatorOptions): Promise<Ru
       "-no-snapshot-save",
       "-no-boot-anim",
       "-no-audio",
+      // The emulator's usage metrics are off (REQ-GEN-06/AC9).
+      "-no-metrics",
       ...(options.headless ? ["-no-window"] : []),
       ...(options.readOnly ? ["-read-only"] : []),
     ],

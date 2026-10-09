@@ -30,6 +30,7 @@ import {
 } from "@qajitsu/core";
 import type { Masker } from "@qajitsu/steps";
 import type { LoadedProject } from "./project.js";
+import type { SetupPorts } from "@qajitsu/toolchain";
 import type { PlaywrightInfo, VersionExec } from "./versions.js";
 import { resolveConfigPath } from "./project.js";
 
@@ -49,6 +50,8 @@ export interface RuntimePorts {
   readonly versionExec?: VersionExec;
   /** Playwright and its browsers (replaced in tests). */
   readonly playwright?: () => PlaywrightInfo;
+  /** Parts of `qj setup` replaced in tests: commands, host, prechecks, smoke tests (REQ-GEN-06). */
+  readonly toolchain?: Partial<SetupPorts>;
 }
 
 /** Adapters for one project. */

@@ -81,22 +81,22 @@ checks (auditor, canary) can only make a result worse, never better.
 
 <p align="center"><sub>🟩 you decide &nbsp;·&nbsp; 🟪 AI agents propose &nbsp;·&nbsp; 🟦 deterministic code executes and judges</sub></p>
 
-| Step                    | Who                         | What it produces                                      | Where it lives (in the run folder)    |
-| ----------------------- | --------------------------- | ----------------------------------------------------- | ------------------------------------- |
-| `qj init` / `qj doctor` | **you** once, code checks   | the project, its `.qa/` folder and a readiness check  | `~/.qajitsu/projects/<slug>/`, `.qa/` |
-| `qj fetch`              | code                        | the ticket, the change, worktrees, manual test cases  | `ticket/`, `repos/`, `imported/`      |
-| `qj plan`               | AI agents                   | analysis and plan versions with sources               | `analysis.json`, `plan/`, `map/`      |
-| review / `qj approve`   | **you**                     | the frozen plan and its SHA-256                       | `plan/plan.approved.yaml`, `run.json` |
-| `qj run` (author)       | AI agent                    | one spec per case, checked by code                    | `specs/`                              |
-| `qj run` (execution)    | code                        | assertions, evidence with hashes                      | `results/`, `evidence/`               |
-| `qj watch`              | you                         | live progress and the latest screenshot per case      | `live/` (preview, not evidence)       |
-| `qj run` (verdict)      | code                        | statuses, gates, auditor and canary records, reports  | `checks/`, `report/`                  |
-| `qj evidence`           | you                         | the report, failed steps, screenshots, videos, traces | `report/report.html`                  |
-| `qj publish`            | **you** confirm, code posts | the ticket comment and the evidence zip               | the ticket                            |
-| `qj bug`                | **you** confirm, code posts | a bug per FAILED case, written from the run           | ticket system, `run.json`             |
-| `qj promote`            | **you** confirm, code posts | a PR/MR with the PASSED specs and their expectations  | tests repository                      |
-| `qj regression`         | code                        | the promoted packs run again, no models               | `exports/regression/`                 |
-| `qj release`            | code                        | readiness of every ticket of a fix version or sprint  | `exports/releases/`                   |
+| Step                                 | Who                         | What it produces                                             | Where it lives (in the run folder)                             |
+| ------------------------------------ | --------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------- |
+| `qj init` / `qj setup` / `qj doctor` | **you** once, code checks   | the project, its `.qa/` folder, its tools, a readiness check | `~/.qajitsu/projects/<slug>/`, `.qa/`, `~/.qajitsu/toolchain/` |
+| `qj fetch`                           | code                        | the ticket, the change, worktrees, manual test cases         | `ticket/`, `repos/`, `imported/`                               |
+| `qj plan`                            | AI agents                   | analysis and plan versions with sources                      | `analysis.json`, `plan/`, `map/`                               |
+| review / `qj approve`                | **you**                     | the frozen plan and its SHA-256                              | `plan/plan.approved.yaml`, `run.json`                          |
+| `qj run` (author)                    | AI agent                    | one spec per case, checked by code                           | `specs/`                                                       |
+| `qj run` (execution)                 | code                        | assertions, evidence with hashes                             | `results/`, `evidence/`                                        |
+| `qj watch`                           | you                         | live progress and the latest screenshot per case             | `live/` (preview, not evidence)                                |
+| `qj run` (verdict)                   | code                        | statuses, gates, auditor and canary records, reports         | `checks/`, `report/`                                           |
+| `qj evidence`                        | you                         | the report, failed steps, screenshots, videos, traces        | `report/report.html`                                           |
+| `qj publish`                         | **you** confirm, code posts | the ticket comment and the evidence zip                      | the ticket                                                     |
+| `qj bug`                             | **you** confirm, code posts | a bug per FAILED case, written from the run                  | ticket system, `run.json`                                      |
+| `qj promote`                         | **you** confirm, code posts | a PR/MR with the PASSED specs and their expectations         | tests repository                                               |
+| `qj regression`                      | code                        | the promoted packs run again, no models                      | `exports/regression/`                                          |
+| `qj release`                         | code                        | readiness of every ticket of a fix version or sprint         | `exports/releases/`                                            |
 
 Every ticket gets a **run folder** in its project (`~/.qajitsu/projects/<project>/runs/<TICKET>/<RUN-ID>/`). Each command continues the latest run of the
 ticket unless you pass `--run <id>`. A new `qj fetch` starts a new run.
@@ -107,13 +107,17 @@ ticket unless you pass `--run <id>`. A new `qj fetch` starts a new run.
 
 ### Requirements
 
-| Needed for | What                                                                                                                                    |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| everything | Node.js 22.12 or newer, git, pnpm (`corepack enable`)                                                                                   |
-| web tests  | Chromium for Playwright: `pnpm --filter @qajitsu/cli exec playwright-core install chromium`                                             |
-| `--build`  | Docker with Compose v2 (for `kind: compose` services); not needed for `kind: process`                                                   |
-| Android    | JDK 17, Android SDK (emulator, platform 34, build-tools 34, a system image), Appium: see [docs/guides/mobile.md](docs/guides/mobile.md) |
-| models     | an API key of a provider (Anthropic, OpenAI, Google, any OpenAI-compatible gateway) or a local model via Ollama                         |
+| Needed for | What                                                                                                              |
+| ---------- | ----------------------------------------------------------------------------------------------------------------- |
+| everything | Node.js 22.12 or newer, git, pnpm (`corepack enable`)                                                             |
+| web tests  | the Playwright browsers of the web matrix                                                                         |
+| `--build`  | Docker with Compose v2 (for `kind: compose` services); not needed for `kind: process`                             |
+| Android    | Java 17+, the Android SDK (platform tools, emulator, a system image, an AVD), Appium with the UiAutomator2 driver |
+| iOS        | a Mac with Xcode, or a device farm (`mobile.ios.farm`)                                                            |
+| models     | an API key of a provider (Anthropic, OpenAI, Google, any OpenAI-compatible gateway) or a local model via Ollama   |
+
+Everything except Node.js, git, pnpm and the model key is installed by **`qj setup`** at the versions QAJitsu is tested
+with ([Install the tools](#install-the-tools-qj-setup)); tools you already have at a compatible version are used as they are.
 
 Linux and macOS are supported (CI runs on both). Windows: use WSL 2.
 
@@ -140,8 +144,10 @@ qj init shop           # registers project "shop" in ~/.qajitsu and creates .qa/
                        # (already have .qa/? `qj init shop --qa-dir ./.qa`; more projects: see "Projects")
 # put the secrets into .env.local next to .qa/ (never commit it):
 #   JIRA_EMAIL=...  JIRA_TOKEN=...  GITHUB_TOKEN=...  ANTHROPIC_API_KEY=...
+qj setup               # installs what .qa/ needs (browsers, Docker, Java, Android SDK + emulator, Appium, Xcode)
+                       # at tested versions into ~/.qajitsu/toolchain; your compatible tools are used as they are
 qj doctor --online     # checks Node, config, secrets, Docker, mobile tooling, ticket system and code host access;
-                       # lists the version of every tool and of the application under test
+                       # lists the version of every tool and of the application under test (--fix runs qj setup)
 qj doctor --models     # optional: one real call per configured model role
 qj knowledge add docs/ # optional: documentation the agents may search (see "Knowledge base")
 ```
@@ -160,6 +166,61 @@ manager add it under `secrets:` in `qa.project.yaml` and reference values direct
 
 A secret manager's own token always comes from `secret://env/...`; CLIs run with argument arrays and only their own
 environment variables.
+
+### Install the tools: `qj setup`
+
+`qj setup` reads `.qa/` and installs only what the project needs: the browsers of the web matrix, Docker for compose
+services, Java and the Android SDK packages (platform tools; platform and build tools when the app is built from the
+worktree; emulator, system image and AVD when an emulator is configured), Appium and its drivers when QAJitsu starts
+Appium, and Xcode for local iOS.
+
+- **Pinned versions.** Java is Eclipse Temurin 17.0.20.1+1, the Android command-line tools 23.0, Appium 3.8.0 with
+  UiAutomator2 8.7.0 and XCUITest 12.16.0, the browsers of QAJitsu's Playwright. Every download is resumable and
+  verified against the publisher's checksum before it is used, and installed atomically.
+- **Your tools stay yours.** A tool you have at a compatible version (Java 17+, Appium 3, Docker 24+ with Compose v2,
+  Xcode 15+, an SDK with every needed package) is used as it is. One that is not compatible is never changed:
+  `qj doctor` tells you, and `qj setup` installs a compatible copy next to it.
+- **One copy per machine.** Managed tools live in `~/.qajitsu/toolchain/<tool>/<version>/`, shared by every project;
+  each project records which tools it uses (`~/.qajitsu/projects/<slug>/toolchain.json`). QAJitsu passes them to the
+  processes it starts (`JAVA_HOME`, `ANDROID_HOME`, `ANDROID_AVD_HOME`, `APPIUM_HOME`, `PATH`) and never edits your
+  shell profile. Docker (Colima with the Compose plugin on macOS, Docker Engine on Linux) and Xcode (through
+  `xcodes`) are installed once for the machine and never removed by QAJitsu.
+- **Checks first.** The processor (arm64 or x86_64 system images), hardware virtualisation (HVF, KVM), memory and free
+  disk are checked before anything is downloaded; when the emulator cannot run on the machine, setup stops and points
+  to a device farm. Two setups cannot run at once.
+- **Proved to work.** After installing, Java must run, sdkmanager must list its packages, the emulator's acceleration
+  check must pass, Appium must list its drivers, each browser must start (`--smoke` also boots the emulator once).
+  Nothing is reported ready that did not pass; usage analytics of Homebrew and the emulator are off.
+
+```sh
+qj setup --check                 # the plan: what, which version, from where, how big; nothing changes (--json too)
+qj setup                         # asks for the licences and every download over 100 MB
+qj setup --yes                   # no questions: licences accepted on your behalf and listed in the output
+qj setup --only java,android     # only these tools (--skip leaves some out)
+qj setup --version java=21       # another version next to the current one (also in .qa/toolchain.yaml)
+qj setup --reinstall android     # install again what QAJitsu installed
+qj setup --uninstall appium      # remove what QAJitsu installed (--uninstall --all: everything, never Docker or Xcode)
+qj setup --download /media/qj    # collect everything for an offline machine of the same system ...
+qj setup --from /media/qj        # ... and install it there, every folder checked against the bundle's digest
+qj doctor --fix --yes            # run qj setup for whatever doctor found missing
+```
+
+Versions per project, private mirrors, a proxy and a company CA go in `.qa/toolchain.yaml` (or for the whole machine in
+`~/.qajitsu/toolchain.yaml`; the project's values win):
+
+```yaml
+versions: { java: "21", appium: 3.8.0, android: { platform: 35, build_tools: 35.0.0 } }
+sources:
+  npm_registry: https://npm.example.com/repository/npm/ # Appium and its drivers
+  npm_token: secret://env/NPM_TOKEN # passed in the environment, never written to disk
+  playwright_host: https://mirror.example.com/playwright
+  java_mirror: https://mirror.example.com/adoptium # replaces https://github.com/adoptium
+  android_mirror: https://mirror.example.com/android/repository
+  homebrew_bottle_domain: https://mirror.example.com/homebrew-bottles
+network: { proxy: http://proxy.example.com:3128, no_proxy: [localhost], ca_certs: company-ca.pem }
+```
+
+`qj doctor --online` checks that every configured source answers.
 
 ---
 
@@ -428,6 +489,8 @@ A project is a name (slug, e.g. `shop`, `bank-web`) plus two places:
 ```text
 ~/.qajitsu/                      QAJitsu home (QAJITSU_HOME overrides it)
   config.yaml                    the active project; never secrets
+  toolchain/                     tools qj setup installed (one copy per version) and installed.json, their record
+  toolchain.yaml                 machine-wide versions, mirrors, proxy and CA for qj setup (optional)
   projects/shop/
     project.yaml                 slug, path of the linked .qa/ folder, ticket key prefixes
     runs/<TICKET>/<RUN-ID>/      run folders (see "What QAJitsu writes to disk")
@@ -436,6 +499,7 @@ A project is a name (slug, e.g. `shop`, `bank-web`) plus two places:
     knowledge/                   the knowledge base (see "Knowledge base")
     exports/                     evidence zips, qj export output, bench results, application maps, releases/, regression/
     logs/, context.json          logs; index of open work for `qj status`
+    toolchain.json               which tools the project uses: yours or QAJitsu's (written by qj setup)
   audit/<slug>/                  run journals kept after `qj projects remove`
 ```
 
@@ -644,14 +708,15 @@ Every option and exit code of every command: [docs/cli/commands.md](docs/cli/com
 
 ### Setup
 
-| Command                                                                                                     | When to use it                                     | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `qj init <slug> [--qa-dir <path>] [--jira-prefix <KEY>]... [--jira-url <url>] [--yes] [--force] [--no-use]` | once per project                                   | Registers the project in `~/.qajitsu/projects/<slug>/` (runs, git cache, knowledge, exports) and links its `.qa/` folder, or creates `.qa/` by detection (git host, compose services and ports, OpenAPI, test types). Validates it, lists every problem and makes it the active project. `--force` relinks an existing project.                                                                                                                                                                                                       |
-| `qj use <slug>` / `qj projects list [--archived]` / `qj projects current`                                   | switching between projects                         | Sets the active project and shows its open work; lists every project with readiness and ticket prefixes; prints the active one. Any command takes `--project <slug>`; a ticket key like `BANK-12` selects its project by prefix.                                                                                                                                                                                                                                                                                                      |
-| `qj doctor [--online] [--models]`                                                                           | after setup and whenever something fails           | Checks Node.js, the configuration, every `secret://` reference (by name only), Docker (for `--build`), Android SDK and Appium (for mobile), iOS availability. `--online`: real access checks against the ticket system and every code host. `--models`: one call per model role and its capabilities. Exit 3 when anything is missing. Ends with the versions of every tool (missing ones with the install command) and of the application under test (mirrors, default branches, latest runs; online: remote and deployed versions). |
-| `qj env check [--env <profile>]`                                                                            | before the first `--build`                         | Lists every missing or invalid variable of the environment profile and of the `--build` services (secrets, templates, stub mappings, seed hook, compose file) without starting anything.                                                                                                                                                                                                                                                                                                                                              |
-| `qj env render <TICKET> [--run <id>]`                                                                       | debugging a build                                  | Recreates the per-service `.env` files (0600) of a run with the ports recorded by `--build`. They contain secrets; `qj clean` removes them.                                                                                                                                                                                                                                                                                                                                                                                           |
-| `qj env up <TICKET> [--set <svc.VAR=value>]... [--detach]`                                                  | checking that the app starts, or poking it by hand | Starts the app from the run's worktree exactly as `run --build` would, without agents or tests, and prints the service URLs. Ctrl+C stops it; `--detach` leaves containers running until `qj clean`.                                                                                                                                                                                                                                                                                                                                  |
+| Command                                                                                                                                                                                      | When to use it                                                     | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `qj init <slug> [--qa-dir <path>] [--jira-prefix <KEY>]... [--jira-url <url>] [--yes] [--force] [--no-use]`                                                                                  | once per project                                                   | Registers the project in `~/.qajitsu/projects/<slug>/` (runs, git cache, knowledge, exports) and links its `.qa/` folder, or creates `.qa/` by detection (git host, compose services and ports, OpenAPI, test types). Validates it, lists every problem and makes it the active project. `--force` relinks an existing project.                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `qj setup [--check] [--json] [--only <tools>] [--skip <tools>] [--yes] [--reinstall <tool>] [--uninstall [tool]] [--all] [--version <tool=ver>] [--download <dir>] [--from <dir>] [--smoke]` | once per machine and project, and when doctor finds a tool missing | Installs what the project needs (browsers, Docker, Java, Android SDK, emulator and AVD, Appium and drivers, Xcode) at tested versions into `~/.qajitsu/toolchain/`; compatible tools you have are used as they are, incompatible ones are never changed. Prechecks, checksum-verified resumable downloads, licences confirmed or accepted with `--yes`, smoke tests. Exit 0 ready, 1 a tool failed or needs a manual step, 2 stopped.                                                                                                                                                                                                                                                                                                         |
+| `qj use <slug>` / `qj projects list [--archived]` / `qj projects current`                                                                                                                    | switching between projects                                         | Sets the active project and shows its open work; lists every project with readiness and ticket prefixes; prints the active one. Any command takes `--project <slug>`; a ticket key like `BANK-12` selects its project by prefix.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `qj doctor [--online] [--models] [--fix [--yes]]`                                                                                                                                            | after setup and whenever something fails                           | Checks Node.js, the configuration, every `secret://` reference (by name only), Docker (for `--build`), Android SDK and Appium (for mobile), iOS availability. `--online`: real access checks against the ticket system and every code host. `--models`: one call per model role and its capabilities. Exit 3 when anything is missing. Ends with the versions of every tool (missing ones with the install command) and of the application under test (mirrors, default branches, latest runs; online: remote and deployed versions), and what `qj setup` would do; a tool of yours that is not compatible is reported with the range and the fix. `--fix` runs `qj setup` for what is missing; `--online` also checks the toolchain sources. |
+| `qj env check [--env <profile>]`                                                                                                                                                             | before the first `--build`                                         | Lists every missing or invalid variable of the environment profile and of the `--build` services (secrets, templates, stub mappings, seed hook, compose file) without starting anything.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `qj env render <TICKET> [--run <id>]`                                                                                                                                                        | debugging a build                                                  | Recreates the per-service `.env` files (0600) of a run with the ports recorded by `--build`. They contain secrets; `qj clean` removes them.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `qj env up <TICKET> [--set <svc.VAR=value>]... [--detach]`                                                                                                                                   | checking that the app starts, or poking it by hand                 | Starts the app from the run's worktree exactly as `run --build` would, without agents or tests, and prints the service URLs. Ctrl+C stops it; `--detach` leaves containers running until `qj clean`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 ### Main flow
 
@@ -727,7 +792,11 @@ qj use bank                                          # make it the active projec
 qj projects list                                     # all projects (--archived for hidden ones)
 qj projects current                                  # the active project
 qj --project bank status                             # any command in another project
+qj setup --check                                     # what the project needs and what would be installed
+qj setup --yes                                       # install it (Java, Android SDK, Appium, browsers, Docker...)
+qj setup --download ./qj-bundle && qj setup --from ./qj-bundle   # offline machines
 qj doctor --online --models                          # machine, config, secrets, ticket system, code hosts, models
+qj doctor --fix --yes                                # install what doctor found missing
 qj env check --env staging                           # every variable of a profile and of --build services
 qj env up SHOP-482 --set api.FEATURE_X=1 --detach    # start the app from the run's worktree, no tests
 qj env render SHOP-482                               # recreate the run's .env files (debugging a build)
@@ -824,7 +893,8 @@ qj ci comment SHOP-482 --change https://github.com/shop-org/backend/pull/12
 These are the codes of `qj run`, `qj test`, `qj resume`, `qj export` and `qj regression`. Commands that ask before
 they act use `2` for "not confirmed" (`publish`, `bug`, `promote`, `baseline accept`, `release --publish`);
 `qj release` exits `1` when the release is not ready; `qj audit verify` exits `1` when a chain is broken; `qj doctor`
-and `qj init` exit `2` or `3` when something is missing. Every command:
+and `qj init` exit `2` or `3` when something is missing; `qj setup` exits `1` when a tool failed or needs a manual
+step and `2` when it stopped before changing anything. Every command:
 [docs/cli/commands.md](docs/cli/commands.md).
 
 ---
@@ -882,6 +952,7 @@ run folder looks like this:
 | `locales:` in `qa.project.yaml`              | locales and time zones cases can run in (`{ name: pl-PL, timezone: Europe/Warsaw }`); a plan case lists its own                                                                                                                                                                       |
 | `messages:` in `qa.project.yaml`             | message capture for e-mails, SMS gateways and webhooks: `base_url` (webhook.site or self-hosted, must be on `environments.allowlist`), `email_domain`, `api_key: secret://...`, `timeout_s`                                                                                           |
 | `test_cases:` in `qa.project.yaml`           | existing manual test cases imported by `qj fetch`: `{ type: xray, client_id, client_secret }`, `{ type: zephyr, token }`, `{ type: testrail, base_url, user, token, project_id }` or `{ type: file, path: cases.csv }` (`.csv` or `.xlsx`; columns id, ticket, title, step, expected) |
+| `.qa/toolchain.yaml`                         | tool versions for this project, private mirrors (npm with a `secret://` token, Playwright, Java, Android, Homebrew), proxy and company CA for `qj setup`; `~/.qajitsu/toolchain.yaml` holds the same for the machine                                                                  |
 | `.env.local` (next to `.qa/`, not committed) | secret values for `secret://env/NAME`                                                                                                                                                                                                                                                 |
 
 Layers, each overriding the previous: defaults → `qa.project.yaml` → `envs/<env>.yaml` → secrets → run options
@@ -1023,6 +1094,10 @@ verification: { auditor: optional, canary: true, triage: on }
   screens and endpoints next to the change that were never tested or failed last time; the planner may propose
   regression cases for them (`{kind: map, id: page:/cart/checkout}`, checked by code). Known screens come from
   `.qa/routes.yaml`, endpoints from the OpenAPI document.
+- **One command for the tools.** `qj setup` installs the browsers, Docker, Java, the Android SDK with emulator and
+  AVD, Appium with its drivers and Xcode the project needs, at tested versions and checksum-verified, without touching
+  your own compatible tools or your shell; mirrors, proxy and company CA for closed networks, offline bundles, and
+  `qj doctor --fix`. [Install the tools](#install-the-tools-qj-setup)
 - **Versions of everything.** `qj doctor` lists the versions of QAJitsu, the system, Node.js, git, Docker and
   Compose, Playwright and each browser, Java, the Android SDK, emulator, Appium and its drivers (a missing tool the
   project needs comes with its install command), and of the application under test: each repository's mirror,

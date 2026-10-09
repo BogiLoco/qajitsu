@@ -3,10 +3,11 @@ flowchart TB
         direction LR
         init["👤 <b>qj init shop</b><br/>registers the project<br/>creates .qa/ by detection"]
         secrets["👤 <b>.env.local</b><br/>tokens and keys<br/>as secret:// references"]
-        doctor["⚙️ <b>qj doctor --online</b><br/>config · secrets · access<br/>Docker · mobile · models"]
+        setup["⚙️ <b>qj setup</b><br/>browsers · Docker · Java<br/>Android SDK · Appium<br/>tested versions"]
+        doctor["⚙️ <b>qj doctor --online</b><br/>config · secrets · access<br/>versions · --fix"]
         knowledge["⚙️ <b>qj knowledge add</b><br/>optional: docs, OpenAPI<br/>Confluence the agents search"]
         status["⚙️ <b>qj status</b><br/>ready? what is open?<br/>the next command"]
-        init --> secrets --> doctor --> knowledge --> status
+        init --> secrets --> setup --> doctor --> knowledge --> status
     end
     subgraph PLAN["① Plan: what to test"]
         direction LR
@@ -53,5 +54,5 @@ flowchart TB
     classDef stage fill:#ffffff,stroke:#94a3b8,color:#1f2a5c,stroke-dasharray:4 4
     class init,secrets,review,publish,watch,bug,promote human
     class plan,author agent
-    class doctor,knowledge,status,fetch,freeze,runner,verdict,evidence,regression,release code
+    class setup,doctor,knowledge,status,fetch,freeze,runner,verdict,evidence,regression,release code
     class SETUP,PLAN,RUN,REPORT,KEEP stage

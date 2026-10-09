@@ -77,7 +77,9 @@ export async function projectChecks(
     checks.push({
       name: "docker",
       ok: version !== undefined,
-      detail: version ? `Docker ${version}` : "docker is not available (needed by --build)",
+      detail: version
+        ? `Docker ${version}`
+        : "docker is not available (needed by --build); qj setup installs it",
     });
   }
 
@@ -97,7 +99,10 @@ export async function projectChecks(
     checks.push({
       name: "android",
       ok: missingTools.length === 0,
-      detail: missingTools.length === 0 ? `SDK ${sdk}` : `missing ${missingTools.join(", ")}`,
+      detail:
+        missingTools.length === 0
+          ? `SDK ${sdk}`
+          : `missing ${missingTools.join(", ")}; qj setup installs them`,
     });
   }
   if (mobile && !mobile.appium.url) {
@@ -109,7 +114,7 @@ export async function projectChecks(
     checks.push({
       name: "appium",
       ok: version !== undefined,
-      detail: version ? `Appium ${version}` : `${bin} not found`,
+      detail: version ? `Appium ${version}` : `${bin} not found; qj setup installs it`,
     });
   }
   if (mobile?.ios && !mobile.ios.farm)

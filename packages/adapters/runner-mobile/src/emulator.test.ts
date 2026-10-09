@@ -29,12 +29,15 @@ describe("Android emulator (REQ-ENV-06/AC2)", () => {
     };
     const child = fakeChild();
     const spawned: string[][] = [];
-    const spawn: Spawn = (cmd, args) => {
+    const envs: (Readonly<Record<string, string>> | undefined)[] = [];
+    const spawn: Spawn = (cmd, args, env) => {
       spawned.push([cmd.split("/").at(-1) ?? "", ...args]);
+      envs.push(env);
       return child;
     };
     const emu = await startAndroidEmulator({
       sdkRoot: "/sdk",
+      avdHome: "/toolchain/android/avd",
       avd: "qajitsu",
       systemImage: "system-images;android-34;google_apis;arm64-v8a",
       headless: true,
@@ -57,8 +60,15 @@ describe("Android emulator (REQ-ENV-06/AC2)", () => {
       "-no-snapshot-save",
       "-no-boot-anim",
       "-no-audio",
+      "-no-metrics",
       "-no-window",
     ]);
+    // REQ-GEN-06/AC3+AC9: QAJitsu's AVD folder is passed; usage metrics are off.
+    expect(envs[0]).toEqual({
+      ANDROID_SDK_ROOT: "/sdk",
+      ANDROID_HOME: "/sdk",
+      ANDROID_AVD_HOME: "/toolchain/android/avd",
+    });
     await emu.stop();
     expect(calls.at(-1)).toBe("adb -s emulator-5556 emu kill");
     expect(child.signals).toEqual(["SIGTERM"]);

@@ -121,10 +121,69 @@ and of the latest run (an unreadable mirror is an error with the fix); with `--o
 and, for each environment profile with a `version_path`, the deployed version compared with the latest run; and where
 the mobile app binary comes from.
 
-- `--models`: probe the configured model of every role (makes real model calls)
-- `--online`: check access to Jira and every code host (makes real requests)
+A third section, **Toolchain (qj setup)**, shows what `qj setup` would do for every tool the project needs (REQ-GEN-06/AC2):
+use yours, use QAJitsu's, install (with version, size and source), start Docker, or what you have to do. A tool of
+yours that is not compatible is information (`!`), with the compatible range and the fix; it is never changed.
 
-Exit codes: `0` every check passed, `3` at least one check failed.
+- `--models`: probe the configured model of every role (makes real model calls)
+- `--online`: check access to Jira, every code host and every toolchain source (npm registry, Playwright host, Java and
+  Android mirrors, Homebrew; makes real requests)
+- `--fix`: run `qj setup --only <the tools found missing>` (REQ-GEN-06/AC9)
+- `--yes`: with `--fix`, no questions; licences are accepted on your behalf and listed
+
+Exit codes: `0` every check passed, `3` at least one check failed (after `--fix`: `0` when setup succeeded and every
+other check passed).
+
+### `qajitsu setup`
+
+Installs what the project needs, at the versions QAJitsu is tested with (REQ-GEN-06): the browsers of the web matrix,
+Docker with Compose for compose services, Java (Eclipse Temurin 17.0.20.1+1) and the Android SDK packages (platform
+tools; platform and build tools for `app.source: build`; emulator, system image and AVD for a configured emulator),
+Appium 3.8.0 with UiAutomator2 8.7.0 / XCUITest 12.16.0 when QAJitsu starts Appium, and Xcode for local iOS.
+
+A tool already on the machine at a compatible version is used as it is; an incompatible one is never changed, a
+compatible copy is installed next to it. Managed tools go to `~/.qajitsu/toolchain/<tool>/<version>/` with a record
+(`installed.json`: source, checksum, licence, smoke test); the project's choice is written to
+`~/.qajitsu/projects/<slug>/toolchain.json` and passed to every process QAJitsu starts (`JAVA_HOME`, `ANDROID_HOME`,
+`ANDROID_SDK_ROOT`, `ANDROID_AVD_HOME`, `APPIUM_HOME`, `PATH`). Shell profiles are never edited. Docker (Colima, the
+Docker CLI and the Compose plugin from Homebrew on macOS; `docker.io` and `docker-compose-v2` through apt on Linux) and
+Xcode (`xcodes`, needs your Apple ID) are system-wide: installed once, never removed by QAJitsu.
+
+Before anything is downloaded: processor (arm64-v8a or x86_64 system images; an image for the other one is refused),
+hardware virtualisation (HVF on macOS, `/dev/kvm` on Linux), memory (4 GiB minimum for the emulator), free disk, curl,
+tar and unzip. A failed check stops setup with the reason; `--skip` the tool to set up the rest. Downloads resume from
+a partial file, are verified against the publisher's checksum (Adoptium SHA-256, Google SHA-1) before use and are moved
+into place only when complete. A lock (`~/.qajitsu/toolchain/.setup.lock`) keeps two setups apart.
+
+After installing, every tool is smoke-tested; nothing that failed is reported ready.
+
+- `--check`: print the plan (what, which version, from where, how big) and the prechecks; change nothing
+- `--json`: the plan or the result as JSON (the project line goes to stderr)
+- `--only <tools>`, `--skip <tools>`: comma-separated, repeatable; tools are `browsers`, `docker`, `java`, `android`,
+  `appium`, `uiautomator2`, `xcuitest`, `xcode`. Without a project nothing is needed: name the tools with `--only`.
+- `--yes`: no questions; the Android SDK licences (and with Xcode, its licence) are accepted on your behalf and listed.
+  Without `--yes` the licences and every download over 100 MB are confirmed first; without a terminal setup stops.
+- `--reinstall <tool>`: install again what QAJitsu installed (repeatable)
+- `--uninstall <tool>`: remove what QAJitsu installed of that tool, by its record; never Docker or Xcode, never a
+  path outside `~/.qajitsu/toolchain/`
+- `--all`: with `--uninstall`, everything QAJitsu installed and its download cache
+- `--version <tool>=<version>`: install another version next to the current one: `java=21` (latest Temurin 21 with its
+  published checksum), `appium=3.7.0`, `uiautomator2=8.6.0`, `xcuitest=…`, `xcode=16.4`. Browser versions are those of
+  QAJitsu's Playwright.
+- `--download <dir>`: install every managed tool the project needs into `<dir>` (also when this machine has them) and
+  write `bundle.json` with a digest of every folder
+- `--from <dir>`: install from such a bundle without network: same system and processor only, every folder checked
+  against its digest, AVDs created on this machine, smoke-tested
+- `--smoke`: also boot the emulator once
+
+`.qa/toolchain.yaml` (per project) and `~/.qajitsu/toolchain.yaml` (per machine; the project wins key by key):
+`versions` (`java`, `android.platform`, `android.build_tools`, `appium`, `uiautomator2`, `xcuitest`, `xcode`),
+`sources` (`npm_registry`, `npm_token: secret://…`, `playwright_host`, `java_mirror`, `android_mirror`,
+`homebrew_bottle_domain`, `homebrew_api_domain`), `network` (`proxy`, `no_proxy`, `ca_certs`: added to the public roots
+for curl and npm, to `NODE_EXTRA_CA_CERTS`, and to the trust store of QAJitsu's Java).
+
+Exit codes: `0` everything wanted is ready, `1` a tool failed or needs a manual step (the line names the next step),
+`2` setup stopped before changing anything (a precheck, a declined licence, a wrong flag).
 
 ## The flow
 

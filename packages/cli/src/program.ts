@@ -63,6 +63,13 @@ import { formatDoctor, runDoctor } from "./doctor.js";
 import { projectChecks } from "./doctor-project.js";
 import { appVersions, formatAppVersions } from "./app-versions.js";
 import { formatToolVersions, toolVersions } from "./versions.js";
+import { readToolchainChoice, toolchainEnv, type ToolchainEnv } from "@qajitsu/toolchain";
+import {
+  checkSources,
+  runSetupCommand,
+  toolchainDoctor,
+  type SetupCommandOptions,
+} from "./commands/setup.js";
 
 /** Output and environment ports, injected for tests. */
 export interface ProgramIO {
@@ -83,11 +90,16 @@ export interface ProgramIO {
   readonly openFile?: (path: string) => Promise<void>;
   /** Opens a Playwright trace in Trace Viewer. */
   readonly openTrace?: (path: string) => Promise<void>;
+  /** Applies the toolchain environment to this process, inherited by the tools it starts (REQ-GEN-06/AC3). */
+  readonly applyEnv?: (env: ToolchainEnv) => void;
   /** Compresses a video for upload (ffmpeg); resolves true on success (REQ-EVD-06/AC2). */
   readonly compressVideo?: (input: string, output: string) => Promise<boolean>;
 }
 
 const collect = (value: string, previous: string[]): string[] => [...previous, value];
+
+/** Doctor checks about tools; `--fix` replaces them with the outcome of qj setup. */
+const TOOL_CHECKS = ["docker", "android", "appium", "ios"];
 
 /**
  * Builds the `qajitsu` command (REQ-GEN-05). Only implemented commands are registered;
@@ -125,7 +137,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
     "projects unarchive",
   ]);
   // These commands write machine-readable output to stdout; the project line goes to stderr.
-  const MACHINE_OUTPUT = new Set(["ci detect", "metrics"]);
+  const MACHINE_OUTPUT = new Set(["ci detect", "metrics", "setup"]);
   program.hook("preAction", async (_root, action) => {
     const path: string[] = [];
     for (let c: Command | null = action; c && c !== program; c = c.parent) path.unshift(c.name());
@@ -140,6 +152,8 @@ export function createProgram(version: string, io: ProgramIO): Command {
       });
       // REQ-PRJ-03/AC4: every command names its project first.
       (MACHINE_OUTPUT.has(name) ? io.writeError : io.write)(`Project: ${resolved.slug} (${resolved.via})\n`);
+      // REQ-GEN-06/AC3: the tools `qj setup` chose for the project reach every process QAJitsu starts.
+      io.applyEnv?.(toolchainEnv(await readToolchainChoice(resolved.paths.home), existsSync));
     } catch (error) {
       projectError = error;
     }
@@ -352,11 +366,58 @@ export function createProgram(version: string, io: ProgramIO): Command {
     });
 
   program
+    .command("setup")
+    .description(
+      "Install what the project needs (browsers, Docker, Java, Android SDK and emulator, Appium, Xcode) at tested versions",
+    )
+    .option("--check", "print the plan (what, which version, from where, how big) and change nothing")
+    .option("--json", "print the plan or the result as JSON")
+    .option("--only <tools>", "only these tools, comma-separated (repeatable)", collect, [])
+    .option("--skip <tools>", "leave these tools out, comma-separated (repeatable)", collect, [])
+    .option("--yes", "no questions: accept the Android SDK and Xcode licences on your behalf and list them")
+    .option("--reinstall <tool>", "install a tool QAJitsu installed again (repeatable)", collect, [])
+    .option("--uninstall [tool]", "remove a tool QAJitsu installed (by its record); with --all, everything")
+    .option("--all", "with --uninstall: everything QAJitsu installed (never Docker or Xcode)")
+    .option(
+      "--version <tool=version>",
+      "install another version next to the current one, e.g. java=21",
+      collect,
+      [],
+    )
+    .option("--download <dir>", "collect everything the project needs into <dir> for an offline machine")
+    .option("--from <dir>", "install from a bundle made with --download (no network)")
+    .option("--smoke", "also boot the emulator once after installing")
+    .action(async (options: SetupCommandOptions) => {
+      if (!io.ports) {
+        io.writeError("Runtime ports are not configured.\n");
+        io.setExitCode(3);
+        return;
+      }
+      const project =
+        resolved && projectError === undefined
+          ? await loadProject(io.cwd, resolved).catch(() => undefined)
+          : undefined;
+      io.setExitCode(
+        await runSetupCommand(
+          options,
+          commandIO,
+          { ...io.ports, ...(resolved ? { project: resolved } : {}) },
+          project,
+        ),
+      );
+    });
+
+  program
     .command("doctor")
     .description("Check that this machine and project are ready for QAJitsu")
     .option("--models", "probe the configured model of every role (makes real model calls)")
-    .option("--online", "check access to Jira and every code host (makes real requests)")
-    .action(async (options: { models?: boolean; online?: boolean }) => {
+    .option(
+      "--online",
+      "check access to Jira, every code host and the toolchain sources (makes real requests)",
+    )
+    .option("--fix", "run qj setup for the tools doctor finds missing")
+    .option("--yes", "with --fix: no questions, licences accepted on your behalf")
+    .action(async (options: { models?: boolean; online?: boolean; fix?: boolean; yes?: boolean }) => {
       const checks = runDoctor({
         nodeVersion: io.nodeVersion,
         hasProjectConfig:
@@ -418,9 +479,38 @@ export function createProgram(version: string, io: ProgramIO): Command {
             ).catch(() => [])
           : [];
       for (const line of app) if (!line.ok) checks.push({ name: line.name, ok: false, detail: line.detail });
+      // REQ-GEN-06/AC7: with --online, the toolchain's sources answer.
+      if (options.online === true && io.ports)
+        checks.push(...(await checkSources(io.ports, loaded).catch(() => [])));
+      // REQ-GEN-06/AC2: what qj setup would do; a tool of yours that is not compatible is information.
+      const toolchain =
+        loaded && io.ports
+          ? await toolchainDoctor(io.ports, commandIO, loaded).catch((error: unknown) => ({
+              lines: [`  · ${error instanceof Error ? error.message : String(error)}`],
+              missing: [],
+            }))
+          : undefined;
       io.write(`${formatDoctor(checks)}\n\n${formatToolVersions(tools)}\n`);
+      if (toolchain && toolchain.lines.length > 0)
+        io.write(`\nToolchain (qj setup):\n${toolchain.lines.join("\n")}\n`);
       if (loaded) io.write(`\n${formatAppVersions(app)}\n`);
       let ok = checks.every((c) => c.ok);
+      // REQ-GEN-06/AC9: --fix installs what doctor found missing, then the tool checks count as fixed only if setup succeeded.
+      if (options.fix === true && io.ports && toolchain) {
+        if (toolchain.missing.length === 0) io.write("\nNothing for qj setup to install.\n");
+        else {
+          io.write(`\nqj doctor --fix: qj setup --only ${toolchain.missing.join(",")}\n`);
+          const code = await runSetupCommand(
+            { only: toolchain.missing, ...(options.yes === true ? { yes: true } : {}) },
+            commandIO,
+            { ...io.ports, ...(resolved ? { project: resolved } : {}) },
+            loaded,
+          );
+          const toolChecks = new Set([...TOOL_CHECKS, ...tools.map((t) => t.name)]);
+          ok = code === 0 && checks.filter((c) => !toolChecks.has(c.name)).every((c) => c.ok);
+          if (code === 0) io.write("Run qj doctor again to see the result.\n");
+        }
+      }
       if (options.models === true && io.ports) {
         try {
           const project = await loadProject(io.cwd, resolved);
