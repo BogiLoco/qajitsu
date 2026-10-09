@@ -45,6 +45,7 @@
     "@qajitsu/models": "workspace:*",
     "@qajitsu/report": "workspace:*",
     "@qajitsu/steps": "workspace:*",
+    "@qajitsu/toolchain": "workspace:*",
     "@qajitsu/verifier": "workspace:*",
     "@types/node": "catalog:",
     "@types/pngjs": "^6.0.5",

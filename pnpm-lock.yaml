@@ -102,6 +102,9 @@ importers:
       '@qajitsu/steps':
         specifier: workspace:*
         version: link:packages/steps
+      '@qajitsu/toolchain':
+        specifier: workspace:*
+        version: link:packages/toolchain
       '@qajitsu/verifier':
         specifier: workspace:*
         version: link:packages/verifier

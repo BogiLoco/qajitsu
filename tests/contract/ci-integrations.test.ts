@@ -161,4 +161,54 @@ describe("CI integrations (REQ-CI-01, REQ-CI-03, REQ-CI-04)", () => {
     expect(jenkins).toContain("input(message");
     expect(jenkins).toContain("junit");
   });
+
+  it("REQ-CI-06/AC1: the Action and the GitLab template set up the tools once, cached by the manifest and .qa/toolchain.yaml", async () => {
+    const action = await yaml<{
+      inputs: Record<string, { default?: string }>;
+      runs: { steps: { id?: string; uses?: string; run?: string; with?: Record<string, string> }[] };
+    }>("ci/github/action.yml");
+    expect(action.inputs["setup"]?.default).toBe("true");
+    const steps = action.runs.steps;
+    const key = steps.find((s) => s.id === "toolchain");
+    expect(key?.run).toContain("packages/toolchain/src/manifest.ts");
+    expect(key?.run).toContain(".qa/toolchain.yaml");
+    const cache = steps.find((s) => s.uses?.startsWith("actions/cache@") === true);
+    expect(cache?.with?.["path"]).toContain("~/.qajitsu/toolchain");
+    expect(cache?.with?.["path"]).toContain("!~/.qajitsu/toolchain/.downloads");
+    expect(cache?.with?.["key"]).toBe("${{ steps.toolchain.outputs.key }}");
+    const setupIndex = steps.findIndex(
+      (s) => s.run?.includes("$QJ setup --yes --skip docker,xcode") === true,
+    );
+    expect(setupIndex).toBeGreaterThan(steps.indexOf(cache ?? {}));
+    // The setup step comes before plan and run.
+    expect(setupIndex).toBeLessThan(steps.findIndex((s) => s.run?.includes("qajitsu-ci.sh") === true));
+    const gl = await yaml<{
+      variables: Record<string, string>;
+      ".qa-base": { before_script: string[]; cache: { key: unknown; paths: string[] }[] };
+    }>("ci/gitlab/qajitsu.gitlab-ci.yml");
+    expect(gl.variables["QAJITSU_HOME"]).toBe("$CI_PROJECT_DIR/.qajitsu");
+    expect(gl.variables["QAJITSU_IMAGE"]).toContain("$QAJITSU_VERSION");
+    expect(gl[".qa-base"].cache).toContainEqual({
+      key: { files: [".qa/toolchain.yaml"], prefix: "qajitsu-toolchain-$QAJITSU_VERSION" },
+      paths: [".qajitsu/toolchain/"],
+    });
+    expect(gl[".qa-base"].before_script.join("\n")).toContain("qajitsu setup --yes --skip docker,xcode");
+  });
+
+  it("REQ-CI-06/AC2: the Android image installs its tools with qj setup and documents where KVM is missing", async () => {
+    const docker = await readFile(join(root, "ci/docker/Dockerfile.android"), "utf8");
+    expect(docker).toMatch(/^FROM \$\{BASE\}$/m);
+    expect(docker).toContain("qajitsu setup --yes --skip docker --ignore-check virtualisation");
+    expect(docker).toContain("system-images;android-34;google_apis;x86_64");
+    expect(docker).toContain("--device /dev/kvm");
+    for (const env of ["JAVA_HOME", "ANDROID_HOME", "ANDROID_SDK_ROOT", "ANDROID_AVD_HOME", "APPIUM_HOME"])
+      expect(docker).toMatch(new RegExp(`^\\s*(ENV )?${env}=`, "m"));
+    // The pinned versions in the image's paths are the manifest's.
+    const { JAVA_RELEASE, MANIFEST } = await import("@qajitsu/toolchain");
+    expect(docker).toContain(`/toolchain/java/${JAVA_RELEASE}`);
+    expect(docker).toContain(`/toolchain/appium/${MANIFEST.appium.version}/`);
+    const guide = await readFile(join(root, "docs/guides/ci-cd.md"), "utf8");
+    expect(guide).toContain("no: no nested virtualisation");
+    expect(guide).toContain("Dockerfile.android");
+  });
 });

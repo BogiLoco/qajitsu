@@ -19,14 +19,49 @@ only when the ticket text is unchanged (`qj approve --reuse-from latest`); other
 
 ## Ready-made integrations (REQ-CI-01)
 
-| CI                 | Files                                                                                                | Approval                                                                                                     |
-| ------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| GitHub Actions     | `ci/github/action.yml` (the action), `ci/github/qajitsu.workflow.yml` (copy to `.github/workflows/`) | environment `qa-approval` with required reviewers, or a `/qa approve` comment from someone with write access |
-| GitLab CI          | `ci/gitlab/qajitsu.gitlab-ci.yml` (include, extend `.qa-plan` and `.qa-run`)                         | the manual `qa-run` job; whoever starts it approves                                                          |
-| Jenkins and others | `ci/docker/Dockerfile` (image with Node.js 22, git, Chromium, `qajitsu`), `ci/jenkins/Jenkinsfile`   | the `input` step                                                                                             |
+| CI                 | Files                                                                                                                                          | Approval                                                                                                     |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| GitHub Actions     | `ci/github/action.yml` (the action), `ci/github/qajitsu.workflow.yml` (copy to `.github/workflows/`)                                           | environment `qa-approval` with required reviewers, or a `/qa approve` comment from someone with write access |
+| GitLab CI          | `ci/gitlab/qajitsu.gitlab-ci.yml` (include, extend `.qa-plan` and `.qa-run`)                                                                   | the manual `qa-run` job; whoever starts it approves                                                          |
+| Jenkins and others | `ci/docker/Dockerfile` (image with Node.js 22, git, Chromium, `qajitsu`), `ci/jenkins/Jenkinsfile`; `ci/docker/Dockerfile.android` for Android | the `input` step                                                                                             |
 
 All of them call `ci/qajitsu-ci.sh plan|run <TICKET>`, configured through environment variables (see the header
 of the script). Build the image with `docker build -f ci/docker/Dockerfile -t qajitsu .`.
+
+## Tools in pipelines (REQ-CI-06)
+
+The GitHub Action and the GitLab template run `qj setup --yes --skip docker,xcode` before the plan and run steps
+(input `setup: "false"` or variable `QA_SETUP: "false"` turns it off). Docker comes from the runner; Xcode cannot be
+installed without a person.
+
+- **Cache.** The toolchain (`~/.qajitsu/toolchain/`, without its download cache) is cached and keyed by QAJitsu's
+  pinned versions and the project's `.qa/toolchain.yaml`: GitHub hashes `packages/toolchain/src/manifest.ts` and the
+  file (`actions/cache`), GitLab uses `QAJITSU_VERSION` (the image tag) as prefix and the file as key, with
+  `QAJITSU_HOME` inside the project folder so the cache can reach it. A pipeline installs a tool once; later jobs find
+  it, smoke-tested, in the record. A new QAJitsu version gets a new cache.
+- **Android image.** `ci/docker/Dockerfile.android` builds on the QAJitsu image and adds Java, the Android SDK, the
+  emulator, an x86_64 system image (`--build-arg SYSTEM_IMAGE=...` for another), the AVD `qajitsu`, Appium and
+  UiAutomator2, all installed by `qj setup` at the pinned versions. Use the same `system_image` and `avd: qajitsu` in
+  `.qa/qa.project.yaml`.
+
+```sh
+docker build -f ci/docker/Dockerfile -t qajitsu .
+docker build -f ci/docker/Dockerfile.android -t qajitsu-android .
+docker run --rm --device /dev/kvm --group-add "$(getent group kvm | cut -d: -f3)" \
+  -v "$PWD:/work" -w /work qajitsu-android run SHOP-482 --env staging
+```
+
+The emulator needs hardware virtualisation (KVM) on the host. Where it is not there, the image cannot run Android
+tests; point `mobile.appium.url` at a device farm or a machine with an emulator instead:
+
+| Host                                                                    | Emulator in the image                                            |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Linux on bare metal, or a VM with nested virtualisation enabled         | yes, with `--device /dev/kvm`                                    |
+| GitHub-hosted Linux runners                                             | yes, once the runner user may open `/dev/kvm` (a udev rule step) |
+| GitLab.com shared runners, most hosted CI containers without `/dev/kvm` | no: no nested virtualisation                                     |
+| Cloud VMs without nested virtualisation                                 | no (enable it, or use a bare-metal instance)                     |
+| Docker Desktop on macOS or Windows, Apple silicon                       | no: no KVM inside its Linux VM                                   |
+| ARM64 Linux hosts (Graviton, Ampere, Apple silicon VMs)                 | no: Google publishes no Linux ARM64 emulator                     |
 
 ## Triggers (REQ-CI-02)
 

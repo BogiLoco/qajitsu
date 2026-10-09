@@ -39,6 +39,10 @@ inputs:
     description: Folder with .qa/
     required: false
     default: .
+  setup:
+    description: Install the tools the project needs with qj setup, cached between jobs (Docker and Xcode come from the runner)
+    required: false
+    default: "true"
 outputs:
   run:
     description: "true when QAJitsu should run (detect)"
@@ -79,6 +83,27 @@ runs:
         pnpm build
         pnpm --filter @qajitsu/cli exec playwright-core install --with-deps chromium
         echo "QJ=node $GITHUB_ACTION_PATH/../../packages/cli/dist/bin.js" >> "$GITHUB_ENV"
+    - id: toolchain
+      if: inputs.setup == 'true' && (inputs.command == 'plan' || inputs.command == 'run')
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      # REQ-CI-06/AC1: QAJitsu's pinned versions (its toolchain manifest) and the project's .qa/toolchain.yaml key the cache.
+      run: |
+        hash="$({ cat "$GITHUB_ACTION_PATH/../../packages/toolchain/src/manifest.ts"; cat .qa/toolchain.yaml 2>/dev/null || true; } | sha256sum | cut -c1-16)"
+        echo "key=qajitsu-toolchain-${RUNNER_OS}-${RUNNER_ARCH}-${hash}" >> "$GITHUB_OUTPUT"
+    - if: steps.toolchain.outputs.key != ''
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.qajitsu/toolchain
+          !~/.qajitsu/toolchain/.downloads
+        key: ${{ steps.toolchain.outputs.key }}
+    - if: steps.toolchain.outputs.key != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        $QJ init ci --qa-dir .qa --yes --force
+        $QJ setup --yes --skip docker,xcode
     - id: detect
       if: inputs.command == 'detect'
       shell: bash

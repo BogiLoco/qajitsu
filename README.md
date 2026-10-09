@@ -574,7 +574,11 @@ qj init ci --qa-dir .qa --yes --force
 export QAJITSU_PROJECT=ci
 ```
 
-`ci/qajitsu-ci.sh`, the GitHub Action, the GitLab template and the Jenkinsfile already do this.
+`ci/qajitsu-ci.sh`, the GitHub Action, the GitLab template and the Jenkinsfile already do this. The Action and the
+GitLab template also run `qj setup --yes --skip docker,xcode` and cache `~/.qajitsu/toolchain/` by QAJitsu's pinned
+versions and `.qa/toolchain.yaml`, so a pipeline installs a tool once. For Android, `ci/docker/Dockerfile.android`
+adds Java, the SDK, emulator, system image, AVD and Appium installed by `qj setup`; it needs KVM on the host
+([docs/guides/ci-cd.md](docs/guides/ci-cd.md) lists where it cannot run).
 
 ---
 

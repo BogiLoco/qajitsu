@@ -71,12 +71,12 @@ The same CLI runs inside pipelines; humans still approve plans.
 
 ### REQ-CI-06 · Toolchain in pipelines
 
-- Status: accepted
+- Status: in-progress
 - Priority: could
 - Stage: later
 - Related: REQ-GEN-06, REQ-CI-04
 
 **Acceptance criteria**
 
-- [ ] AC1: The GitHub Action and the GitLab template cache `~/.qajitsu/toolchain/` keyed by the toolchain manifest and `.qa/toolchain.yaml`, so a pipeline installs a tool once and later jobs reuse it.
+- [x] AC1: The GitHub Action and the GitLab template cache `~/.qajitsu/toolchain/` keyed by the toolchain manifest and `.qa/toolchain.yaml`, so a pipeline installs a tool once and later jobs reuse it.
 - [ ] AC2: A Docker image with Java, the Android SDK, emulator, system image and Appium installed by `qj setup` runs Android tests on a host with KVM; the documentation names the hosts where it cannot (no nested virtualisation).

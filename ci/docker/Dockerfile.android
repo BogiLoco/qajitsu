@@ -1,0 +1,46 @@
+# QAJitsu image for Android tests (REQ-CI-06/AC2): the QAJitsu image plus Java, the Android SDK, emulator, system
+# image, AVD, Appium and UiAutomator2, installed by `qj setup` at QAJitsu's pinned versions.
+#   docker build -f ci/docker/Dockerfile -t qajitsu .
+#   docker build -f ci/docker/Dockerfile.android -t qajitsu-android .
+#   docker run --rm --device /dev/kvm --group-add "$(getent group kvm | cut -d: -f3)" \
+#     -v "$PWD:/work" -w /work qajitsu-android run SHOP-482 --env staging
+# The emulator needs KVM on the host; docs/guides/ci-cd.md lists the hosts where it cannot run. Projects use the
+# image's system image (or build with --build-arg SYSTEM_IMAGE=...) and the AVD name "qajitsu".
+ARG BASE=qajitsu
+FROM ${BASE}
+
+ARG SYSTEM_IMAGE="system-images;android-34;google_apis;x86_64"
+
+USER root
+# curl, tar and unzip for qj setup; the emulator's runtime libraries for a headless start.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends curl unzip libpulse0 libgl1 libnss3 libxcomposite1 libxcursor1 \
+    libxdamage1 libxi6 libxtst6 libasound2 libxkbfile1 libxrandr2 libdbus-1-3 libfontconfig1 \
+  && rm -rf /var/lib/apt/lists/*
+
+USER qa
+ENV QAJITSU_HOME=/home/qa/.qajitsu
+# A project that needs exactly the Android tools; KVM is only there when the container runs, so the build ignores
+# the virtualisation precheck (and with it the acceleration smoke test). The download cache is not kept.
+RUN mkdir -p /home/qa/android-image/.qa \
+  && printf '%s\n' \
+    'project: android-image' \
+    'jira: { type: file, tickets_dir: tickets, project_key: IMG }' \
+    'test_types: [mobile]' \
+    'mobile:' \
+    '  android:' \
+    '    app: { source: path, repo: app, path: app.apk }' \
+    '    app_id: org.example.app' \
+    "    emulator: { avd: qajitsu, system_image: \"${SYSTEM_IMAGE}\" }" \
+    > /home/qa/android-image/.qa/qa.project.yaml \
+  && qajitsu init android-image --qa-dir /home/qa/android-image/.qa --yes --force \
+  && qajitsu setup --yes --skip docker --ignore-check virtualisation \
+  && rm -rf /home/qa/.qajitsu/toolchain/.downloads
+
+# Every project in the container gets these tools, whatever QAJITSU_HOME the job sets.
+ENV JAVA_HOME="/home/qa/.qajitsu/toolchain/java/17.0.20.1+1" \
+  ANDROID_HOME=/home/qa/.qajitsu/toolchain/android/sdk \
+  ANDROID_SDK_ROOT=/home/qa/.qajitsu/toolchain/android/sdk \
+  ANDROID_AVD_HOME=/home/qa/.qajitsu/toolchain/android/avd \
+  APPIUM_HOME=/home/qa/.qajitsu/toolchain/appium-home/3
+ENV PATH="${JAVA_HOME}/bin:${ANDROID_HOME}/platform-tools:${ANDROID_HOME}/emulator:${ANDROID_HOME}/cmdline-tools/latest/bin:/home/qa/.qajitsu/toolchain/appium/3.8.0/node_modules/.bin:${PATH}"
