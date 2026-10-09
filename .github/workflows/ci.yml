@@ -38,7 +38,8 @@ jobs:
       - run: pnpm verify
       - run: pnpm build
       # REQ-NFR-03/AC2: API reference (TypeDoc); every export needs TSDoc.
-      - run: pnpm docs
+      # `pnpm docs` would run npm's built-in `docs` (open the package page in a browser), not the script.
+      - run: pnpm run docs
       - name: CLI smoke test
         run: |
           pnpm qajitsu --version

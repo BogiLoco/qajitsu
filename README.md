@@ -1141,7 +1141,7 @@ More: [docs/guides/getting-started.md](docs/guides/getting-started.md), [docs/ar
 pnpm install
 pnpm verify          # typecheck, lint, format, tests with coverage, hook tests, requirements check
 pnpm test:e2e        # demo-shop self-test (Docker and Android suites skip themselves when unavailable)
-pnpm docs            # API reference and guides into docs-site/
+pnpm run docs        # API reference and guides into docs-site/ (`pnpm docs` would open npm's page instead)
 ```
 
 ```text
