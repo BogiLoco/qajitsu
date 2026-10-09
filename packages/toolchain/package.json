@@ -1,0 +1,25 @@
+{
+  "name": "@qajitsu/toolchain",
+  "version": "0.0.0",
+  "description": "QAJitsu toolchain setup: pinned versions, compatibility checks, installs into ~/.qajitsu/toolchain and the environment for the tools QAJitsu starts.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "qajitsu-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@qajitsu/core": "workspace:*",
+    "yaml": "catalog:",
+    "zod": "catalog:"
+  }
+}
