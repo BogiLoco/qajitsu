@@ -262,6 +262,8 @@ the evidence bundle as pipeline artifacts.
 - [REQ-OBS-08](requirements/observability.md#req-obs-08--map-as-planner-input) Map as planner input (could, implemented, AC 1/1)
 - [REQ-OBS-09](requirements/observability.md#req-obs-09--live-progress-of-a-run) Live progress of a run (should, implemented, AC 4/4)
 - [REQ-OBS-10](requirements/observability.md#req-obs-10--tool-versions-recorded-with-every-run) Tool versions recorded with every run (should, implemented, AC 4/4)
+- [REQ-CI-06](requirements/ci-cd.md#req-ci-06--toolchain-in-pipelines) Toolchain in pipelines (could, accepted, AC 0/2)
+- [REQ-GEN-06](requirements/generic.md#req-gen-06--toolchain-setup) Toolchain setup (should, accepted, AC 0/9)
 - [REQ-PRJ-09](requirements/projects.md#req-prj-09--export-and-import-of-a-project-profile) Export and import of a project profile (could, implemented, AC 2/2)
 - [REQ-KNOW-12](requirements/knowledge.md#req-know-12--online-sources) Online sources (could, implemented, AC 2/2)
 <!-- /req-stage -->
