@@ -19,7 +19,7 @@ argument-hint: "[adr <title> | docs <topic>]"
 | Config reference                                | `docs/config/*.md` (field tables generated from Zod)                |
 | Adapters                                        | `docs/adapters/<kind>-<name>.md`                                    |
 | Guides (getting started, CI/CD, writing `.qa/`) | `docs/guides/*.md`                                                  |
-| API reference                                   | generated from TSDoc by TypeDoc (`pnpm docs`)                       |
+| API reference                                   | generated from TSDoc by TypeDoc (`pnpm run docs`)                   |
 
 ## Writing an ADR (`/docs-and-adr adr <title>`)
 

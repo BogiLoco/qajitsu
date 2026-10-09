@@ -37,7 +37,7 @@ The non-negotiable invariants live in `.claude/rules/architecture-invariants.md`
 | `pnpm build` / `pnpm qajitsu <cmd>` | Build packages to `dist/` / run the built CLI                                                                                        |
 | `pnpm format`                       | Prettier write                                                                                                                       |
 | `pnpm bench -- --model <ref>`       | Benchmark a model on the demo-shop seeded bugs (real model calls; never in PR CI)                                                    |
-| `pnpm docs`                         | API reference and guides with TypeDoc into `docs-site/` (every export needs TSDoc)                                                   |
+| `pnpm run docs`                     | API reference and guides with TypeDoc into `docs-site/` (every export needs TSDoc)                                                   |
 
 ## Repository map
 
