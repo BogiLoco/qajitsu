@@ -24,6 +24,8 @@ catalog:
 overrides:
   # GHSA-c475-qrg2-pj4r, via webdriverio > @puppeteer/browsers > proxy-agent > get-uri; only ftp:// PAC files use it.
   basic-ftp: ^6.2.2
+  # GHSA-pqg4-j6r4-53mv (critical), via appium > @appium/support, which pins shell-quote 1.10.0; 1.11+ is compatible.
+  shell-quote: ^1.11.0
 
 # @lancedb/lancedb lists its own embedding helpers as optional dependencies; QAJitsu embeds through the models layer
 # (REQ-KNOW-08), and @huggingface/transformers would pull onnxruntime-node with an install script.

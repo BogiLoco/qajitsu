@@ -5,6 +5,91 @@
 // spec does to this process, the parent only accepts these operations and validates each one.
 // This file has no imports so the sandbox needs no read access to installed packages.
 
+/**
+ * Cuts the child off the network before any spec code runs. Node's permission model denies network only from
+ * Node 25 (`--allow-net`); on Node 22 and 24 it does not, so every way to open a connection or resolve a name is
+ * replaced here by a function that throws, as a non-configurable property the spec cannot redefine, and the ESM views
+ * of the built-in modules are synced so `import { connect } from "node:net"` gets the replacement too. The child
+ * needs no network: every call goes through the parent over IPC (ADR-0004).
+ */
+function lockNetwork(): void {
+  const deny = (): never => {
+    throw new Error("network access is denied in the QAJitsu sandbox");
+  };
+  const builtin = (name: string): Record<string, unknown> | undefined => {
+    try {
+      return (
+        process as unknown as { getBuiltinModule: (n: string) => Record<string, unknown> }
+      ).getBuiltinModule(name);
+    } catch {
+      return undefined;
+    }
+  };
+  const seal = (target: unknown, keys: readonly string[]): void => {
+    if (target === null || (typeof target !== "object" && typeof target !== "function")) return;
+    for (const key of keys) {
+      try {
+        Object.defineProperty(target, key, {
+          value: deny,
+          writable: false,
+          configurable: false,
+          enumerable: true,
+        });
+      } catch {
+        // Already non-configurable (e.g. denied by the permission model on newer Node): leave it.
+      }
+    }
+  };
+  const proto = (mod: Record<string, unknown> | undefined, cls: string): unknown =>
+    (mod?.[cls] as { prototype?: unknown } | undefined)?.prototype;
+  const net = builtin("node:net");
+  seal(net, ["connect", "createConnection", "createServer"]);
+  seal(proto(net, "Socket"), ["connect"]);
+  seal(proto(net, "Server"), ["listen"]);
+  seal(builtin("node:tls"), ["connect", "createServer"]);
+  for (const name of ["node:http", "node:https"]) {
+    seal(builtin(name), ["request", "get", "createServer"]);
+    seal(proto(builtin(name), "Agent"), ["createConnection"]);
+  }
+  seal(builtin("node:http2"), ["connect", "createServer", "createSecureServer"]);
+  const dgram = builtin("node:dgram");
+  seal(dgram, ["createSocket"]);
+  seal(proto(dgram, "Socket"), ["bind", "send", "connect"]);
+  const resolvers = [
+    "lookup",
+    "lookupService",
+    "resolve",
+    "resolve4",
+    "resolve6",
+    "resolveAny",
+    "resolveCaa",
+    "resolveCname",
+    "resolveMx",
+    "resolveNaptr",
+    "resolveNs",
+    "resolvePtr",
+    "resolveSoa",
+    "resolveSrv",
+    "resolveTxt",
+    "reverse",
+  ];
+  const dns = builtin("node:dns");
+  seal(dns, resolvers);
+  seal(proto(dns, "Resolver"), resolvers);
+  const promises = dns?.["promises"] as Record<string, unknown> | undefined;
+  seal(promises, resolvers);
+  seal(proto(promises, "Resolver"), resolvers);
+  seal(builtin("node:dns/promises"), resolvers);
+  seal(globalThis, ["fetch", "WebSocket", "EventSource"]);
+  try {
+    (builtin("node:module") as { syncBuiltinESMExports?: () => void } | undefined)?.syncBuiltinESMExports?.();
+  } catch {
+    // Older Node: ESM views were never created yet, so they will be built from the sealed exports.
+  }
+}
+
+lockNetwork();
+
 interface StartMessage {
   readonly type: "start";
   readonly specFile: string;
