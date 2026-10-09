@@ -74,7 +74,8 @@ describe("run one case with a live view (REQ-EXEC-16)", () => {
   }, 240_000);
 
   it("REQ-EXEC-16/AC3: [c]ontinue runs the rest without stopping and the case passes as usual", async () => {
-    const p = await setup();
+    // A machine with a display (macOS): on a Linux CI runner without one, --headed is refused (tested above).
+    const p = await setup({ ports: { platform: "darwin" } });
     const r = await p.run(
       ["run", "DEMO-1", "--build", "--cases", "TC-02", "--step", "--headed", "--slow-mo", "10"],
       undefined,
