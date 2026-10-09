@@ -148,6 +148,23 @@ describe("static checks of generated specs (REQ-EXEC-03)", () => {
     }
   });
 
+  it("REQ-EXEC-03/AC1: a spec is always checked as it is now, never from an earlier check of the same path", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "qj-tsc-"));
+    try {
+      const file = join(dir, "TC-02.spec.ts");
+      await writeFile(file, good);
+      expect(typecheckSpecs([file]).get(file)).toEqual([]);
+      await writeFile(file, good.replace("api.as", "api.ass"));
+      expect(formatSpecProblems(typecheckSpecs([file]).get(file) ?? [])).toMatch(
+        /Property 'ass' does not exist/,
+      );
+      await writeFile(file, good);
+      expect(typecheckSpecs([file]).get(file)).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("allows literal member access and non-caseId exports; resolves the steps types", () => {
     const src = good
       .replace("res.status, plan", 'res["status"], plan')

@@ -104,8 +104,12 @@ export async function toolVersions(input: {
   readonly project?: LoadedProject | undefined;
   readonly exec?: VersionExec;
   readonly playwright?: () => PlaywrightInfo;
+  /** Ask only the tools the project needs (a run); `qj doctor` asks every tool. */
+  readonly neededOnly?: boolean;
 }): Promise<ToolVersion[]> {
-  const exec = input.exec ?? execVersion;
+  const run = input.exec ?? execVersion;
+  const exec = (needed: boolean): VersionExec =>
+    needed || input.neededOnly !== true ? run : () => Promise.resolve(undefined);
   const config = input.project?.config;
   const web = config?.test_types.includes("web") === true;
   const browsers =
@@ -120,7 +124,7 @@ export async function toolVersions(input: {
       name: "os",
       version: `${
         platform() === "darwin"
-          ? `macOS ${first(await exec("sw_vers", ["-productVersion"]), /([\d.]+)/) ?? release()}`
+          ? `macOS ${first(await exec(true)("sw_vers", ["-productVersion"]), /([\d.]+)/) ?? release()}`
           : `${type()} ${release()}`
       } (${arch()})`,
       needed: true,
@@ -128,21 +132,24 @@ export async function toolVersions(input: {
     { name: "node", version: input.node, needed: true },
     {
       name: "git",
-      version: first(await exec("git", ["--version"]), /git version ([\w.-]+)/),
+      version: first(await exec(true)("git", ["--version"]), /git version ([\w.-]+)/),
       needed: true,
       why: "fetching the change",
       install: "install git from https://git-scm.com",
     },
     {
       name: "docker",
-      version: first(await exec("docker", ["version", "--format", "{{.Server.Version}}"]), /^([\w.+-]+)/),
+      version: first(
+        await exec(docker)("docker", ["version", "--format", "{{.Server.Version}}"]),
+        /^([\w.+-]+)/,
+      ),
       needed: docker,
       why: "--build with compose services",
       install: "install Docker with Compose v2 and start it",
     },
     {
       name: "compose",
-      version: first(await exec("docker", ["compose", "version", "--short"]), /v?([\d.]+)/),
+      version: first(await exec(docker)("docker", ["compose", "version", "--short"]), /v?([\d.]+)/),
       needed: docker,
       why: "--build with compose services",
       install: "install Docker Compose v2 (docker compose)",
@@ -160,7 +167,7 @@ export async function toolVersions(input: {
     });
   out.push({
     name: "java",
-    version: first(await exec("java", ["-version"]), /version "([^"]+)"/),
+    version: first(await exec(android)("java", ["-version"]), /version "([^"]+)"/),
     needed: android,
     why: "Android tests",
     install: "install a JDK 17 or newer (e.g. Temurin)",
@@ -195,13 +202,13 @@ export async function toolVersions(input: {
     : undefined;
   out.push({
     name: "appium",
-    version: first(await exec(appiumBin, ["--version"], appiumEnv), /^([\d.]+)/m),
+    version: first(await exec(appium)(appiumBin, ["--version"], appiumEnv), /^([\d.]+)/m),
     needed: appium,
     why: "mobile tests",
     install: "npm install -g appium",
   });
   if (appium) {
-    const listed = await exec(appiumBin, ["driver", "list", "--installed", "--json"], appiumEnv);
+    const listed = await exec(appium)(appiumBin, ["driver", "list", "--installed", "--json"], appiumEnv);
     const drivers = ((): Record<string, { version?: string }> => {
       try {
         return JSON.parse(first(listed, /(\{[\s\S]*\})/) ?? "{}") as Record<string, { version?: string }>;
@@ -222,7 +229,7 @@ export async function toolVersions(input: {
   if (platform() === "darwin" || ios)
     out.push({
       name: "xcode",
-      version: first(await exec("xcodebuild", ["-version"]), /Xcode ([\d.]+)/),
+      version: first(await exec(ios)("xcodebuild", ["-version"]), /Xcode ([\d.]+)/),
       needed: ios,
       why: "iOS tests on this Mac",
       install: "install Xcode from the App Store, or use mobile.ios.farm",
@@ -282,6 +289,7 @@ export async function runVersions(
     qajitsu: qajitsuVersion(),
     node: process.version,
     project,
+    neededOnly: true,
     ...(options.exec ? { exec: options.exec } : {}),
     ...(options.playwright ? { playwright: options.playwright } : {}),
   });

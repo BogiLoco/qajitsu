@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { plannedFields } from "./expectations.js";
 import { dirname, join } from "node:path";
 import type { Plan } from "@qajitsu/core";
@@ -250,6 +250,25 @@ export function stepsTypesEntry(exists: (path: string) => boolean = existsSync):
  * @param files - Absolute spec paths.
  * @returns Problems per file.
  */
+/** Parsed library and steps files shared between checks, by path and modification time (specs are never cached). */
+const sourceCache = new Map<string, { readonly mtimeMs: number; readonly source: ts.SourceFile }>();
+
+/** A compiler host that reuses parsed files that are not the specs under check, like the TypeScript language service. */
+function cachingHost(options: ts.CompilerOptions, specs: ReadonlySet<string>): ts.CompilerHost {
+  const host = ts.createCompilerHost(options, true);
+  const parse = host.getSourceFile.bind(host);
+  host.getSourceFile = (fileName, languageVersion, onError, shouldCreate) => {
+    if (specs.has(fileName)) return parse(fileName, languageVersion, onError, shouldCreate);
+    const mtimeMs = statSync(fileName, { throwIfNoEntry: false })?.mtimeMs ?? -1;
+    const cached = sourceCache.get(fileName);
+    if (cached?.mtimeMs === mtimeMs) return cached.source;
+    const source = parse(fileName, languageVersion, onError, shouldCreate);
+    if (source) sourceCache.set(fileName, { mtimeMs, source });
+    return source;
+  };
+  return host;
+}
+
 export function typecheckSpecs(files: readonly string[]): Map<string, SpecProblem[]> {
   const options: ts.CompilerOptions = {
     strict: true,
@@ -263,9 +282,17 @@ export function typecheckSpecs(files: readonly string[]): Map<string, SpecProble
     paths: { "@qajitsu/steps": [stepsTypesEntry()] },
     allowImportingTsExtensions: true,
   };
-  const program = ts.createProgram([...files], options);
+  const program = ts.createProgram([...files], options, cachingHost(options, new Set(files)));
   const out = new Map<string, SpecProblem[]>(files.map((f) => [f, []]));
-  for (const d of ts.getPreEmitDiagnostics(program)) {
+  // Only the specs' own diagnostics count: checking every file of the program (the steps and core sources the spec
+  // imports) did the same work again for each spec and was thrown away.
+  const diagnostics = files.flatMap((f) => {
+    const source = program.getSourceFile(f);
+    return source
+      ? [...program.getSyntacticDiagnostics(source), ...program.getSemanticDiagnostics(source)]
+      : [];
+  });
+  for (const d of [...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics(), ...diagnostics]) {
     const file = d.file?.fileName;
     if (file === undefined || !out.has(file)) continue;
     const line =

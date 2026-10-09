@@ -139,7 +139,11 @@ describe("Anthropic Messages API contract (REQ-LLM-01/AC6)", () => {
   });
 
   it("REQ-LLM-01/AC6: documented 429 and 529 are retried; 401 fails at once without the key in the error", async () => {
-    const retried = await setup([{ error: 429, retryAfter: 0 }, { error: 529 }, { text: '{"answer":"ok"}' }]);
+    const retried = await setup([
+      { error: 429, retryAfter: 0 },
+      { error: 529, retryAfter: 0 },
+      { text: '{"answer":"ok"}' },
+    ]);
     const ok = await runStructuredAgent({
       stage: "plan",
       role: "planner",
