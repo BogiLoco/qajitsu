@@ -35,6 +35,16 @@ async function emulatorChecks(needs: ToolchainNeeds, ports: PrecheckPorts): Prom
   const emulator = needs.android?.emulator;
   if (!emulator) return [];
   const out: Precheck[] = [];
+  // Google publishes the emulator for Linux x86_64 and macOS (x86_64, arm64) only (repository2-3.xml).
+  const built = !(ports.host.os === "linux" && ports.host.arch === "arm64");
+  out.push({
+    name: "emulator build",
+    ok: built,
+    detail: built
+      ? `the Android emulator is published for ${ports.host.os} ${ports.host.arch}`
+      : "the Android emulator has no build for Linux on ARM64; run Android tests against a device farm or another machine with mobile.appium.url, or --skip android",
+    tools: ["android"],
+  });
   const abi = imageAbi(emulator.systemImage);
   const native = nativeAbi(ports.host);
   const abiOk = abi === native || (native === "x86_64" && abi === "x86");

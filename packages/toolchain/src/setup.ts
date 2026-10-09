@@ -69,6 +69,11 @@ export interface SetupOptions extends PlanOptions {
   readonly yes?: boolean;
   /** Also boot the emulator once. */
   readonly smoke?: boolean;
+  /**
+   * Prechecks that do not stop setup, by name (e.g. `virtualisation` when building an image on a machine without KVM
+   * for hosts that have it). They are still reported, marked as ignored.
+   */
+  readonly ignoreChecks?: readonly string[];
 }
 
 /** Inputs of {@link runSetup}. */
@@ -136,7 +141,9 @@ const forBundle = (s: PlanStep): PlanStep =>
 
 /** Plans setup without changing anything: detection, plan and prechecks (`qj setup --check`, `qj doctor`). */
 export async function planToolchain(
-  input: Omit<SetupInput, "options"> & { readonly options: PlanOptions },
+  input: Omit<SetupInput, "options"> & {
+    readonly options: PlanOptions & { readonly ignoreChecks?: readonly string[] };
+  },
 ): Promise<{ detected: DetectedTool[]; steps: PlanStep[]; prechecks: Precheck[] }> {
   const record = await readToolchainRecord(input.root);
   const ports = input.bundle !== undefined ? emptyMachine(input.ports, input.root) : input.ports;
@@ -157,7 +164,10 @@ export async function planToolchain(
     playwrightVersion: input.ports.playwrightVersion,
   });
   const steps = input.bundle !== undefined ? planned.map(forBundle) : planned;
-  const prechecks = await runPrechecks(steps, input.needs, input.ports, input.root);
+  const ignored = new Set(input.options.ignoreChecks ?? []);
+  const prechecks = (await runPrechecks(steps, input.needs, input.ports, input.root)).map((p) =>
+    !p.ok && ignored.has(p.name) ? { ...p, detail: `${p.detail} (ignored: --ignore-check ${p.name})` } : p,
+  );
   return { detected, steps, prechecks };
 }
 
@@ -355,7 +365,10 @@ export async function runSetup(input: SetupInput): Promise<SetupReport> {
   const { steps, prechecks, detected } = await planToolchain(input);
   const changing = changingSteps(steps);
   if (input.options.check === true) return { steps, prechecks, results: [], licences: [] };
-  const blocking = prechecks.filter((p) => !p.ok && p.tools.some((t) => changing.some((s) => s.tool === t)));
+  const ignored = new Set(input.options.ignoreChecks ?? []);
+  const blocking = prechecks.filter(
+    (p) => !p.ok && !ignored.has(p.name) && p.tools.some((t) => changing.some((s) => s.tool === t)),
+  );
   if (blocking.length > 0)
     return {
       steps,
@@ -421,6 +434,7 @@ export async function runSetup(input: SetupInput): Promise<SetupReport> {
             : await smokeTest(ctx, tested, {
                 android: input.needs.android,
                 boot: input.options.smoke === true,
+                noAccel: ignored.has("virtualisation"),
                 ports: input.ports.smoke,
               });
         if (entry) {

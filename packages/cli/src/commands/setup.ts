@@ -51,7 +51,11 @@ export interface SetupCommandOptions {
   readonly download?: string;
   readonly from?: string;
   readonly smoke?: boolean;
+  readonly ignoreCheck?: readonly string[];
 }
+
+/** Prechecks `--ignore-check` may name (REQ-GEN-06/AC6). */
+export const PRECHECKS = ["system image", "virtualisation", "memory", "disk"] as const;
 
 const MB = 1024 * 1024;
 
@@ -85,6 +89,22 @@ export function versionFlags(values: readonly string[] | undefined): Partial<Rec
     out[tool] = version;
   }
   return out;
+}
+
+/** `--ignore-check virtualisation` → the named prechecks; an unknown name is an error. */
+export function ignoredChecks(values: readonly string[] | undefined): string[] {
+  const names = (values ?? [])
+    .flatMap((v) => v.split(","))
+    .map((v) => v.trim())
+    .filter(Boolean);
+  const unknown = names.filter((n) => !(PRECHECKS as readonly string[]).includes(n));
+  if (unknown.length > 0)
+    throw new ConfigError(
+      "PRECHECK_UNKNOWN",
+      `--ignore-check: unknown check ${unknown.join(", ")}; checks are ${PRECHECKS.join(", ")}`,
+      {},
+    );
+  return names;
 }
 
 /** The machine as QAJitsu sees it: macOS or Linux on arm64 or x86_64. */
@@ -362,6 +382,7 @@ export async function runSetupCommand(
       ...(options.check === true ? { check: true } : {}),
       ...(options.yes === true ? { yes: true } : {}),
       ...(options.smoke === true ? { smoke: true } : {}),
+      ignoreChecks: ignoredChecks(options.ignoreCheck),
     };
     if (options.download !== undefined && options.from !== undefined)
       throw new ConfigError("SETUP_FLAGS", "--download and --from cannot be used together", {});

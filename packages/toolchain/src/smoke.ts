@@ -54,6 +54,7 @@ async function smokeAndroid(
   android: AndroidNeeds | undefined,
   ports: SmokePorts,
   boot: boolean,
+  noAccel: boolean,
 ): Promise<SmokeResult> {
   const sdk = entry.path;
   const env = androidEnv(ctx, sdk, managedAndroid(ctx.root).avd);
@@ -72,6 +73,11 @@ async function smokeAndroid(
         ? `sdkmanager does not run: ${listed.stderr.trim().slice(-200)}`
         : `sdkmanager does not list ${missing.join(", ")}`,
       "qj setup --reinstall android",
+    );
+  if (android?.emulator && noAccel)
+    return ok(
+      "android",
+      `sdkmanager lists ${String(packages.length)} packages; acceleration not checked (--ignore-check virtualisation)`,
     );
   if (android?.emulator) {
     const accel = await run(ctx, join(sdk, "emulator", "emulator"), ["-accel-check"], env);
@@ -112,6 +118,8 @@ export async function smokeTest(
     readonly android?: AndroidNeeds | undefined;
     readonly boot: boolean;
     readonly ports: SmokePorts;
+    /** The virtualisation precheck was ignored on purpose (an image built without KVM): no acceleration check. */
+    readonly noAccel?: boolean;
   },
 ): Promise<SmokeResult> {
   switch (entry.tool) {
@@ -123,7 +131,7 @@ export async function smokeTest(
         : failed("java", `java does not run: ${out.stderr.trim().slice(-200)}`, "qj setup --reinstall java");
     }
     case "android":
-      return smokeAndroid(ctx, entry, options.android, options.ports, options.boot);
+      return smokeAndroid(ctx, entry, options.android, options.ports, options.boot, options.noAccel === true);
     case "appium": {
       const out = await run(ctx, appiumBinOf(entry.path), ["--version"]);
       return out.stdout.trim().startsWith(entry.version)

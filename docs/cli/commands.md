@@ -149,7 +149,8 @@ compatible copy is installed next to it. Managed tools go to `~/.qajitsu/toolcha
 Docker CLI and the Compose plugin from Homebrew on macOS; `docker.io` and `docker-compose-v2` through apt on Linux) and
 Xcode (`xcodes`, needs your Apple ID) are system-wide: installed once, never removed by QAJitsu.
 
-Before anything is downloaded: processor (arm64-v8a or x86_64 system images; an image for the other one is refused),
+Before anything is downloaded: processor (arm64-v8a or x86_64 system images; an image for the other one is refused;
+Linux on ARM64 has no Android emulator build),
 hardware virtualisation (HVF on macOS, `/dev/kvm` on Linux), memory (4 GiB minimum for the emulator), free disk, curl,
 tar and unzip. A failed check stops setup with the reason; `--skip` the tool to set up the rest. Downloads resume from
 a partial file, are verified against the publisher's checksum (Adoptium SHA-256, Google SHA-1) before use and are moved
@@ -175,6 +176,9 @@ After installing, every tool is smoke-tested; nothing that failed is reported re
 - `--from <dir>`: install from such a bundle without network: same system and processor only, every folder checked
   against its digest, AVDs created on this machine, smoke-tested
 - `--smoke`: also boot the emulator once
+- `--ignore-check <check>`: do not stop on this precheck (`virtualisation`, `memory`, `disk`, `system image`;
+  repeatable). It is still printed, marked as ignored. Meant for building an image on a machine without KVM for hosts
+  that have it: with `virtualisation` ignored the smoke test does not check the emulator's acceleration.
 
 `.qa/toolchain.yaml` (per project) and `~/.qajitsu/toolchain.yaml` (per machine; the project wins key by key):
 `versions` (`java`, `android.platform`, `android.build_tools`, `appium`, `uiautomator2`, `xcuitest`, `xcode`),

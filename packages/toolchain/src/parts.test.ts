@@ -251,6 +251,7 @@ describe("prechecks on Linux (REQ-GEN-06/AC6)", () => {
     );
     expect(checks.map((c) => [c.name, c.ok])).toEqual([
       ["processor", true],
+      ["emulator build", true],
       ["system image", true],
       ["virtualisation", true],
       ["memory", true],
@@ -261,6 +262,20 @@ describe("prechecks on Linux (REQ-GEN-06/AC6)", () => {
     ]);
     expect(checks.find((c) => c.name === "memory")?.detail).toContain("8 GiB or more is recommended");
     expect(checks.find((c) => c.name === "disk")?.detail).toBe("free space unknown");
+  });
+
+  it("REQ-GEN-06/AC6: Linux on ARM64 has no Android emulator build", async () => {
+    const checks = await runPrechecks(
+      androidStep,
+      needs("system-images;android-34;google_apis;arm64-v8a"),
+      ports({ host: { os: "linux", arch: "arm64" } }),
+      dir,
+    );
+    expect(checks.find((c) => c.name === "emulator build")).toMatchObject({
+      ok: false,
+      detail: expect.stringContaining("no build for Linux on ARM64") as unknown,
+    });
+    expect(checks.find((c) => c.name === "system image")?.ok).toBe(true);
   });
 
   it("REQ-GEN-06/AC6: an arm64 image on x64, no /dev/kvm, too little memory and missing unzip each stop it", async () => {

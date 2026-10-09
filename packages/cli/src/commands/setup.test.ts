@@ -7,7 +7,7 @@ import { registerProject, setActiveProject } from "@qajitsu/core";
 import type { RunExec, ToolchainEnv } from "@qajitsu/toolchain";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createProgram } from "../program.js";
-import { formatStep, hostOf, toolList, versionFlags } from "./setup.js";
+import { formatStep, hostOf, ignoredChecks, toolList, versionFlags } from "./setup.js";
 
 let home: string;
 beforeEach(async () => {
@@ -209,6 +209,8 @@ describe("qj setup (REQ-GEN-06)", () => {
 describe("setup flags and output", () => {
   it("parses tool lists and versions strictly", () => {
     expect(toolList(["java,android", "java"], "--only")).toEqual(["java", "android"]);
+    expect(ignoredChecks(["virtualisation,memory"])).toEqual(["virtualisation", "memory"]);
+    expect(() => ignoredChecks(["checksum"])).toThrow(/unknown check checksum/);
     expect(versionFlags(["java=21", "appium=3.7.0"])).toEqual({ java: "21", appium: "3.7.0" });
     expect(() => versionFlags(["java=latest"])).toThrow(/expected <tool>=<version>/);
     expect(hostOf("linux", "x64")).toEqual({ os: "linux", arch: "x64" });

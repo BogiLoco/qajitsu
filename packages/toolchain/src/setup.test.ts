@@ -363,6 +363,28 @@ describe("qj setup (REQ-GEN-06)", () => {
     expect(tools.calls).toEqual([]);
   });
 
+  it("REQ-GEN-06/AC6: an ignored precheck is reported and does not stop setup; acceleration is then not checked", async () => {
+    const tools = fakeTools();
+    const input = setupInput(
+      tools,
+      {},
+      { yes: true, skip: ["appium", "uiautomator2"], ignoreChecks: ["virtualisation"] },
+    );
+    const report = await runSetup({
+      ...input,
+      ports: { ...input.ports, exec: (cmd) => Promise.resolve(cmd === "sysctl" ? "0" : "ok") },
+    });
+    expect(report.stopped).toBeUndefined();
+    expect(report.prechecks.find((p) => p.name === "virtualisation")?.detail).toContain(
+      "(ignored: --ignore-check virtualisation)",
+    );
+    expect(report.results.find((r) => r.tool === "android")).toMatchObject({
+      status: "ready",
+      detail: expect.stringContaining("acceleration not checked (--ignore-check virtualisation)") as unknown,
+    });
+    expect(tools.calls.some((c) => c.args.includes("-accel-check"))).toBe(false);
+  });
+
   it("REQ-GEN-06/AC6: two setups cannot run at once", async () => {
     const input = setupInput(fakeTools());
     await mkdir(input.root, { recursive: true });

@@ -387,6 +387,12 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--download <dir>", "collect everything the project needs into <dir> for an offline machine")
     .option("--from <dir>", "install from a bundle made with --download (no network)")
     .option("--smoke", "also boot the emulator once after installing")
+    .option(
+      "--ignore-check <check>",
+      "do not stop on this precheck (virtualisation, memory, disk, system image), e.g. building an image without KVM",
+      collect,
+      [],
+    )
     .action(async (options: SetupCommandOptions) => {
       if (!io.ports) {
         io.writeError("Runtime ports are not configured.\n");
