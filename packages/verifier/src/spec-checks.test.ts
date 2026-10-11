@@ -111,6 +111,36 @@ describe("static checks of generated specs (REQ-EXEC-03)", () => {
     ]);
   });
 
+  it("REQ-EXEC-03/AC2: verify() runs inside the function of its own step", () => {
+    const tc1 = readFileSync(
+      new URL("../../../fixtures/specs/demo-1/TC-01.spec.ts", import.meta.url),
+      "utf8",
+    );
+    expect(checkSpecSource(tc1, "TC-01", plan)).toEqual([]);
+    // Moved after the step: the runtime would throw; the static check says so before anything runs.
+    const outside = good.replace(
+      /\n\}\s*$/,
+      '\n  verify("S2", "status", 1, plan.expect("TC-02.S2.status"));\n}\n',
+    );
+    expect(messages(outside)).toContain(
+      'coverage: verify("S2", ...) must be inside step("S2", ...); it is outside every step',
+    );
+    // Inside another step's function: attributed to the wrong step.
+    const wrongStep = good.replace(
+      'verify("S1", "status", res.status, plan.expect("TC-02.S1.status"))',
+      'verify("S1", "status", res.status, plan.expect("TC-02.S1.status"));\n    verify("S2", "status", res.status, plan.expect("TC-02.S2.status"))',
+    );
+    expect(messages(wrongStep)).toContain(
+      'coverage: verify("S2", ...) must be inside step("S2", ...); it is inside step("S1", ...)',
+    );
+    // A helper function declared inside the step still counts as inside it.
+    const helper = good.replace(
+      'verify("S1", "status", res.status, plan.expect("TC-02.S1.status"))',
+      'const check = () => verify("S1", "status", res.status, plan.expect("TC-02.S1.status"));\n    check()',
+    );
+    expect(messages(helper).filter((m) => m.includes("must be inside"))).toEqual([]);
+  });
+
   it("requires the caseId and run exports", () => {
     expect(messages(good.replace('"TC-02";', '"TC-01";'))).toContain(
       'lint: export const caseId must be "TC-02"',

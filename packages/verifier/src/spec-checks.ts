@@ -53,6 +53,19 @@ const calleeName = (call: ts.CallExpression): string | undefined => {
   return undefined;
 };
 
+/** The id of the step whose function (`step("S1", async () => ...)`) contains a node, if any. */
+const enclosingStep = (node: ts.Node): string | undefined => {
+  for (let n = node.parent; !ts.isSourceFile(n); n = n.parent) {
+    if (!(ts.isArrowFunction(n) || ts.isFunctionExpression(n))) continue;
+    const call = n.parent;
+    if (ts.isCallExpression(call) && calleeName(call) === "step" && call.arguments[1] === n) {
+      const id = call.arguments[0];
+      return id !== undefined && ts.isStringLiteral(id) ? id.text : undefined;
+    }
+  }
+  return undefined;
+};
+
 /**
  * Lint, plan coverage and assertion lock of one spec (REQ-EXEC-03/AC1..AC3, invariant 4). Pure AST
  * checks, no execution:
@@ -178,6 +191,14 @@ export function checkSpecSource(source: string, caseId: string, plan: Plan): Spe
         } else {
           const stepId = first.text;
           const field = node.arguments[1].text;
+          // REQ-EXEC-03/AC2: a verify() belongs to the step whose function contains it; the runtime refuses others.
+          const owner = enclosingStep(node);
+          if (owner !== stepId)
+            add(
+              "coverage",
+              `verify("${stepId}", ...) must be inside step("${stepId}", ...); ${owner === undefined ? "it is outside every step" : `it is inside step("${owner}", ...)`}`,
+              node,
+            );
           verifiedSteps.add(stepId);
           verifiedFields.add(`${stepId}.${field}`);
           const expected = node.arguments[3];
