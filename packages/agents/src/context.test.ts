@@ -76,6 +76,10 @@ describe("change context (REQ-CTX-05)", () => {
     const text = renderChangeContext(context);
     expect(text).toContain('<untrusted_data source="ui/inventory">');
     expect(text).toContain("Pages: /app/checkout");
+    // The analyst classifies the change without the inventory; with no map, map sources are ruled out in so many words.
+    const forAnalyst = renderChangeContext(context, { ui: false });
+    expect(forAnalyst).not.toContain("ui/inventory");
+    expect(forAnalyst).toContain("None for this change: do not cite {kind: map} sources.");
     // A worktree without UI code adds no section.
     const { root: plain, ws: plainWs } = await createFetchedRun();
     roots.push(plain);

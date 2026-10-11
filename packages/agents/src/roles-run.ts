@@ -201,7 +201,7 @@ export async function runAnalyst(deps: AgentStageDeps, context: ChangeContext): 
     role: "analyst",
     model,
     system: ANALYST_SYSTEM,
-    prompt: `${renderChangeContext(context)}${docs.section ? `\n\n${docs.section}` : ""}\n\nAnalyse this change and answer with the JSON object.`,
+    prompt: `${renderChangeContext(context, { ui: false })}${docs.section ? `\n\n${docs.section}` : ""}\n\nAnalyse this change and answer with the JSON object.`,
     schema: AnalysisSchema,
     validate: (analysis) => issuesAsErrors(checkAnalysisSources(analysis, sources)),
     tools: [...createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText }), ...docs.tools],
