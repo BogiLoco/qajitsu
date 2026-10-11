@@ -37,15 +37,41 @@ export async function run({ step, verify, plan, api }: CaseContext): Promise<voi
 }
 `;
 
+/** Example web spec shown to the author: the browser is driven through `ui`, element states are read by QAJitsu. */
+export const EXAMPLE_WEB_SPEC = `import type { CaseContext } from "@qajitsu/steps";
+
+export const caseId = "TC-08";
+
+export async function run({ step, verify, plan, ui }: CaseContext): Promise<void> {
+  await step("S1", async () => {
+    await ui.as("user:standard");
+    await ui.goto("/app/checkout");
+    verify("S1", "elements.testid:place-order.enabled", undefined, plan.expect("TC-08.S1.elements.testid:place-order.enabled"));
+  });
+  await step("S2", async () => {
+    await ui.check("testid:accept-terms");
+    verify("S2", "elements.testid:place-order.enabled", undefined, plan.expect("TC-08.S2.elements.testid:place-order.enabled"));
+    verify("S2", "texts.0", undefined, plan.expect("TC-08.S2.texts.0"));
+  });
+}
+`;
+
 /** System prompt of the author role (REQ-EXEC-01). */
 export const AUTHOR_SYSTEM = `You are the test author of QAJitsu. You write one executable TypeScript spec for one approved test case.
 ${UNTRUSTED_DATA_RULES}
 Rules (checked by code; a violating spec is rejected):
 - Start with: import type { CaseContext } from "@qajitsu/steps"; no other imports, no dynamic import.
-- Export const caseId = "<case id>" and export async function run({ step, verify, plan, api, inbox }: CaseContext) (take only what you use).
+- Export const caseId = "<case id>" and export async function run({ step, verify, plan, api, ui, inbox }: CaseContext) (take only what you use).
 - One step("<step id>", async () => { ... }) per plan step, in order; API calls only inside steps through api or api.as("<account alias>").
 - Every step has at least one verify("<step id>", "<field>", <actual value>, plan.expect("<case>.<step>.<field>")).
   Fields are "status", "fields.<key>" (read with res.json("<key>")) or "texts.<n>". The expected value is ALWAYS plan.expect(...) with exactly the same step and field; never a literal.
+- Web and mobile steps drive the app only through ui, inside the step: await ui.as("<account alias>") opens it as an
+  account, then ui.goto("/path"), ui.click(sel), ui.fill(sel, text), ui.check(sel), ui.uncheck(sel), ui.select(sel,
+  value), ui.press(sel, key), ui.waitFor(sel), ui.back(). Selectors are the plan's: testid:<id>, role:<role>:<name>,
+  label:<text>, text:<text>. Open the page before checking anything on it.
+- QAJitsu reads web and mobile values from the live page: element states are verified as
+  verify("<step id>", "elements.<selector>.<property>", undefined, plan.expect("<case>.<step>.elements.<selector>.<property>"))
+  and visible texts as verify("<step id>", "texts.<n>", undefined, plan.expect("<case>.<step>.texts.<n>")).
 - A step whose expect has "message": use const email = await inbox.address() (or inbox.address("url") for a webhook)
   as the address in the test data, then const msg = await inbox.wait("<step id>") and
   verify("<step id>", "message", msg, plan.expect("<case>.<step>.message")); msg.links holds the links of the message.
@@ -59,9 +85,12 @@ Rules (checked by code; a violating spec is rejected):
   selectors and flows as its page objects and helpers (read them under repos/<tests repo>/). Specs cannot import them;
   copy the selector, never the code.
 Answer with the complete spec in one \`\`\`ts code block and nothing else.
-Example:
+Example (API):
 \`\`\`ts
-${EXAMPLE_SPEC}\`\`\``;
+${EXAMPLE_SPEC}\`\`\`
+Example (web or mobile):
+\`\`\`ts
+${EXAMPLE_WEB_SPEC}\`\`\``;
 
 /** Outcome of authoring one case. */
 export interface AuthoredSpec {
