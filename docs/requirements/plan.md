@@ -130,7 +130,8 @@ Besides the terminal, plans can be approved where the team already works.
 - Stage: 2
 - Related: INV-4, REQ-PLAN-02, REQ-PLAN-04, REQ-PLAN-06, REQ-EXEC-04
 
-An expected value in a plan is a value a test can compare with, never a name standing in for one.
+An expected value in a plan is a value a test can compare with, never a name standing in for one, and a selector in a
+plan points to an element that exists in the code under test.
 
 **Acceptance criteria**
 
@@ -139,3 +140,6 @@ An expected value in a plan is a value a test can compare with, never a name sta
 - [ ] AC3: Flagged values go back to the planner once for an automatic revision; whatever is still flagged is listed in the review next to the plan (case, step, field, value, why).
 - [ ] AC4: A plan with flagged values cannot be approved without `--confirm-placeholders` (or the same answer in the interactive review); the confirmation and the flagged values are recorded in `run.json`.
 - [ ] AC5: The check is deterministic code with fixture tests, including values that must not be flagged.
+- [ ] AC6: A step that is not manual and whose expect has only a description (no status, fields, texts, elements, message or visual) is flagged the same way: the test would have nothing to compare.
+- [ ] AC7: The planner and the author get a selector inventory computed by code from the worktree of the run: every `data-testid` (and the mobile equivalents, e.g. Android resource ids) with the file and the page or screen it belongs to, so a model does not have to search for them.
+- [ ] AC8: Every `testid:` selector in a plan must exist in that inventory for the run's commit; an unknown one is flagged like a placeholder (one automatic revision, then listed in the review), never silently accepted.
