@@ -82,6 +82,36 @@ const enclosingStep = (node: ts.Node): string | undefined => {
 };
 
 /**
+ * The element selectors a spec uses (REQ-EXEC-22/AC3): the first argument of every `ui.*` action and the selector of
+ * every `verify(..., "elements.<selector>.<property>", ...)`, in the order they appear.
+ *
+ * @param source - Spec source.
+ */
+export function specSelectors(source: string): string[] {
+  const sf = ts.createSourceFile("spec.ts", source, ts.ScriptTarget.ES2023, true, ts.ScriptKind.TS);
+  const out: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const name = calleeName(node);
+      const [first, second] = node.arguments;
+      const onUi =
+        ts.isPropertyAccessExpression(node.expression) &&
+        ts.isIdentifier(node.expression.expression) &&
+        node.expression.expression.text === "ui";
+      if (onUi && name !== undefined && UI_ACTIONS.has(name) && first && ts.isStringLiteral(first))
+        out.push(first.text);
+      if (name === "verify" && second && ts.isStringLiteral(second)) {
+        const m = /^elements\.(.+)\.(?:visible|enabled|checked|text|value)$/.exec(second.text);
+        if (m?.[1] !== undefined) out.push(m[1]);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
+}
+
+/**
  * Lint, plan coverage and assertion lock of one spec (REQ-EXEC-03/AC1..AC3, invariant 4). Pure AST
  * checks, no execution:
  * - only `import type` from `@qajitsu/steps`; no dynamic import, no `process`, `require`, `fetch`,

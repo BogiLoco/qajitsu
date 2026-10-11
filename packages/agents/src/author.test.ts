@@ -140,6 +140,65 @@ describe("author (REQ-EXEC-01, REQ-EXEC-03/AC4)", () => {
   });
 });
 
+describe("author with a snapshot of the running application (REQ-EXEC-22)", () => {
+  const mobilePlan = PlanSchema.parse({
+    schema: 1,
+    ticket: "DEMO-6",
+    version: 1,
+    ...JSON.parse(
+      readFileSync(new URL("../../../fixtures/plans/demo-6-draft.json", import.meta.url), "utf8"),
+    ),
+  });
+  const one = { ...mobilePlan, cases: mobilePlan.cases.filter((c) => c.id === "TC-01") };
+  const good = readFileSync(new URL("../../../fixtures/specs/demo-6/TC-01.spec.ts", import.meta.url), "utf8");
+  const guessed = good.replaceAll("testid:open-checkout", "testid:nav-checkout");
+  const snapshot = [
+    {
+      where: "app:start",
+      platform: "android" as const,
+      elements: [
+        { role: "Button", testid: "add-item", text: "Add item" },
+        { role: "TextView", testid: "cart-count", text: "Cart: 0 items" },
+        { role: "Button", testid: "open-checkout", text: "Checkout" },
+      ],
+    },
+    { where: "/app/cart", platform: "web" as const, elements: [{ testid: "nav-checkout", role: "a" }] },
+  ];
+
+  it("REQ-EXEC-22/AC1+AC3: the author sees the screen of its platform; a selector found nowhere is asked about once", async () => {
+    const model = scriptedModel([{ text: "```ts\n" + guessed + "```" }, { text: "```ts\n" + good + "```" }]);
+    const { d, ws, context } = await deps(model);
+    const [result] = await runAuthor(d, one, { ...context, snapshot }, analysis, []);
+    expect(result).toMatchObject({ caseId: "TC-01", attempts: 2, problems: [] });
+    expect(await readFile(ws.path("specs", "TC-01.spec.ts"), "utf8")).toBe(good);
+    const prompt = promptOf(model, 0);
+    expect(prompt).toContain("### android app:start");
+    expect(prompt).toContain('- testid:add-item: Button \\"Add item\\"');
+    // A web page is not shown for a mobile case.
+    expect(prompt).not.toContain("/app/cart");
+    expect(promptOf(model, 1)).toContain("- testid:nav-checkout (closest recorded: testid:open-checkout");
+  });
+
+  it("REQ-EXEC-22/AC3: the author may keep a selector of an element that appears later; the spec is accepted", async () => {
+    const model = scriptedModel([
+      { text: "```ts\n" + guessed + "```" },
+      { text: "```ts\n" + guessed + "```" },
+    ]);
+    const { d, ws, context } = await deps(model);
+    const [result] = await runAuthor(d, one, { ...context, snapshot }, analysis, []);
+    expect(result).toMatchObject({ caseId: "TC-01", attempts: 2, problems: [] });
+    expect(await readFile(ws.path("specs", "TC-01.spec.ts"), "utf8")).toBe(guessed);
+  });
+
+  it("REQ-EXEC-22/AC6: without a snapshot the author writes the spec as before", async () => {
+    const model = scriptedModel([{ text: "```ts\n" + guessed + "```" }]);
+    const { d, context } = await deps(model);
+    const [result] = await runAuthor(d, one, context, analysis, []);
+    expect(result).toMatchObject({ caseId: "TC-01", attempts: 1, problems: [] });
+    expect(promptOf(model, 0)).not.toContain("What the application shows");
+  });
+});
+
 describe("author exploring through MCP (REQ-EXEC-01/AC2, REQ-VER-03/AC3)", () => {
   const ORIGIN = "http://127.0.0.1:4000";
   const fakeBrowser = (received: string[], closed: string[]): McpClientLike => ({

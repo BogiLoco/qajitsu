@@ -14,6 +14,7 @@ import {
   type ReviewComment,
   type RunWorkspace,
   type Ticket,
+  type UiScreen,
 } from "@qajitsu/core";
 import { cachedTestsIndex, renderTestsRepo, type TestsRepoIndex } from "./tests-repo.js";
 import { buildUiInventory, renderUiInventory, type UiInventory } from "@qajitsu/verifier";
@@ -124,6 +125,8 @@ export interface ChangeContext {
   readonly mapAround?: MapAround | undefined;
   /** Element ids and pages of the code under test, computed by code from the worktrees (REQ-PLAN-09/AC7). */
   readonly ui?: UiInventory | undefined;
+  /** Pages and screens of the running application, recorded by code before writing specs (REQ-EXEC-22/AC1). */
+  readonly snapshot?: readonly UiScreen[] | undefined;
 }
 
 const UI_EXTENSIONS = /\.(html?|[cm]?jsx?|tsx?|vue|svelte|xml|java|kt|swift|dart)$/;

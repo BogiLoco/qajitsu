@@ -1,4 +1,4 @@
-import { copyFile, readFile, realpath, writeFile } from "node:fs/promises";
+import { copyFile, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createPlaywrightTransport, executeAttempt, type BrowserFactory } from "@qajitsu/adapter-runner-api";
 import {
@@ -10,6 +10,7 @@ import { readRunIndex, type CodeHost, type TicketKey } from "@qajitsu/core";
 import { zip } from "@qajitsu/report";
 import { afterEach, describe, expect, it } from "vitest";
 import { apiService, createBuildProject } from "../../../../tests/support/cli-build.js";
+import { promptOf } from "../../../../tests/support/mock-model.js";
 import { openSession } from "../session.js";
 import {
   emulatorUrl,
@@ -125,6 +126,21 @@ const statuses = async (dir: string) =>
     .data.results;
 
 describe("mobile cases in qj run (REQ-EXEC-06, REQ-EVD-03, REQ-ENV-06)", () => {
+  it("REQ-EXEC-22/AC1+AC2: before writing a spec the author gets the app's first screen, recorded on the run's device", async () => {
+    const { run, dir } = await setup(() => Promise.resolve(device(false)));
+    await rm(join(dir, "specs", "TC-01.spec.ts"));
+    const spec = await read("fixtures/specs/demo-6/TC-01.spec.ts");
+    const result = await run(["run", "DEMO-6", "--build"], [{ text: "```ts\n" + spec + "```" }]);
+    expect(result.exitCode).toBe(0);
+    expect(result.out).toContain("Recorded 1 page(s) or screen(s) of the application for the author.");
+    const prompt = promptOf(result.model, 0);
+    expect(prompt).toContain("### android app:start");
+    expect(prompt).toContain("text:Cart: 0 items");
+    expect(await statuses(dir)).toEqual({ "TC-01": "PASSED" });
+    const journal = await readFile(join(dir, "journal", "events.jsonl"), "utf8");
+    expect(journal).toContain('"event":"ui.snapshot"');
+  });
+
   it("REQ-EXEC-06 + REQ-NFR-04: DEMO-6 PASSES on the clean app with a screenshot per step and device log", async () => {
     const { run, dir } = await setup(() => Promise.resolve(device(false)));
     const result = await run(["run", "DEMO-6", "--build"]);

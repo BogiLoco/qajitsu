@@ -1,5 +1,5 @@
 import type { UiElementFact, UiScreen } from "@qajitsu/core";
-import type { UiPlatform } from "./ui-inventory.js";
+import { selectorKnown, type UiInventory, type UiPlatform } from "./ui-inventory.js";
 
 /** Web roles a `role:<role>:<name>` selector is worth for: elements a test acts on or checks. */
 const WEB_ROLES = new Set([
@@ -125,4 +125,57 @@ export function closestSelectors(selector: string, known: ReadonlySet<string>, n
     .sort((x, y) => x.d - y.d || x.k.localeCompare(y.k))
     .slice(0, n)
     .map((x) => x.k);
+}
+
+/** Platforms of a plan case type; API cases have no screen. */
+const PLATFORMS_OF: Readonly<Record<string, readonly UiPlatform[]>> = {
+  web: ["web"],
+  mobile: ["android", "ios"],
+};
+
+/**
+ * Selectors of a spec that match no recorded element of the case's platform and no element id of the code
+ * (REQ-EXEC-22/AC3). `css:` and `xpath:` selectors cannot be judged; nothing is judged without a recorded screen of the
+ * platform. Elements that appear only after an action may be unknown, so the caller asks the author once, it does not
+ * reject the spec.
+ *
+ * @param selectors - Selectors of the spec ({@link specSelectors}).
+ * @param caseType - The plan case type.
+ * @param known - Recorded screens and, when the code is available, its element inventory.
+ */
+export function unknownSelectors(
+  selectors: readonly string[],
+  caseType: string,
+  known: { readonly screens: readonly UiScreen[]; readonly inventory?: UiInventory | undefined },
+): string[] {
+  const platforms = PLATFORMS_OF[caseType];
+  if (platforms === undefined) return [];
+  const screens = known.screens.filter((s) => platforms.includes(s.platform));
+  if (screens.length === 0) return [];
+  const elements = screens.flatMap((s) => s.elements);
+  const recorded = snapshotSelectors(screens, platforms);
+  const seen = (selector: string): boolean => {
+    const colon = selector.indexOf(":");
+    const kind = selector.slice(0, colon);
+    const rest = selector.slice(colon + 1);
+    switch (kind) {
+      case "testid":
+        return (
+          recorded.has(selector) ||
+          (known.inventory !== undefined && selectorKnown(known.inventory, selector, platforms))
+        );
+      case "role": {
+        const [role, ...name] = rest.split(":");
+        return elements.some((e) => e.role === role && (name.length === 0 || e.name === name.join(":")));
+      }
+      case "text":
+      case "label":
+        return elements.some(
+          (e) => e.text === rest || e.name === rest || (platforms[0] !== "web" && e.testid === rest),
+        );
+      default:
+        return true;
+    }
+  };
+  return [...new Set(selectors)].filter((s) => !seen(s));
 }

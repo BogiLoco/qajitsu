@@ -6,8 +6,13 @@ import {
   blockingProblems,
   checkSpecSource,
   formatSpecProblems,
+  closestSelectors,
   renderUiInventory,
+  renderUiSnapshot,
+  snapshotSelectors,
+  specSelectors,
   typecheckSpecs,
+  unknownSelectors,
   type SpecCheckOptions,
   type SpecProblem,
 } from "@qajitsu/verifier";
@@ -227,6 +232,10 @@ export async function runAuthor(
     : undefined;
   try {
     const out: AuthoredSpec[] = [];
+    const screensFor = (type: string) =>
+      (context.snapshot ?? []).filter((s) =>
+        type === "web" ? s.platform === "web" : type === "mobile" && s.platform !== "web",
+      );
     for (const planCase of plan.cases) {
       const stop = stopReason?.();
       if (stop !== undefined) {
@@ -251,6 +260,10 @@ export async function runAuthor(
             `Code of the change is under ${context.repos.map((r) => `repos/${r.alias}/`).join(", ") || "repos/"}.`,
             // REQ-PLAN-09/AC7: the element ids and pages the code defines, so the spec opens real pages.
             ...(context.ui ? [untrusted("ui/inventory", renderUiInventory(context.ui))] : []),
+            // REQ-EXEC-22/AC1+AC2: what the running application shows on the case's platform, masked by the caller.
+            ...(screensFor(planCase.type).length > 0
+              ? [untrusted("ui/snapshot", renderUiSnapshot(screensFor(planCase.type)))]
+              : []),
             ...context.testsRepos.flatMap((t) => [
               `## Conventions of the tests repository '${t.alias}' (REQ-EXEC-01/AC3; code under repos/${t.alias}/)`,
               renderTestsRepo(t.alias, t.index),
@@ -261,8 +274,9 @@ export async function runAuthor(
       let problems: SpecProblem[] = [];
       let file: string | undefined;
       let attempts = 0;
+      let askedAboutSelectors = false;
       for (let attempt = 1; attempt <= AUTHOR_MAX_ATTEMPTS; attempt += 1) {
-        attempts = attempt;
+        attempts += 1;
         const result = await generateText({
           model: model.model,
           system: AUTHOR_SYSTEM,
@@ -280,6 +294,42 @@ export async function runAuthor(
           code === undefined
             ? [{ check: "lint", message: "answer contained no ```ts code block" }]
             : await checkSpec(code, planCase.id, plan, deps.specChecks);
+        // REQ-EXEC-22/AC3: selectors that match nothing recorded go back to the author once, with the closest ones;
+        // the question does not use up an attempt, and the answer is accepted when it passes the checks.
+        const unknown =
+          code !== undefined && problems.length === 0 && !askedAboutSelectors
+            ? unknownSelectors(specSelectors(code), planCase.type, {
+                screens: screensFor(planCase.type),
+                inventory: context.ui,
+              })
+            : [];
+        if (code !== undefined && unknown.length > 0) {
+          askedAboutSelectors = true;
+          const known = snapshotSelectors(
+            screensFor(planCase.type),
+            planCase.type === "web" ? ["web"] : ["android", "ios"],
+          );
+          deps.events.emit("author", actor, "selectors.unknown", {
+            caseId: planCase.id,
+            selectors: unknown.length,
+          });
+          messages = [
+            ...messages,
+            ...result.responseMessages,
+            {
+              role: "user",
+              content: [
+                "These selectors match no element of the recorded pages or screens and no element id in the code:",
+                ...unknown.map(
+                  (s) => `- ${s} (closest recorded: ${closestSelectors(s, known).join(", ") || "none"})`,
+                ),
+                "Use a recorded selector instead. Keep one only if its element appears after an action of the spec. Answer with the complete spec.",
+              ].join("\n"),
+            },
+          ];
+          attempt -= 1;
+          continue;
+        }
         if (code !== undefined && problems.length === 0) {
           file = deps.ws.path("specs", `${planCase.id}.spec.ts`);
           await writeFile(file, code, "utf8");

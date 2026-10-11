@@ -1,5 +1,6 @@
 import type { KnowledgePorts } from "./knowledge.js";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { compareDeployedSha, createRemoteEnvProvider } from "@qajitsu/adapter-env-remote";
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
@@ -34,6 +35,7 @@ import {
   webCombinations,
   type CaseResultFile,
   type Plan,
+  type UiScreen,
   type ResolvedEnvironment,
   type VisualCheck,
   type WebCombination,
@@ -53,6 +55,7 @@ import { approvalContext, changedParts, type ApprovalContext } from "./context-f
 import { runRunHook, type HookExec } from "./hooks.js";
 import { prepareMobile, type PreparedMobile } from "./mobile.js";
 import { accountLogin, runLimited, runMobileLane } from "./lanes.js";
+import { recordUiSnapshot } from "./ui-snapshot.js";
 import { exportRunTelemetry } from "./telemetry.js";
 import {
   blockAfterStartFailure,
@@ -106,6 +109,8 @@ export interface RunPorts extends KnowledgePorts, MessagePorts {
   readonly hookExec?: HookExec;
   /** Operating system, for the display check of `--headed` (default: the process's). */
   readonly platform?: string;
+  /** Browser for the snapshot before the author (replaced in tests); default: headless Playwright (REQ-EXEC-22). */
+  readonly snapshotBrowser?: BrowserFactory;
 }
 
 const RUNNER = { kind: "runner", name: "api" } as const;
@@ -118,6 +123,144 @@ const blockedResult = (caseId: string, reason: string): CaseResultFile =>
     runner: "api",
     attempts: [{ attempt: 1, outcome: "error", assertions: [], error: reason, steps: [], evidence: [] }],
   });
+
+/**
+ * Records the pages and screens the author will see (REQ-EXEC-22): web pages through a headless browser with the
+ * run's logins and allowlist, the first screen of the app on the run's device. Tests without a real browser pass
+ * `snapshotBrowser`; a fake executor without one records no web pages.
+ */
+async function snapshotForAuthor(
+  session: RunSession,
+  plan: Plan,
+  cases: Plan["cases"],
+  env: ResolvedEnvironment,
+  ports: RuntimePorts & ModelPorts & RunPorts,
+  options: {
+    readonly knownPages: readonly string[];
+    readonly device: (() => Promise<PreparedMobile>) | undefined;
+    readonly io: CommandIO;
+  },
+): Promise<UiScreen[]> {
+  const { project, masker, events } = session;
+  const webFactory =
+    ports.snapshotBrowser ??
+    (ports.executor
+      ? undefined
+      : createPlaywrightBrowserFactory({
+          browser: project.config.web.browser,
+          video: "off",
+          headless: true,
+          actionTimeoutMs: project.config.web.action_timeout_ms,
+          webSession: env.profile.web_session,
+          observations: { console: false, httpErrors: false, accessibility: false },
+        }));
+  const login = accountLogin(
+    env,
+    createAccountLeases(env.profile, { waitMs: project.config.execution.account_wait_s * 1000 }),
+    {
+      fetch: ports.fetch,
+      qaDir: project.qaDir,
+      resolveSecret: (r) => session.resolveSecret(r),
+      registerSecret: (v) => {
+        masker.register(v);
+      },
+    },
+  );
+  const device = cases.some((c) => c.type === "mobile") ? await options.device?.() : undefined;
+  const scratch = await mkdtemp(join(tmpdir(), "qj-snapshot-"));
+  try {
+    const screens = await recordUiSnapshot({
+      plan,
+      cases,
+      ...(webFactory && cases.some((c) => c.type === "web")
+        ? {
+            web: {
+              factory: webFactory,
+              // The login finds the aliases it needs in a file, as for a spec.
+              login: async (aliases) => {
+                const file = join(scratch, `${aliases.join("-").replace(/[^\w-]/g, "_")}.txt`);
+                await writeFile(file, aliases.join("\n"), "utf8");
+                return login({ caseId: "snapshot", attempt: 0, specFile: file, lane: "web" });
+              },
+              aliases: Object.keys(env.profile.accounts),
+              knownPages: options.knownPages,
+              baseUrl: env.baseUrl,
+              allowedOrigins: [env.origin],
+            },
+          }
+        : {}),
+      ...(device?.ok && device.factories[0]
+        ? {
+            mobile: {
+              factory: device.factories[0],
+              // Android unless only an iOS app is configured.
+              platform:
+                project.config.mobile?.ios && !project.config.mobile.android
+                  ? ("ios" as const)
+                  : ("android" as const),
+            },
+          }
+        : {}),
+      mask: (v) => masker.maskJson(v),
+      emit: (event, details) => {
+        events.emit("author", SYSTEM, event, details);
+        // REQ-EXEC-22/AC6: the person sees what could not be recorded; the author goes on without it.
+        if (event === "ui.snapshot.failed")
+          options.io.writeError(
+            `Could not record ${String(details["where"])} for the author: ${String(details["error"])}\n`,
+          );
+      },
+    });
+    if (screens.length > 0)
+      options.io.write(
+        `Recorded ${String(screens.length)} page(s) or screen(s) of the application for the author.\n`,
+      );
+    return screens;
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+}
+
+/**
+ * The devices of the run's mobile cases, started on the first call and shared by later ones (REQ-EXEC-06,
+ * REQ-EXEC-22): the snapshot before the author and the mobile lane use the same emulators.
+ */
+function mobileDevices(
+  session: RunSession,
+  env: ResolvedEnvironment,
+  ports: RuntimePorts & ModelPorts & RunPorts,
+  options: { readonly build: boolean; readonly headed: boolean; readonly cases: readonly string[] },
+): { readonly get: () => Promise<PreparedMobile>; readonly started: () => boolean } {
+  let device: Promise<PreparedMobile> | undefined;
+  return {
+    get: () => {
+      if (device) return device;
+      const { codeHosts } = buildAdapters(
+        session.project,
+        {
+          fetch: ports.fetch,
+          logger: session.logger,
+          now: ports.now,
+          resolveSecret: (r) => session.resolveSecret(r),
+          registerSecret: (v) => {
+            session.masker.register(v);
+          },
+        },
+        ports,
+      );
+      session.events.emit("run", SYSTEM, "mobile.prepare", { cases: options.cases });
+      device =
+        ports.mobileDevice?.() ??
+        prepareMobile(session, env.baseUrl, codeHosts, ports.env["APPIUM_HOME"], {
+          allowBuild: options.build,
+          // REQ-EXEC-16/AC2: --headed shows the emulator window.
+          headed: options.headed,
+        });
+      return device;
+    },
+    started: () => device !== undefined,
+  };
+}
 
 /**
  * Runs the web cases again in every further browser and viewport combination (REQ-EXEC-13/AC1): results go to
@@ -228,39 +371,18 @@ async function runMobile(
   session: RunSession,
   plan: Plan,
   mobileCases: Plan["cases"],
-  env: ResolvedEnvironment,
   io: CommandIO,
-  ports: RuntimePorts & ModelPorts & RunPorts,
   results: Map<string, CaseResultFile>,
   options: {
-    readonly build: boolean;
-    readonly headed: boolean;
     readonly sequential: boolean;
     readonly onDevice: (stop: () => Promise<void>) => void;
     readonly run: Parameters<typeof runMobileLane>[0]["run"];
+    /** The devices, started once per run: before the author when it records the app's first screen (REQ-EXEC-22). */
+    readonly device: () => Promise<PreparedMobile>;
   },
 ): Promise<Map<string, CaseResultFile>> {
-  const { project, masker } = session;
-  const { codeHosts } = buildAdapters(
-    project,
-    {
-      fetch: ports.fetch,
-      logger: session.logger,
-      now: ports.now,
-      resolveSecret: (r) => session.resolveSecret(r),
-      registerSecret: (v) => {
-        masker.register(v);
-      },
-    },
-    ports,
-  );
-  session.events.emit("run", SYSTEM, "mobile.prepare", { cases: mobileCases.map((c) => c.id) });
-  const device = await (ports.mobileDevice?.() ??
-    prepareMobile(session, env.baseUrl, codeHosts, ports.env["APPIUM_HOME"], {
-      allowBuild: options.build,
-      // REQ-EXEC-16/AC2: --headed shows the emulator window.
-      headed: options.headed,
-    }));
+  const { project } = session;
+  const device = await options.device();
   if (!device.ok) {
     io.writeError(`Mobile cases are BLOCKED: ${device.reason}\n`);
     await writeBlocked(
@@ -676,6 +798,11 @@ async function executeCases(
       .filter((x): x is string => x !== undefined),
   );
   const live = run.live;
+  const devices = mobileDevices(session, env, ports, {
+    build: run.build,
+    headed: live?.headed === true,
+    cases: plan.cases.filter((c) => c.type === "mobile").map((c) => c.id),
+  });
   // REQ-EXEC-06: ui.goto() may open a deep link only when every configured native app declares a scheme.
   const apps = [project.config.mobile?.android, project.config.mobile?.ios].filter((a) => a !== undefined);
   const specChecks = { deepLinks: apps.length > 0 && apps.every((a) => a.deep_link_scheme !== undefined) };
@@ -724,10 +851,17 @@ async function executeCases(
       mcp: { servers: project.config.mcp.servers, allowedOrigins: [env.origin] },
       specChecks,
     };
+    const context = await buildChangeContext(ws, [], { indexCache: codeIndexCache(project) });
+    // REQ-EXEC-22: the author sees what the running application shows, recorded by this trusted code.
+    const snapshot = await snapshotForAuthor(session, plan, missing, env, ports, {
+      knownPages: context.ui?.pages ?? [],
+      device: missing.some((c) => c.type === "mobile") ? devices.get : undefined,
+      io,
+    });
     const authored = await runAuthor(
       deps,
       { ...plan, cases: missing },
-      await buildChangeContext(ws, [], { indexCache: codeIndexCache(project) }),
+      { ...context, ...(snapshot.length > 0 ? { snapshot } : {}) },
       analysis,
       Object.keys(env.profile.accounts),
       () =>
@@ -955,10 +1089,16 @@ async function executeCases(
   const mobileCases = active.filter((c) => c.type === "mobile" && specs.has(c.id));
   const mobileRan = new Map<string, CaseResultFile>();
   const mobileLane = async (): Promise<void> => {
-    if (mobileCases.length === 0) return;
-    for (const [id, r] of await runMobile(session, plan, mobileCases, env, io, ports, results, {
-      build: run.build,
-      headed: live?.headed === true,
+    if (mobileCases.length === 0) {
+      // Started for the snapshot but nothing to run on it: stop it now.
+      if (devices.started()) {
+        const d = await devices.get();
+        if (d.ok) await d.stop();
+      }
+      return;
+    }
+    for (const [id, r] of await runMobile(session, plan, mobileCases, io, results, {
+      device: devices.get,
       onDevice: run.onDevice,
       sequential: lanes.sequential,
       run: (factory, cases, where) =>
