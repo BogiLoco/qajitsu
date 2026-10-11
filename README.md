@@ -1100,6 +1100,8 @@ verification: { auditor: optional, canary: true, triage: on }
   [Knowledge base](#5-knowledge-base)
 - **Failure hints.** Every FAILED case gets a suggested cause (product bug, test bug, environment, data) citing
   steps, assertions, evidence or logs; code drops hints without real evidence and a hint never changes a status.
+  Every BLOCKED case gets the likely cause (spec, plan, environment, tooling, configuration) and the next step to
+  take, printed under the result table of `qj run` and shown in the matrix and report.
   [docs/guides/models-and-verification.md](docs/guides/models-and-verification.md)
 - **Browser and viewport matrix.** `web: { matrix: { browsers: [chromium, firefox, webkit], viewports: [...] } }`
   runs web cases in every combination; the matrix, report and ticket comment show the status per combination, and a
@@ -1230,7 +1232,7 @@ qj evidence DEMO-1 --failed
   model for `planner` and `author`, a cheap or local one for `summary` and `auditor` is a good start. Measure with
   `qj bench`. Declare capabilities (`tools`, `structured_output`, `vision`, `context_window`) and `cost_per_mtok`.
 - Cost and time: `models.token_budget`, `environments.retries`, `execution.workers` (`environments.workers` is the default), `execution.web_combinations`, `web.action_timeout_ms`.
-- Strictness: `verification.auditor` (`optional`, `required`, `off`), `verification.canary: true`, `verification.triage` (`on`, `off`) for failure hints.
+- Strictness: `verification.auditor` (`optional`, `required`, `off`), `verification.canary: true`, `verification.triage` (`on`, `off`) for hints on FAILED and BLOCKED cases.
 - Better plans: domain notes in `.qa/knowledge/`, clear acceptance criteria in tickets, test ids in the UI
   (`web.test_id_attribute` if they are not `data-testid`; accessibility ids or resource ids in mobile apps). Without
   test ids QAJitsu uses roles, labels and texts.

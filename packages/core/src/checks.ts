@@ -80,3 +80,45 @@ export const TriageRecordSchema = z.discriminatedUnion("status", [
 
 /** Parsed `checks/triage.json`. */
 export type TriageRecord = z.infer<typeof TriageRecordSchema>;
+
+/**
+ * Why a case could not be judged (REQ-VER-13/AC1): the generated test, the plan, the environment, the tooling (device,
+ * browser, Appium) or the configuration.
+ */
+export const BLOCKED_CATEGORIES = ["spec", "plan", "environment", "tooling", "configuration"] as const;
+
+/** What a BLOCKED hint cites: a step, an evidence or log file, a line of the spec (`12`) or the attempt's `error`. */
+export const BlockedCiteSchema = z.strictObject({
+  kind: z.enum(["step", "evidence", "log", "spec", "error"]),
+  ref: z.string().min(1).max(300),
+});
+
+/** One hint for one BLOCKED case: the likely cause and what to do next, with citations code verified. */
+export const BlockedHintSchema = z.strictObject({
+  caseId: z.string(),
+  category: z.enum(BLOCKED_CATEGORIES),
+  justification: z.string().min(1).max(600),
+  next: z.string().min(1).max(300),
+  cites: z.array(BlockedCiteSchema).min(1),
+});
+
+/** A hint for a BLOCKED case. */
+export type BlockedHint = z.infer<typeof BlockedHintSchema>;
+
+/**
+ * `checks/blocked.json`: hints for BLOCKED cases (REQ-VER-13). Written by the orchestrator after code dropped hints
+ * without real citations; never read by status computation (invariant 1).
+ */
+export const BlockedRecordSchema = z.discriminatedUnion("status", [
+  z.strictObject({
+    schema: z.literal(1),
+    status: z.literal("done"),
+    model: z.string(),
+    hints: z.array(BlockedHintSchema),
+    dropped: z.array(z.string()).default([]),
+  }),
+  z.strictObject({ schema: z.literal(1), status: z.literal("failed"), error: z.string() }),
+]);
+
+/** Parsed `checks/blocked.json`. */
+export type BlockedRecord = z.infer<typeof BlockedRecordSchema>;

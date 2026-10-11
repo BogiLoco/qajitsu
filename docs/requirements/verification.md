@@ -170,7 +170,7 @@ the label is only a hint.
 
 ### REQ-VER-13 · Why a case was BLOCKED
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-VER-12, INV-1, INV-5
@@ -180,6 +180,6 @@ explains the cause and the next step in the user's terms; the status stays BLOCK
 
 **Acceptance criteria**
 
-- [ ] AC1: Each BLOCKED case gets a hint: `spec` (the generated test is wrong, e.g. an operation a native app does not have), `plan` (an expectation names something the application does not show), `environment`, `tooling` (device, browser, Appium) or `configuration`, with a next step and citations of the error, the spec line, the journal or the page source.
-- [ ] AC2: The hint never changes the status; a hint without an existing citation is dropped; a model error leaves the case without a hint.
-- [ ] AC3: `qj run` prints the hint under the summary table, and the report and matrix show it as a suggestion, separate from the computed status.
+- [x] AC1: Each BLOCKED case gets a hint: `spec` (the generated test is wrong, e.g. an operation a native app does not have), `plan` (an expectation names something the application does not show), `environment`, `tooling` (device, browser, Appium) or `configuration`, with a next step and citations of the error, the spec line, the journal or the page source.
+- [x] AC2: The hint never changes the status; a hint without an existing citation is dropped; a model error leaves the case without a hint.
+- [x] AC3: `qj run` prints the hint under the summary table, and the report and matrix show it as a suggestion, separate from the computed status.

@@ -32,6 +32,7 @@ import {
   selectExecutableSpecs,
   planForLocale,
   webCombinations,
+  type BlockedRecord,
   type CaseResultFile,
   type Plan,
   type UiElementFact,
@@ -45,7 +46,7 @@ import { buildAdapters, type RuntimePorts } from "../adapters.js";
 import { codeIndexCache, openSession, type ModelPorts, type RunSession } from "../session.js";
 import type { CommandIO } from "./fetch.js";
 import { anchorJournal, computeVerdict, writeReports } from "./verdict.js";
-import { auditRun, triageRun, runCanary } from "./checks.js";
+import { auditRun, blockedRun, triageRun, runCanary } from "./checks.js";
 import { createManualPrompter } from "./manual.js";
 import { formatEstimate, readRunHistory } from "./estimate.js";
 import { rootOf } from "./runs.js";
@@ -623,6 +624,18 @@ export async function runRun(
       if (triage?.status === "failed") io.writeError(`Failure hints not available: ${triage.error}\n`);
       if (triage) await writeReports(session, await computeVerdict(session, ports.now));
     }
+    // REQ-VER-13: why each BLOCKED case could not be judged and what to do next; suggestions, never statuses.
+    let blockedHints: BlockedRecord | undefined;
+    if (
+      ws.record.data["bench"] === undefined &&
+      ws.record.data["regression"] === undefined &&
+      verdict.cases.some((c) => c.status === "BLOCKED")
+    ) {
+      blockedHints = await blockedRun(session, ports.now);
+      if (blockedHints?.status === "failed")
+        io.writeError(`Hints for BLOCKED cases not available: ${blockedHints.error}\n`);
+      if (blockedHints) await writeReports(session, await computeVerdict(session, ports.now));
+    }
     await ws.update({
       status: "completed",
       stage: "run",
@@ -635,6 +648,13 @@ export async function runRun(
     const telemetry = await exportRunTelemetry(session, ports.fetch);
     if (telemetry?.error !== undefined) io.writeError(`Telemetry export failed: ${telemetry.error}\n`);
     io.write(`${verdict.matrixMd}\n`);
+    // REQ-VER-13/AC3: under the table, apart from the computed statuses.
+    if (blockedHints?.status === "done" && blockedHints.hints.length > 0)
+      io.write(
+        `Why BLOCKED (suggestions by ${blockedHints.model}, not statuses):\n${blockedHints.hints
+          .map((h) => `  ${h.caseId} ${h.category}: ${h.justification}\n    Next: ${h.next}`)
+          .join("\n")}\n`,
+      );
     io.write(`Report: ${ws.path("report", "report.html")}\n`);
     if (!verdict.ok) {
       io.writeError(

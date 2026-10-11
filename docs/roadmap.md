@@ -260,7 +260,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-EXEC-23](requirements/execution.md#req-exec-23--mobile-app-without-access-to-its-code) Mobile app without access to its code (should, accepted, AC 0/3)
 - [REQ-VER-11](requirements/verification.md#req-ver-11--bug-fix-verification-fails-before-passes-after) Bug fix verification: fails before, passes after (should, implemented, AC 4/4)
 - [REQ-VER-12](requirements/verification.md#req-ver-12--failure-triage-hints) Failure triage hints (should, implemented, AC 4/4)
-- [REQ-VER-13](requirements/verification.md#req-ver-13--why-a-case-was-blocked) Why a case was BLOCKED (should, accepted, AC 0/3)
+- [REQ-VER-13](requirements/verification.md#req-ver-13--why-a-case-was-blocked) Why a case was BLOCKED (should, implemented, AC 3/3)
 - [REQ-EVD-07](requirements/evidence.md#req-evd-07--passive-observations-during-tests) Passive observations during tests (should, implemented, AC 5/5)
 - [REQ-EVD-08](requirements/evidence.md#req-evd-08--failure-screenshots-mark-the-failing-element) Failure screenshots mark the failing element (should, implemented, AC 5/5)
 - [REQ-PUB-05](requirements/publishing.md#req-pub-05--optional-integrations) Optional integrations (could, deferred, AC 1/4)

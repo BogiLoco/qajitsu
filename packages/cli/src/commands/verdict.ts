@@ -7,6 +7,7 @@ import {
   AuditRecordSchema,
   CanaryRecordSchema,
   TriageRecordSchema,
+  BlockedRecordSchema,
   CaseResultFileSchema,
   loadApprovedPlan,
   parseEventLines,
@@ -291,12 +292,16 @@ export async function computeVerdict(
   const canary = await readChecked("canary.json", CanaryRecordSchema, verification.canary);
   // REQ-VER-12: hints are shown next to the results and never read by status computation (invariant 1).
   const triage = await readChecked("triage.json", TriageRecordSchema, false);
-  const hintOf = new Map(
-    (triage?.status === "done" ? triage.hints : []).map((h) => [
-      h.caseId,
-      masker.maskText(`${h.category}: ${h.justification}`),
-    ]),
-  );
+  // REQ-VER-13: hints for BLOCKED cases, shown the same way, with the next step.
+  const blockedHints = await readChecked("blocked.json", BlockedRecordSchema, false);
+  const hintOf = new Map([
+    ...(triage?.status === "done" ? triage.hints : []).map(
+      (h) => [h.caseId, masker.maskText(`${h.category}: ${h.justification}`)] as const,
+    ),
+    ...(blockedHints?.status === "done" ? blockedHints.hints : []).map(
+      (h) => [h.caseId, masker.maskText(`${h.category}: ${h.justification} Next: ${h.next}`)] as const,
+    ),
+  ]);
   const checked = applyVerificationChecks(combined, audit, canary, integrity);
   const cases = combined.map((c, i) => ({ ...c, status: checked[i]?.status ?? c.status }));
   const checkNotes = [
@@ -323,6 +328,12 @@ export async function computeVerdict(
       ? [`Failure hints by ${triage.model}: suggestions with cited evidence, not statuses.`]
       : []),
     ...(triage?.status === "failed" ? [`Failure hints not available: ${triage.error}`] : []),
+    ...(blockedHints?.status === "done" && blockedHints.hints.length > 0
+      ? [`Hints for BLOCKED cases by ${blockedHints.model}: likely cause and next step, not statuses.`]
+      : []),
+    ...(blockedHints?.status === "failed"
+      ? [`Hints for BLOCKED cases not available: ${blockedHints.error}`]
+      : []),
     ...checked
       .filter((c) => c.downgradedBy)
       .map((c) => `${c.caseId} → NEEDS_REVIEW (${c.downgradedBy ?? ""})`),
@@ -358,7 +369,9 @@ export async function computeVerdict(
       status: c.status,
       stepsPassed: c.stepsPassed,
       stepsTotal: c.stepsTotal,
-      ...(c.status === "FAILED" && hintOf.has(c.caseId) ? { hint: hintOf.get(c.caseId) } : {}),
+      ...((c.status === "FAILED" || c.status === "BLOCKED") && hintOf.has(c.caseId)
+        ? { hint: hintOf.get(c.caseId) }
+        : {}),
       ...manualOf(c.caseId),
       ...(() => {
         const primaryStatus = evaluated.cases.find((e) => e.caseId === c.caseId)?.status ?? c.status;

@@ -18,3 +18,4 @@ export * from "./matrix.js";
 export * from "./ui-inventory.js";
 export * from "./plan-quality.js";
 export * from "./ui-snapshot.js";
+export * from "./blocked.js";
