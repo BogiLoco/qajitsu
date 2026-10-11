@@ -117,7 +117,7 @@ webhook.site (hosted or self-hosted); the provider sits behind an interface.
 
 ### REQ-ENV-09 · Account pools
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: INV-8, REQ-CFG-07, REQ-EXEC-10, REQ-EXEC-19
@@ -126,8 +126,8 @@ Cases running at the same time never interfere through a shared test account.
 
 **Acceptance criteria**
 
-- [ ] AC1: An account alias in an environment profile can be a pool of accounts (`pool:`); a single account is a pool of one.
-- [ ] AC2: While a case runs it holds, for each alias its spec uses, one account of the pool for itself; no two cases running at the same time share an account unless the alias is marked `shared: true`.
-- [ ] AC3: A pool account can be limited to lanes (`lanes: [mobile]`), e.g. for apps that allow one session per user.
-- [ ] AC4: When no account is free the case waits up to `execution.account_wait_s`, then it is BLOCKED with the reason; it is never given an account in use.
-- [ ] AC5: The journal records which pool member each attempt used (`user:standard#2`, never the user name); `qj env check` warns when a pool is smaller than the number of cases that can need it at once.
+- [x] AC1: An account alias in an environment profile can be a pool of accounts (`pool:`); a single account is a pool of one.
+- [x] AC2: While a case runs it holds, for each alias its spec uses, one account of the pool for itself; no two cases running at the same time share an account unless the alias is marked `shared: true`.
+- [x] AC3: A pool account can be limited to lanes (`lanes: [mobile]`), e.g. for apps that allow one session per user.
+- [x] AC4: When no account is free the case waits up to `execution.account_wait_s`, then it is BLOCKED with the reason; it is never given an account in use.
+- [x] AC5: The journal records which pool member each attempt used (`user:standard#2`, never the user name); `qj env check` warns when a pool is smaller than the number of cases that can need it at once.

@@ -350,6 +350,7 @@ function contextFor(
     playwrightCli: input.ports.playwrightCli,
     acceptedLicences,
     log: input.ports.log,
+    android: input.needs.android,
     ...(input.ports.artifacts ? { artifacts: input.ports.artifacts } : {}),
     ...paths,
   };

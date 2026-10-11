@@ -1,13 +1,23 @@
-import { webCombinations, type ProjectConfig } from "@qajitsu/core";
+import { mobileDevices, webCombinations, type ProjectConfig } from "@qajitsu/core";
 import type { ToolchainFile } from "./config.js";
 import { ANDROID_DEFAULTS, type ToolId } from "./manifest.js";
 
-/** The Android SDK packages a project needs and its emulator. */
+/** One emulator a project starts: its AVD, system image and hardware profile. */
+export interface EmulatorNeed {
+  readonly avd: string;
+  readonly systemImage: string;
+  /** avdmanager hardware profile, e.g. `pixel_8`. */
+  readonly device?: string | undefined;
+}
+
+/** The Android SDK packages a project needs and its emulators. */
 export interface AndroidNeeds {
   /** sdkmanager package ids, e.g. `platform-tools`, `platforms;android-34`. */
   readonly packages: readonly string[];
-  /** System image and AVD of the configured emulator. */
-  readonly emulator?: { readonly systemImage: string; readonly avd: string };
+  /** One entry per AVD, in device order (REQ-EXEC-20/AC5); empty without an emulator. */
+  readonly emulators: readonly EmulatorNeed[];
+  /** Emulators that run at the same time, for the memory precheck. */
+  readonly atOnce: number;
 }
 
 /** What a project needs from the toolchain, and why (REQ-GEN-06/AC1). */
@@ -43,16 +53,23 @@ export function toolchainNeeds(config: ProjectConfig, versions: ToolchainFile["v
     tools.set("android", "Android tests");
     const platform = versions.android?.platform ?? ANDROID_DEFAULTS.platform;
     const buildTools = versions.android?.build_tools ?? ANDROID_DEFAULTS.buildTools;
-    const emulator = mobile.android.emulator;
+    const devices = mobileDevices(mobile).flatMap((d) => (d.kind === "emulator" ? [d.profile] : []));
+    // Copies of one emulator share its AVD: one entry per AVD.
+    const emulators = [...new Map(devices.map((p) => [p.avd, p])).values()].map((p) => ({
+      avd: p.avd,
+      systemImage: p.system_image,
+      ...(p.device ? { device: p.device } : {}),
+    }));
     android = {
       packages: [
         "platform-tools",
         ...(mobile.android.app.source === "build"
           ? [`platforms;android-${String(platform)}`, `build-tools;${buildTools}`]
           : []),
-        ...(emulator ? ["emulator", emulator.system_image] : []),
+        ...(emulators.length > 0 ? ["emulator", ...new Set(emulators.map((e) => e.systemImage))] : []),
       ],
-      ...(emulator ? { emulator: { systemImage: emulator.system_image, avd: emulator.avd } } : {}),
+      emulators,
+      atOnce: devices.length,
     };
   }
   if (mobile && mobile.appium.url === undefined) {

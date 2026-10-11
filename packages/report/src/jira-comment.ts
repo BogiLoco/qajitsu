@@ -1,6 +1,6 @@
 import { formatVersions } from "./versions.js";
 import type { RunObservation } from "@qajitsu/core";
-import { countStatuses, summaryLine, type MatrixRow } from "./matrix.js";
+import { combinationsTitle, countStatuses, summaryLine, type MatrixRow } from "./matrix.js";
 
 /** One failed assertion shown in the comment (REQ-PUB-01/AC3). */
 export interface CommentFailure {
@@ -68,7 +68,12 @@ const hintLines = (m: CommentModel): string[] =>
   m.rows.flatMap((r) => (r.hint === undefined ? [] : [`${r.caseId}: ${r.hint}`]));
 
 /** Status per browser and viewport combination (REQ-EXEC-13/AC2). */
-const COMBOS_TITLE = "Browsers and viewports";
+const combosTitle = (m: CommentModel): string =>
+  ({
+    Browsers: "Browsers and viewports",
+    Devices: "Devices",
+    "Browsers / devices": "Browsers, viewports and devices",
+  })[combinationsTitle(m.rows)];
 const comboLines = (m: CommentModel): string[] =>
   m.rows.flatMap((r) => (r.combinations === undefined ? [] : [`${r.caseId}: ${r.combinations}`]));
 
@@ -176,7 +181,7 @@ export function renderJiraAdf(m: CommentModel): { version: 1; type: "doc"; conte
     content.push(bullets(m.fixCheck.map((l) => [text(l)])));
   }
   if (comboLines(m).length > 0) {
-    content.push(heading(4, COMBOS_TITLE));
+    content.push(heading(4, combosTitle(m)));
     content.push(bullets(comboLines(m).map((l) => [text(l)])));
   }
   if (localeLines(m).length > 0) {
@@ -249,7 +254,7 @@ export function renderJiraWiki(m: CommentModel): string {
   if (m.fixCheck && m.fixCheck.length > 0)
     lines.push("", "h4. Fix verification", ...m.fixCheck.map((l) => `* ${wikiEscape(l)}`));
   if (comboLines(m).length > 0)
-    lines.push("", `h4. ${COMBOS_TITLE}`, ...comboLines(m).map((l) => `* ${wikiEscape(l)}`));
+    lines.push("", `h4. ${combosTitle(m)}`, ...comboLines(m).map((l) => `* ${wikiEscape(l)}`));
   if (localeLines(m).length > 0)
     lines.push("", `h4. ${LOCALES_TITLE}`, ...localeLines(m).map((l) => `* ${wikiEscape(l)}`));
   if (manualLines(m).length > 0)
@@ -282,7 +287,7 @@ export function renderCommentPreview(m: CommentModel): string {
   }
   if (m.fixCheck && m.fixCheck.length > 0)
     lines.push("", "Fix verification:", ...m.fixCheck.map((l) => `  ${l}`));
-  if (comboLines(m).length > 0) lines.push("", `${COMBOS_TITLE}:`, ...comboLines(m).map((l) => `  ${l}`));
+  if (comboLines(m).length > 0) lines.push("", `${combosTitle(m)}:`, ...comboLines(m).map((l) => `  ${l}`));
   if (localeLines(m).length > 0) lines.push("", `${LOCALES_TITLE}:`, ...localeLines(m).map((l) => `  ${l}`));
   if (manualLines(m).length > 0) lines.push("", `${MANUAL_TITLE}:`, ...manualLines(m).map((l) => `  ${l}`));
   if (hintLines(m).length > 0) lines.push("", `${HINTS_TITLE}:`, ...hintLines(m).map((l) => `  ${l}`));

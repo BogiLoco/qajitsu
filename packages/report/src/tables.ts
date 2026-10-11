@@ -1,5 +1,5 @@
 import type { MatrixRow } from "./matrix.js";
-import { summaryLine } from "./matrix.js";
+import { combinationsTitle, summaryLine } from "./matrix.js";
 import { zip } from "./zip.js";
 
 const HEADER = [
@@ -49,7 +49,7 @@ const headerOf = (rows: readonly MatrixRow[]): readonly string[] => {
   const f = flagsOf(rows);
   return [
     ...HEADER,
-    ...(f.combos ? ["Browsers"] : []),
+    ...(f.combos ? [combinationsTitle(rows)] : []),
     ...(f.locales ? ["Locales"] : []),
     ...(f.manual ? ["Manual steps"] : []),
     ...(f.hints ? ["Hint (suggestion)"] : []),

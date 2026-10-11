@@ -15,6 +15,7 @@ import {
   journalAnchor,
   OBSERVATIONS_FILE,
   planForLocale,
+  mobileDevices,
   webCombinations,
   type CaseResultFile,
   type TestStatus,
@@ -184,6 +185,33 @@ export async function computeVerdict(
           { combo: combo.id, status: c.status },
         ]);
   }
+  // REQ-EXEC-20/AC3: in matrix mode every further device is evaluated by the same code; a mobile case is PASSED only
+  // when it passed on every device.
+  const mobile = session.project.config.mobile;
+  const devices = mobile?.distribute === "matrix" ? mobileDevices(mobile).map((d) => d.name) : [];
+  const perDevice = new Map<string, { combo: string; status: TestStatus }[]>();
+  for (const name of devices.slice(1)) {
+    const dir = ws.path("results", "devices", name);
+    const deviceResults = new Map<string, CaseResultFile>();
+    for (const file of (await readdir(dir).catch(() => [] as string[])).filter((f) => f.endsWith(".json"))) {
+      const text = await readFile(join(dir, file), "utf8");
+      const parsed = CaseResultFileSchema.safeParse(JSON.parse(text) as unknown);
+      if (parsed.success && parsed.data.caseId === file.slice(0, -5)) {
+        deviceResults.set(parsed.data.caseId, parsed.data);
+        matrixResults.push({ name: `results/devices/${name}/${file}`, text });
+      } else malformed.push(`results/devices/${name}/${file}: not a valid results file`);
+    }
+    for (const c of plan.cases.filter((x) => x.type === "mobile")) {
+      // A device that left no result for a case that ran on the primary device is BLOCKED, never skipped.
+      const status = deviceResults.has(c.id)
+        ? evaluateCases({ ...plan, cases: [c] }, deviceResults, manifest, manifestCheck)[0]?.status
+        : results.has(c.id)
+          ? ("BLOCKED" as TestStatus)
+          : undefined;
+      if (status !== undefined)
+        perDevice.set(c.id, [...(perDevice.get(c.id) ?? []), { combo: name, status }]);
+    }
+  }
   // REQ-EXEC-14: each locale run is evaluated against the plan resolved for that locale.
   const perLocale = new Map<string, { locale: string; status: TestStatus }[]>();
   for (const name of (await readdir(ws.path("results", "locale")).catch(() => [] as string[])).sort()) {
@@ -202,7 +230,11 @@ export async function computeVerdict(
         perLocale.set(c.caseId, [...(perLocale.get(c.caseId) ?? []), { locale: name, status: c.status }]);
   }
   const combined = evaluated.cases.map((c) => {
-    const others = [...(perCombination.get(c.caseId) ?? []), ...(perLocale.get(c.caseId) ?? [])];
+    const others = [
+      ...(perCombination.get(c.caseId) ?? []),
+      ...(perDevice.get(c.caseId) ?? []),
+      ...(perLocale.get(c.caseId) ?? []),
+    ];
     return others.length > 0
       ? { ...c, status: combineStatuses([c.status, ...others.map((o) => o.status)]) }
       : c;
@@ -214,6 +246,9 @@ export async function computeVerdict(
       : undefined;
   };
   const combinationsOf = (caseId: string, primaryStatus: TestStatus): string | undefined => {
+    const onDevices = perDevice.get(caseId);
+    if (onDevices && devices[0])
+      return [`${devices[0]} ${primaryStatus}`, ...onDevices.map((o) => `${o.combo} ${o.status}`)].join(", ");
     const others = perCombination.get(caseId);
     return others && combos[0]
       ? [`${combos[0].id} ${primaryStatus}`, ...others.map((o) => `${o.combo} ${o.status}`)].join(", ")

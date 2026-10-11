@@ -48,6 +48,18 @@ export function summaryLine(rows: readonly MatrixRow[]): string {
 const cell = (value: string): string => value.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
 
 /**
+ * Title of the combinations column (REQ-EXEC-13, REQ-EXEC-20/AC3): browsers for web cases, devices for mobile cases.
+ */
+export function combinationsTitle(rows: readonly MatrixRow[]): "Browsers" | "Devices" | "Browsers / devices" {
+  const kinds = new Set(
+    rows
+      .filter((r) => r.combinations !== undefined)
+      .map((r) => (r.type === "mobile" ? "Devices" : "Browsers")),
+  );
+  return kinds.size > 1 ? "Browsers / devices" : kinds.has("Devices") ? "Devices" : "Browsers";
+}
+
+/**
  * Renders the matrix as Markdown, the basis of the Jira comment (REQ-EVD-05, REQ-PUB-01).
  *
  * @param rows - Rows in approved-plan order.
@@ -66,7 +78,7 @@ export function renderMatrixMarkdown(rows: readonly MatrixRow[]): string {
     "Status",
     "Steps OK",
     "Evidence",
-    ...(combos ? ["Browsers"] : []),
+    ...(combos ? [combinationsTitle(rows)] : []),
     ...(locales ? ["Locales"] : []),
     ...(manual ? ["Manual steps"] : []),
     ...(hints ? ["Hint (suggestion)"] : []),

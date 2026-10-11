@@ -103,4 +103,40 @@ describe("browser and viewport matrix (REQ-EXEC-13)", () => {
       "chromium-desktop PASSED, firefox-desktop BLOCKED",
     );
   }, 240_000);
+
+  it.each([
+    [1, 1],
+    [2, 2],
+  ])(
+    "REQ-EXEC-19/AC3: execution.web_combinations %i runs up to %i browser combinations at the same time",
+    async (atOnce, expectedPeak) => {
+      let active = 0;
+      let peak = 0;
+      const p = await setup(
+        "{ browsers: [chromium], viewports: [{ name: desktop, width: 1280, height: 800 }, { name: mobile, width: 390, height: 844 }] }",
+        {
+          wrapExecutor: (inner) => async (input) => {
+            active += 1;
+            peak = Math.max(peak, active);
+            try {
+              await new Promise((r) => setTimeout(r, 200));
+              return await inner(input);
+            } finally {
+              active -= 1;
+            }
+          },
+        },
+      );
+      const yaml = join(p.project, ".qa", "qa.project.yaml");
+      await writeFile(
+        yaml,
+        `${await readFile(yaml, "utf8")}\nexecution: { web_combinations: ${String(atOnce)} }\n`,
+      );
+      const r = await p.executed();
+      expect(r.exitCode).toBe(0);
+      expect(await statuses(p.runDir)).toEqual({ "TC-01": "PASSED", "TC-02": "PASSED" });
+      expect(peak).toBe(expectedPeak);
+    },
+    240_000,
+  );
 });

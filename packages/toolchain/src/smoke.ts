@@ -74,12 +74,13 @@ async function smokeAndroid(
         : `sdkmanager does not list ${missing.join(", ")}`,
       "qj setup --reinstall android",
     );
-  if (android?.emulator && noAccel)
+  const first = android?.emulators[0];
+  if (first && noAccel)
     return ok(
       "android",
       `sdkmanager lists ${String(packages.length)} packages; acceleration not checked (--ignore-check virtualisation)`,
     );
-  if (android?.emulator) {
+  if (first) {
     const accel = await run(ctx, join(sdk, "emulator", "emulator"), ["-accel-check"], env);
     // The emulator prints "accel:", the status (0 means usable) and a description.
     if (!/accel:\s*\n\s*0\b/.test(accel.stdout))
@@ -89,7 +90,7 @@ async function smokeAndroid(
         "enable hardware virtualisation (HVF/KVM) or run Android tests on a device farm (mobile.appium.url)",
       );
     if (boot && ports.bootEmulator) {
-      const error = await ports.bootEmulator(sdk, android.emulator.avd, android.emulator.systemImage, env);
+      const error = await ports.bootEmulator(sdk, first.avd, first.systemImage, env);
       if (error !== undefined)
         return failed(
           "android",
@@ -101,7 +102,7 @@ async function smokeAndroid(
   }
   return ok(
     "android",
-    `sdkmanager lists ${String(packages.length)} packages${android?.emulator ? "; acceleration check passed" : ""}`,
+    `sdkmanager lists ${String(packages.length)} packages${first ? "; acceleration check passed" : ""}`,
   );
 }
 

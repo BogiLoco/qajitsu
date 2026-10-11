@@ -19,6 +19,7 @@ import {
   type ToolId,
 } from "./manifest.js";
 import type { Network, RunExec } from "./network.js";
+import type { AndroidNeeds } from "./needs.js";
 import { managedAndroid, managedAppiumHome, type PlanStep } from "./plan.js";
 import { toolDir, type InstalledTool } from "./registry.js";
 
@@ -44,6 +45,8 @@ export interface InstallContext {
   readonly javaReady: boolean;
   /** The Appium executable the drivers are installed with. */
   readonly appiumBin?: string | undefined;
+  /** The project's emulators: the image and hardware profile of each AVD to create (REQ-EXEC-20/AC5). */
+  readonly android?: AndroidNeeds | undefined;
   /** The pinned archives; tests replace them, everything else uses the manifest's. */
   readonly artifacts?: { readonly java?: Artifact; readonly cmdlineTools?: Artifact } | undefined;
   /** Licences accepted on the user's behalf, collected for the summary (AC4). */
@@ -331,16 +334,32 @@ export async function installAndroid(
     );
   }
   const avds = step.parts.filter((p) => p.startsWith("avd:")).map((p) => p.slice(4));
-  const image = [...packages, ...(current?.parts ?? [])].find((p) => p.startsWith("system-images;"));
+  const images = [...packages, ...(current?.parts ?? [])].filter((p) => p.startsWith("system-images;"));
   for (const name of avds) {
+    const wanted = ctx.android?.emulators.find((e) => e.avd === name);
+    const image = wanted?.systemImage ?? images[0];
     if (image === undefined)
       throw new AdapterError("AVD_IMAGE_MISSING", `no system image for AVD ${name}`, {});
     await mkdir(avd, { recursive: true });
-    await must(ctx, avdmanagerOf(sdk), ["create", "avd", "--name", name, "--package", image, "--force"], {
-      env,
-      // "Do you wish to create a custom hardware profile?" gets "no".
-      input: "no\n",
-    });
+    await must(
+      ctx,
+      avdmanagerOf(sdk),
+      [
+        "create",
+        "avd",
+        "--name",
+        name,
+        "--package",
+        image,
+        ...(wanted?.device ? ["--device", wanted.device] : []),
+        "--force",
+      ],
+      {
+        env,
+        // "Do you wish to create a custom hardware profile?" gets "no".
+        input: "no\n",
+      },
+    );
   }
   return {
     tool: "android",

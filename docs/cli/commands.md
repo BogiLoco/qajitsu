@@ -259,6 +259,10 @@ statuses, gates, auditor and canary run, reports are written.
 - `--step`: in a terminal, pause before every step with its action and expected result: Enter runs it, `c` runs the
   rest without stopping, `q` stops the case (BLOCKED, also in its retries); paused time does not count toward the
   case's time limit
+- `--sequential`: one case at a time in plan order, across the API, web and mobile lanes and every device
+  (REQ-EXEC-19/AC2); also `execution.sequential: true`. Without it the lanes run at the same time: API cases
+  (`execution.workers.api`), web cases (`execution.workers.web`, with `execution.web_combinations` browser combinations
+  at once) and mobile cases on every device; each case holds its own pool accounts while it runs (REQ-ENV-09)
 - `--fix-check`: with `--build`, verify a bug fix (REQ-VER-11): after this run, a sibling run builds the commit the
   change branched from and runs the same approved plan and specs; every case marked `reproduces` must be FAILED before
   the fix and PASSED with it. Both results appear side by side in the report and the Jira comment.
@@ -575,7 +579,9 @@ Exit codes: `0` searched, `3` errors.
 
 ### `qajitsu env check`
 
-Lists every missing or invalid variable of the environment profile and the `--build` configuration; starts nothing.
+Lists every missing or invalid variable of the environment profile and the `--build` configuration (every account of
+a pool included); starts nothing. Warns (`! accounts:`) when an account pool is smaller than the number of cases that
+can need it at once (REQ-ENV-09/AC5); those cases wait for a free account, which is not an error.
 
 - `--env <profile>`: environment profile (default: `build.profile` or `environments.default`)
 

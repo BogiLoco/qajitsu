@@ -271,7 +271,7 @@ difference asks a person to look; it does not fail the case.
 
 ### REQ-EXEC-19 · Execution lanes and sequential runs
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: INV-1, REQ-EXEC-10, REQ-EXEC-13, REQ-EXEC-16, REQ-ENV-09
@@ -281,15 +281,15 @@ once; a run can also go one case at a time.
 
 **Acceptance criteria**
 
-- [ ] AC1: API, web and mobile cases run in separate lanes at the same time; `execution.workers.api` and `execution.workers.web` set how many cases of each run at once (default `environments.workers`), and mobile cases start as soon as their devices are ready instead of after the other cases.
-- [ ] AC2: `qj run --sequential` (or `execution.sequential: true`) runs one case at a time in plan order across all lanes and devices; `--cases` runs only the named cases.
-- [ ] AC3: `execution.web_combinations` (default 1) runs that many browser and viewport combinations of `web.matrix` at the same time; each combination keeps its own results and evidence.
-- [ ] AC4: Order and concurrency never change how a status is computed: each case writes its own results file and evidence, and its journal events carry the case and the lane.
-- [ ] AC5: `--headed` and `--step` keep one case at a time.
+- [x] AC1: API, web and mobile cases run in separate lanes at the same time; `execution.workers.api` and `execution.workers.web` set how many cases of each run at once (default `environments.workers`), and mobile cases start as soon as their devices are ready instead of after the other cases.
+- [x] AC2: `qj run --sequential` (or `execution.sequential: true`) runs one case at a time in plan order across all lanes and devices; `--cases` runs only the named cases.
+- [x] AC3: `execution.web_combinations` (default 1) runs that many browser and viewport combinations of `web.matrix` at the same time; each combination keeps its own results and evidence.
+- [x] AC4: Order and concurrency never change how a status is computed: each case writes its own results file and evidence, and its journal events carry the case and the lane.
+- [x] AC5: `--headed` and `--step` keep one case at a time.
 
 ### REQ-EXEC-20 · Several different mobile devices
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-EXEC-06, REQ-EXEC-10, REQ-ENV-06, REQ-GEN-06, REQ-EXEC-19
@@ -298,8 +298,8 @@ Mobile cases can run on several different devices at once: to finish sooner, or 
 
 **Acceptance criteria**
 
-- [ ] AC1: `mobile.android.emulators` lists emulator profiles (name, AVD, system image, hardware profile), each started as its own emulator with its own Appium session; `mobile.ios.farm.devices` lists device and OS version pairs for a device farm.
-- [ ] AC2: `mobile.distribute: split` divides the mobile cases among the devices; `matrix` runs every mobile case on every device, the first device being the primary run.
-- [ ] AC3: In matrix mode each device keeps its own results and evidence; a case is PASSED only when it passed on every device, and the report shows the status per device.
-- [ ] AC4: A device that cannot start makes the cases it would run BLOCKED with the reason; the other devices go on.
-- [ ] AC5: `qj setup` installs the system image and creates the AVD of every emulator profile, and its memory precheck counts every emulator.
+- [x] AC1: `mobile.android.emulators` lists emulator profiles (name, AVD, system image, hardware profile), each started as its own emulator with its own Appium session; `mobile.ios.farm.devices` lists device and OS version pairs for a device farm.
+- [x] AC2: `mobile.distribute: split` divides the mobile cases among the devices; `matrix` runs every mobile case on every device, the first device being the primary run.
+- [x] AC3: In matrix mode each device keeps its own results and evidence; a case is PASSED only when it passed on every device, and the report shows the status per device.
+- [x] AC4: A device that cannot start is reported with the reason and the other devices go on: in matrix mode its results are BLOCKED, in split mode its cases run on the devices that started.
+- [x] AC5: `qj setup` installs the system image and creates the AVD of every emulator profile, and its memory precheck counts every emulator.

@@ -55,6 +55,7 @@ function fakeTools(
   } = {},
 ) {
   const calls: Call[] = [];
+  const installedPackages = new Set<string>();
   const appiumVersions = new Map<string, string>();
   const drivers = new Map<string, Record<string, { version: string }>>();
   const ok = (stdout = "", stderr = "") => Promise.resolve({ code: 0, stdout, stderr });
@@ -115,17 +116,21 @@ function fakeTools(
           ? ok("License android-sdk-license:\n---\nAccept? (y/N): y\nLicense android-sdk-preview-license:\n")
           : fail("licences not accepted");
       if (args.includes("--install")) {
-        for (const p of args.slice(args.indexOf("--install") + 1)) await touch(sdkPackagePath(root, p));
+        for (const p of args.slice(args.indexOf("--install") + 1)) {
+          installedPackages.add(p);
+          await touch(sdkPackagePath(root, p));
+        }
         return ok();
       }
       if (args.includes("--list_installed")) {
-        const listed = [
+        // What is on disk: installed here, or copied from a bundle.
+        const known = new Set([
+          ...installedPackages,
           "platform-tools",
           "emulator",
-          "platforms;android-34",
-          "build-tools;34.0.0",
           "system-images;android-34;google_apis;arm64-v8a",
-        ].filter((p) => existsSync(sdkPackagePath(root, p)));
+        ]);
+        const listed = [...known].filter((p) => existsSync(sdkPackagePath(root, p)));
         return ok(listed.map((p) => `  ${p} | 1 | x`).join("\n"));
       }
     }
@@ -269,6 +274,41 @@ describe("qj setup (REQ-GEN-06)", () => {
     // Nothing half-written is left behind, and the lock is released.
     expect((await readdir(join(input.root, "java"))).filter((f) => f.includes(".tmp"))).toEqual([]);
     expect(existsSync(join(input.root, ".setup.lock"))).toBe(false);
+  });
+
+  it("REQ-EXEC-20/AC5: every emulator profile gets its system image and its own AVD with its hardware profile", async () => {
+    const tools = fakeTools();
+    const devices = parseProjectConfig({
+      project: "shop",
+      jira: { type: "file", tickets_dir: "t", project_key: "SHOP" },
+      mobile: {
+        android: {
+          app: { source: "path", repo: "shop", path: "a.apk" },
+          app_id: "a.b",
+          emulators: [
+            {
+              name: "pixel",
+              avd: "qj-pixel",
+              system_image: "system-images;android-34;google_apis;arm64-v8a",
+              device: "pixel_8",
+            },
+            { name: "old", avd: "qj-old", system_image: "system-images;android-30;google_apis;arm64-v8a" },
+          ],
+        },
+      },
+    });
+    const input = setupInput(tools, {}, { yes: true, only: ["java", "android"] });
+    const report = await runSetup({ ...input, needs: toolchainNeeds(devices, {}) });
+    expect(report.results.map((r) => [r.tool, r.status])).toEqual([
+      ["java", "ready"],
+      ["android", "ready"],
+    ]);
+    const created = tools.calls.filter((c) => c.cmd.endsWith("avdmanager")).map((c) => c.args.join(" "));
+    expect(created).toEqual([
+      "create avd --name qj-pixel --package system-images;android-34;google_apis;arm64-v8a --device pixel_8 --force",
+      "create avd --name qj-old --package system-images;android-30;google_apis;arm64-v8a --force",
+    ]);
+    expect(existsSync(join(input.root, "android", "avd", "qj-old.avd"))).toBe(true);
   });
 
   it("REQ-GEN-06/AC4: --yes accepts the licences on the user's behalf and lists them", async () => {

@@ -165,7 +165,7 @@ function planAndroid(d: DetectedTool, input: PlanInput): PlanStep {
   const sdk = managedAndroid(input.root).sdk;
   const wantedParts = [
     ...(input.needs.android?.packages ?? ["platform-tools"]),
-    ...(input.needs.android?.emulator ? [`avd:${input.needs.android.emulator.avd}`] : []),
+    ...(input.needs.android?.emulators ?? []).map((e) => `avd:${e.avd}`),
   ];
   const entry = d.managed[0];
   const pinned = input.artifacts?.cmdlineTools ?? CMDLINE_TOOLS[hostKey(input.host)];

@@ -11,9 +11,14 @@ import {
   startAndroidEmulator,
   startAppium,
   type RunningAppium,
-  type RunningEmulator,
 } from "@qajitsu/adapter-runner-mobile";
-import { AdapterError, type CodeHost, type MobileConfig, type ProjectConfig } from "@qajitsu/core";
+import {
+  AdapterError,
+  mobileDevices,
+  type CodeHost,
+  type MobileConfig,
+  type ProjectConfig,
+} from "@qajitsu/core";
 import { unzip } from "@qajitsu/report";
 import type { RunSession } from "../session.js";
 import { headlessFor } from "./live.js";
@@ -128,8 +133,14 @@ export async function resolveAppBinary(
 export type PreparedMobile =
   | {
       readonly ok: true;
-      /** One factory per device; cases are split among them (REQ-EXEC-10/AC2). */
+      /** One factory per device that started (REQ-EXEC-10/AC2, REQ-EXEC-20). */
       readonly factories: readonly BrowserFactory[];
+      /** Name of each device of `factories`, e.g. `pixel-8` (default `device-<n>`). */
+      readonly names?: readonly string[];
+      /** Devices that did not start, with the reason (REQ-EXEC-20/AC4). */
+      readonly failed?: readonly { readonly name: string; readonly reason: string }[];
+      /** The first configured device: the primary run in matrix mode. */
+      readonly primary?: string;
       readonly stop: () => Promise<void>;
     }
   | { readonly ok: false; readonly reason: string };
@@ -182,33 +193,50 @@ export async function prepareMobile(
       if (!/^https?:\/\/[\w.-]+(:\d+)?(\/[\w./-]*)?$/.test(launchUrl))
         return { ok: false, reason: "the environment URL cannot be passed to the app launch safely" };
       const app = await resolveAppBinary(session, android.app, codeHosts, project.config);
-      if (mobile.devices > 1 && !android.emulator)
+      if (mobile.devices > 1 && !android.emulator && !android.emulators)
         return {
           ok: false,
           reason: "mobile.devices > 1 needs mobile.android.emulator (QAJitsu starts one emulator per device)",
         };
-      // Started one after another: each emulator picks a console port the ones before it do not use.
-      const emulators: RunningEmulator[] = [];
-      if (android.emulator) {
-        for (let i = 0; i < mobile.devices; i++) {
+      const list = mobileDevices(mobile);
+      // Started one after another: each emulator picks a console port the ones before it do not use. A device that
+      // does not start is reported with the reason; the others go on (REQ-EXEC-20/AC4).
+      const started: { name: string; serial?: string }[] = [];
+      const failed: { name: string; reason: string }[] = [];
+      for (const d of list) {
+        if (d.kind !== "emulator") {
+          started.push({ name: d.name });
+          continue;
+        }
+        try {
           const emulator = await startAndroidEmulator({
             sdkRoot: androidSdkRoot(android.sdk_root),
-            avd: android.emulator.avd,
-            systemImage: android.emulator.system_image,
-            headless: headlessFor(android.emulator.headless, { headed: options.headed === true }),
-            bootTimeoutMs: android.emulator.boot_timeout_s * 1000,
-            readOnly: mobile.devices > 1,
+            avd: d.profile.avd,
+            systemImage: d.profile.system_image,
+            ...(d.profile.device ? { deviceProfile: d.profile.device } : {}),
+            headless: headlessFor(d.profile.headless, { headed: options.headed === true }),
+            bootTimeoutMs: d.profile.boot_timeout_s * 1000,
+            readOnly: d.readOnly,
           });
-          emulators.push(emulator);
           stops.push(() => emulator.stop());
+          started.push({ name: d.name, serial: emulator.serial });
+        } catch (error) {
+          failed.push({
+            name: d.name,
+            reason: session.masker.maskText(error instanceof Error ? error.message : String(error)),
+          });
         }
+      }
+      if (started.length === 0) {
+        await stop();
+        return { ok: false, reason: failed.map((f) => `${f.name}: ${f.reason}`).join("; ") };
       }
       const appium = await appiumServer(mobile, project.qaDir, appiumHome, androidSdkRoot(android.sdk_root));
       if (appium.stop) stops.push(appium.stop);
       const factories: BrowserFactory[] = [];
-      for (const emulator of emulators.length > 0 ? emulators : [undefined]) {
+      for (const device of started) {
         // Parallel UiAutomator2 sessions on one Appium server need their own system port.
-        const systemPort = mobile.devices > 1 ? await freePort() : undefined;
+        const systemPort = list.length > 1 ? await freePort() : undefined;
         factories.push(
           createAppiumDeviceFactory({
             platform: "android",
@@ -219,7 +247,7 @@ export async function prepareMobile(
               "appium:app": app,
               "appium:appPackage": android.app_id,
               ...(android.activity ? { "appium:appActivity": android.activity } : {}),
-              ...(emulator ? { "appium:udid": emulator.serial } : {}),
+              ...(device.serial ? { "appium:udid": device.serial } : {}),
               ...(systemPort === undefined ? {} : { "appium:systemPort": systemPort }),
               ...(android.intent_args
                 ? {
@@ -238,7 +266,14 @@ export async function prepareMobile(
           }),
         );
       }
-      return { ok: true, factories, stop };
+      return {
+        ok: true,
+        factories,
+        names: started.map((d) => d.name),
+        failed,
+        ...(list[0] ? { primary: list[0].name } : {}),
+        stop,
+      };
     }
     const ios = mobile.ios;
     if (!ios) return { ok: false, reason: "mobile cases need mobile.android or mobile.ios" };
@@ -257,11 +292,12 @@ export async function prepareMobile(
       farm.provider === "browserstack"
         ? "https://hub-cloud.browserstack.com/wd/hub"
         : "https://ondemand.us-west-1.saucelabs.com/wd/hub";
-    const factory = (): BrowserFactory =>
+    const devices = mobileDevices(mobile).filter((d) => d.kind === "farm");
+    const factory = (device: { device: string; osVersion: string }): BrowserFactory =>
       createAppiumDeviceFactory({
         platform: "ios",
         connect: (caps) => connectAppium(hub, caps, { user, key }),
-        capabilities: farmCapabilities(farm, ios.bundle_id),
+        capabilities: farmCapabilities(farm, ios.bundle_id, device),
         // The farm credentials are masked in device logs, page source and connection errors.
         secrets: [user, key],
         recording: mobile.recording,
@@ -269,8 +305,14 @@ export async function prepareMobile(
         appId: ios.bundle_id,
         actionTimeoutMs: mobile.action_timeout_ms,
       });
-    // One farm session per device.
-    return { ok: true, factories: Array.from({ length: mobile.devices }, factory), stop };
+    // One farm session per device (REQ-EXEC-20/AC1).
+    return {
+      ok: true,
+      factories: devices.map((d) => factory(d)),
+      names: devices.map((d) => d.name),
+      ...(devices[0] ? { primary: devices[0].name } : {}),
+      stop,
+    };
   } catch (error) {
     await stop();
     return {
@@ -287,6 +329,11 @@ export async function prepareMobile(
 export function farmCapabilities(
   farm: NonNullable<NonNullable<MobileConfig["ios"]>["farm"]>,
   bundleId: string,
+  /** The device of a device list (REQ-EXEC-20); default the farm's one device. */
+  device: { readonly device: string; readonly osVersion: string } = {
+    device: farm.device ?? "",
+    osVersion: farm.os_version ?? "",
+  },
 ): Record<string, unknown> {
   const record = farm.vendor_recording;
   const common = {
@@ -294,8 +341,8 @@ export function farmCapabilities(
     "appium:automationName": "XCUITest",
     "appium:app": farm.app,
     "appium:bundleId": bundleId,
-    "appium:deviceName": farm.device,
-    "appium:platformVersion": farm.os_version,
+    "appium:deviceName": device.device,
+    "appium:platformVersion": device.osVersion,
   };
   return farm.provider === "browserstack"
     ? { ...common, "bstack:options": { projectName: "QAJitsu", video: record, deviceLogs: record } }

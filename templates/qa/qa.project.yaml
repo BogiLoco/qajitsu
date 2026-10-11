@@ -99,6 +99,14 @@ test_types: [api, web]
 # Run budget (REQ-PLAN-08): once a limit is reached the remaining cases are NOT_RUN with the reason.
 # budget: { max_minutes: 30, max_cost_usd: 2.00 }
 
+# How cases run (REQ-EXEC-19): API, web and mobile lanes at the same time; each case holds its own pool accounts
+# (accounts: { user:standard: { pool: [...] } } in envs/<name>.yaml). sequential: true runs one case at a time.
+# execution:
+#   workers: { api: 4, web: 2 } # default environments.workers
+#   web_combinations: 1 # browser combinations of web.matrix at once
+#   account_wait_s: 300
+#   sequential: false
+
 # Visual regression (REQ-EXEC-12): baselines in .qa/baselines/, accepted with `qj baseline accept`.
 # visual: { threshold: 0.001, color_threshold: 0.1 }
 

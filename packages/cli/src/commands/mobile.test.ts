@@ -477,5 +477,13 @@ describe("app binaries and devices (REQ-ENV-06)", () => {
         "dev.x",
       ),
     ).toHaveProperty("sauce:options");
+    // REQ-EXEC-20/AC1: each device of a farm device list opens its own session with its device and OS version.
+    expect(
+      farmCapabilities(
+        { ...farm, provider: "browserstack", app: "bs://abc", vendor_recording: false },
+        "dev.x",
+        { device: "iPad Air", osVersion: "16" },
+      ),
+    ).toMatchObject({ "appium:deviceName": "iPad Air", "appium:platformVersion": "16" });
   });
 });

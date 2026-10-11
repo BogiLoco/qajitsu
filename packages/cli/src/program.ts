@@ -614,6 +614,10 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--slow-mo <ms>", "with --headed: wait this long before every browser action")
     .option("--step", "pause before every step and continue on Enter (terminal only)")
     .option(
+      "--sequential",
+      "one case at a time in plan order, across API, web and mobile (default: lanes run at the same time)",
+    )
+    .option(
       "--fix-check",
       "with --build: verify a bug fix: cases marked reproduces must FAIL before the fix and PASS with it",
     )
@@ -631,6 +635,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
           headed?: boolean;
           slowMo?: string;
           step?: boolean;
+          sequential?: boolean;
         },
       ) => {
         const { fixCheck, ...runOptions } = options;

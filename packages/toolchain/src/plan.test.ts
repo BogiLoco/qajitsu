@@ -130,7 +130,51 @@ describe("what a project needs (REQ-GEN-06/AC1)", () => {
         "emulator",
         "system-images;android-34;google_apis;arm64-v8a",
       ],
-      emulator: { systemImage: "system-images;android-34;google_apis;arm64-v8a", avd: "qj" },
+      emulators: [{ systemImage: "system-images;android-34;google_apis;arm64-v8a", avd: "qj" }],
+      atOnce: 1,
+    });
+  });
+
+  it("REQ-EXEC-20/AC5: several emulators need each system image once and one AVD each, with its hardware profile", () => {
+    const needs = toolchainNeeds(
+      mobileProject({
+        app: { source: "path", repo: "shop", path: "a.apk" },
+        emulator: undefined,
+        emulators: [
+          {
+            name: "pixel",
+            avd: "qj-pixel",
+            system_image: "system-images;android-34;google_apis;arm64-v8a",
+            device: "pixel_8",
+          },
+          {
+            name: "tablet",
+            avd: "qj-tablet",
+            system_image: "system-images;android-34;google_apis;arm64-v8a",
+            device: "pixel_tablet",
+          },
+          { name: "old", avd: "qj-old", system_image: "system-images;android-30;google_apis;arm64-v8a" },
+        ],
+      }),
+      {},
+    );
+    expect(needs.android).toEqual({
+      packages: [
+        "platform-tools",
+        "emulator",
+        "system-images;android-34;google_apis;arm64-v8a",
+        "system-images;android-30;google_apis;arm64-v8a",
+      ],
+      emulators: [
+        { avd: "qj-pixel", systemImage: "system-images;android-34;google_apis;arm64-v8a", device: "pixel_8" },
+        {
+          avd: "qj-tablet",
+          systemImage: "system-images;android-34;google_apis;arm64-v8a",
+          device: "pixel_tablet",
+        },
+        { avd: "qj-old", systemImage: "system-images;android-30;google_apis;arm64-v8a" },
+      ],
+      atOnce: 3,
     });
   });
 
