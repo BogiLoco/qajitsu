@@ -6,6 +6,7 @@ import {
   blockingProblems,
   checkSpecSource,
   formatSpecProblems,
+  renderUiInventory,
   typecheckSpecs,
   type SpecProblem,
 } from "@qajitsu/verifier";
@@ -216,6 +217,8 @@ export async function runAuthor(
               JSON.stringify(analysis.endpoints.map((e) => ({ method: e.method, path: e.path }))),
             ),
             `Code of the change is under ${context.repos.map((r) => `repos/${r.alias}/`).join(", ") || "repos/"}.`,
+            // REQ-PLAN-09/AC7: the element ids and pages the code defines, so the spec opens real pages.
+            ...(context.ui ? [untrusted("ui/inventory", renderUiInventory(context.ui))] : []),
             ...context.testsRepos.flatMap((t) => [
               `## Conventions of the tests repository '${t.alias}' (REQ-EXEC-01/AC3; code under repos/${t.alias}/)`,
               renderTestsRepo(t.alias, t.index),

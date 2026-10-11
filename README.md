@@ -277,6 +277,12 @@ them in full). A case that relies on documentation cites it, and the plan shows 
 quote word for word; outdated documents are marked _possibly outdated_, and a contradiction between documentation
 and ticket becomes an open question. With `knowledge.auto_sync: true` the knowledge base is synced first.
 
+Code also makes sure the expectations can be checked at all: both agents get the element ids and page paths found
+in the code under test (`testid:place-order`, `/app/checkout`), and before you see a plan version code flags
+placeholders instead of values (`expected_total`, TBD), fields that are not in the OpenAPI response or have another
+type, steps with a description only, and `testid:` selectors the code does not define. The planner gets one
+automatic round to fix them; what remains is listed under "Cannot be checked as written" next to the plan.
+
 With `--depth smoke|standard|full` the planner rates each case's risk and QAJitsu keeps only the cases of that
 depth (smoke: high risk, standard: high and medium, full: all); the plan shows the depth and why each case is in or
 out, so you review the selection too.
@@ -293,6 +299,7 @@ Accepting in the review approves it. Non-interactively:
 qj approve SHOP-482                          # latest version
 qj approve SHOP-482 --version 2              # exactly the version you reviewed
 qj approve SHOP-482 --confirm-open-questions # if the plan still has open questions
+qj approve SHOP-482 --confirm-placeholders   # if code still flags expectations it cannot check (recorded)
 ```
 
 **What it does:** checks the sources again and freezes the plan: `plan/plan.approved.yaml` plus its SHA-256 in

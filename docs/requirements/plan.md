@@ -125,7 +125,7 @@ Besides the terminal, plans can be approved where the team already works.
 
 ### REQ-PLAN-09 · Concrete expected values
 
-- Status: proposed
+- Status: implemented
 - Priority: must
 - Stage: 2
 - Related: INV-4, REQ-PLAN-02, REQ-PLAN-04, REQ-PLAN-06, REQ-EXEC-04
@@ -135,11 +135,11 @@ plan points to an element that exists in the code under test.
 
 **Acceptance criteria**
 
-- [ ] AC1: Before a plan version is shown for review, code checks every expected value and flags placeholders: `<...>`, `{...}`, `${...}`, TBD, TODO, `?`, `...`, N/A, and lower-case identifiers such as `expected_total`, `reduced_value` or `original_total` (words joined by `_` with a word like value, expected, result, original, final or computed). Codes such as `DISCOUNT_NOT_FOUND` are not flagged.
-- [ ] AC2: When the project has an OpenAPI document, an expected field whose type does not match the response schema (e.g. a string for a numeric `total`) is flagged too.
-- [ ] AC3: Flagged values go back to the planner once for an automatic revision; whatever is still flagged is listed in the review next to the plan (case, step, field, value, why).
-- [ ] AC4: A plan with flagged values cannot be approved without `--confirm-placeholders` (or the same answer in the interactive review); the confirmation and the flagged values are recorded in `run.json`.
-- [ ] AC5: The check is deterministic code with fixture tests, including values that must not be flagged.
-- [ ] AC6: A step that is not manual and whose expect has only a description (no status, fields, texts, elements, message or visual) is flagged the same way: the test would have nothing to compare.
-- [ ] AC7: The planner and the author get a selector inventory computed by code from the worktree of the run: every `data-testid` (and the mobile equivalents, e.g. Android resource ids) with the file and the page or screen it belongs to, so a model does not have to search for them.
-- [ ] AC8: Every `testid:` selector in a plan must exist in that inventory for the run's commit; an unknown one is flagged like a placeholder (one automatic revision, then listed in the review), never silently accepted.
+- [x] AC1: Before a plan version is shown for review, code checks every expected value and flags placeholders: `<...>`, `{...}`, `${...}`, TBD, TODO, `?`, `...`, N/A, and lower-case identifiers such as `expected_total`, `reduced_value` or `original_total` (words joined by `_` with a word like value, expected, result, original, final or computed). Codes such as `DISCOUNT_NOT_FOUND` are not flagged.
+- [x] AC2: When the project has an OpenAPI document, an expected field whose type does not match the response schema (e.g. a string for a numeric `total`) is flagged too.
+- [x] AC3: Flagged values go back to the planner once for an automatic revision; whatever is still flagged is listed in the review next to the plan (case, step, field, value, why).
+- [x] AC4: A plan with flagged values cannot be approved without `--confirm-placeholders` (or the same answer in the interactive review); the confirmation and the flagged values are recorded in `run.json`.
+- [x] AC5: The check is deterministic code with fixture tests, including values that must not be flagged.
+- [x] AC6: A step that is not manual and whose expect has only a description (no status, fields, texts, elements, message or visual) is flagged the same way: the test would have nothing to compare.
+- [x] AC7: The planner and the author get a selector inventory computed by code from the worktree of the run: every `data-testid` (and the mobile equivalents, e.g. Android resource ids) with the file and the page or screen it belongs to, so a model does not have to search for them.
+- [x] AC8: Every `testid:` selector in a plan must exist in that inventory for the run's commit; an unknown one is flagged like a placeholder (one automatic revision, then listed in the review), never silently accepted.

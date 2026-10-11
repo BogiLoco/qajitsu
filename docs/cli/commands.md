@@ -222,6 +222,13 @@ When the project has earlier runs, the application map around the change (`map/a
 and last failed screens, endpoints and transitions) is given to the planner, which may add regression cases citing it
 (REQ-OBS-08); a map that cannot be built is a warning and planning continues.
 
+The planner and the author also get the element ids (`data-testid`, `testID`, Android content descriptions, …) and
+page paths that code finds in the run's worktree (REQ-PLAN-09/AC7). Before a plan version is shown, code checks every
+expectation (REQ-PLAN-09): placeholders instead of values (`expected_total`, `<total>`, TBD), fields that are not in
+the OpenAPI response of the step's call or have another type, steps with a description only, and `testid:` selectors
+the code does not define. A draft with findings goes back to the planner once; what is still flagged is listed under
+"Cannot be checked as written" and approving it needs a separate `yes`.
+
 - `--run <id>`: run id (default: latest run of the ticket)
 - `--revise <instruction>`: write a new plan version following this instruction
 - `--depth <depth>`: `smoke` (high-risk cases), `standard` (high and medium) or `full` (every case, the default).
@@ -237,10 +244,13 @@ Approves and freezes a plan version without the interactive loop (SHA-256 in `ru
 - `--run <id>`: run id (default: latest run of the ticket)
 - `--version <n>`: plan version (default: latest)
 - `--confirm-open-questions`: approve although the plan has open questions
+- `--confirm-placeholders`: approve although code flags expectations it cannot check (REQ-PLAN-09/AC4); the flags
+  and who confirmed them are recorded in `run.json`
 - `--approver <name>`: who approves (CI: the reviewer or the `/qa approve` author)
 - `--reuse-from <run>`: reuse the plan approved in this earlier run if the ticket did not change
 
-Exit codes: `0` approved, `3` not approvable (ungrounded sources, open questions, changed ticket) or errors.
+Exit codes: `0` approved, `3` not approvable (ungrounded sources, open questions, expectations that cannot be checked,
+changed ticket) or errors.
 
 ### `qajitsu run <ticket>`
 

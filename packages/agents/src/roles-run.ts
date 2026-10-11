@@ -20,7 +20,9 @@ import {
   checkAnalysisSources,
   checkExistingCoverage,
   checkPlanSources,
+  formatPlanFlags,
   indexDiff,
+  type PlanFlag,
   type SourceContext,
 } from "@qajitsu/verifier";
 import { stringify } from "yaml";
@@ -59,6 +61,11 @@ export interface AgentStageDeps {
     readonly allowedOrigins: readonly string[];
     readonly connect?: (command: string, args: readonly string[], cwd: string) => Promise<McpClientLike>;
   };
+  /**
+   * Checks a drafted plan for expectations a test could not compare with (REQ-PLAN-09); code, not a model. A plan
+   * with findings goes back to the planner once.
+   */
+  readonly planQuality?: (plan: Plan) => readonly PlanFlag[];
 }
 
 const roleDef = (role: AgentRoleDefinition["role"]): AgentRoleDefinition => {
@@ -216,6 +223,8 @@ export async function runAnalyst(deps: AgentStageDeps, context: ChangeContext): 
 export interface PlanRevision {
   readonly previous: Plan;
   readonly instruction: string;
+  /** Asked by code, not by a person: the one automatic round for unverifiable expectations (REQ-PLAN-09/AC3). */
+  readonly automatic?: boolean;
 }
 
 /**
@@ -246,7 +255,9 @@ export async function runPlanner(
             out_of_scope: revision.previous.out_of_scope,
           }),
         ),
-        "## Reviewer instruction (from the human approver; follow it within the rules)",
+        revision.automatic === true
+          ? "## Problems found by code (fix every one; keep everything else as it is)"
+          : "## Reviewer instruction (from the human approver; follow it within the rules)",
         revision.instruction,
         "Return the complete revised plan.",
       ].join("\n")
@@ -279,5 +290,23 @@ export async function runPlanner(
     cases: value.cases.length,
     openQuestions: value.open_questions.length,
   });
+  // REQ-PLAN-09/AC3: expectations code cannot use (placeholders, wrong fields, unknown selectors, description-only
+  // steps) go back to the planner once; what is still flagged afterwards is shown to the person reviewing.
+  if (deps.planQuality && revision?.automatic !== true) {
+    const asPlan = PlanSchema.parse({ schema: 1, ticket: context.ticket.key, version: 1, ...value });
+    const flags = deps.planQuality(asPlan);
+    if (flags.length > 0) {
+      deps.events.emit("plan", actor, "plan.quality", { flags: flags.length, revising: true });
+      return runPlanner(deps, context, analysis, {
+        previous: asPlan,
+        instruction: [
+          "These expectations cannot be checked by a test. Use real values (numbers, texts), fields of the response,",
+          "selectors and pages listed under 'Elements and pages in the code', and give every step something to compare:",
+          formatPlanFlags(flags),
+        ].join("\n"),
+        automatic: true,
+      });
+    }
+  }
   return value;
 }

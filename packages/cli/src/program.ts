@@ -558,6 +558,10 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--run <id>", "run id (default: latest run of the ticket)")
     .option("--version <n>", "plan version (default: latest)")
     .option("--confirm-open-questions", "approve although the plan has open questions")
+    .option(
+      "--confirm-placeholders",
+      "approve although code flags expectations it cannot check (placeholders, unknown fields or selectors)",
+    )
     .option("--approver <name>", "who approves (CI: the reviewer or the /qa approve author)")
     .option("--reuse-from <run>", "reuse the plan approved in this earlier run if the ticket did not change")
     .action(
@@ -567,6 +571,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
           run?: string;
           version?: string;
           confirmOpenQuestions?: boolean;
+          confirmPlaceholders?: boolean;
           approver?: string;
           reuseFrom?: string;
         },

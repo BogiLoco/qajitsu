@@ -39,7 +39,13 @@ import { createMasker } from "@qajitsu/steps";
 import { exportRunTelemetry } from "./telemetry.js";
 import { anchorJournal } from "./verdict.js";
 import { approvalContext } from "./context-fingerprint.js";
-import { checkPlanSources, formatSourceIssues } from "@qajitsu/verifier";
+import {
+  checkPlanExpectations,
+  checkPlanSources,
+  formatPlanFlags,
+  formatSourceIssues,
+  type PlanFlag,
+} from "@qajitsu/verifier";
 import { parse } from "yaml";
 import type { RuntimePorts } from "../adapters.js";
 import { codeIndexCache, knowledgeDir, openSession, type ModelPorts, type RunSession } from "../session.js";
@@ -151,6 +157,40 @@ async function acceptEditedPlan(
  * @returns Exit code: 0 plan written (or approved), 2 token budget exceeded, 3 errors.
  */
 
+/** The application's OpenAPI document from the run's worktree, when a repository declares one (REQ-PLAN-09/AC2). */
+async function runOpenApi(session: RunSession): Promise<unknown> {
+  for (const [alias, repo] of Object.entries(session.project.config.repos)) {
+    if (repo.openapi === undefined || session.ws.record.repos[alias] === undefined) continue;
+    const text = await readFile(session.ws.path("repos", alias, repo.openapi), "utf8").catch(() => undefined);
+    if (text !== undefined) return parse(text) as unknown;
+  }
+  return undefined;
+}
+
+/** Expectations of a plan a test could not compare with (REQ-PLAN-09), from its OpenAPI and the code inventory. */
+async function planFlagsOf(session: RunSession, context: ChangeContext): Promise<(plan: Plan) => PlanFlag[]> {
+  const openapi = await runOpenApi(session);
+  return (plan) => checkPlanExpectations(plan, { openapi, inventory: context.ui });
+}
+
+/** Records what was approved although code could not check it (REQ-PLAN-09/AC4). */
+async function recordPlanFlags(
+  session: RunSession,
+  flags: readonly PlanFlag[],
+  approver: string,
+): Promise<void> {
+  if (flags.length === 0) return;
+  await session.ws.update({
+    data: {
+      ...session.ws.record.data,
+      planFlags: { confirmedBy: approver, flags: session.masker.maskJson(flags) },
+    },
+  });
+  session.events.emit("approve", { kind: "user", name: approver }, "plan.flags_confirmed", {
+    flags: flags.length,
+  });
+}
+
 /**
  * Computes the application map around the change from every past run of the project and stores it in
  * `map/around.json` (REQ-OBS-08). The planner may propose regression cases for it; a map that cannot be built is
@@ -240,6 +280,7 @@ export async function runPlan(
     }
     const mapAround = await writeMapAround(session, ports, analysis, context, io);
     if (mapAround) context = { ...context, mapAround };
+    const flagsOf = await planFlagsOf(session, context);
 
     let current: Plan | undefined;
     try {
@@ -258,7 +299,7 @@ export async function runPlan(
       if (!current || instruction !== undefined) {
         io.write(current ? `Revising plan v${String(current.version)}…\n` : "Writing the test plan…\n");
         const draft = await runPlanner(
-          deps,
+          { ...deps, planQuality: flagsOf },
           context,
           analysis,
           current && instruction !== undefined ? { previous: current, instruction } : undefined,
@@ -282,6 +323,10 @@ export async function runPlan(
         `Plan v${String(current.version)}: ${String(current.cases.length)} case(s), ${String(current.open_questions.length)} open question(s)\n${mdFile}\n`,
       );
       for (const q of current.open_questions) io.write(`  ? ${q.id}: ${q.question}\n`);
+      // REQ-PLAN-09/AC3: what code cannot check, next to the plan.
+      const flags = flagsOf(current);
+      if (flags.length > 0)
+        io.write(`Cannot be checked as written (${String(flags.length)}):\n${formatPlanFlags(flags)}\n`);
       if (!io.ask) return 0;
 
       const answer = (await io.ask("[a]ccept, [r]evise, [e]dit, [q]uit? ")).trim().toLowerCase();
@@ -296,6 +341,16 @@ export async function runPlan(
             ).trim() === "yes";
           if (!confirm) continue;
         }
+        // REQ-PLAN-09/AC4: approving what code cannot check is a decision of its own, recorded with the approval.
+        if (
+          flags.length > 0 &&
+          (
+            await io.ask(
+              `Approve with ${String(flags.length)} expectation(s) that cannot be checked as written? Type 'yes' to confirm: `,
+            )
+          ).trim() !== "yes"
+        )
+          continue;
         const issues = checkPlanSources(current, sourceContext(context));
         if (issues.length > 0) {
           io.write(
@@ -311,6 +366,7 @@ export async function runPlan(
           confirmOpenQuestions: confirm,
         });
         session.events.emit("approve", { kind: "user", name: review.user }, "plan.approved", { ...approval });
+        await recordPlanFlags(session, flags, review.user);
         await recordApprovalContext(session);
         io.write(`Approved plan v${String(approval.version)} (sha256 ${approval.sha256.slice(0, 16)}…)\n`);
         return 0;
@@ -364,6 +420,8 @@ export interface ApproveOptions {
   readonly run?: string | undefined;
   readonly version?: string | undefined;
   readonly confirmOpenQuestions?: boolean | undefined;
+  /** Approve although code flags expectations it cannot check (REQ-PLAN-09/AC4). */
+  readonly confirmPlaceholders?: boolean | undefined;
   /** Who approves, e.g. the reviewer of a GitHub protected environment or a `/qa approve` comment (CI). */
   readonly approver?: string | undefined;
   /**
@@ -398,17 +456,21 @@ export async function runApprove(
     }
     const version = options.version === undefined ? undefined : Number(options.version);
     const { plan } = await readPlan(session.ws, version);
-    const issues = checkPlanSources(
-      plan,
-      sourceContext(
-        await buildChangeContext(session.ws, [], { indexCache: codeIndexCache(session.project) }),
-      ),
-    );
+    const context = await buildChangeContext(session.ws, [], { indexCache: codeIndexCache(session.project) });
+    const issues = checkPlanSources(plan, sourceContext(context));
     if (issues.length > 0) {
       throw new ConfigError("PLAN_SOURCES_INVALID", "The plan has ungrounded sources.", {
         issues: formatSourceIssues(issues).split("\n"),
       });
     }
+    // REQ-PLAN-09/AC4: expectations code cannot check need an explicit confirmation.
+    const flags = (await planFlagsOf(session, context))(plan);
+    if (flags.length > 0 && options.confirmPlaceholders !== true)
+      throw new ConfigError(
+        "PLAN_UNCHECKABLE",
+        `${String(flags.length)} expectation(s) cannot be checked as written; revise the plan, or approve them with --confirm-placeholders.`,
+        { issues: formatPlanFlags(flags).split("\n") },
+      );
     const approval = await approvePlan(session.ws, {
       approver,
       now: ports.now,
@@ -416,6 +478,7 @@ export async function runApprove(
       confirmOpenQuestions: options.confirmOpenQuestions === true,
     });
     session.events.emit("approve", { kind: "user", name: approver }, "plan.approved", { ...approval });
+    await recordPlanFlags(session, flags, approver);
     await recordApprovalContext(session);
     io.write(
       `Approved plan v${String(approval.version)} of ${session.ws.ticket} run ${session.ws.runId}\nsha256 ${approval.sha256}\n${join(session.ws.dir, "plan", "plan.approved.yaml")}\n`,
