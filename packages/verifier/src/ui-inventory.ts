@@ -111,7 +111,8 @@ export function renderUiInventory(inventory: UiInventory, limit = 300): string {
         `- ${e.selector}${e.prefix ? "<rest> (built at run time, e.g. " + e.selector + "1)" : ""} in ${e.files.join(", ")}`,
     );
   return [
-    "## Elements and pages in the code (computed by QAJitsu from the code under test; use only these)",
+    "## Elements and pages in the code (computed by QAJitsu from the code under test)",
+    "Use these element ids and page paths in steps and expectations instead of inventing any. This list is not a source: never cite it or its pages as a source of a case, screen or risk.",
     ...(inventory.pages.length > 0 ? [`Pages: ${inventory.pages.join(", ")}`] : []),
     ...lines,
     ...(inventory.selectors.length > limit

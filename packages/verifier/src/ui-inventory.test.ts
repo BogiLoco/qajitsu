@@ -78,6 +78,7 @@ describe("element and page inventory (REQ-PLAN-09/AC7)", () => {
       1,
     );
     expect(text).toContain("Pages: /x");
+    expect(text).toContain("This list is not a source: never cite it");
     expect(renderUiInventory({ selectors: [], pages: [] })).toBe("");
     const many = renderUiInventory(
       buildUiInventory([{ path: "a.html", text: '<i data-testid="a"><i data-testid="b">' }]),
