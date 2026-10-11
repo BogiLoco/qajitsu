@@ -167,3 +167,19 @@ the label is only a hint.
 - [x] AC2: The hint never changes the status; a hint that cites no existing evidence is dropped.
 - [x] AC3: Matrix, report and Jira comment show the hint visibly as a suggestion, separate from the computed status and counts.
 - [x] AC4: A model error or invalid output leaves the case without a hint; the run continues.
+
+### REQ-VER-13 · Why a case was BLOCKED
+
+- Status: accepted
+- Priority: should
+- Stage: later
+- Related: REQ-VER-12, INV-1, INV-5
+
+A BLOCKED case says that the test could not judge the application, but not always what to do about it. An agent
+explains the cause and the next step in the user's terms; the status stays BLOCKED.
+
+**Acceptance criteria**
+
+- [ ] AC1: Each BLOCKED case gets a hint: `spec` (the generated test is wrong, e.g. an operation a native app does not have), `plan` (an expectation names something the application does not show), `environment`, `tooling` (device, browser, Appium) or `configuration`, with a next step and citations of the error, the spec line, the journal or the page source.
+- [ ] AC2: The hint never changes the status; a hint without an existing citation is dropped; a model error leaves the case without a hint.
+- [ ] AC3: `qj run` prints the hint under the summary table, and the report and matrix show it as a suggestion, separate from the computed status.

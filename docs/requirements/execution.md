@@ -303,3 +303,60 @@ Mobile cases can run on several different devices at once: to finish sooner, or 
 - [x] AC3: In matrix mode each device keeps its own results and evidence; a case is PASSED only when it passed on every device, and the report shows the status per device.
 - [x] AC4: A device that cannot start is reported with the reason and the other devices go on: in matrix mode its results are BLOCKED, in split mode its cases run on the devices that started.
 - [x] AC5: `qj setup` installs the system image and creates the AVD of every emulator profile, and its memory precheck counts every emulator.
+
+### REQ-EXEC-21 · Selectors for any web or mobile application
+
+- Status: accepted
+- Priority: must
+- Stage: later
+- Related: REQ-EXEC-05, REQ-EXEC-06, REQ-EXEC-09, REQ-PLAN-09, INV-4
+
+Tests must work on applications as they are: with any test id attribute, with Android resource ids only, or with no
+test ids at all. Selector kinds cover what each platform offers, from the most stable to the last resort.
+
+**Acceptance criteria**
+
+- [ ] AC1: The web test id attribute is configurable (`web.test_id_attribute`, default `data-testid`, e.g. `data-qa`, `data-test`, `data-cy`); `testid:` selectors, the element inventory and the prompts use it.
+- [ ] AC2: On Android `testid:<id>` finds the accessibility id (content-desc) or the resource id (`<package>:id/<id>` or `<id>`); on iOS the accessibility identifier.
+- [ ] AC3: Web selectors also include `placeholder:`, `alt:`, `title:` and `id:` (DOM id), and `role:<role>:<name>` and `label:` work without any test id; mobile selectors include `text:`, `label:`, `id:` (resource id) and `xpath:` as the last resort.
+- [ ] AC4: The element inventory also finds Android `@+id/...` in layouts and code, Flutter `Key('...')` and `Semantics(identifier:)`, SwiftUI `.accessibilityIdentifier(...)`, and the configured web attribute.
+- [ ] AC5: The prompts of the author and the healer list the selector kinds in order of stability and contain no element ids or pages of the demo application; a test checks that.
+- [ ] AC6: Without any test id in the code, the plan check does not judge element names (nothing to compare against) and the author relies on roles, labels, texts and the UI snapshot (REQ-EXEC-22); `css:` and `xpath:` selectors are flagged in review.
+- [ ] AC7: A screen that exposes no accessible elements (canvas, game, Flutter without semantics) makes the case BLOCKED with that reason, never PASSED.
+
+### REQ-EXEC-22 · Snapshot of the running application for the author and the healer
+
+- Status: accepted
+- Priority: must
+- Stage: later
+- Related: REQ-EXEC-01, REQ-EXEC-09, REQ-EXEC-21, REQ-ENV-01, INV-2, INV-8, INV-10
+
+The author sees what the application really shows instead of guessing selectors from code: code opens the running
+application and records its accessible elements; the agent only reads that record.
+
+**Acceptance criteria**
+
+- [ ] AC1: Before the author writes a UI case, the trusted parent opens the pages the case names (web, after logging in with the case's account alias) or the start screen of the app (mobile) on the run's environment and records the accessibility snapshot: role, name, label, text, test id, resource id and a ready selector for each element.
+- [ ] AC2: The snapshot is masked like evidence before an agent sees it, is limited in size, and is passed to the author and the healer as untrusted data; recording it is journaled and produces no results or evidence.
+- [ ] AC3: A selector the author writes that matches no element of the snapshot is reported back to the author with the closest elements before the spec runs.
+- [ ] AC4: When a step fails because an element is missing, the healer gets the snapshot of the current page or screen, on web and on mobile (healing extends to mobile cases).
+- [ ] AC5: Snapshots respect the environment allowlist; production is never opened for a snapshot.
+- [ ] AC6: When the snapshot cannot be taken (environment down, page not reachable), the author works without it and the run says so; the case's status still comes only from the runner.
+- [ ] AC7: Without any repository (only a test environment), the snapshot is the source of element names: the planner also gets a snapshot of the pages and screens it can reach from the environment's start page or the app's start screen, so plan expectations use names the application really shows.
+- [ ] AC8: A plan expectation naming an element that no snapshot contains is flagged in the review like an unknown selector (REQ-PLAN-09/AC8), whether or not the code is available.
+
+### REQ-EXEC-23 · Mobile app without access to its code
+
+- Status: accepted
+- Priority: should
+- Stage: later
+- Related: REQ-EXEC-06, REQ-EXEC-22, REQ-ENV-06, INV-10
+
+Mobile cases can run when the team has only a test build of the app, not its repository.
+
+**Acceptance criteria**
+
+- [ ] AC1: `mobile.android.app` and `mobile.ios.app` also accept a file (`source: file`, a local `.apk`/`.ipa`/`.app`), a download (`source: url`, checked against the allowlist, with a SHA-256 to compare), an app already installed on the device or emulator (`source: installed`, by app id), and an app already uploaded to the device farm.
+- [ ] AC2: The run records the app's version and SHA-256 when known, and the report shows them in place of the commit.
+- [ ] AC3: An app that cannot be obtained or whose SHA-256 differs makes the mobile cases BLOCKED with the reason.
+
