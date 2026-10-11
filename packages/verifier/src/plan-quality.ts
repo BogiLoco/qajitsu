@@ -1,5 +1,6 @@
-import type { Plan } from "@qajitsu/core";
+import type { Plan, UiScreen } from "@qajitsu/core";
 import { selectorKnown, type UiInventory, type UiPlatform } from "./ui-inventory.js";
+import { unknownSelectors } from "./ui-snapshot.js";
 
 /** Platforms whose ids a case may name, and how the flag calls that code. */
 const CASE_PLATFORMS: Record<string, { readonly platforms: readonly UiPlatform[]; readonly code: string }> = {
@@ -162,7 +163,12 @@ function fieldProblem(doc: Schema, root: Schema, key: string, value: unknown): s
  */
 export function checkPlanExpectations(
   plan: Plan,
-  options: { readonly openapi?: unknown; readonly inventory?: UiInventory | undefined } = {},
+  options: {
+    readonly openapi?: unknown;
+    readonly inventory?: UiInventory | undefined;
+    /** Pages and screens recorded on the environment before planning (REQ-EXEC-22/AC8). */
+    readonly snapshot?: readonly UiScreen[] | undefined;
+  } = {},
 ): PlanFlag[] {
   const flags: PlanFlag[] = [];
   const doc = isObject(options.openapi) ? options.openapi : undefined;
@@ -219,6 +225,22 @@ export function checkPlanExpectations(
           }
       }
       const target = CASE_PLATFORMS[c.type];
+      // REQ-EXEC-22/AC8: with recorded pages of the case's platform, every element must be one of them or in the code.
+      const recorded = (options.snapshot ?? []).filter(
+        (x) => target?.platforms.includes(x.platform) === true,
+      );
+      if (recorded.length > 0) {
+        for (const sel of unknownSelectors(Object.keys(e.elements ?? {}), c.type, {
+          screens: recorded,
+          inventory: options.inventory,
+        }))
+          flag(
+            "selector",
+            `${sel} matches no element recorded on the environment's pages`,
+            `elements.${sel}`,
+          );
+        continue;
+      }
       // A platform without any id in the code (e.g. its app is not in the repositories) cannot be judged.
       const judged =
         inventory &&

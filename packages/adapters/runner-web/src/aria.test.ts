@@ -22,8 +22,8 @@ describe("elements from Playwright's accessibility snapshot (REQ-EXEC-22/AC1)", 
       "- button [disabled]",
     ].join("\n");
     expect(ariaElements(yaml)).toEqual([
-      { role: "link", name: "Products" },
-      { role: "link", name: "Cart (1)" },
+      { role: "link", name: "Products", href: "/app/products" },
+      { role: "link", name: "Cart (1)", href: "/app/cart" },
       { role: "heading", name: "Checkout" },
       { role: "text", text: "Total 24,99 zł" },
       { role: "checkbox", name: "I accept the terms", checked: true },

@@ -52,6 +52,7 @@ import { codeIndexCache, knowledgeDir, openSession, type ModelPorts, type RunSes
 import type { CommandIO } from "./fetch.js";
 import { openRunKnowledge, type KnowledgePorts } from "./knowledge.js";
 import { collectAppMap } from "./map.js";
+import { planSnapshot, readPlanSnapshot, type SnapshotPorts } from "./app-snapshot.js";
 
 /** Options of `qajitsu plan`. */
 export interface PlanOptions {
@@ -59,6 +60,10 @@ export interface PlanOptions {
   readonly revise?: string | undefined;
   /** Test depth (REQ-PLAN-08): smoke, standard or full; remembered for revisions of the run. */
   readonly depth?: string | undefined;
+  /** Environment whose pages are recorded for the planner (REQ-EXEC-22/AC7). */
+  readonly env?: string | undefined;
+  /** Record the environment's pages also when the code is available, or record them again. */
+  readonly snapshot?: boolean | undefined;
 }
 
 /** Ports of the review loop (REQ-PLAN-04/AC1). */
@@ -170,7 +175,9 @@ async function runOpenApi(session: RunSession): Promise<unknown> {
 /** Expectations of a plan a test could not compare with (REQ-PLAN-09), from its OpenAPI and the code inventory. */
 async function planFlagsOf(session: RunSession, context: ChangeContext): Promise<(plan: Plan) => PlanFlag[]> {
   const openapi = await runOpenApi(session);
-  return (plan) => checkPlanExpectations(plan, { openapi, inventory: context.ui });
+  // REQ-EXEC-22/AC8: elements are also checked against the pages recorded before planning.
+  const snapshot = context.snapshot ?? (await readPlanSnapshot(session.ws));
+  return (plan) => checkPlanExpectations(plan, { openapi, inventory: context.ui, snapshot });
 }
 
 /** Records what was approved although code could not check it (REQ-PLAN-09/AC4). */
@@ -235,7 +242,7 @@ export async function runPlan(
   rawKey: string,
   options: PlanOptions,
   io: CommandIO,
-  ports: RuntimePorts & ModelPorts & KnowledgePorts,
+  ports: RuntimePorts & ModelPorts & KnowledgePorts & SnapshotPorts,
   review: ReviewPorts,
 ): Promise<number> {
   const masker = createMasker();
@@ -280,6 +287,12 @@ export async function runPlan(
     }
     const mapAround = await writeMapAround(session, ports, analysis, context, io);
     if (mapAround) context = { ...context, mapAround };
+    // REQ-EXEC-22/AC7: without the code, the planner names elements as the environment's pages show them.
+    const pages = await planSnapshot(session, io, ports, {
+      env: options.env,
+      force: options.snapshot === true,
+    });
+    if (pages) context = { ...context, snapshot: pages };
     const flagsOf = await planFlagsOf(session, context);
 
     let current: Plan | undefined;

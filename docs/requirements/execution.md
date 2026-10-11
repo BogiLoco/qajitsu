@@ -326,9 +326,10 @@ test ids at all. Selector kinds cover what each platform offers, from the most s
 
 ### REQ-EXEC-22 · Snapshot of the running application for the author and the healer
 
-- Status: accepted
+- Status: in-progress
 - Priority: must
 - Stage: later
+- Note: AC7 is done for web pages; the first screen of a mobile app before planning comes with REQ-EXEC-23 (an app without its repository).
 - Related: REQ-EXEC-01, REQ-EXEC-09, REQ-EXEC-21, REQ-ENV-01, INV-2, INV-8, INV-10
 
 The author sees what the application really shows instead of guessing selectors from code: code opens the running
@@ -336,14 +337,14 @@ application and records its accessible elements; the agent only reads that recor
 
 **Acceptance criteria**
 
-- [ ] AC1: Before the author writes a UI case, the trusted parent opens the pages the case names (web, after logging in with the case's account alias) or the start screen of the app (mobile) on the run's environment and records the accessibility snapshot: role, name, label, text, test id, resource id and a ready selector for each element.
-- [ ] AC2: The snapshot is masked like evidence before an agent sees it, is limited in size, and is passed to the author and the healer as untrusted data; recording it is journaled and produces no results or evidence.
-- [ ] AC3: A selector the author writes that matches no element of the snapshot is reported back to the author with the closest elements before the spec runs.
-- [ ] AC4: When a step fails because an element is missing, the healer gets the snapshot of the current page or screen, on web and on mobile (healing extends to mobile cases).
-- [ ] AC5: Snapshots respect the environment allowlist; production is never opened for a snapshot.
-- [ ] AC6: When the snapshot cannot be taken (environment down, page not reachable), the author works without it and the run says so; the case's status still comes only from the runner.
+- [x] AC1: Before the author writes a UI case, the trusted parent opens the pages the case names (web, after logging in with the case's account alias) or the start screen of the app (mobile) on the run's environment and records the accessibility snapshot: role, name, label, text, test id, resource id and a ready selector for each element.
+- [x] AC2: The snapshot is masked like evidence before an agent sees it, is limited in size, and is passed to the author and the healer as untrusted data; recording it is journaled and produces no results or evidence.
+- [x] AC3: A selector the author writes that matches no element of the snapshot is reported back to the author with the closest elements before the spec runs.
+- [x] AC4: When a step fails because an element is missing, the healer gets the snapshot of the current page or screen, on web and on mobile (healing extends to mobile cases).
+- [x] AC5: Snapshots respect the environment allowlist; production is never opened for a snapshot.
+- [x] AC6: When the snapshot cannot be taken (environment down, page not reachable), the author works without it and the run says so; the case's status still comes only from the runner.
 - [ ] AC7: Without any repository (only a test environment), the snapshot is the source of element names: the planner also gets a snapshot of the pages and screens it can reach from the environment's start page or the app's start screen, so plan expectations use names the application really shows.
-- [ ] AC8: A plan expectation naming an element that no snapshot contains is flagged in the review like an unknown selector (REQ-PLAN-09/AC8), whether or not the code is available.
+- [x] AC8: A plan expectation naming an element that no snapshot contains is flagged in the review like an unknown selector (REQ-PLAN-09/AC8), whether or not the code is available.
 
 ### REQ-EXEC-23 · Mobile app without access to its code
 

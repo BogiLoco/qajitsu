@@ -286,6 +286,12 @@ automatic round to fix them; what remains is listed under "Cannot be checked as 
 a mobile case that uses what only a browser has (`ui.as`, `ui.select`, `ui.goto` without a deep link scheme, `css:` or
 `role:` selectors) goes back to the author before anything runs.
 
+The author does not have to guess selectors: before writing specs, `qj run` opens each case's pages (and the first
+screen of the mobile app) on the test environment and gives the author what they show, with the selectors that find
+each element. The healer gets the same view of the page or screen at the failure, on the web and on mobile. Without
+access to the code, `qj plan` records the environment's pages reachable from its start page, so the plan names
+elements as the application shows them, and flags any element no recorded page shows.
+
 With `--depth smoke|standard|full` the planner rates each case's risk and QAJitsu keeps only the cases of that
 depth (smoke: high risk, standard: high and medium, full: all); the plan shows the depth and why each case is in or
 out, so you review the selection too.

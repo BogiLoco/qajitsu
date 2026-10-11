@@ -229,11 +229,19 @@ the OpenAPI response of the step's call or have another type, steps with a descr
 the code does not define. A draft with findings goes back to the planner once; what is still flagged is listed under
 "Cannot be checked as written" and approving it needs a separate `yes`.
 
+When the run has no code of the application (only a test environment), code opens the environment's start page in a
+headless browser as the first account alias of the profile, follows links on the same origin (up to 12 pages) and
+gives the planner what each page shows, with the selectors that find each element (REQ-EXEC-22/AC7). The pages are
+saved in `ui/snapshot.json` of the run, masked; an expectation naming an element no recorded page shows is flagged
+like an unknown selector (AC8). An environment that cannot be reached is reported and planning goes on without it.
+
 - `--run <id>`: run id (default: latest run of the ticket)
 - `--revise <instruction>`: write a new plan version following this instruction
 - `--depth <depth>`: `smoke` (high-risk cases), `standard` (high and medium) or `full` (every case, the default).
   The planner rates every case's risk as its priority; code keeps the cases of the depth and records in the plan
   why each one is in or out (REQ-PLAN-08). The depth is remembered for revisions of the run.
+- `--env <profile|url>`: environment whose pages are recorded for the planner (default: `environments.default`)
+- `--snapshot`: record the environment's pages also when the code is available, or record them again
 
 Exit codes: `0` plan written (and approved, if accepted in the review), `2` token budget exceeded, `3` errors.
 
@@ -256,6 +264,13 @@ changed ticket) or errors.
 
 Executes the approved plan: the author writes specs, static checks run, the sandbox executes them, code computes
 statuses, gates, auditor and canary run, reports are written.
+
+Before the author writes a spec, code records what the running application shows (REQ-EXEC-22): each web case's pages
+opened as the case's account in a headless browser, and the first screen of the native app on the run's device
+(started before the author and reused by the mobile lane). The author gets every element with the selectors that find
+it, as untrusted data; a selector the author writes that matches nothing recorded and no element id of the code goes
+back to it once with the closest recorded ones. A failed web or mobile attempt keeps `failure-elements.json` (what the
+page or screen showed, masked), which the healer gets; mobile cases are healed too and a healed case is never PASSED.
 
 - `--run <id>`: run id (default: latest run of the ticket)
 - `--env <profile|url>`: environment profile from `.qa/envs` or a URL (default: `environments.default`)

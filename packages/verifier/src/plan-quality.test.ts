@@ -180,6 +180,54 @@ describe("concrete expected values (REQ-PLAN-09)", () => {
     ).toEqual([]);
   });
 
+  it("REQ-EXEC-22/AC8: an element no recorded page shows is flagged, with or without the code", () => {
+    const screens = [
+      {
+        where: "/app/checkout",
+        platform: "web" as const,
+        elements: [
+          { role: "button", name: "Place order", disabled: true },
+          { testid: "place-order", role: "button" },
+        ],
+      },
+    ];
+    const elements = {
+      "role:button:Place order": { enabled: false },
+      "testid:place-order": { enabled: false },
+      "text:Order placed": { visible: true },
+      "role:button:Buy now": { visible: true },
+    };
+    const flags = (inv?: typeof inventory) =>
+      checkPlanExpectations(plan([{ expect: { description: "d", elements } }], "web"), {
+        snapshot: screens,
+        ...(inv ? { inventory: inv } : {}),
+      }).map((f) => [f.kind, f.field, f.reason]);
+    expect(flags()).toEqual([
+      [
+        "selector",
+        "elements.text:Order placed",
+        "text:Order placed matches no element recorded on the environment's pages",
+      ],
+      [
+        "selector",
+        "elements.role:button:Buy now",
+        "role:button:Buy now matches no element recorded on the environment's pages",
+      ],
+    ]);
+    // A test id the code defines counts as known even when the page did not show it yet.
+    const withCode = checkPlanExpectations(
+      plan([{ expect: { description: "d", elements: { "testid:toast": { visible: true } } } }], "web"),
+      { snapshot: screens, inventory },
+    );
+    expect(withCode).toEqual([]);
+    // A mobile case is not judged by web pages.
+    expect(
+      checkPlanExpectations(plan([{ expect: { description: "d", elements } }], "mobile"), {
+        snapshot: screens,
+      }),
+    ).toEqual([]);
+  });
+
   it("REQ-PLAN-09/AC2: references, allOf, arrays, open objects and every way a call has no schema", () => {
     const doc = {
       paths: {

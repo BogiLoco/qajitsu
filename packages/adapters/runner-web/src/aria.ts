@@ -29,6 +29,14 @@ const LINE = /^\s*- ([a-z]+)(?: "((?:[^"\\]|\\.)*)")?((?: \[[^\]]*\])*)(?::\s*(.
 export function ariaElements(yaml: string): UiElementFact[] {
   const elements: UiElementFact[] = [];
   for (const line of yaml.split("\n")) {
+    // `- /url: /app/cart` under a link gives its target.
+    const url = /^\s*- \/url: (.+)$/.exec(line)?.[1];
+    const last = elements.at(-1);
+    if (url !== undefined) {
+      if (last?.role === "link" && last.href === undefined)
+        elements[elements.length - 1] = { ...last, href: url.trim() };
+      continue;
+    }
     const m = LINE.exec(line);
     if (!m) continue;
     const [, role = "", quoted, attrs = "", rest] = m;

@@ -1,6 +1,5 @@
 import type { KnowledgePorts } from "./knowledge.js";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { compareDeployedSha, createRemoteEnvProvider } from "@qajitsu/adapter-env-remote";
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
@@ -36,7 +35,6 @@ import {
   type CaseResultFile,
   type Plan,
   type UiElementFact,
-  type UiScreen,
   type ResolvedEnvironment,
   type VisualCheck,
   type WebCombination,
@@ -56,7 +54,7 @@ import { approvalContext, changedParts, type ApprovalContext } from "./context-f
 import { runRunHook, type HookExec } from "./hooks.js";
 import { prepareMobile, type PreparedMobile } from "./mobile.js";
 import { accountLogin, runLimited, runMobileLane } from "./lanes.js";
-import { recordUiSnapshot } from "./ui-snapshot.js";
+import { authorSnapshot } from "./app-snapshot.js";
 import { exportRunTelemetry } from "./telemetry.js";
 import {
   blockAfterStartFailure,
@@ -124,100 +122,6 @@ const blockedResult = (caseId: string, reason: string): CaseResultFile =>
     runner: "api",
     attempts: [{ attempt: 1, outcome: "error", assertions: [], error: reason, steps: [], evidence: [] }],
   });
-
-/**
- * Records the pages and screens the author will see (REQ-EXEC-22): web pages through a headless browser with the
- * run's logins and allowlist, the first screen of the app on the run's device. Tests without a real browser pass
- * `snapshotBrowser`; a fake executor without one records no web pages.
- */
-async function snapshotForAuthor(
-  session: RunSession,
-  plan: Plan,
-  cases: Plan["cases"],
-  env: ResolvedEnvironment,
-  ports: RuntimePorts & ModelPorts & RunPorts,
-  options: {
-    readonly knownPages: readonly string[];
-    readonly device: (() => Promise<PreparedMobile>) | undefined;
-    readonly platform: "android" | "ios";
-    readonly io: CommandIO;
-  },
-): Promise<UiScreen[]> {
-  const { project, masker, events } = session;
-  const webFactory =
-    ports.snapshotBrowser ??
-    (ports.executor
-      ? undefined
-      : createPlaywrightBrowserFactory({
-          browser: project.config.web.browser,
-          video: "off",
-          headless: true,
-          actionTimeoutMs: project.config.web.action_timeout_ms,
-          webSession: env.profile.web_session,
-          observations: { console: false, httpErrors: false, accessibility: false },
-        }));
-  const login = accountLogin(
-    env,
-    createAccountLeases(env.profile, { waitMs: project.config.execution.account_wait_s * 1000 }),
-    {
-      fetch: ports.fetch,
-      qaDir: project.qaDir,
-      resolveSecret: (r) => session.resolveSecret(r),
-      registerSecret: (v) => {
-        masker.register(v);
-      },
-    },
-  );
-  const device = cases.some((c) => c.type === "mobile") ? await options.device?.() : undefined;
-  const scratch = await mkdtemp(join(tmpdir(), "qj-snapshot-"));
-  try {
-    const screens = await recordUiSnapshot({
-      plan,
-      cases,
-      ...(webFactory && cases.some((c) => c.type === "web")
-        ? {
-            web: {
-              factory: webFactory,
-              // The login finds the aliases it needs in a file, as for a spec.
-              login: async (aliases) => {
-                const file = join(scratch, `${aliases.join("-").replace(/[^\w-]/g, "_")}.txt`);
-                await writeFile(file, aliases.join("\n"), "utf8");
-                return login({ caseId: "snapshot", attempt: 0, specFile: file, lane: "web" });
-              },
-              aliases: Object.keys(env.profile.accounts),
-              knownPages: options.knownPages,
-              baseUrl: env.baseUrl,
-              allowedOrigins: [env.origin],
-            },
-          }
-        : {}),
-      ...(device?.ok && device.factories[0]
-        ? {
-            mobile: {
-              factory: device.factories[0],
-              platform: options.platform,
-            },
-          }
-        : {}),
-      mask: (v) => masker.maskJson(v),
-      emit: (event, details) => {
-        events.emit("author", SYSTEM, event, details);
-        // REQ-EXEC-22/AC6: the person sees what could not be recorded; the author goes on without it.
-        if (event === "ui.snapshot.failed")
-          options.io.writeError(
-            `Could not record ${String(details["where"])} for the author: ${String(details["error"])}\n`,
-          );
-      },
-    });
-    if (screens.length > 0)
-      options.io.write(
-        `Recorded ${String(screens.length)} page(s) or screen(s) of the application for the author.\n`,
-      );
-    return screens;
-  } finally {
-    await rm(scratch, { recursive: true, force: true });
-  }
-}
 
 /**
  * The devices of the run's mobile cases, started on the first call and shared by later ones (REQ-EXEC-06,
@@ -854,7 +758,7 @@ async function executeCases(
     };
     const context = await buildChangeContext(ws, [], { indexCache: codeIndexCache(project) });
     // REQ-EXEC-22: the author sees what the running application shows, recorded by this trusted code.
-    const snapshot = await snapshotForAuthor(session, plan, missing, env, ports, {
+    const snapshot = await authorSnapshot(session, plan, missing, env, ports, {
       knownPages: context.ui?.pages ?? [],
       device: missing.some((c) => c.type === "mobile") ? devices.get : undefined,
       platform: mobilePlatform,

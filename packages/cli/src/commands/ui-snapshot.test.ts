@@ -2,7 +2,7 @@ import type { BrowserFactory } from "@qajitsu/adapter-runner-api";
 import { PlanSchema, type UiElementFact } from "@qajitsu/core";
 import type { UiDriver } from "@qajitsu/steps";
 import { describe, expect, it } from "vitest";
-import { recordUiSnapshot, snapshotPages } from "./ui-snapshot.js";
+import { crawlUiSnapshot, recordUiSnapshot, snapshotPages } from "./ui-snapshot.js";
 
 const plan = PlanSchema.parse({
   schema: 1,
@@ -216,6 +216,92 @@ describe("snapshot of the running application in qj run (REQ-EXEC-22)", () => {
     expect(events[0]).toEqual([
       "ui.snapshot.failed",
       { where: "/app/checkout", platform: "web", error: "net::ERR at /app/checkout ***" },
+    ]);
+  });
+
+  it("REQ-EXEC-22/AC5+AC7: without the code, pages reachable from the start page are recorded, same origin only, up to a limit", async () => {
+    const calls: string[] = [];
+    const events: [string, unknown][] = [];
+    const link = (href: string) => ({ role: "link", name: href, href });
+    const screens = await crawlUiSnapshot({
+      factory: fakeFactory(
+        {
+          "/": [
+            link("/app/products"),
+            link("https://elsewhere.example/x"),
+            link("#top"),
+            link("mailto:a@b.c"),
+          ],
+          "/app/products": [
+            link("/app/cart?x=1"),
+            link("/app/products"),
+            link("http://127.0.0.1:3000/app/login"),
+          ],
+          "/app/cart": [{ role: "heading", name: "Cart" }, link("/app/checkout")],
+          "/app/login": [{ role: "textbox", name: "Username" }],
+          "/app/checkout": [{ role: "button", name: "Pay" }],
+        },
+        calls,
+        "/app/login",
+      ),
+      login: (aliases) =>
+        Promise.resolve({
+          accounts: {},
+          secrets: [],
+          sessions: Object.fromEntries(aliases.map((a) => [a, "t"])),
+        }),
+      account: "user:standard",
+      baseUrl: "http://127.0.0.1:3000",
+      allowedOrigins: ["http://127.0.0.1:3000"],
+      maxPages: 4,
+      mask: (v) => v,
+      emit: (event, details) => events.push([event, details]),
+    });
+    expect(screens.map((s) => [s.where, s.account])).toEqual([
+      ["/", "user:standard"],
+      ["/app/products", "user:standard"],
+      ["/app/cart", "user:standard"],
+      ["/app/checkout", "user:standard"],
+    ]);
+    expect(calls).toEqual([
+      "as user:standard (user:standard)",
+      "goto /",
+      "goto /app/products",
+      "goto /app/cart",
+      "goto /app/checkout",
+      "close false",
+    ]);
+    expect(events.filter(([e]) => e === "ui.snapshot.failed")).toEqual([
+      [
+        "ui.snapshot.failed",
+        { where: "/app/login", platform: "web", error: "net::ERR at /app/login secret-token" },
+      ],
+    ]);
+  });
+
+  it("REQ-EXEC-22/AC6+AC7: without an account the start page is opened anonymously; a failed login records nothing", async () => {
+    const calls: string[] = [];
+    const events: [string, unknown][] = [];
+    const base = {
+      factory: fakeFactory({ "/": [{ role: "heading", name: "Shop" }] }, calls),
+      baseUrl: "http://127.0.0.1:3000",
+      allowedOrigins: ["http://127.0.0.1:3000"],
+      mask: (v: unknown) => v,
+      emit: (event: string, details: Record<string, unknown>) => events.push([event, details]),
+    };
+    const anonymous = await crawlUiSnapshot({ ...base, login: () => Promise.reject(new Error("unused")) });
+    expect(anonymous).toEqual([
+      { where: "/", platform: "web", elements: [{ role: "heading", name: "Shop" }] },
+    ]);
+    const none = await crawlUiSnapshot({
+      ...base,
+      account: "user:standard",
+      login: () => Promise.reject(new Error("bad password")),
+    });
+    expect(none).toEqual([]);
+    expect(events.at(-1)).toEqual([
+      "ui.snapshot.failed",
+      { where: "/", platform: "web", error: "bad password" },
     ]);
   });
 });

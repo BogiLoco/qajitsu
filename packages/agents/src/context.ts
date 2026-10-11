@@ -17,7 +17,7 @@ import {
   type UiScreen,
 } from "@qajitsu/core";
 import { cachedTestsIndex, renderTestsRepo, type TestsRepoIndex } from "./tests-repo.js";
-import { buildUiInventory, renderUiInventory, type UiInventory } from "@qajitsu/verifier";
+import { buildUiInventory, renderUiInventory, renderUiSnapshot, type UiInventory } from "@qajitsu/verifier";
 
 /** Diffs longer than this are replaced by a file list; agents read the rest with tools (REQ-CTX-05/AC5). */
 export const DIFF_INLINE_LIMIT = 30_000;
@@ -368,6 +368,18 @@ export function renderChangeContext(
   }
   if (context.ui && options.ui !== false)
     parts.push(untrusted("ui/inventory", renderUiInventory(context.ui)));
+  // REQ-EXEC-22/AC7: without the code, what the environment's pages show is how the planner names elements.
+  if (context.snapshot && context.snapshot.length > 0 && options.ui !== false)
+    parts.push(
+      untrusted(
+        "ui/snapshot",
+        renderUiSnapshot(
+          context.snapshot,
+          60,
+          "What the environment's pages show (recorded by QAJitsu before planning; name elements with these selectors; not a source to cite)",
+        ),
+      ),
+    );
   const around = context.mapAround;
   if (around && (around.changed.length > 0 || around.untested.length > 0)) {
     // REQ-OBS-08: computed by code from past runs; labels come from routes, OpenAPI and visited URLs, so wrapped.

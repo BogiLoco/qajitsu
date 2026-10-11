@@ -547,8 +547,16 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--run <id>", "run id (default: latest run of the ticket)")
     .option("--revise <instruction>", "write a new plan version following this instruction")
     .option("--depth <depth>", "smoke (high-risk cases), standard (high and medium) or full (every case)")
-    .action((ticket: string, options: { run?: string; revise?: string; depth?: string }) =>
-      withPorts((ports) => runPlan(ticket, options, commandIO, ports, review))(),
+    .option(
+      "--env <profile|url>",
+      "environment whose pages are recorded for the planner when the code is not available",
+    )
+    .option("--snapshot", "record the environment's pages for the planner also when the code is available")
+    .action(
+      (
+        ticket: string,
+        options: { run?: string; revise?: string; depth?: string; env?: string; snapshot?: boolean },
+      ) => withPorts((ports) => runPlan(ticket, options, commandIO, ports, review))(),
     );
 
   program

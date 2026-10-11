@@ -173,3 +173,111 @@ export async function recordUiSnapshot(input: UiSnapshotInput): Promise<UiScreen
   }
   return screens;
 }
+
+/** What a crawl of the environment needs (REQ-EXEC-22/AC7). */
+export interface UiCrawlInput {
+  readonly factory: BrowserFactory;
+  readonly login: NonNullable<UiSnapshotInput["web"]>["login"];
+  /** Account alias to open the pages as; anonymous when absent. */
+  readonly account?: string | undefined;
+  readonly baseUrl: string;
+  readonly allowedOrigins: readonly string[];
+  /** Pages recorded at most (default 12). */
+  readonly maxPages?: number;
+  readonly mask: UiSnapshotInput["mask"];
+  readonly emit: UiSnapshotInput["emit"];
+}
+
+/** The path of a link on the environment's own origin, without query and fragment; undefined for anything else. */
+const pagePath = (
+  href: string,
+  from: string,
+  base: string,
+  allowed: readonly string[],
+): string | undefined => {
+  try {
+    const url = new URL(href, new URL(from, base));
+    if (url.origin !== new URL(base).origin || !allowed.includes(url.origin)) return undefined;
+    return url.pathname.replace(/(.)\/+$/, "$1");
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * Records the pages reachable from the environment's start page, for planning without the code (REQ-EXEC-22/AC7):
+ * breadth first over links on the environment's own origin, as one account, up to a limit. Nothing becomes evidence;
+ * a page that cannot be opened is journaled and skipped (AC6). The browser keeps the allowlist (AC5).
+ *
+ * @param input - Browser, login, environment and masking.
+ * @returns The recorded pages, masked.
+ */
+export async function crawlUiSnapshot(input: UiCrawlInput): Promise<UiScreen[]> {
+  const screens: UiScreen[] = [];
+  const max = input.maxPages ?? PAGES_PER_RUN;
+  const failed = (where: string, error: unknown): void => {
+    input.emit("ui.snapshot.failed", {
+      where,
+      platform: "web",
+      error: (input.mask({ error: message(error) }) as { error: string }).error.slice(0, 500),
+    });
+  };
+  let login: Awaited<ReturnType<UiCrawlInput["login"]>> | undefined;
+  try {
+    login = input.account === undefined ? undefined : await input.login([input.account]);
+  } catch (error) {
+    failed("/", error);
+    return screens;
+  }
+  const plan = { schema: 1, ticket: "CRAWL-1", version: 1, summary: "", cases: [] } as unknown as Plan;
+  const session = input.factory({
+    specFile: "",
+    caseId: "TC-00",
+    attempt: 0,
+    plan,
+    timeoutMs: 60_000,
+    baseUrl: input.baseUrl,
+    allowedOrigins: input.allowedOrigins,
+    accounts: login?.accounts ?? {},
+    secrets: login?.secrets ?? [],
+    ...(login?.sessions ? { sessions: login.sessions } : {}),
+  });
+  try {
+    const driver = await session.driver();
+    if (input.account !== undefined) await driver.useAccount(input.account);
+    const queue = ["/"];
+    const seen = new Set(queue);
+    while (queue.length > 0 && screens.length < max) {
+      const where = queue.shift() ?? "/";
+      try {
+        await driver.goto(where);
+        if (!driver.elements) break;
+        const elements = await driver.elements();
+        const masked = input.mask({
+          where,
+          platform: "web",
+          ...(input.account !== undefined ? { account: input.account } : {}),
+          elements: elements.slice(0, ELEMENTS_PER_SCREEN),
+        }) as UiScreen;
+        screens.push(masked);
+        input.emit("ui.snapshot", { where, platform: "web", elements: masked.elements.length });
+        for (const e of elements) {
+          const next =
+            e.href === undefined ? undefined : pagePath(e.href, where, input.baseUrl, input.allowedOrigins);
+          if (next !== undefined && !seen.has(next)) {
+            seen.add(next);
+            queue.push(next);
+          }
+        }
+      } catch (error) {
+        failed(where, error);
+      }
+    }
+  } catch (error) {
+    failed("/", error);
+  } finally {
+    await session.close(false).catch(() => []);
+    login?.release?.();
+  }
+  return screens;
+}

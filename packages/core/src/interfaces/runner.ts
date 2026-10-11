@@ -112,6 +112,8 @@ export interface UiElementFact {
   readonly resourceId?: string | undefined;
   readonly disabled?: boolean | undefined;
   readonly checked?: boolean | undefined;
+  /** Target of a web link, as the page wrote it (REQ-EXEC-22/AC7: pages reachable from the start page). */
+  readonly href?: string | undefined;
 }
 
 /** The elements of one page or screen (REQ-EXEC-22). */
