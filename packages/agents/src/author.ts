@@ -57,6 +57,25 @@ export async function run({ step, verify, plan, ui }: CaseContext): Promise<void
 }
 `;
 
+/** Example mobile spec shown to the author: a native app is driven by tapping its elements; no web session. */
+export const EXAMPLE_MOBILE_SPEC = `import type { CaseContext } from "@qajitsu/steps";
+
+export const caseId = "TC-09";
+
+export async function run({ step, verify, plan, ui }: CaseContext): Promise<void> {
+  await step("S1", async () => {
+    await ui.click("testid:add-item");
+    verify("S1", "elements.testid:cart-count.text", undefined, plan.expect("TC-09.S1.elements.testid:cart-count.text"));
+  });
+  await step("S2", async () => {
+    await ui.click("testid:open-checkout");
+    await ui.back();
+    await ui.waitFor("testid:cart-count");
+    verify("S2", "elements.testid:cart-count.text", undefined, plan.expect("TC-09.S2.elements.testid:cart-count.text"));
+  });
+}
+`;
+
 /** System prompt of the author role (REQ-EXEC-01). */
 export const AUTHOR_SYSTEM = `You are the test author of QAJitsu. You write one executable TypeScript spec for one approved test case.
 ${UNTRUSTED_DATA_RULES}
@@ -71,6 +90,9 @@ Rules (checked by code; a violating spec is rejected):
   account, then ui.goto("/path"), ui.click(sel), ui.fill(sel, text), ui.check(sel), ui.uncheck(sel), ui.select(sel,
   value), ui.press(sel, key), ui.waitFor(sel), ui.back(). Selectors are the plan's: testid:<id>, role:<role>:<name>,
   label:<text>, text:<text>. Open the page before checking anything on it.
+- Mobile cases (type "mobile") test a native app that is already open: never ui.as (a native app cannot get a web
+  session; log in through its own screens when the plan says so) and ui.goto only for deep links; perform every
+  action of the step by tapping its elements (ui.click, ui.fill), ui.back() presses the Android back button.
 - QAJitsu reads web and mobile values from the live page: element states are verified as
   verify("<step id>", "elements.<selector>.<property>", undefined, plan.expect("<case>.<step>.elements.<selector>.<property>"))
   and visible texts as verify("<step id>", "texts.<n>", undefined, plan.expect("<case>.<step>.texts.<n>")).
@@ -90,9 +112,12 @@ Answer with the complete spec in one \`\`\`ts code block and nothing else.
 Example (API):
 \`\`\`ts
 ${EXAMPLE_SPEC}\`\`\`
-Example (web or mobile):
+Example (web):
 \`\`\`ts
-${EXAMPLE_WEB_SPEC}\`\`\``;
+${EXAMPLE_WEB_SPEC}\`\`\`
+Example (mobile):
+\`\`\`ts
+${EXAMPLE_MOBILE_SPEC}\`\`\``;
 
 /** Outcome of authoring one case. */
 export interface AuthoredSpec {

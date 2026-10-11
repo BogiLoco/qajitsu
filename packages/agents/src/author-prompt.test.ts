@@ -1,7 +1,7 @@
 import { PlanSchema } from "@qajitsu/core";
 import { checkSpecSource } from "@qajitsu/verifier";
 import { describe, expect, it } from "vitest";
-import { AUTHOR_SYSTEM, EXAMPLE_SPEC, EXAMPLE_WEB_SPEC } from "./author.js";
+import { AUTHOR_SYSTEM, EXAMPLE_MOBILE_SPEC, EXAMPLE_SPEC, EXAMPLE_WEB_SPEC } from "./author.js";
 
 const plan = PlanSchema.parse({
   schema: 1,
@@ -48,6 +48,29 @@ const plan = PlanSchema.parse({
         },
       ],
     },
+    {
+      id: "TC-09",
+      title: "Mobile example",
+      type: "mobile",
+      priority: "high",
+      source: [{ kind: "ac", id: "AC1" }],
+      evidence: ["screenshot"],
+      steps: [
+        {
+          id: "S1",
+          action: "Add one item",
+          expect: { description: "One item", elements: { "testid:cart-count": { text: "Cart: 1 item" } } },
+        },
+        {
+          id: "S2",
+          action: "Open checkout and press back",
+          expect: {
+            description: "Still one item",
+            elements: { "testid:cart-count": { text: "Cart: 1 item" } },
+          },
+        },
+      ],
+    },
   ],
 });
 
@@ -55,6 +78,9 @@ describe("author prompt (REQ-EXEC-01, REQ-EXEC-05)", () => {
   it("REQ-EXEC-01/AC1 + REQ-EXEC-05/AC1: the API and web examples the author is shown pass the static checks", () => {
     expect(checkSpecSource(EXAMPLE_SPEC, "TC-07", plan)).toEqual([]);
     expect(checkSpecSource(EXAMPLE_WEB_SPEC, "TC-08", plan)).toEqual([]);
+    expect(checkSpecSource(EXAMPLE_MOBILE_SPEC, "TC-09", plan)).toEqual([]);
+    expect(EXAMPLE_MOBILE_SPEC).not.toContain("ui.as");
+    expect(AUTHOR_SYSTEM).toContain("never ui.as");
     expect(AUTHOR_SYSTEM).toContain(EXAMPLE_WEB_SPEC);
     expect(AUTHOR_SYSTEM).toContain('"elements.<selector>.<property>"');
   });
