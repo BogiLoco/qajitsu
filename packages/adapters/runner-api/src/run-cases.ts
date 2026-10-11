@@ -10,12 +10,21 @@ import {
   type StepPause,
   type VisualCheck,
   type CaseMessages,
+  type Lane,
   type Plan,
 } from "@qajitsu/core";
 import type { AttemptRecord } from "@qajitsu/steps";
 import type { AttemptInput } from "./attempt.js";
 import type { ContractValidator } from "./openapi.js";
 import type { AttemptExecutor } from "./sandbox.js";
+
+/** What an attempt logs in for. */
+export interface LoginContext {
+  readonly caseId: string;
+  readonly attempt: number;
+  readonly specFile: string;
+  readonly lane: Lane;
+}
 
 /** Settings of one execution. */
 export interface RunCasesOptions {
@@ -28,14 +37,19 @@ export interface RunCasesOptions {
   readonly baseUrl: string;
   readonly allowedOrigins: readonly string[];
   /**
-   * Logs in every account alias for one attempt. Called per attempt, so retries never share session
-   * state (carts, tokens) with the attempt before them (REQ-EXEC-08, REQ-CFG-07/AC2).
+   * Logs in the accounts of one attempt. Called per attempt, so retries never share session state (carts, tokens)
+   * with the attempt before them (REQ-EXEC-08, REQ-CFG-07/AC2). With account pools it hands the attempt its own
+   * accounts (`leased`, journal labels) and `release` gives them back when the attempt ends (REQ-ENV-09).
    */
-  readonly login: () => Promise<{
+  readonly login: (context: LoginContext) => Promise<{
     readonly accounts: AttemptInput["accounts"];
     readonly secrets: readonly string[];
     readonly sessions?: Readonly<Record<string, string>>;
+    readonly leased?: Readonly<Record<string, string>>;
+    readonly release?: () => void;
   }>;
+  /** The lane these cases run in (REQ-EXEC-19); recorded with their journal events. */
+  readonly lane?: Lane;
   /** Retries after a failed or errored attempt (REQ-EXEC-08/AC1, default 1). */
   readonly retries?: number;
   readonly timeoutMs?: number;
@@ -145,15 +159,17 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
       (bytes) => sha256(bytes),
       () => undefined,
     );
+    const lane = options.lane ?? "api";
     options.events.emit("run", actor, "case.attempt.start", {
       caseId,
       attempt,
+      lane,
       healed,
       ...(specSha256 === undefined ? {} : { specSha256 }),
     });
     let session;
     try {
-      session = await options.login();
+      session = await options.login({ caseId, attempt, specFile: spec, lane });
     } catch (error) {
       return {
         entry: {
@@ -166,36 +182,42 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
         },
       };
     }
-    const executed = await options.executor({
-      specFile: spec,
-      caseId,
-      attempt,
-      plan: options.plan,
-      baseUrl: options.baseUrl,
-      allowedOrigins: options.allowedOrigins,
-      accounts: session.accounts,
-      secrets: session.secrets,
-      ...(session.sessions ? { sessions: session.sessions } : {}),
-      // A case with manual steps waits for people: its time limit grows by their answer time (REQ-EXEC-11).
-      timeoutMs:
-        (options.timeoutMs ?? 60_000) +
-        manualCount(caseId) * (options.manualTimeoutMs ?? 900_000) +
-        messageWaitMs(caseId),
-      ...(options.manual ? { manual: options.manual } : {}),
-      ...(options.locale ? { locale: options.locale } : {}),
-      ...(options.visual ? { visual: options.visual } : {}),
-      ...(options.pause ? { pause: options.pause } : {}),
-      // REQ-OBS-09: step starts go to the journal as they happen, so `qj run` and `qj watch` can show progress.
-      progress: {
-        step: (stepId: string) => {
-          options.events.emit("run", actor, "step.start", { caseId, attempt, step: stepId });
+    if (session.leased && Object.keys(session.leased).length > 0)
+      options.events.emit("run", actor, "case.accounts", { caseId, attempt, lane, accounts: session.leased });
+    const release = session.release;
+    const executed = await options
+      .executor({
+        specFile: spec,
+        caseId,
+        attempt,
+        plan: options.plan,
+        baseUrl: options.baseUrl,
+        allowedOrigins: options.allowedOrigins,
+        accounts: session.accounts,
+        secrets: session.secrets,
+        ...(session.sessions ? { sessions: session.sessions } : {}),
+        // A case with manual steps waits for people: its time limit grows by their answer time (REQ-EXEC-11).
+        timeoutMs:
+          (options.timeoutMs ?? 60_000) +
+          manualCount(caseId) * (options.manualTimeoutMs ?? 900_000) +
+          messageWaitMs(caseId),
+        ...(options.manual ? { manual: options.manual } : {}),
+        ...(options.locale ? { locale: options.locale } : {}),
+        ...(options.visual ? { visual: options.visual } : {}),
+        ...(options.pause ? { pause: options.pause } : {}),
+        // REQ-OBS-09: step starts go to the journal as they happen, so `qj run` and `qj watch` can show progress.
+        progress: {
+          step: (stepId: string) => {
+            options.events.emit("run", actor, "step.start", { caseId, attempt, step: stepId });
+          },
+          screenshot: (stepId: string, png: Uint8Array) => {
+            options.onScreenshot?.(caseId, stepId, png);
+          },
         },
-        screenshot: (stepId: string, png: Uint8Array) => {
-          options.onScreenshot?.(caseId, stepId, png);
-        },
-      },
-      ...(options.messages ? { messages: options.messages(caseId) } : {}),
-    });
+        ...(options.messages ? { messages: options.messages(caseId) } : {}),
+      })
+      // The accounts go back to the pool as soon as the attempt ends, also when it throws (REQ-ENV-09/AC2).
+      .finally(() => release?.());
     const record = applyContract(executed, options.contract);
     const evidencePaths: string[] = [];
     for (const item of record.evidence) {
@@ -223,6 +245,7 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
     options.events.emit("run", actor, "case.attempt.end", {
       caseId,
       attempt,
+      lane,
       outcome: record.outcome,
       healed,
     });

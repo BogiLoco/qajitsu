@@ -12,7 +12,7 @@ export {
   type BrowserFactory,
   type BrowserSession,
 } from "./sandbox.js";
-export { applyContract, runCases, type RunCasesOptions } from "./run-cases.js";
+export { applyContract, runCases, type LoginContext, type RunCasesOptions } from "./run-cases.js";
 export { createContractValidator, loadContractValidator, type ContractValidator } from "./openapi.js";
 export { createPlaywrightTransport } from "./transport.js";
 

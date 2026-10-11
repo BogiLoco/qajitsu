@@ -576,6 +576,14 @@
           "minimum": 1,
           "maximum": 8
         },
+        "distribute": {
+          "default": "split",
+          "type": "string",
+          "enum": [
+            "split",
+            "matrix"
+          ]
+        },
         "recording": {
           "default": "retain-on-failure",
           "type": "string",
@@ -727,6 +735,48 @@
               ],
               "additionalProperties": false
             },
+            "emulators": {
+              "minItems": 1,
+              "maxItems": 8,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9-]{0,29}$"
+                  },
+                  "avd": {
+                    "type": "string",
+                    "pattern": "^[\\w.-]+$"
+                  },
+                  "system_image": {
+                    "type": "string",
+                    "pattern": "^system-images;[\\w.;-]+$"
+                  },
+                  "device": {
+                    "type": "string",
+                    "pattern": "^[\\w.-]+$"
+                  },
+                  "headless": {
+                    "default": true,
+                    "type": "boolean"
+                  },
+                  "boot_timeout_s": {
+                    "default": 300,
+                    "type": "integer",
+                    "minimum": 30,
+                    "maximum": 1800
+                  }
+                },
+                "required": [
+                  "name",
+                  "avd",
+                  "system_image"
+                ],
+                "additionalProperties": false
+              }
+            },
             "sdk_root": {
               "type": "string",
               "minLength": 1
@@ -870,15 +920,41 @@
                 "os_version": {
                   "type": "string",
                   "minLength": 1
+                },
+                "devices": {
+                  "minItems": 1,
+                  "maxItems": 8,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9-]{0,29}$"
+                      },
+                      "device": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "os_version": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "device",
+                      "os_version"
+                    ],
+                    "additionalProperties": false
+                  }
                 }
               },
               "required": [
                 "provider",
                 "app",
                 "username",
-                "access_key",
-                "device",
-                "os_version"
+                "access_key"
               ],
               "additionalProperties": false
             }
@@ -1863,6 +1939,51 @@
         "auto_sync": {
           "default": false,
           "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": {
+      "default": {
+        "sequential": false,
+        "workers": {},
+        "web_combinations": 1,
+        "account_wait_s": 300
+      },
+      "type": "object",
+      "properties": {
+        "sequential": {
+          "default": false,
+          "type": "boolean"
+        },
+        "workers": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "api": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "web": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            }
+          },
+          "additionalProperties": false
+        },
+        "web_combinations": {
+          "default": 1,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "account_wait_s": {
+          "default": 300,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3600
         }
       },
       "additionalProperties": false

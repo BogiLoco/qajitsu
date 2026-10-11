@@ -97,6 +97,8 @@ export interface EmulatorOptions {
   readonly exec?: Exec;
   readonly spawn?: Spawn;
   readonly sleep?: (ms: number) => Promise<void>;
+  /** avdmanager hardware profile of a new AVD, e.g. `pixel_8` (REQ-EXEC-20/AC1). */
+  readonly deviceProfile?: string;
   /** AVD folder; default `$ANDROID_AVD_HOME` or the emulator's own (`~/.android/avd`). */
   readonly avdHome?: string;
   /** avdmanager binary; default `cmdline-tools/latest/bin/avdmanager` in the SDK, else `avdmanager` on PATH. */
@@ -128,7 +130,16 @@ export async function startAndroidEmulator(options: EmulatorOptions): Promise<Ru
   if (!avds.includes(options.avd))
     await exec(
       avdmanager,
-      ["create", "avd", "--name", options.avd, "--package", options.systemImage, "--force"],
+      [
+        "create",
+        "avd",
+        "--name",
+        options.avd,
+        "--package",
+        options.systemImage,
+        ...(options.deviceProfile ? ["--device", options.deviceProfile] : []),
+        "--force",
+      ],
       {
         ...env,
         // "Do you wish to create a custom hardware profile?" is answered by the empty stdin.

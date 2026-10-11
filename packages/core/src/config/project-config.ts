@@ -504,6 +504,26 @@ export const ProjectConfigSchema = z.strictObject({
       index_threshold: 50_000,
       auto_sync: false,
     }),
+  /**
+   * How the cases of a run are executed (REQ-EXEC-19, REQ-ENV-09): API, web and mobile lanes run at the same time,
+   * each with its own number of cases at once; `sequential` runs one case at a time in plan order.
+   */
+  execution: z
+    .strictObject({
+      sequential: z.boolean().default(false),
+      /** Cases at once per lane; default `environments.workers`. Mobile runs one case at a time per device. */
+      workers: z
+        .strictObject({
+          api: z.number().int().min(1).max(16).optional(),
+          web: z.number().int().min(1).max(16).optional(),
+        })
+        .default({}),
+      /** Browser and viewport combinations of `web.matrix` running at the same time. */
+      web_combinations: z.number().int().min(1).max(8).default(1),
+      /** How long a case waits for a free pool account before it is BLOCKED. */
+      account_wait_s: z.number().int().min(0).max(3600).default(300),
+    })
+    .default({ sequential: false, workers: {}, web_combinations: 1, account_wait_s: 300 }),
   test_types: z
     .array(z.enum(["api", "web", "mobile"]))
     .min(1)
@@ -512,6 +532,22 @@ export const ProjectConfigSchema = z.strictObject({
 
 /** Parsed and defaulted project configuration. */
 export type ProjectConfig = z.infer<typeof ProjectConfigSchema>;
+
+/** Cases at once per lane of a run (REQ-EXEC-19): one everywhere when sequential. */
+export function laneWorkers(
+  config: ProjectConfig,
+  options: { readonly sequential?: boolean } = {},
+): { api: number; web: number; webCombinations: number; sequential: boolean } {
+  const sequential = options.sequential === true || config.execution.sequential;
+  if (sequential) return { api: 1, web: 1, webCombinations: 1, sequential };
+  const fallback = config.environments.workers;
+  return {
+    api: config.execution.workers.api ?? fallback,
+    web: config.execution.workers.web ?? fallback,
+    webCombinations: config.execution.web_combinations,
+    sequential,
+  };
+}
 
 /**
  * Validates raw project configuration (already parsed from YAML).
@@ -540,6 +576,28 @@ export function parseProjectConfig(raw: unknown, source = ".qa/qa.project.yaml")
         buildIssues.push("build.compose_file: required when a service has kind: compose");
       }
     }
+    // REQ-EXEC-20: one way to describe the devices, each with its own name.
+    const mobile = result.data.mobile;
+    if (mobile?.android?.emulators) {
+      if (mobile.android.emulator)
+        buildIssues.push(
+          "mobile.android: use emulators (several devices) or emulator (one profile), not both",
+        );
+      if (mobile.devices > 1)
+        buildIssues.push(
+          "mobile.devices: does not apply with mobile.android.emulators; list one profile per device",
+        );
+    }
+    if (mobile?.ios?.farm?.devices && mobile.devices > 1)
+      buildIssues.push(
+        "mobile.devices: does not apply with mobile.ios.farm.devices; list one entry per device",
+      );
+    const names = [
+      ...(mobile?.android?.emulators ?? []).map((e) => e.name),
+      ...(mobile?.ios?.farm?.devices ?? []).map((d) => d.name),
+    ];
+    for (const name of new Set(names.filter((n, i) => names.indexOf(n) !== i)))
+      buildIssues.push(`mobile: device name '${name}' is used twice`);
     const providers = result.data.models.providers;
     const missingHosts = [
       ...buildIssues,

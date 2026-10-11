@@ -34,36 +34,118 @@
         "pattern": "^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$"
       },
       "additionalProperties": {
-        "type": "object",
-        "properties": {
-          "username": {
-            "type": "string",
-            "minLength": 1
-          },
-          "password": {
-            "type": "string",
-            "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
-          },
-          "login_extra": {
-            "default": {},
+        "anyOf": [
+          {
             "type": "object",
-            "propertyNames": {
-              "type": "string"
+            "properties": {
+              "username": {
+                "type": "string",
+                "minLength": 1
+              },
+              "password": {
+                "type": "string",
+                "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+              },
+              "login_extra": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ]
+                }
+              },
+              "lanes": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "api",
+                    "web",
+                    "mobile"
+                  ]
+                }
+              },
+              "shared": {
+                "default": false,
+                "type": "boolean"
+              }
             },
-            "additionalProperties": {
-              "type": [
-                "string",
-                "number",
-                "boolean"
-              ]
-            }
+            "required": [
+              "username",
+              "password"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "pool": {
+                "minItems": 1,
+                "maxItems": 200,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "username": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "password": {
+                      "type": "string",
+                      "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+                    },
+                    "login_extra": {
+                      "default": {},
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": [
+                          "string",
+                          "number",
+                          "boolean"
+                        ]
+                      }
+                    },
+                    "lanes": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "api",
+                          "web",
+                          "mobile"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "username",
+                    "password"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "shared": {
+                "default": false,
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "pool"
+            ],
+            "additionalProperties": false
           }
-        },
-        "required": [
-          "username",
-          "password"
-        ],
-        "additionalProperties": false
+        ]
       }
     },
     "login": {
