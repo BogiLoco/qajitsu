@@ -1,0 +1,231 @@
+import type { Plan } from "@qajitsu/core";
+import { selectorKnown, type UiInventory } from "./ui-inventory.js";
+
+/** Why an expectation of a plan cannot be checked as it is (REQ-PLAN-09). */
+export type PlanFlagKind = "placeholder" | "schema" | "description-only" | "selector";
+
+/** One expectation a test could not compare with anything meaningful. */
+export interface PlanFlag {
+  readonly caseId: string;
+  readonly stepId: string;
+  readonly kind: PlanFlagKind;
+  /** The expectation, e.g. `fields.total` or `elements.testid:pay.enabled`. */
+  readonly field?: string | undefined;
+  readonly value?: unknown;
+  readonly reason: string;
+}
+
+/** Words that make a lower-case identifier a name standing in for a value (`expected_total`, `reduced_value`). */
+const PLACEHOLDER_WORDS = new Set([
+  "value",
+  "expected",
+  "result",
+  "original",
+  "final",
+  "computed",
+  "calculated",
+  "reduced",
+  "intermediate",
+  "actual",
+  "placeholder",
+  "sample",
+  "some",
+]);
+
+/**
+ * Whether a string is a placeholder rather than a value (REQ-PLAN-09/AC1): `<...>`, `{...}`, `${...}`, TBD, TODO,
+ * `?`, `...`, N/A, `X,XX`, and identifiers such as `expected_total` or `expectedTotal`. Codes such as
+ * `DISCOUNT_NOT_FOUND` and ordinary words are not.
+ */
+export function isPlaceholder(value: string): boolean {
+  const s = value.trim();
+  if (s === "") return false;
+  if (/^<[^<>]*>$/.test(s) || /^\{\{?[^{}]*\}?\}$/.test(s) || /\$\{[^}]*\}/.test(s)) return true;
+  if (/^(tbd|todo|fixme|xxx|n\/a|\?+|\.{3}|…)$/i.test(s)) return true;
+  if (/\bX+[.,]X+\b/.test(s)) return true;
+  if (/^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/.test(s)) return s.split("_").some((w) => PLACEHOLDER_WORDS.has(w));
+  return /^(expected|actual|computed|calculated|original|reduced|final|intermediate|some)[A-Z][A-Za-z0-9]*$/.test(
+    s,
+  );
+}
+
+/** Every string inside a value with its path, e.g. `lines.0.name`. */
+function strings(value: unknown, path: string): { path: string; text: string }[] {
+  if (typeof value === "string") return [{ path, text: value }];
+  if (Array.isArray(value)) return value.flatMap((v, i) => strings(v, `${path}.${String(i)}`));
+  if (value !== null && typeof value === "object")
+    return Object.entries(value).flatMap(([k, v]) => strings(v, `${path}.${k}`));
+  return [];
+}
+
+type Schema = Record<string, unknown>;
+
+const isObject = (v: unknown): v is Schema => v !== null && typeof v === "object" && !Array.isArray(v);
+
+/** Resolves a local `$ref` (`#/components/schemas/Cart`) and merges `allOf`. */
+function resolve(doc: Schema, schema: unknown, depth = 0): Schema | undefined {
+  if (!isObject(schema) || depth > 20) return undefined;
+  const ref = schema["$ref"];
+  if (typeof ref === "string") {
+    if (!ref.startsWith("#/")) return undefined;
+    let node: unknown = doc;
+    for (const part of ref.slice(2).split("/")) node = isObject(node) ? node[part] : undefined;
+    return resolve(doc, node, depth + 1);
+  }
+  const allOf = schema["allOf"];
+  if (Array.isArray(allOf)) {
+    const merged: Schema = { type: "object", properties: {} };
+    for (const part of allOf) {
+      const r = resolve(doc, part, depth + 1);
+      if (r && isObject(r["properties"])) Object.assign(merged["properties"] as Schema, r["properties"]);
+    }
+    return merged;
+  }
+  return schema;
+}
+
+/** The JSON type of an expected value as OpenAPI names it. */
+const jsonType = (v: unknown): string =>
+  v === null ? "null" : Array.isArray(v) ? "array" : typeof v === "number" ? "number" : typeof v;
+
+const typeMatches = (schemaType: unknown, v: unknown): boolean => {
+  const types = Array.isArray(schemaType) ? schemaType : [schemaType];
+  const actual = jsonType(v);
+  return types.some((t) => t === actual || (t === "integer" && actual === "number" && Number.isInteger(v)));
+};
+
+/** The response schema of the call a step names (`POST /cart/discount`) for a status. */
+function responseSchema(
+  doc: Schema,
+  action: string,
+  status: number | undefined,
+): { schema: Schema; where: string } | undefined {
+  const m = /\b(GET|POST|PUT|PATCH|DELETE)\s+(\/[^\s?]*)/i.exec(action) as [string, string, string] | null;
+  if (!m) return undefined;
+  const [, verb, path] = m;
+  const method = verb.toLowerCase();
+  const paths = isObject(doc["paths"]) ? doc["paths"] : {};
+  const entry = Object.entries(paths).find(([template]) =>
+    new RegExp(
+      `^${template.replace(/[.*+?^$()|[\]\\]/g, "\\$&").replace(/\\?\{[^}]+\\?\}/g, "[^/]+")}$`,
+    ).test(path),
+  );
+  const operation = entry && isObject(entry[1]) ? entry[1][method] : undefined;
+  if (!isObject(operation) || !isObject(operation["responses"])) return undefined;
+  const responses = operation["responses"];
+  const code = status !== undefined ? String(status) : Object.keys(responses).find((k) => /^2\d\d$/.test(k));
+  if (code === undefined) return undefined;
+  const response = responses[code];
+  const content = isObject(response) && isObject(response["content"]) ? response["content"] : undefined;
+  const json = content && isObject(content["application/json"]) ? content["application/json"] : undefined;
+  const schema = json ? resolve(doc, json["schema"]) : undefined;
+  return schema ? { schema, where: `${verb.toUpperCase()} ${path} ${code}` } : undefined;
+}
+
+/** Checks one expected field against a response schema; returns why it does not fit, if it does not. */
+function fieldProblem(doc: Schema, root: Schema, key: string, value: unknown): string | undefined {
+  let node: Schema | undefined = root;
+  for (const part of key.split(".")) {
+    if (!node) return undefined;
+    if (/^\d+$/.test(part)) {
+      node = resolve(doc, node["items"]);
+      continue;
+    }
+    const props = isObject(node["properties"]) ? node["properties"] : undefined;
+    if (!props) return undefined;
+    if (!(part in props)) {
+      if (node["additionalProperties"] !== undefined && node["additionalProperties"] !== false)
+        return undefined;
+      return `"${part}" is not a field of the response (fields: ${Object.keys(props).join(", ")})`;
+    }
+    node = resolve(doc, props[part]);
+  }
+  if (node?.["type"] === undefined) return undefined;
+  return typeMatches(node["type"], value)
+    ? undefined
+    : `the response field is ${JSON.stringify(node["type"])}, the plan expects ${jsonType(value)} ${JSON.stringify(value)}`;
+}
+
+/**
+ * Expectations of a plan that cannot be checked as they are (REQ-PLAN-09): placeholders instead of values (AC1),
+ * fields that do not exist in the OpenAPI response or have another type (AC2), steps with a description only (AC6),
+ * and `testid:` selectors that the code under test does not define (AC8). Deterministic; nothing is guessed.
+ *
+ * @param plan - The plan version.
+ * @param options - The OpenAPI document of the application and the element inventory of the code, when known.
+ */
+export function checkPlanExpectations(
+  plan: Plan,
+  options: { readonly openapi?: unknown; readonly inventory?: UiInventory | undefined } = {},
+): PlanFlag[] {
+  const flags: PlanFlag[] = [];
+  const doc = isObject(options.openapi) ? options.openapi : undefined;
+  const inventory =
+    options.inventory && options.inventory.selectors.length > 0 ? options.inventory : undefined;
+  for (const c of plan.cases)
+    for (const s of c.steps) {
+      const e = s.expect;
+      const flag = (kind: PlanFlagKind, reason: string, field?: string, value?: unknown): void => {
+        flags.push({
+          caseId: c.id,
+          stepId: s.id,
+          kind,
+          reason,
+          ...(field ? { field } : {}),
+          ...(value !== undefined ? { value } : {}),
+        });
+      };
+      const checks =
+        e.status !== undefined ||
+        e.fields !== undefined ||
+        e.texts !== undefined ||
+        e.elements !== undefined ||
+        e.message !== undefined ||
+        e.visual !== undefined;
+      if (s.manual !== true && !checks)
+        flag(
+          "description-only",
+          "the step expects a description only: the test would have nothing to compare",
+        );
+      const values = [
+        ...Object.entries(e.fields ?? {}).flatMap(([k, v]) => strings(v, `fields.${k}`)),
+        ...(e.texts ?? []).map((t, i) => ({ path: `texts.${String(i)}`, text: t })),
+        ...Object.entries(e.elements ?? {}).flatMap(([sel, state]) => strings(state, `elements.${sel}`)),
+        ...Object.entries(e.message ?? {}).flatMap(([k, v]) => strings(v, `message.${k}`)),
+      ];
+      for (const v of values)
+        if (isPlaceholder(v.text))
+          flag("placeholder", "looks like a placeholder, not a value to compare", v.path, v.text);
+      for (const [k, v] of Object.entries(e.fields ?? {}))
+        if (isObject(v) && Object.keys(v).length === 1 && "value" in v)
+          flag(
+            "placeholder",
+            'the value is wrapped in {"value": ...}; write the value itself',
+            `fields.${k}`,
+            v,
+          );
+      if (doc && e.fields) {
+        const response = responseSchema(doc, s.action, e.status);
+        if (response)
+          for (const [k, v] of Object.entries(e.fields)) {
+            const problem = fieldProblem(doc, response.schema, k, v);
+            if (problem) flag("schema", `${response.where}: ${problem}`, `fields.${k}`, v);
+          }
+      }
+      if (inventory)
+        for (const sel of Object.keys(e.elements ?? {}))
+          if (sel.startsWith("testid:") && !selectorKnown(inventory, sel))
+            flag("selector", `${sel} is not defined in the code under test`, `elements.${sel}`);
+    }
+  return flags;
+}
+
+/** The flags as lines for the review (REQ-PLAN-09/AC3). */
+export function formatPlanFlags(flags: readonly PlanFlag[]): string {
+  return flags
+    .map(
+      (f) =>
+        `  ! ${f.caseId} ${f.stepId}${f.field ? ` ${f.field}` : ""}${f.value !== undefined ? ` = ${JSON.stringify(f.value)}` : ""}: ${f.reason}`,
+    )
+    .join("\n");
+}
