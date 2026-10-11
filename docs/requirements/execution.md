@@ -268,3 +268,38 @@ difference asks a person to look; it does not fail the case.
 - [ ] AC2: A difference above the threshold makes the case NEEDS_REVIEW (never FAILED, never PASSED) with the design, the screenshot, the diff and the changed regions marked (REQ-EVD-08) as evidence; the exported frame is kept in the evidence with its SHA-256 and the Figma version it came from.
 - [ ] AC3: When a Figma layer is named like an element selector (e.g. `testid:pay`), its position, size, colour, font and text are compared with the element in the browser or on the device within configured tolerances; each difference is listed with expected (design) and actual (app) values and marked on the screenshot.
 - [ ] AC4: Figma not reachable, a missing node or a missing token makes the design check BLOCKED with the reason; the rest of the step is checked as usual.
+
+### REQ-EXEC-19 · Execution lanes and sequential runs
+
+- Status: accepted
+- Priority: should
+- Stage: later
+- Related: INV-1, REQ-EXEC-10, REQ-EXEC-13, REQ-EXEC-16, REQ-ENV-09
+
+API, web and mobile cases of one run run at the same time in separate lanes, each with its own number of cases at
+once; a run can also go one case at a time.
+
+**Acceptance criteria**
+
+- [ ] AC1: API, web and mobile cases run in separate lanes at the same time; `execution.workers.api` and `execution.workers.web` set how many cases of each run at once (default `environments.workers`), and mobile cases start as soon as their devices are ready instead of after the other cases.
+- [ ] AC2: `qj run --sequential` (or `execution.sequential: true`) runs one case at a time in plan order across all lanes and devices; `--cases` runs only the named cases.
+- [ ] AC3: `execution.web_combinations` (default 1) runs that many browser and viewport combinations of `web.matrix` at the same time; each combination keeps its own results and evidence.
+- [ ] AC4: Order and concurrency never change how a status is computed: each case writes its own results file and evidence, and its journal events carry the case and the lane.
+- [ ] AC5: `--headed` and `--step` keep one case at a time.
+
+### REQ-EXEC-20 · Several different mobile devices
+
+- Status: accepted
+- Priority: should
+- Stage: later
+- Related: REQ-EXEC-06, REQ-EXEC-10, REQ-ENV-06, REQ-GEN-06, REQ-EXEC-19
+
+Mobile cases can run on several different devices at once: to finish sooner, or to check every case on each device.
+
+**Acceptance criteria**
+
+- [ ] AC1: `mobile.android.emulators` lists emulator profiles (name, AVD, system image, hardware profile), each started as its own emulator with its own Appium session; `mobile.ios.farm.devices` lists device and OS version pairs for a device farm.
+- [ ] AC2: `mobile.distribute: split` divides the mobile cases among the devices; `matrix` runs every mobile case on every device, the first device being the primary run.
+- [ ] AC3: In matrix mode each device keeps its own results and evidence; a case is PASSED only when it passed on every device, and the report shows the status per device.
+- [ ] AC4: A device that cannot start makes the cases it would run BLOCKED with the reason; the other devices go on.
+- [ ] AC5: `qj setup` installs the system image and creates the AVD of every emulator profile, and its memory precheck counts every emulator.
