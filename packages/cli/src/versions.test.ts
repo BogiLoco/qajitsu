@@ -78,7 +78,7 @@ describe("tool versions (REQ-GEN-03/AC4)", () => {
     expect(by["chromium"]).toMatchObject({ version: "153.0", needed: true });
     // Firefox is in the matrix but not installed: needed and missing, with the install command.
     expect(by["firefox"]).toMatchObject({ version: undefined, needed: true });
-    expect(by["firefox"]?.install).toBe("pnpm --filter @qajitsu/cli exec playwright-core install firefox");
+    expect(by["firefox"]?.install).toBe("qj setup --only browsers");
     expect(by["webkit"]).toMatchObject({ version: undefined, needed: false });
     expect(by["java"]).toMatchObject({ version: "17.0.12", needed: true });
     expect(by["android sdk"]).toMatchObject({ version: undefined, needed: true });
@@ -87,7 +87,7 @@ describe("tool versions (REQ-GEN-03/AC4)", () => {
     expect(by["appium uiautomator2"]).toMatchObject({ version: "3.8.0", needed: true });
     const text = formatToolVersions(tools);
     expect(text).toMatch(/✔ git +2\.45\.1/);
-    expect(text).toMatch(/✘ firefox +not found \(needed for web tests\); install: pnpm --filter/);
+    expect(text).toMatch(/✘ firefox +not found \(needed for web tests\); install: qj setup --only browsers/);
     expect(text).toMatch(/· webkit +not found \(not needed by this project\)/);
   });
 
@@ -120,7 +120,7 @@ describe("tool versions (REQ-GEN-03/AC4)", () => {
     expect(by["appium xcuitest"]).toMatchObject({
       version: undefined,
       needed: true,
-      install: "appium driver install xcuitest",
+      install: "qj setup --only xcuitest",
     });
   });
 

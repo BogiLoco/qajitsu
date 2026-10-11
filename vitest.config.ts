@@ -29,7 +29,7 @@ export default defineConfig({
       provider: "v8",
       // Add a package here when it gets its first implementation.
       include: [
-        "packages/{core,guard,steps,verifier,report,models,agents,cli}/src/**/*.ts",
+        "packages/{core,guard,steps,verifier,report,models,agents,cli,toolchain}/src/**/*.ts",
         "packages/adapters/*/src/**/*.ts",
       ],
       exclude: ["**/*.test.ts", "**/src/interfaces/**", "packages/cli/src/bin.ts"],

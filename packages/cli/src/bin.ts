@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { homedir, userInfo } from "node:os";
 import { createInterface } from "node:readline/promises";
 import { createGitExec } from "@qajitsu/core";
+import { applyToolchainEnv } from "@qajitsu/toolchain";
 import { createProgram } from "./program.js";
 import { readVersion } from "./version.js";
 
@@ -17,6 +18,10 @@ const program = createProgram(readVersion(), {
   nodeVersion: process.version,
   setExitCode: (code) => {
     process.exitCode = code;
+  },
+  // REQ-GEN-06/AC3: QAJitsu's own process and its children only; shell profiles are never edited.
+  applyEnv: (env) => {
+    applyToolchainEnv(process.env, env);
   },
   user: process.env["QAJITSU_USER"] ?? userInfo().username,
   openEditor: (file: string) =>

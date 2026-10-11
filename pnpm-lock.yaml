@@ -102,6 +102,9 @@ importers:
       '@qajitsu/steps':
         specifier: workspace:*
         version: link:packages/steps
+      '@qajitsu/toolchain':
+        specifier: workspace:*
+        version: link:packages/toolchain
       '@qajitsu/verifier':
         specifier: workspace:*
         version: link:packages/verifier
@@ -483,6 +486,9 @@ importers:
       '@qajitsu/steps':
         specifier: workspace:*
         version: link:../steps
+      '@qajitsu/toolchain':
+        specifier: workspace:*
+        version: link:../toolchain
       '@qajitsu/verifier':
         specifier: workspace:*
         version: link:../verifier
@@ -568,6 +574,18 @@ importers:
       '@qajitsu/core':
         specifier: workspace:*
         version: link:../core
+
+  packages/toolchain:
+    dependencies:
+      '@qajitsu/core':
+        specifier: workspace:*
+        version: link:../core
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.1
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
 
   packages/verifier:
     dependencies:

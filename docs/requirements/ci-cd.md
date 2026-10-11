@@ -68,3 +68,15 @@ The same CLI runs inside pipelines; humans still approve plans.
 - [x] AC1: Documentation describes starting in informational mode and making the check required once false FAILED is low.
 - [x] AC2: Runs limited by label or changed paths; per-run timeout and token budget; caches for git mirrors and browsers.
 - [x] AC3: Secrets from CI stores or OIDC to cloud secret managers; mobile requires KVM (Android) or macOS runners/device farms (iOS).
+
+### REQ-CI-06 · Toolchain in pipelines
+
+- Status: in-progress
+- Priority: could
+- Stage: later
+- Related: REQ-GEN-06, REQ-CI-04
+
+**Acceptance criteria**
+
+- [x] AC1: The GitHub Action and the GitLab template cache `~/.qajitsu/toolchain/` keyed by the toolchain manifest and `.qa/toolchain.yaml`, so a pipeline installs a tool once and later jobs reuse it.
+- [ ] AC2: A Docker image with Java, the Android SDK, emulator, system image and Appium installed by `qj setup` runs Android tests on a host with KVM; the documentation names the hosts where it cannot (no nested virtualisation).

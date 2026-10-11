@@ -145,14 +145,14 @@ export async function toolVersions(input: {
       ),
       needed: docker,
       why: "--build with compose services",
-      install: "install Docker with Compose v2 and start it",
+      install: "qj setup --only docker",
     },
     {
       name: "compose",
       version: first(await exec(docker)("docker", ["compose", "version", "--short"]), /v?([\d.]+)/),
       needed: docker,
       why: "--build with compose services",
-      install: "install Docker Compose v2 (docker compose)",
+      install: "qj setup --only docker",
     },
   ];
   const pw = (input.playwright ?? playwrightInfo)();
@@ -163,14 +163,14 @@ export async function toolVersions(input: {
       version: b.installed ? b.version : undefined,
       needed: browsers.has(b.name),
       why: "web tests",
-      install: `pnpm --filter @qajitsu/cli exec playwright-core install ${b.name}`,
+      install: "qj setup --only browsers",
     });
   out.push({
     name: "java",
     version: first(await exec(android)("java", ["-version"]), /version "([^"]+)"/),
     needed: android,
     why: "Android tests",
-    install: "install a JDK 17 or newer (e.g. Temurin)",
+    install: "qj setup --only java",
   });
   const sdk = androidSdkRoot(config?.mobile?.android?.sdk_root);
   const platforms = (await readdir(join(sdk, "platforms")).catch(() => [] as string[])).sort();
@@ -183,14 +183,14 @@ export async function toolVersions(input: {
         : undefined,
     needed: android,
     why: "Android tests",
-    install: 'sdkmanager "platforms;android-34" "build-tools;34.0.0" (see docs/guides/mobile.md)',
+    install: "qj setup --only android",
   });
   out.push({
     name: "emulator",
     version: await sdkPackageRevision(join(sdk, "emulator")),
     needed: config?.mobile?.android?.emulator !== undefined,
     why: "Android tests on an emulator",
-    install: "sdkmanager emulator",
+    install: "qj setup --only android",
   });
   const appiumBin =
     config?.mobile?.appium.bin?.includes("/") === true
@@ -205,7 +205,7 @@ export async function toolVersions(input: {
     version: first(await exec(appium)(appiumBin, ["--version"], appiumEnv), /^([\d.]+)/m),
     needed: appium,
     why: "mobile tests",
-    install: "npm install -g appium",
+    install: "qj setup --only appium",
   });
   if (appium) {
     const listed = await exec(appium)(appiumBin, ["driver", "list", "--installed", "--json"], appiumEnv);
@@ -223,7 +223,7 @@ export async function toolVersions(input: {
         version: drivers[d]?.version,
         needed: true,
         why: "mobile tests",
-        install: `appium driver install ${d}`,
+        install: `qj setup --only ${d}`,
       });
   }
   if (platform() === "darwin" || ios)
@@ -232,7 +232,7 @@ export async function toolVersions(input: {
       version: first(await exec(ios)("xcodebuild", ["-version"]), /Xcode ([\d.]+)/),
       needed: ios,
       why: "iOS tests on this Mac",
-      install: "install Xcode from the App Store, or use mobile.ios.farm",
+      install: "qj setup --only xcode, or use mobile.ios.farm",
     });
   return out;
 }

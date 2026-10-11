@@ -11,8 +11,14 @@
 # manual `qa-run` job, which is the approval (REQ-CI-03/AC3). Secrets: CI/CD variables (masked, protected).
 
 variables:
-  QAJITSU_IMAGE: ghcr.io/your-org/qajitsu:latest
+  # The QAJitsu version: its image, and its pinned tool versions in the toolchain cache key (REQ-CI-06/AC1).
+  QAJITSU_VERSION: latest
+  QAJITSU_IMAGE: ghcr.io/your-org/qajitsu:$QAJITSU_VERSION
   QAJITSU_WORKSPACE: $CI_PROJECT_DIR/.qa-runs
+  # Inside the project folder, so GitLab can cache the toolchain.
+  QAJITSU_HOME: $CI_PROJECT_DIR/.qajitsu
+  # Install the tools the project needs (qj setup); Docker comes from the runner.
+  QA_SETUP: "true"
   QA_LABEL: qa-agent
 
 .qa-base:
@@ -25,10 +31,16 @@ variables:
     - detected="$(qajitsu ci detect --label "$QA_LABEL" --format env)"
     - eval "$detected"
     - if [ "$QA_RUN" != "true" ]; then echo "QAJitsu not triggered"; exit 0; fi
+    - if [ "$QA_SETUP" = "true" ]; then qajitsu init ci --qa-dir .qa --yes --force && qajitsu setup --yes --skip docker,xcode; fi
   cache:
     # Git mirrors and browsers between pipelines (REQ-CI-05/AC2).
-    key: qajitsu-$CI_COMMIT_REF_SLUG
-    paths: [.qa-cache/]
+    - key: qajitsu-$CI_COMMIT_REF_SLUG
+      paths: [.qa-cache/]
+    # Tools installed by qj setup, once per QAJitsu version and .qa/toolchain.yaml (REQ-CI-06/AC1).
+    - key:
+        files: [.qa/toolchain.yaml]
+        prefix: qajitsu-toolchain-$QAJITSU_VERSION
+      paths: [.qajitsu/toolchain/]
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_LABELS =~ /(^|,)qa-agent(,|$)/
     - if: $QA_TICKET
