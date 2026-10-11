@@ -122,3 +122,20 @@ Besides the terminal, plans can be approved where the team already works.
 - [x] AC1: `qj plan --depth smoke|standard|full` selects cases by risk; the plan records the depth and why each case is in or out.
 - [x] AC2: Before a run QAJitsu shows an estimate of time and model cost based on case count, types and past runs.
 - [x] AC3: A configured budget (time or cost) stops further cases when reached; cases not run are NOT_RUN with the reason.
+
+### REQ-PLAN-09 · Concrete expected values
+
+- Status: proposed
+- Priority: must
+- Stage: 2
+- Related: INV-4, REQ-PLAN-02, REQ-PLAN-04, REQ-PLAN-06, REQ-EXEC-04
+
+An expected value in a plan is a value a test can compare with, never a name standing in for one.
+
+**Acceptance criteria**
+
+- [ ] AC1: Before a plan version is shown for review, code checks every expected value and flags placeholders: `<...>`, `{...}`, `${...}`, TBD, TODO, `?`, `...`, N/A, and lower-case identifiers such as `expected_total`, `reduced_value` or `original_total` (words joined by `_` with a word like value, expected, result, original, final or computed). Codes such as `DISCOUNT_NOT_FOUND` are not flagged.
+- [ ] AC2: When the project has an OpenAPI document, an expected field whose type does not match the response schema (e.g. a string for a numeric `total`) is flagged too.
+- [ ] AC3: Flagged values go back to the planner once for an automatic revision; whatever is still flagged is listed in the review next to the plan (case, step, field, value, why).
+- [ ] AC4: A plan with flagged values cannot be approved without `--confirm-placeholders` (or the same answer in the interactive review); the confirmation and the flagged values are recorded in `run.json`.
+- [ ] AC5: The check is deterministic code with fixture tests, including values that must not be flagged.
