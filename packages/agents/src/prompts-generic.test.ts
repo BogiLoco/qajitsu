@@ -48,4 +48,8 @@ describe("prompts work for any application (REQ-EXEC-21/AC5)", () => {
     }
     expect(AUTHOR_SYSTEM).toContain("xpath:<path> (native app) only as the last");
   });
+
+  it("REQ-VER-13/AC1: the BLOCKED hints know the approved plan is frozen", () => {
+    expect(BLOCKED_SYSTEM).toContain("The approved plan of this run\nis frozen");
+  });
 });

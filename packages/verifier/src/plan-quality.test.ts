@@ -180,6 +180,36 @@ describe("concrete expected values (REQ-PLAN-09)", () => {
     ).toEqual([]);
   });
 
+  it("REQ-PLAN-09/AC8: a text: or label: selector naming an element id of the code is flagged with the testid: to use", () => {
+    const app = buildUiInventory([
+      { path: "Cart.java", text: 'v.setContentDescription("cart-count");' },
+      { path: "web.html", text: '<b data-testid="nav-cart">' },
+    ]);
+    const elements = {
+      "text:cart-count": { text: "Cart: 1 item" },
+      "label:cart-count": { visible: true },
+      "text:Cart: 1 item": { visible: true },
+      "text:nav-cart": { visible: true },
+    };
+    expect(
+      checkPlanExpectations(plan([{ expect: { description: "d", elements } }], "mobile"), {
+        inventory: app,
+      }).map((f) => [f.field, f.reason]),
+    ).toEqual([
+      [
+        "elements.text:cart-count",
+        "cart-count is an element id in the code, not a visible text or label: write testid:cart-count",
+      ],
+    ]);
+    // On the web label: names a form label, never an id; in a native app label: is the accessibility id.
+    expect(
+      checkPlanExpectations(
+        plan([{ expect: { description: "d", elements: { "label:nav-cart": { visible: true } } } }], "web"),
+        { inventory: app },
+      ).map((f) => f.field),
+    ).toEqual(["elements.label:nav-cart"]);
+  });
+
   it("REQ-EXEC-21/AC6: code without any test id cannot judge element names; roles, labels and texts pass", () => {
     const pagesOnly = buildUiInventory([{ path: "app.html", text: '<a href="/orders">Orders</a>' }]);
     expect(pagesOnly.selectors).toEqual([]);

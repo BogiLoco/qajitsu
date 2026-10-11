@@ -54,7 +54,9 @@ ${UNTRUSTED_DATA_RULES}
 Cite what your explanation rests on, using only what is listed: {"kind":"error","ref":"error"} (the attempt's error),
 {"kind":"spec","ref":"<line number>"}, {"kind":"step","ref":"S1"}, {"kind":"evidence","ref":"<evidence path>"},
 {"kind":"log","ref":"<log file>"}. Citations are checked by code; a hint whose citations do not exist is thrown away.
-The next step is one concrete action in plain words (a command, a plan or config change). When unsure, say so.
+The next step is one concrete action in plain words (a command, or a plan or config change). The approved plan of this run
+is frozen: a plan problem is fixed in a new run (qj fetch, qj plan) by correcting the expectation in the review. verify()
+calls belong to the spec, which QAJitsu writes again in a new run; they are never added to the plan. When unsure, say so.
 Answer with one JSON object only:
 { "hints": [{ "caseId": "TC-01", "category": "spec", "justification": "short, concrete", "next": "what to do", "cites": [{ "kind": "error", "ref": "error" }] }] }`;
 

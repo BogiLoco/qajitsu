@@ -247,13 +247,25 @@ export function checkPlanExpectations(
         (target === undefined ||
           inventory.selectors.some((x) => x.platforms.some((p) => target.platforms.includes(p))));
       if (inventory && judged)
-        for (const sel of Object.keys(e.elements ?? {}))
+        for (const sel of Object.keys(e.elements ?? {})) {
+          // An id written as a text (text:cart-count) finds nothing: the element has no such text. On the web the same
+          // goes for label:; in a native app label: is the accessibility id and finds it.
+          const asId = (c.type === "mobile" ? /^text:([\w.-]+)$/ : /^(?:text|label):([\w.-]+)$/).exec(
+            sel,
+          )?.[1];
+          if (asId !== undefined && selectorKnown(inventory, `testid:${asId}`, target?.platforms))
+            flag(
+              "selector",
+              `${asId} is an element id in the code, not a visible text or label: write testid:${asId}`,
+              `elements.${sel}`,
+            );
           if (sel.startsWith("testid:") && !selectorKnown(inventory, sel, target?.platforms))
             flag(
               "selector",
               `${sel} is not defined in the code ${target ? `of ${target.code}` : "under test"}`,
               `elements.${sel}`,
             );
+        }
     }
   return flags;
 }
