@@ -5,6 +5,8 @@
 services:
   api:
     image: node:22-alpine
+    # An init process forwards SIGTERM: the container stops at once instead of being killed after 10 s.
+    init: true
     working_dir: /app
     command: ["node", "api/server.mjs", "--port", "3000", "--host", "0.0.0.0"]
     volumes:
