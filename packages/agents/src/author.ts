@@ -63,6 +63,7 @@ Rules (checked by code; a violating spec is rejected):
 - Start with: import type { CaseContext } from "@qajitsu/steps"; no other imports, no dynamic import.
 - Export const caseId = "<case id>" and export async function run({ step, verify, plan, api, ui, inbox }: CaseContext) (take only what you use).
 - One step("<step id>", async () => { ... }) per plan step, in order; API calls only inside steps through api or api.as("<account alias>").
+- Every verify("<step id>", ...) is written inside the function of that same step, never after it or in another step.
 - Every step has at least one verify("<step id>", "<field>", <actual value>, plan.expect("<case>.<step>.<field>")).
   Fields are "status", "fields.<key>" (read with res.json("<key>")) or "texts.<n>". The expected value is ALWAYS plan.expect(...) with exactly the same step and field; never a literal.
 - Web and mobile steps drive the app only through ui, inside the step: await ui.as("<account alias>") opens it as an

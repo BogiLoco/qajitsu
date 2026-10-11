@@ -164,7 +164,8 @@ export async function runStructuredAgent<T extends z.ZodType>(
             { type: "text", text: run.prompt },
             ...images.flatMap((img) => [
               { type: "text" as const, text: `Image ${img.name}:` },
-              { type: "image" as const, image: img.data, mediaType: img.mediaType },
+              // A file part with an image media type: the "image" part is deprecated in the AI SDK.
+              { type: "file" as const, data: img.data, mediaType: img.mediaType, filename: img.name },
             ]),
           ],
         },
