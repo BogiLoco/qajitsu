@@ -138,6 +138,8 @@ export function renderPlanMarkdown(plan: Plan): string {
         s.expect.status === undefined ? undefined : `status ${String(s.expect.status)}`,
         s.expect.fields ? `fields ${JSON.stringify(s.expect.fields)}` : undefined,
         s.expect.texts ? `texts ${JSON.stringify(s.expect.texts)}` : undefined,
+        // REQ-PLAN-04: the reviewer sees every expectation the test will check, element states included.
+        s.expect.elements ? `elements ${JSON.stringify(s.expect.elements)}` : undefined,
         s.expect.message ? `message ${JSON.stringify(s.expect.message)}` : undefined,
         s.expect.visual ? `visual ${JSON.stringify(s.expect.visual)}` : undefined,
         s.expect.by_locale ? `per locale ${JSON.stringify(s.expect.by_locale)}` : undefined,
