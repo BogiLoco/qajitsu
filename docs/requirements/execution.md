@@ -359,4 +359,3 @@ Mobile cases can run when the team has only a test build of the app, not its rep
 - [ ] AC1: `mobile.android.app` and `mobile.ios.app` also accept a file (`source: file`, a local `.apk`/`.ipa`/`.app`), a download (`source: url`, checked against the allowlist, with a SHA-256 to compare), an app already installed on the device or emulator (`source: installed`, by app id), and an app already uploaded to the device farm.
 - [ ] AC2: The run records the app's version and SHA-256 when known, and the report shows them in place of the commit.
 - [ ] AC3: An app that cannot be obtained or whose SHA-256 differs makes the mobile cases BLOCKED with the reason.
-

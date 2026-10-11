@@ -95,6 +95,35 @@ export interface ScreenBox {
   readonly height: number;
 }
 
+/**
+ * One element the application shows, as the trusted parent recorded it for a snapshot (REQ-EXEC-22/AC1). Values are
+ * what the page or the native view reports; the parent masks them before an agent sees them.
+ */
+export interface UiElementFact {
+  /** Accessible role on the web (`button`, `link`, `heading`, `text`...) or the native class (`Button`, `TextView`). */
+  readonly role?: string | undefined;
+  /** Accessible name on the web; the label of a native element. */
+  readonly name?: string | undefined;
+  /** Visible text. */
+  readonly text?: string | undefined;
+  /** Test id on the web; accessibility id (content-desc, iOS identifier) in a native app. */
+  readonly testid?: string | undefined;
+  /** Android resource id without the package, e.g. `add_item`. */
+  readonly resourceId?: string | undefined;
+  readonly disabled?: boolean | undefined;
+  readonly checked?: boolean | undefined;
+}
+
+/** The elements of one page or screen (REQ-EXEC-22). */
+export interface UiScreen {
+  /** Page path (`/app/checkout`) or `app:start` for the first screen of a native app. */
+  readonly where: string;
+  readonly platform: "web" | "android" | "ios";
+  /** Account alias the page was opened as, if any. */
+  readonly account?: string | undefined;
+  readonly elements: readonly UiElementFact[];
+}
+
 /** A numbered box drawn on a copy of a screenshot (REQ-EVD-08). */
 export interface ScreenMark {
   readonly n: number;

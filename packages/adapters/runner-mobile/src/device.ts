@@ -6,6 +6,7 @@ import {
   type UiDriver,
   type UiProperty,
 } from "@qajitsu/steps";
+import { pageSourceElements } from "./page-source.js";
 
 /** The part of a WebdriverIO element the driver uses. */
 export interface AppiumElement {
@@ -187,6 +188,7 @@ export function createAppiumDeviceFactory(options: MobileRunnerOptions): Browser
           return png;
         },
         dom: () => c.getPageSource(),
+        elements: async () => pageSourceElements(await c.getPageSource(), options.platform),
         // REQ-EVD-08: the element's rectangle in screen pixels, as on the screenshot.
         bounds: async (s) => {
           const el = await c.$(appiumLocator(s, options.platform));

@@ -82,6 +82,12 @@ describe("Appium device driver (REQ-EXEC-06, REQ-EVD-03)", () => {
     expect(await d.property("testid:x", "value")).toBe("Cart: 1 item");
     expect(new TextDecoder().decode(await d.screenshot(false))).toBe("png");
     expect(await d.dom()).toBe(SOURCE);
+    // REQ-EXEC-22/AC1: the elements of the screen for a snapshot.
+    expect(await d.elements?.()).toEqual([
+      { role: "TextView", testid: "cart-count", text: "Cart: 1 item" },
+      { role: "Button", testid: "checkout", text: "Checkout" },
+      { role: "y", text: "A & B" },
+    ]);
     await expect(d.select("testid:x", "a")).rejects.toThrow(/not available/);
     await expect(d.useAccount("user:standard")).rejects.toThrow(/log in through the app/);
     expect(caps).toEqual({ platformName: "Android", "appium:automationName": "UiAutomator2" });

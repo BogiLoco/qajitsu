@@ -1,4 +1,4 @@
-import type { ScreenBox } from "@qajitsu/core";
+import type { ScreenBox, UiElementFact } from "@qajitsu/core";
 /**
  * Width and height of a PNG from its header, without decoding it; undefined when the bytes are not a PNG.
  *
@@ -40,6 +40,8 @@ export interface UiDriver {
   readonly dom: () => Promise<string>;
   /** Where an element is on the screenshot, in its pixels; undefined when it is not on the screen (REQ-EVD-08). */
   readonly bounds?: (selector: UiSelector) => Promise<ScreenBox | undefined>;
+  /** The elements on the page or screen now, for snapshots of the trusted parent (REQ-EXEC-22/AC1). */
+  readonly elements?: () => Promise<readonly UiElementFact[]>;
 }
 
 /** The browser API a spec sees (the parent performs every action). */

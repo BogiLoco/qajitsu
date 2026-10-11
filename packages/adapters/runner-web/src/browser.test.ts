@@ -77,6 +77,47 @@ const attempt = async (
 };
 
 describe("web runner (REQ-EXEC-05, REQ-EXEC-07, REQ-EVD-02)", () => {
+  it("REQ-EXEC-22/AC1: the parent lists the elements of a page: test ids, roles, names, texts and states", async () => {
+    const shop = await startShop({ env: { DEMO_USER_PASSWORD: PASSWORD } });
+    cleanups.push(() => shop.close());
+    const login = (await (
+      await fetch(`${shop.url}/auth/login`, {
+        method: "POST",
+        body: JSON.stringify({ username: "standard", password: PASSWORD }),
+      })
+    ).json()) as { token: string };
+    const session = createPlaywrightBrowserFactory({
+      video: "off",
+      webSession: { storage: "sessionStorage", key: "token" },
+    })({
+      specFile: spec("DEMO-4", "TC-01"),
+      caseId: "TC-01",
+      attempt: 1,
+      plan: plan("DEMO-4"),
+      baseUrl: shop.url,
+      allowedOrigins: [shop.url],
+      accounts: {},
+      sessions: { "user:standard": login.token },
+      secrets: [login.token],
+      timeoutMs: 30_000,
+    });
+    try {
+      const driver = await session.driver();
+      await driver.useAccount("user:standard");
+      await driver.goto("/app/checkout");
+      const elements = (await driver.elements?.()) ?? [];
+      expect(elements).toContainEqual(
+        expect.objectContaining({ testid: "place-order", role: "button", disabled: true }),
+      );
+      expect(elements).toContainEqual(expect.objectContaining({ testid: "accept-terms" }));
+      expect(elements).toContainEqual(expect.objectContaining({ role: "button", disabled: true }));
+      expect(elements.some((e) => e.role === "checkbox")).toBe(true);
+      expect(JSON.stringify(elements)).not.toContain(login.token);
+    } finally {
+      await session.close(false);
+    }
+  });
+
   it("REQ-EXEC-05/AC3 + REQ-EVD-02/AC1+AC3 + REQ-NFR-04/AC1: a passing web case (BUG-05 off) has a screenshot per step, HAR and console log, no video", async () => {
     const { record, token } = await attempt("DEMO-4", "TC-01");
     expect(record.outcome).toBe("passed");

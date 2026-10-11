@@ -12,7 +12,8 @@ import {
   type UiDriver,
   type UiProperty,
 } from "@qajitsu/steps";
-import { OBSERVATIONS_FILE, type PassiveObservations } from "@qajitsu/core";
+import { OBSERVATIONS_FILE, type PassiveObservations, type UiElementFact } from "@qajitsu/core";
+import { ariaElements } from "./aria.js";
 import {
   chromium,
   firefox,
@@ -64,6 +65,40 @@ async function axeViolations(
         targets: v.nodes.slice(0, 5).map((n) => [].concat(n.target).join(" ")) })))`,
   );
   return found;
+}
+
+/** Visible elements with a test id, read in the page (CDP evaluation): id, tag, text and state. */
+const TEST_ID_SCRIPT = `[...document.querySelectorAll("[data-testid]")]
+  .filter((e) => e.getClientRects().length > 0)
+  .slice(0, 400)
+  .map((e) => ({
+    testid: e.getAttribute("data-testid"),
+    role: e.tagName.toLowerCase(),
+    text: (e.innerText || "").trim().replace(/\\s+/g, " ").slice(0, 120),
+    disabled: e.disabled === true || e.getAttribute("aria-disabled") === "true",
+    checked: e.checked === true,
+  }))`;
+
+/**
+ * The elements of a page for a snapshot (REQ-EXEC-22/AC1): every accessible element from Playwright's accessibility
+ * snapshot, then every visible element with a test id.
+ */
+async function pageElements(page: Page): Promise<UiElementFact[]> {
+  const accessible = ariaElements(await page.locator("body").ariaSnapshot({ timeout: 5000 }));
+  const withId =
+    await page.evaluate<
+      { testid: string; role: string; text: string; disabled: boolean; checked: boolean }[]
+    >(TEST_ID_SCRIPT);
+  return [
+    ...withId.map((e) => ({
+      testid: e.testid,
+      role: e.role,
+      ...(e.text !== "" ? { text: e.text } : {}),
+      ...(e.disabled ? { disabled: true } : {}),
+      ...(e.checked ? { checked: true } : {}),
+    })),
+    ...accessible,
+  ];
 }
 
 /**
@@ -300,6 +335,7 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
             .first()
             .boundingBox({ timeout: 1000 })
             .catch(() => null)) ?? undefined,
+        elements: () => pageElements(p),
       };
     };
 
