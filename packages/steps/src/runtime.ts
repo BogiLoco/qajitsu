@@ -743,7 +743,10 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         );
       }
       const expected = expectationOf(planCase, stepId, field, `${caseId}.${stepId}.${field}`);
-      if (!driver) throw new Error(`verify('${stepId}', '${field}') needs the browser to be open`);
+      // A native app is open from the start of the case; a browser has no page until ui.goto().
+      if (!driver && planCase.type === "mobile") await browser();
+      if (!driver)
+        throw new Error(`verify('${stepId}', '${field}') needs an open page: call ui.goto() first`);
       record(expected, await driver.property(assertSelector(rest.slice(0, -1).join(".")), property));
       return;
     }

@@ -299,4 +299,62 @@ describe("manual steps in specs (REQ-EXEC-11)", () => {
       ).map((p) => p.message),
     ).toContain("step S9 is manual: a person reports its outcome, the spec must not verify it");
   });
+
+  describe("native app cases (REQ-EXEC-06)", () => {
+    const mobilePlan = PlanSchema.parse({
+      schema: 1,
+      ticket: "DEMO-6",
+      version: 1,
+      ...JSON.parse(
+        readFileSync(new URL("../../../fixtures/plans/demo-6-draft.json", import.meta.url), "utf8"),
+      ),
+    });
+    const mobile = readFileSync(
+      new URL("../../../fixtures/specs/demo-6/TC-01.spec.ts", import.meta.url),
+      "utf8",
+    );
+    const at = (src: string, options?: { deepLinks?: boolean }) =>
+      checkSpecSource(src, "TC-01", mobilePlan, options).map((p) => `${p.check}: ${p.message}`);
+
+    it("REQ-EXEC-06/AC1: the reference mobile spec passes", () => {
+      expect(at(mobile)).toEqual([]);
+    });
+
+    it("REQ-EXEC-06/AC1: web-only operations and selectors are rejected before the run, with what to do instead", () => {
+      const src = mobile.replace(
+        'await ui.click("testid:add-item");',
+        'await ui.as("user:standard");\n    await ui.goto("/app/cart");\n    await ui.select("css:#size", "M");\n    await ui.click("role:button:Add");\n    await ui.click("testid:add-item");',
+      );
+      expect(at(src)).toEqual([
+        "lint: ui.as() does not exist in a native app: log in through the app's own screens with ui.fill and ui.click",
+        "lint: ui.goto() in a native app needs mobile.deep_link_scheme; the app is already open: tap its elements instead",
+        "lint: ui.select() does not exist in a native app: tap the option with ui.click",
+        "lint: 'css:#size' cannot be found in a native app: use testid:, label: or text:",
+        "lint: 'role:button:Add' cannot be found in a native app: use testid:, label: or text:",
+      ]);
+      expect(blockingProblems(checkSpecSource(src, "TC-01", mobilePlan)).length).toBe(5);
+    });
+
+    it("REQ-EXEC-06/AC1: ui.goto is allowed with a deep link scheme; web cases keep every operation", () => {
+      const src = mobile.replace(
+        'await ui.click("testid:add-item");',
+        'await ui.goto("/cart");\n    await ui.click("testid:add-item");',
+      );
+      expect(at(src, { deepLinks: true })).toEqual([]);
+      const web = readFileSync(
+        new URL("../../../fixtures/specs/demo-4/TC-01.spec.ts", import.meta.url),
+        "utf8",
+      );
+      const webPlan = PlanSchema.parse({
+        schema: 1,
+        ticket: "DEMO-4",
+        version: 1,
+        ...JSON.parse(
+          readFileSync(new URL("../../../fixtures/plans/demo-4-draft.json", import.meta.url), "utf8"),
+        ),
+      });
+      expect(checkSpecSource(web, "TC-01", webPlan)).toEqual([]);
+      expect(web).toContain("ui.as(");
+    });
+  });
 });

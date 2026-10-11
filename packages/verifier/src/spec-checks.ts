@@ -29,6 +29,21 @@ const FORBIDDEN_GLOBALS = new Set([
 
 const UI_ACTIONS = new Set(["click", "fill", "check", "uncheck", "select", "press", "waitFor"]);
 
+/** Selector kinds a native app can resolve (REQ-EXEC-06); `role:` and `css:` exist only in a browser. */
+const NATIVE_SELECTORS = ["testid:", "label:", "text:"];
+
+/** `ui` operations that do not exist in a native app, and what to do instead (REQ-EXEC-06). */
+const NATIVE_UNAVAILABLE: Readonly<Record<string, string>> = {
+  as: "ui.as() does not exist in a native app: log in through the app's own screens with ui.fill and ui.click",
+  select: "ui.select() does not exist in a native app: tap the option with ui.click",
+};
+
+/** Options of the static checks that depend on the project. */
+export interface SpecCheckOptions {
+  /** The native app declares `mobile.deep_link_scheme`, so `ui.goto()` may open a deep link in mobile cases. */
+  readonly deepLinks?: boolean;
+}
+
 const FORBIDDEN_MEMBERS = new Set([
   "constructor",
   "prototype",
@@ -75,17 +90,26 @@ const enclosingStep = (node: ts.Node): string | undefined => {
  * - every plan step has exactly one `step("Sx")` and at least one `verify("Sx", ...)`; a manual step
  *   (REQ-EXEC-11) has its `step("Sx", () => {})` and no `verify()`;
  * - every `verify()` has 4 arguments and the 4th is `plan.expect("<case>.<step>.<field>")` with the
- *   same step and field as the call, so expected values always come from the approved plan.
+ *   same step and field as the call, so expected values always come from the approved plan;
+ * - a mobile case uses only what a native app offers: no `ui.as()` or `ui.select()`, `ui.goto()` only with a deep
+ *   link scheme, and `testid:`, `label:` or `text:` selectors (the device would refuse the rest at run time).
  *
  * @param source - Spec source.
  * @param caseId - Case the spec must implement.
  * @param plan - Approved plan.
+ * @param options - Project-dependent options.
  */
-export function checkSpecSource(source: string, caseId: string, plan: Plan): SpecProblem[] {
+export function checkSpecSource(
+  source: string,
+  caseId: string,
+  plan: Plan,
+  options: SpecCheckOptions = {},
+): SpecProblem[] {
   const problems: SpecProblem[] = [];
   const sf = ts.createSourceFile(`${caseId}.spec.ts`, source, ts.ScriptTarget.ES2023, true, ts.ScriptKind.TS);
   const planCase = plan.cases.find((c) => c.id === caseId);
   if (!planCase) return [{ check: "coverage", message: `${caseId} is not in the approved plan` }];
+  const native = planCase.type === "mobile";
 
   let exportsCaseId = false;
   let exportsRun = false;
@@ -162,7 +186,29 @@ export function checkSpecSource(source: string, caseId: string, plan: Plan): Spe
         if (!first || !ts.isStringLiteral(first)) add("coverage", "step() needs a literal step id", node);
         else stepCalls.set(first.text, (stepCalls.get(first.text) ?? 0) + 1);
       }
+      const onUi =
+        ts.isPropertyAccessExpression(node.expression) &&
+        ts.isIdentifier(node.expression.expression) &&
+        node.expression.expression.text === "ui";
+      if (native && onUi && name !== undefined) {
+        const unavailable = NATIVE_UNAVAILABLE[name];
+        if (unavailable !== undefined) add("lint", unavailable, node);
+        if (name === "goto" && options.deepLinks !== true)
+          add(
+            "lint",
+            "ui.goto() in a native app needs mobile.deep_link_scheme; the app is already open: tap its elements instead",
+            node,
+          );
+        if (
+          UI_ACTIONS.has(name) &&
+          first &&
+          ts.isStringLiteral(first) &&
+          !NATIVE_SELECTORS.some((k) => first.text.startsWith(k))
+        )
+          add("lint", `'${first.text}' cannot be found in a native app: use testid:, label: or text:`, node);
+      }
       if (
+        !native &&
         name !== undefined &&
         UI_ACTIONS.has(name) &&
         first &&

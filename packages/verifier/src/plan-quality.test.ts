@@ -158,6 +158,28 @@ describe("concrete expected values (REQ-PLAN-09)", () => {
     );
   });
 
+  it("REQ-PLAN-09/AC8: a mobile case may only name ids of the app, a web case only ids of the pages", () => {
+    const both = buildUiInventory([
+      { path: "web.html", text: '<a data-testid="nav-checkout">' },
+      { path: "Cart.java", text: 'v.setContentDescription("open-checkout");' },
+    ]);
+    const elements = { "testid:nav-checkout": { enabled: true }, "testid:open-checkout": { visible: true } };
+    const fields = (type: string) =>
+      checkPlanExpectations(plan([{ expect: { description: "d", elements } }], type), {
+        inventory: both,
+      }).map((f) => [f.field, f.reason]);
+    expect(fields("mobile")).toEqual([
+      ["elements.testid:nav-checkout", "testid:nav-checkout is not defined in the code of the mobile app"],
+    ]);
+    expect(fields("web")).toEqual([
+      ["elements.testid:open-checkout", "testid:open-checkout is not defined in the code of the web pages"],
+    ]);
+    // A mobile case with no app ids in the code at all cannot be judged.
+    expect(
+      checkPlanExpectations(plan([{ expect: { description: "d", elements } }], "mobile"), { inventory }),
+    ).toEqual([]);
+  });
+
   it("REQ-PLAN-09/AC2: references, allOf, arrays, open objects and every way a call has no schema", () => {
     const doc = {
       paths: {

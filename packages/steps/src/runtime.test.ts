@@ -348,4 +348,59 @@ describe("case runtime (REQ-EXEC-02, REQ-EVD-01, REQ-CFG-06)", () => {
       pass: false,
     });
   });
+
+  it("REQ-EXEC-06/AC1: a native app is open from the start, so a step may check an element before any action", async () => {
+    const custom = (type: "web" | "mobile") =>
+      PlanSchema.parse({
+        schema: 1,
+        ticket: "DEMO-6",
+        version: 1,
+        cases: [
+          {
+            id: "TC-01",
+            title: "first screen",
+            type,
+            priority: "high",
+            source: [{ kind: "ac", id: "AC1" }],
+            steps: [
+              {
+                id: "S1",
+                action: "Look at the cart",
+                expect: { description: "d", elements: { "testid:cart-count": { text: "Cart: 0 items" } } },
+              },
+            ],
+            evidence: ["screenshot"],
+          },
+        ],
+      });
+    const driver = {
+      property: () => Promise.resolve("Cart: 0 items"),
+      screenshot: () => Promise.resolve(new Uint8Array()),
+      url: () => "app:launch",
+      dom: () => Promise.resolve(""),
+    } as unknown as UiDriver;
+    const runtime = (type: "web" | "mobile") =>
+      createCaseRuntime({
+        plan: custom(type),
+        caseId: "TC-01",
+        attempt: 1,
+        baseUrl: "http://127.0.0.1:3000",
+        transport: () => Promise.reject(new Error("no API")),
+        masker: createMasker(),
+        allowedOrigins: ["http://127.0.0.1:3000"],
+        accounts: {},
+        now: () => 0,
+        ui: () => Promise.resolve(driver),
+      });
+    const mobile = runtime("mobile");
+    mobile.beginStep("S1");
+    await mobile.verify("S1", "elements.testid:cart-count.text");
+    expect((await mobile.finish()).assertions[0]).toMatchObject({ actual: "Cart: 0 items", pass: true });
+    // A browser starts empty: checking an element before opening a page is a test error, not a verdict.
+    const web = runtime("web");
+    web.beginStep("S1");
+    await expect(web.verify("S1", "elements.testid:cart-count.text")).rejects.toThrow(
+      "verify('S1', 'elements.testid:cart-count.text') needs an open page: call ui.goto() first",
+    );
+  });
 });

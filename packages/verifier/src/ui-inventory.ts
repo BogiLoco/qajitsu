@@ -1,9 +1,17 @@
+/** Where an element id can be addressed: web pages, or the native app on Android or iOS. */
+export type UiPlatform = "web" | "android" | "ios";
+
+/** Every platform, in the order the inventory lists them. */
+const PLATFORMS: readonly UiPlatform[] = ["android", "ios", "web"];
+
 /** One element id found in the code, as the selector `testid:<id>` refers to it (REQ-PLAN-09/AC7). */
 export interface UiSelectorEntry {
   /** `testid:<id>`; for a prefix the part before the generated rest, e.g. `testid:price-`. */
   readonly selector: string;
   /** The id is built at run time from this prefix (`"price-" + p.id`); `testid:price-P-2` matches it. */
   readonly prefix: boolean;
+  /** Platforms whose code defines it (REQ-PLAN-09/AC8): a web id cannot be tapped in the native app. */
+  readonly platforms: readonly UiPlatform[];
   /** Files that define it, relative to the repository. */
   readonly files: readonly string[];
 }
@@ -18,17 +26,22 @@ export interface UiInventory {
 const QUOTES = `"'\``;
 
 /**
- * Patterns that define an element id the runners address with `testid:`: `data-testid` (web), `testID` (React
- * Native), `dataset.testid`, and accessibility ids on mobile (`setContentDescription`, `android:contentDescription`,
- * `testTag`, `accessibilityIdentifier`). Group 1 is the opening quote, group 2 the id, group 3 what follows it.
+ * Patterns that define an element id the runners address with `testid:`, with the platforms where it applies:
+ * `data-testid` and `dataset.testid` (web), `testID` (React Native, both phones), accessibility ids on Android
+ * (`setContentDescription`, `android:contentDescription`, Compose `testTag`) and on iOS (`accessibilityIdentifier`).
+ * Group 1 is the opening quote, group 2 the id, group 3 what follows it.
  */
-const ID_PATTERNS: readonly RegExp[] = [
-  /(?:data-testid|testID)\s*=\s*\{?\s*(["'`])([^"'`$\s{}]*)(.)/g,
-  /dataset\.testid\s*=\s*(["'`])([^"'`$\s]*)(.)/g,
-  /(?:setContentDescription|testTag)\(\s*(["'`])([^"'`$\s]*)(.)/g,
-  /android:contentDescription\s*=\s*(")([^"@\s]*)(.)/g,
-  /accessibilityIdentifier\s*=\s*(["'`])([^"'`$\s]*)(.)/g,
+const ID_PATTERNS: readonly { readonly pattern: RegExp; readonly platforms: readonly UiPlatform[] }[] = [
+  { pattern: /data-testid\s*=\s*\{?\s*(["'`])([^"'`$\s{}]*)(.)/g, platforms: ["web"] },
+  { pattern: /\btestID\s*=\s*\{?\s*(["'`])([^"'`$\s{}]*)(.)/g, platforms: ["android", "ios"] },
+  { pattern: /dataset\.testid\s*=\s*(["'`])([^"'`$\s]*)(.)/g, platforms: ["web"] },
+  { pattern: /(?:setContentDescription|testTag)\(\s*(["'`])([^"'`$\s]*)(.)/g, platforms: ["android"] },
+  { pattern: /android:contentDescription\s*=\s*(")([^"@\s]*)(.)/g, platforms: ["android"] },
+  { pattern: /accessibilityIdentifier\s*=\s*(["'`])([^"'`$\s]*)(.)/g, platforms: ["ios"] },
 ];
+
+const union = (a: readonly UiPlatform[], b: readonly UiPlatform[]): UiPlatform[] =>
+  PLATFORMS.filter((p) => a.includes(p) || b.includes(p));
 
 /** Where a UI page path appears: links, router configs and maps of pages keyed by path. */
 const PAGE_PATTERNS: readonly RegExp[] = [
@@ -43,11 +56,15 @@ const PAGE_PATTERNS: readonly RegExp[] = [
  * continues it (`"price-" + p.id`, `` `price-${id}` ``, `'price-'+id`) is a prefix.
  */
 export function scanUiSource(text: string): {
-  readonly ids: readonly { readonly id: string; readonly prefix: boolean }[];
+  readonly ids: readonly {
+    readonly id: string;
+    readonly prefix: boolean;
+    readonly platforms: readonly UiPlatform[];
+  }[];
   readonly pages: readonly string[];
 } {
-  const ids = new Map<string, boolean>();
-  for (const pattern of ID_PATTERNS)
+  const ids = new Map<string, { prefix: boolean; platforms: UiPlatform[] }>();
+  for (const { pattern, platforms } of ID_PATTERNS)
     for (const m of text.matchAll(pattern)) {
       // Every pattern has exactly these three groups, so each one is a string.
       const [, open, id, next] = m as unknown as [string, string, string, string];
@@ -56,12 +73,16 @@ export function scanUiSource(text: string): {
       const closedHere = next === open && !/^\s*\+/.test(rest);
       const prefix = !closedHere && (QUOTES.includes(next) || next === "$" || next === "+");
       // An exact definition wins over a prefix of the same text.
-      ids.set(id, (ids.get(id) ?? true) && prefix);
+      const known = ids.get(id);
+      ids.set(id, {
+        prefix: (known?.prefix ?? true) && prefix,
+        platforms: union(known?.platforms ?? [], platforms),
+      });
     }
   const pages = new Set<string>();
   for (const pattern of PAGE_PATTERNS)
     for (const m of text.matchAll(pattern)) if (m[1] && m[1] !== "/") pages.add(m[1]);
-  return { ids: [...ids].map(([id, prefix]) => ({ id, prefix })), pages: [...pages] };
+  return { ids: [...ids].map(([id, e]) => ({ id, ...e })), pages: [...pages] };
 }
 
 /**
@@ -72,13 +93,14 @@ export function buildUiInventory(
   files: readonly { readonly path: string; readonly text: string }[],
   exclude: readonly string[] = [],
 ): UiInventory {
-  const selectors = new Map<string, { prefix: boolean; files: Set<string> }>();
+  const selectors = new Map<string, { prefix: boolean; platforms: UiPlatform[]; files: Set<string> }>();
   const pages = new Set<string>();
   for (const file of files) {
     const found = scanUiSource(file.text);
-    for (const { id, prefix } of found.ids) {
-      const entry = selectors.get(id) ?? { prefix, files: new Set<string>() };
+    for (const { id, prefix, platforms } of found.ids) {
+      const entry = selectors.get(id) ?? { prefix, platforms: [], files: new Set<string>() };
       entry.prefix = entry.prefix && prefix;
+      entry.platforms = union(entry.platforms, platforms);
       entry.files.add(file.path);
       selectors.set(id, entry);
     }
@@ -87,17 +109,32 @@ export function buildUiInventory(
   return {
     selectors: [...selectors]
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([id, e]) => ({ selector: `testid:${id}`, prefix: e.prefix, files: [...e.files].sort() })),
+      .map(([id, e]) => ({
+        selector: `testid:${id}`,
+        prefix: e.prefix,
+        platforms: e.platforms,
+        files: [...e.files].sort(),
+      })),
     pages: [...pages].sort(),
   };
 }
 
-/** Whether a `testid:` selector names an element of the inventory (exactly, or by a known prefix). */
-export function selectorKnown(inventory: UiInventory, selector: string): boolean {
+/**
+ * Whether a `testid:` selector names an element of the inventory (exactly, or by a known prefix).
+ *
+ * @param platforms - Only ids defined for one of these platforms count; every platform when omitted.
+ */
+export function selectorKnown(
+  inventory: UiInventory,
+  selector: string,
+  platforms: readonly UiPlatform[] = PLATFORMS,
+): boolean {
   return inventory.selectors.some((e) =>
-    e.prefix
-      ? selector.startsWith(e.selector) && selector.length > e.selector.length
-      : selector === e.selector,
+    !e.platforms.some((p) => platforms.includes(p))
+      ? false
+      : e.prefix
+        ? selector.startsWith(e.selector) && selector.length > e.selector.length
+        : selector === e.selector,
   );
 }
 
@@ -108,11 +145,11 @@ export function renderUiInventory(inventory: UiInventory, limit = 300): string {
     .slice(0, limit)
     .map(
       (e) =>
-        `- ${e.selector}${e.prefix ? "<rest> (built at run time, e.g. " + e.selector + "1)" : ""} in ${e.files.join(", ")}`,
+        `- ${e.selector}${e.prefix ? "<rest> (built at run time, e.g. " + e.selector + "1)" : ""} (${e.platforms.join(", ")}) in ${e.files.join(", ")}`,
     );
   return [
     "## Elements and pages in the code (computed by QAJitsu from the code under test)",
-    "Use these element ids and page paths in steps and expectations instead of inventing any. This list is not a source: never cite it or its pages as a source of a case, screen or risk.",
+    "Use these element ids and page paths in steps and expectations instead of inventing any; a case uses only ids of its own platform (web pages for web cases, android or ios for mobile cases). This list is not a source: never cite it or its pages as a source of a case, screen or risk.",
     ...(inventory.pages.length > 0 ? [`Pages: ${inventory.pages.join(", ")}`] : []),
     ...lines,
     ...(inventory.selectors.length > limit

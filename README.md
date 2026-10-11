@@ -280,8 +280,11 @@ and ticket becomes an open question. With `knowledge.auto_sync: true` the knowle
 Code also makes sure the expectations can be checked at all: both agents get the element ids and page paths found
 in the code under test (`testid:place-order`, `/app/checkout`), and before you see a plan version code flags
 placeholders instead of values (`expected_total`, TBD), fields that are not in the OpenAPI response or have another
-type, steps with a description only, and `testid:` selectors the code does not define. The planner gets one
-automatic round to fix them; what remains is listed under "Cannot be checked as written" next to the plan.
+type, steps with a description only, and `testid:` selectors the code does not define (for the case's own platform:
+a web id does not count in a mobile case). The planner gets one
+automatic round to fix them; what remains is listed under "Cannot be checked as written" next to the plan. A spec for
+a mobile case that uses what only a browser has (`ui.as`, `ui.select`, `ui.goto` without a deep link scheme, `css:` or
+`role:` selectors) goes back to the author before anything runs.
 
 With `--depth smoke|standard|full` the planner rates each case's risk and QAJitsu keeps only the cases of that
 depth (smoke: high risk, standard: high and medium, full: all); the plan shows the depth and why each case is in or

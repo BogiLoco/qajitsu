@@ -8,6 +8,7 @@ import {
   formatSpecProblems,
   renderUiInventory,
   typecheckSpecs,
+  type SpecCheckOptions,
   type SpecProblem,
 } from "@qajitsu/verifier";
 import { generateText, stepCountIs, type ModelMessage } from "ai";
@@ -146,10 +147,16 @@ const describeCase = (c: TestCase): string =>
 /**
  * Checks a spec source the same way `qj run` does before execution (REQ-EXEC-03/AC1..AC3).
  *
+ * @param options - Project-dependent options, e.g. whether the native app has deep links.
  * @returns Every problem found; empty when the spec may run.
  */
-export async function checkSpec(source: string, caseId: string, plan: Plan): Promise<SpecProblem[]> {
-  const problems = blockingProblems(checkSpecSource(source, caseId, plan));
+export async function checkSpec(
+  source: string,
+  caseId: string,
+  plan: Plan,
+  options: SpecCheckOptions = {},
+): Promise<SpecProblem[]> {
+  const problems = blockingProblems(checkSpecSource(source, caseId, plan, options));
   if (problems.length > 0) return problems;
   const dir = await mkdtemp(join(tmpdir(), "qj-spec-"));
   try {
@@ -272,7 +279,7 @@ export async function runAuthor(
         problems =
           code === undefined
             ? [{ check: "lint", message: "answer contained no ```ts code block" }]
-            : await checkSpec(code, planCase.id, plan);
+            : await checkSpec(code, planCase.id, plan, deps.specChecks);
         if (code !== undefined && problems.length === 0) {
           file = deps.ws.path("specs", `${planCase.id}.spec.ts`);
           await writeFile(file, code, "utf8");

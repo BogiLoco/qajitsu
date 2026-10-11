@@ -676,6 +676,9 @@ async function executeCases(
       .filter((x): x is string => x !== undefined),
   );
   const live = run.live;
+  // REQ-EXEC-06: ui.goto() may open a deep link only when every configured native app declares a scheme.
+  const apps = [project.config.mobile?.android, project.config.mobile?.ios].filter((a) => a !== undefined);
+  const specChecks = { deepLinks: apps.length > 0 && apps.every((a) => a.deep_link_scheme !== undefined) };
   // REQ-EXEC-16/AC1: cases not chosen with --cases are not run (and get no spec); they are NOT_RUN, never PASSED.
   const notRun = new Map<string, string>();
   if (live?.selected)
@@ -719,6 +722,7 @@ async function executeCases(
       maskText: (t: string) => masker.maskText(t),
       // REQ-EXEC-01/AC2: exploration through MCP stays inside the environment allowlist (invariant 10).
       mcp: { servers: project.config.mcp.servers, allowedOrigins: [env.origin] },
+      specChecks,
     };
     const authored = await runAuthor(
       deps,
@@ -747,7 +751,7 @@ async function executeCases(
   const specs = new Map<string, string>();
   for (const file of execute) {
     const caseId = /(TC-\d{2,4})\.spec\.ts$/.exec(file)?.[1] ?? "";
-    const problems = await checkSpec(await readFile(file, "utf8"), caseId, plan);
+    const problems = await checkSpec(await readFile(file, "utf8"), caseId, plan, specChecks);
     if (notRun.has(caseId)) continue;
     if (problems.length > 0)
       blocked.set(caseId, `spec failed static checks: ${formatSpecProblems(problems)}`);
@@ -882,6 +886,7 @@ async function executeCases(
         now: ports.now,
         maskJson: (v: unknown) => masker.maskJson(v),
         maskText: (t: string) => masker.maskText(t),
+        specChecks,
       },
       plan,
       {

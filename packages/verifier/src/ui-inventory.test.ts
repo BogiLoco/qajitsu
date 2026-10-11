@@ -21,12 +21,14 @@ describe("element and page inventory (REQ-PLAN-09/AC7)", () => {
     expect(byId["testid:place-order"]).toEqual({
       selector: "testid:place-order",
       prefix: false,
+      platforms: ["web"],
       files: ["api/web.mjs"],
     });
     expect(byId["testid:accept-terms"]?.prefix).toBe(false);
     expect(byId["testid:price-"]?.prefix).toBe(true);
     expect(byId["testid:product-"]?.prefix).toBe(true);
     expect(byId["testid:cart-count"]?.files).toEqual(["android/src/dev/qajitsu/demoshop/CartActivity.java"]);
+    expect(byId["testid:cart-count"]?.platforms).toEqual(["android"]);
     expect(inventory.pages).toEqual(["/app/cart", "/app/checkout", "/app/login", "/app/products"]);
     expect(selectorKnown(inventory, "testid:place-order")).toBe(true);
     expect(selectorKnown(inventory, "testid:price-P-2")).toBe(true);
@@ -46,7 +48,40 @@ describe("element and page inventory (REQ-PLAN-09/AC7)", () => {
     ['<Button android:contentDescription="ok"/>', "ok", false],
     ["view.setContentDescription('item-' + i)", "item-", true],
   ])("REQ-PLAN-09/AC7: %s defines %s (prefix %s)", (source, id, prefix) => {
-    expect(scanUiSource(source).ids).toEqual([{ id, prefix }]);
+    expect(scanUiSource(source).ids.map((e) => ({ id: e.id, prefix: e.prefix }))).toEqual([{ id, prefix }]);
+  });
+
+  it.each([
+    ['<button data-testid="pay">', ["web"]],
+    ['el.dataset.testid = "line";', ["web"]],
+    ['<View testID="login" />', ["android", "ios"]],
+    ['Modifier.testTag("submit")', ["android"]],
+    ['<Button android:contentDescription="ok"/>', ["android"]],
+    ['view.setContentDescription("item")', ["android"]],
+    ['button.accessibilityIdentifier = "buy"', ["ios"]],
+  ])("REQ-PLAN-09/AC8: %s is an id of %j", (source, platforms) => {
+    expect(scanUiSource(source).ids[0]?.platforms).toEqual(platforms);
+  });
+
+  it("REQ-PLAN-09/AC8: an id is known only on the platforms that define it", () => {
+    const inventory = buildUiInventory([
+      { path: "web.html", text: '<a data-testid="nav-checkout"><b data-testid="cart">' },
+      {
+        path: "Cart.java",
+        text: 'v.setContentDescription("open-checkout"); w.setContentDescription("cart");',
+      },
+    ]);
+    expect(inventory.selectors.find((s) => s.selector === "testid:cart")?.platforms).toEqual([
+      "android",
+      "web",
+    ]);
+    expect(selectorKnown(inventory, "testid:nav-checkout", ["web"])).toBe(true);
+    expect(selectorKnown(inventory, "testid:nav-checkout", ["android", "ios"])).toBe(false);
+    expect(selectorKnown(inventory, "testid:open-checkout", ["android", "ios"])).toBe(true);
+    expect(selectorKnown(inventory, "testid:open-checkout", ["web"])).toBe(false);
+    expect(selectorKnown(inventory, "testid:cart", ["ios"])).toBe(false);
+    expect(renderUiInventory(inventory)).toContain("- testid:nav-checkout (web) in web.html");
+    expect(renderUiInventory(inventory)).toContain("- testid:cart (android, web) in Cart.java, web.html");
   });
 
   it("REQ-PLAN-09/AC7: pages come from links, routers and page maps; an exact id wins over a prefix", () => {
@@ -62,14 +97,16 @@ describe("element and page inventory (REQ-PLAN-09/AC7)", () => {
       ].join("\n"),
     );
     expect(found.pages).toEqual(["/orders", "/orders/:id", "/settings", "/help"]);
-    expect(found.ids).toEqual([{ id: "x-", prefix: false }]);
+    expect(found.ids).toEqual([{ id: "x-", prefix: false, platforms: ["web"] }]);
     // An empty id defines nothing; an id defined as a prefix in one file and exactly in another is exact.
     expect(scanUiSource('<b data-testid="">').ids).toEqual([]);
     const merged = buildUiInventory([
       { path: "a.js", text: 'el.dataset.testid = "row-" + n;' },
       { path: "b.html", text: '<b data-testid="row-">' },
     ]);
-    expect(merged.selectors).toEqual([{ selector: "testid:row-", prefix: false, files: ["a.js", "b.html"] }]);
+    expect(merged.selectors).toEqual([
+      { selector: "testid:row-", prefix: false, platforms: ["web"], files: ["a.js", "b.html"] },
+    ]);
   });
 
   it("REQ-PLAN-09/AC7: the prompt section lists pages and elements; nothing found is no section", () => {
@@ -84,7 +121,7 @@ describe("element and page inventory (REQ-PLAN-09/AC7)", () => {
       buildUiInventory([{ path: "a.html", text: '<i data-testid="a"><i data-testid="b">' }]),
       1,
     );
-    expect(many).toContain("- testid:a in a.html");
+    expect(many).toContain("- testid:a (web) in a.html");
     expect(many).toContain("(1 more not listed)");
   });
 });

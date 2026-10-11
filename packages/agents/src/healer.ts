@@ -83,7 +83,7 @@ export async function healSpec(
   if (code !== undefined) {
     problems = [
       ...assertionLockDiff(original, code),
-      ...blockingProblems(checkSpecSource(code, request.caseId, plan)),
+      ...blockingProblems(checkSpecSource(code, request.caseId, plan, deps.specChecks)),
     ];
   }
   let file: string | undefined;

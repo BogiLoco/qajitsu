@@ -24,6 +24,7 @@ import {
   indexDiff,
   type PlanFlag,
   type SourceContext,
+  type SpecCheckOptions,
 } from "@qajitsu/verifier";
 import { stringify } from "yaml";
 import { renderChangeContext, untrusted, type ChangeContext } from "./context.js";
@@ -66,6 +67,8 @@ export interface AgentStageDeps {
    * with findings goes back to the planner once.
    */
   readonly planQuality?: (plan: Plan) => readonly PlanFlag[];
+  /** Project-dependent options of the static spec checks (REQ-EXEC-03), e.g. deep links of the native app. */
+  readonly specChecks?: SpecCheckOptions;
 }
 
 const roleDef = (role: AgentRoleDefinition["role"]): AgentRoleDefinition => {

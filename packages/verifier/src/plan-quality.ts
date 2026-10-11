@@ -1,5 +1,11 @@
 import type { Plan } from "@qajitsu/core";
-import { selectorKnown, type UiInventory } from "./ui-inventory.js";
+import { selectorKnown, type UiInventory, type UiPlatform } from "./ui-inventory.js";
+
+/** Platforms whose ids a case may name, and how the flag calls that code. */
+const CASE_PLATFORMS: Record<string, { readonly platforms: readonly UiPlatform[]; readonly code: string }> = {
+  web: { platforms: ["web"], code: "the web pages" },
+  mobile: { platforms: ["android", "ios"], code: "the mobile app" },
+};
 
 /** Why an expectation of a plan cannot be checked as it is (REQ-PLAN-09). */
 export type PlanFlagKind = "placeholder" | "schema" | "description-only" | "selector";
@@ -212,10 +218,20 @@ export function checkPlanExpectations(
             if (problem) flag("schema", `${response.where}: ${problem}`, `fields.${k}`, v);
           }
       }
-      if (inventory)
+      const target = CASE_PLATFORMS[c.type];
+      // A platform without any id in the code (e.g. its app is not in the repositories) cannot be judged.
+      const judged =
+        inventory &&
+        (target === undefined ||
+          inventory.selectors.some((x) => x.platforms.some((p) => target.platforms.includes(p))));
+      if (inventory && judged)
         for (const sel of Object.keys(e.elements ?? {}))
-          if (sel.startsWith("testid:") && !selectorKnown(inventory, sel))
-            flag("selector", `${sel} is not defined in the code under test`, `elements.${sel}`);
+          if (sel.startsWith("testid:") && !selectorKnown(inventory, sel, target?.platforms))
+            flag(
+              "selector",
+              `${sel} is not defined in the code ${target ? `of ${target.code}` : "under test"}`,
+              `elements.${sel}`,
+            );
     }
   return flags;
 }
