@@ -58,6 +58,8 @@ services:
       BUG_CHECKOUT_BUTTON_DISABLED: { value: "0", overridable: true }
       BUG_PRICE_FORMAT_LOCALE: { value: "0", overridable: true }
       BUG_SILENT_500_TOAST: { value: "0", overridable: true }
+      # BUG-08: the Android app asks the API whether back from checkout empties the cart (DEMO-6).
+      BUG_ANDROID_BACK_EMPTIES_CART: { value: "0", overridable: true }
     health: { http: /health, timeout_s: 180 }
 
 build:
