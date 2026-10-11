@@ -403,4 +403,65 @@ describe("case runtime (REQ-EXEC-02, REQ-EVD-01, REQ-CFG-06)", () => {
       "verify('S1', 'elements.testid:cart-count.text') needs an open page: call ui.goto() first",
     );
   });
+
+  it("REQ-EXEC-22/AC4: a failed UI attempt keeps the elements of the page, masked; a driver without them adds nothing", async () => {
+    const custom = PlanSchema.parse({
+      schema: 1,
+      ticket: "DEMO-6",
+      version: 1,
+      cases: [
+        {
+          id: "TC-01",
+          title: "first screen",
+          type: "mobile",
+          priority: "high",
+          source: [{ kind: "ac", id: "AC1" }],
+          steps: [
+            {
+              id: "S1",
+              action: "Look at the cart",
+              expect: { description: "d", elements: { "testid:cart-count": { text: "Cart: 1 item" } } },
+            },
+          ],
+          evidence: ["screenshot"],
+        },
+      ],
+    });
+    const masker = createMasker({ secrets: ["s3cret-value"] });
+    const run = async (elements: boolean) => {
+      const driver = {
+        property: () => Promise.resolve("Cart: 0 items"),
+        screenshot: () => Promise.resolve(new Uint8Array()),
+        url: () => "app:launch",
+        dom: () => Promise.resolve("<hierarchy/>"),
+        ...(elements
+          ? {
+              elements: () => Promise.resolve([{ testid: "cart-count", text: "Cart: 0 items s3cret-value" }]),
+            }
+          : {}),
+      } as unknown as UiDriver;
+      const runtime = createCaseRuntime({
+        plan: custom,
+        caseId: "TC-01",
+        attempt: 1,
+        baseUrl: "http://127.0.0.1:3000",
+        transport: () => Promise.reject(new Error("no API")),
+        masker,
+        allowedOrigins: ["http://127.0.0.1:3000"],
+        accounts: {},
+        now: () => 0,
+        ui: () => Promise.resolve(driver),
+      });
+      runtime.beginStep("S1");
+      await runtime.verify("S1", "elements.testid:cart-count.text");
+      return runtime.finish();
+    };
+    const record = await run(true);
+    expect(record.outcome).toBe("failed");
+    const item = record.evidence.find((e) => e.name === "failure-elements.json");
+    expect(item?.kind).toBe("dom");
+    expect(String(item?.content)).toContain('"testid": "cart-count"');
+    expect(String(item?.content)).not.toContain("s3cret-value");
+    expect((await run(false)).evidence.map((e) => e.name)).not.toContain("failure-elements.json");
+  });
 });

@@ -59,11 +59,16 @@ const describe = (e: UiElementFact): string =>
  *
  * @param screens - Recorded pages and screens.
  * @param limit - Elements listed per screen.
+ * @param heading - Heading of the section.
  */
-export function renderUiSnapshot(screens: readonly UiScreen[], limit = 80): string {
+export function renderUiSnapshot(
+  screens: readonly UiScreen[],
+  limit = 80,
+  heading = "What the application shows (recorded by QAJitsu on the run's environment)",
+): string {
   if (screens.length === 0) return "";
   const parts = [
-    "## What the application shows (recorded by QAJitsu on the run's environment)",
+    `## ${heading}`,
     "Selectors below are the ones that find each element now; prefer the first one of a line. Elements that appear only after an action are not listed.",
   ];
   for (const screen of screens) {

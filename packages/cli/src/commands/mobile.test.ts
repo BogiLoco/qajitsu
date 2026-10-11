@@ -126,6 +126,20 @@ const statuses = async (dir: string) =>
     .data.results;
 
 describe("mobile cases in qj run (REQ-EXEC-06, REQ-EVD-03, REQ-ENV-06)", () => {
+  it("REQ-EXEC-22/AC4: a mobile case that could not run is healed with the screen at the failure, and is never PASSED", async () => {
+    const { run, dir } = await setup(() => Promise.resolve(device(false)));
+    const good = await read("fixtures/specs/demo-6/TC-01.spec.ts");
+    await writeFile(
+      join(dir, "specs", "TC-01.spec.ts"),
+      good.replace('await ui.click("testid:open-checkout");', 'await ui.waitFor("text:Go to checkout");'),
+    );
+    const result = await run(["run", "DEMO-6", "--build"], [{ text: "```ts\n" + good + "```" }]);
+    const prompt = promptOf(result.model, 0);
+    expect(prompt).toContain("## What the page or screen showed at the failure");
+    expect(prompt).toContain("text:Cart: 1 item");
+    expect(await statuses(dir)).toEqual({ "TC-01": "NEEDS_REVIEW" });
+  });
+
   it("REQ-EXEC-22/AC1+AC2: before writing a spec the author gets the app's first screen, recorded on the run's device", async () => {
     const { run, dir } = await setup(() => Promise.resolve(device(false)));
     await rm(join(dir, "specs", "TC-01.spec.ts"));

@@ -142,11 +142,15 @@ describe("web runner (REQ-EXEC-05, REQ-EXEC-07, REQ-EVD-02)", () => {
       "S2-annotations.json",
       "failure.png",
       "failure.html",
+      "failure-elements.json",
       "trace.zip",
       "video.webm",
       "network.har",
       "console.log",
     ]);
+    // REQ-EXEC-22/AC4: what the page showed at the failure, for the healer.
+    const elements = String(record.evidence.find((e) => e.name === "failure-elements.json")?.content);
+    expect(elements).toContain('"testid": "place-order"');
   });
 
   it("REQ-NFR-04/AC1: BUG-06 (price format) is FAILED; without it PASSED", async () => {

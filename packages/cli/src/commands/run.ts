@@ -35,6 +35,7 @@ import {
   webCombinations,
   type CaseResultFile,
   type Plan,
+  type UiElementFact,
   type UiScreen,
   type ResolvedEnvironment,
   type VisualCheck,
@@ -138,6 +139,7 @@ async function snapshotForAuthor(
   options: {
     readonly knownPages: readonly string[];
     readonly device: (() => Promise<PreparedMobile>) | undefined;
+    readonly platform: "android" | "ios";
     readonly io: CommandIO;
   },
 ): Promise<UiScreen[]> {
@@ -193,11 +195,7 @@ async function snapshotForAuthor(
         ? {
             mobile: {
               factory: device.factories[0],
-              // Android unless only an iOS app is configured.
-              platform:
-                project.config.mobile?.ios && !project.config.mobile.android
-                  ? ("ios" as const)
-                  : ("android" as const),
+              platform: options.platform,
             },
           }
         : {}),
@@ -798,6 +796,9 @@ async function executeCases(
       .filter((x): x is string => x !== undefined),
   );
   const live = run.live;
+  // Android unless only an iOS app is configured.
+  const mobilePlatform =
+    project.config.mobile?.ios && !project.config.mobile.android ? ("ios" as const) : ("android" as const);
   const devices = mobileDevices(session, env, ports, {
     build: run.build,
     headed: live?.headed === true,
@@ -856,6 +857,7 @@ async function executeCases(
     const snapshot = await snapshotForAuthor(session, plan, missing, env, ports, {
       knownPages: context.ui?.pages ?? [],
       device: missing.some((c) => c.type === "mobile") ? devices.get : undefined,
+      platform: mobilePlatform,
       io,
     });
     const authored = await runAuthor(
@@ -1004,13 +1006,22 @@ async function executeCases(
   const ran = new Map<string, CaseResultFile>();
   const heal: RunCasesOptions["heal"] = async (caseId, specFile, failed, healAttempt) => {
     // Regression runs run the promoted specs as they are: no healing (REQ-EXEC-17/AC1).
-    if (regression.success || plan.cases.find((c) => c.id === caseId)?.type !== "web") return undefined;
+    // REQ-EXEC-09 + REQ-EXEC-22/AC4: web and mobile cases are healed; API cases have no selectors.
+    const type = plan.cases.find((c) => c.id === caseId)?.type;
+    if (regression.success || (type !== "web" && type !== "mobile")) return undefined;
     const usage = createUsageTracker({
       events,
       budget: project.config.models.token_budget,
       alreadyUsed: Number(ws.record.data["tokens"] ?? 0),
     });
-    const dom = failed.evidence.find((e) => e.kind === "dom")?.content;
+    const dom = failed.evidence.find((e) => e.name === "failure.html")?.content;
+    const recorded = failed.evidence.find((e) => e.name === "failure-elements.json")?.content;
+    let elements: UiElementFact[] | undefined;
+    try {
+      elements = typeof recorded === "string" ? (JSON.parse(recorded) as UiElementFact[]) : undefined;
+    } catch {
+      elements = undefined;
+    }
     const { file } = await healSpec(
       {
         ws,
@@ -1028,6 +1039,15 @@ async function executeCases(
         specFile,
         error: masker.maskText(failed.error ?? "unknown error"),
         dom: typeof dom === "string" ? dom : undefined,
+        ...(elements
+          ? {
+              screen: {
+                where: "the failure",
+                platform: type === "web" ? ("web" as const) : mobilePlatform,
+                elements,
+              },
+            }
+          : {}),
         attempt: healAttempt,
       },
     ).catch((error: unknown) => {
@@ -1115,6 +1135,8 @@ async function executeCases(
           ...(where.evidencePrefix ? { evidencePrefix: where.evidencePrefix } : {}),
           retries: project.config.environments.retries,
           workers: 1,
+          // REQ-EXEC-22/AC4: the primary device heals like the web lane.
+          ...(where.primary ? { heal } : {}),
         }),
     }))
       mobileRan.set(id, r);

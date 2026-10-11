@@ -902,6 +902,15 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         } catch {
           // The page is gone; video and trace from the runner still show what happened.
         }
+        // REQ-EXEC-22/AC4: the elements on the page or screen at the failure, for the healer and the reviewer.
+        const elements = await driver.elements?.().catch(() => undefined);
+        if (elements !== undefined)
+          evidence.push({
+            stepId: "case",
+            kind: "dom",
+            name: "failure-elements.json",
+            content: masker.maskText(`${JSON.stringify(elements, null, 2)}\n`),
+          });
       }
       return {
         caseId,
