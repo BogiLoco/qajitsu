@@ -46,8 +46,13 @@ Rules:
 - When the ticket concerns several languages or regions, a case can list "locales" (names from the project, e.g.
   ["pl-PL","de-DE"]) and a step's expect can give per-locale values of its planned fields, texts or element states:
   "by_locale": {"pl-PL": {"fields": {"price": "1 234,50 zł"}}}. Only planned keys can differ per locale.
+- Web and mobile steps expect the state of elements by selector: "elements": {"testid:place-order": {"enabled":
+  false}, "text:Total": {"visible": true}}. A selector is testid:<data-testid>, role:<role>:<accessible name>,
+  label:<label text> or text:<visible text>, never a made-up name and without dots; prefer the testid values found in
+  the code. Properties: visible, enabled, checked (booleans), text, value (exact strings).
 - For a visible layout or design change a web or mobile step can expect "visual": {"name": "checkout", "mask":
-  ["testid:date"]}: its screenshot is compared with an approved baseline; mask regions that change on their own.
+  ["testid:date"]}: its screenshot is compared with an approved baseline; mask regions that change on their own. The
+  name uses lower-case letters, digits and "-" only (e.g. "checkout-terms").
 - When the change sends an e-mail, an SMS (through a gateway) or a webhook, the step can expect it:
   "message": {"to": "...", "subject": "...", "body": "...", "within_s": 60} (every part is optional and matched
   as contained text); the case gets its own inbox address to use in the test data.
