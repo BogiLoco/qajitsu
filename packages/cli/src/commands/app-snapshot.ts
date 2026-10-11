@@ -16,12 +16,14 @@ import type { RuntimePorts } from "../adapters.js";
 import type { RunSession } from "../session.js";
 import type { CommandIO } from "./fetch.js";
 import { accountLogin } from "./lanes.js";
-import type { PreparedMobile } from "./mobile.js";
-import { crawlUiSnapshot, recordUiSnapshot, type UiSnapshotInput } from "./ui-snapshot.js";
+import { prepareMobile, type PreparedMobile } from "./mobile.js";
+import { crawlUiSnapshot, recordStartScreen, recordUiSnapshot, type UiSnapshotInput } from "./ui-snapshot.js";
 
 /** Ports of the snapshot: a browser replaced in tests (default: headless Playwright). */
 export interface SnapshotPorts {
   readonly snapshotBrowser?: BrowserFactory;
+  /** Device for the app's first screen before planning (replaced in tests); default: the mobile config. */
+  readonly mobileDevice?: () => Promise<PreparedMobile>;
   /** A fake executor of tests: without `snapshotBrowser` no real browser is started for a snapshot. */
   readonly executor?: unknown;
 }
@@ -142,9 +144,43 @@ export async function planSnapshot(
           io.writeError(`Could not record ${String(details["where"])}: ${String(details["error"])}\n`);
       },
     });
+    // AC7: the first screen of a mobile app that needs no repository (a file, a download, an installed app or a farm).
+    const mobile = project.config.mobile;
+    const appWithoutCode =
+      mobile?.android !== undefined
+        ? ["file", "url", "installed"].includes(mobile.android.app.source)
+        : mobile?.ios?.farm !== undefined;
+    if (mobile && (appWithoutCode || options.force)) {
+      const device = await (ports.mobileDevice?.() ??
+        prepareMobile(session, env.baseUrl, {}, ports.env["APPIUM_HOME"], {
+          allowBuild: false,
+          fetch: ports.fetch,
+        }));
+      if (!device.ok) io.writeError(`Could not record the app's first screen: ${device.reason}\n`);
+      else
+        try {
+          const screen = device.factories[0]
+            ? await recordStartScreen({
+                factory: device.factories[0],
+                platform: mobile.android ? "android" : "ios",
+                plan: { schema: 1, ticket: ws.ticket, version: 1, summary: "", cases: [] } as unknown as Plan,
+                caseId: "TC-00",
+                mask: (v) => masker.maskJson(v),
+                emit: (event, details) => {
+                  events.emit("plan", { kind: "system", name: "orchestrator" }, event, details);
+                  if (event === "ui.snapshot.failed")
+                    io.writeError(`Could not record the app's first screen: ${String(details["error"])}\n`);
+                },
+              })
+            : undefined;
+          if (screen) screens.push(screen);
+        } finally {
+          await device.stop();
+        }
+    }
     await mkdir(ws.path("ui"), { recursive: true });
     await writeFile(ws.path(...FILE), `${JSON.stringify(screens, null, 2)}\n`, "utf8");
-    io.write(`Recorded ${String(screens.length)} page(s) of ${env.name} for the planner.\n`);
+    io.write(`Recorded ${String(screens.length)} page(s) or screen(s) of ${env.name} for the planner.\n`);
     return screens;
   } finally {
     await rm(scratch, { recursive: true, force: true });

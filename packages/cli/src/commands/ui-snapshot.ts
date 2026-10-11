@@ -154,22 +154,14 @@ export async function recordUiSnapshot(input: UiSnapshotInput): Promise<UiScreen
   const mobile = input.mobile;
   const first = input.cases.find((c) => c.type === "mobile");
   if (mobile && first) {
-    const session = mobile.factory({
-      ...request(first.id),
-      baseUrl: "",
-      allowedOrigins: [],
-      accounts: {},
-      secrets: [],
+    const screen = await recordStartScreen({
+      ...mobile,
+      plan: input.plan,
+      caseId: first.id,
+      mask: input.mask,
+      emit: input.emit,
     });
-    try {
-      const driver = await session.driver();
-      if (driver.elements)
-        keep({ where: "app:start", platform: mobile.platform, elements: await driver.elements() });
-    } catch (error) {
-      failed("app:start", mobile.platform, error);
-    } finally {
-      await session.close(false).catch(() => []);
-    }
+    if (screen) screens.push(screen);
   }
   return screens;
 }
@@ -280,4 +272,52 @@ export async function crawlUiSnapshot(input: UiCrawlInput): Promise<UiScreen[]> 
     login?.release?.();
   }
   return screens;
+}
+
+/**
+ * Records the first screen of a native app on a device (REQ-EXEC-22/AC1+AC7): one session, its elements, nothing kept
+ * as evidence. A screen that cannot be recorded is journaled and left out (AC6).
+ *
+ * @returns The masked screen, or undefined.
+ */
+export async function recordStartScreen(input: {
+  readonly factory: BrowserFactory;
+  readonly platform: "android" | "ios";
+  readonly plan: Plan;
+  readonly caseId: string;
+  readonly mask: UiSnapshotInput["mask"];
+  readonly emit: UiSnapshotInput["emit"];
+}): Promise<UiScreen | undefined> {
+  const session = input.factory({
+    specFile: "",
+    caseId: input.caseId,
+    attempt: 0,
+    plan: input.plan,
+    timeoutMs: 60_000,
+    baseUrl: "",
+    allowedOrigins: [],
+    accounts: {},
+    secrets: [],
+  });
+  try {
+    const driver = await session.driver();
+    if (!driver.elements) return undefined;
+    const elements = (await driver.elements()).slice(0, ELEMENTS_PER_SCREEN);
+    const screen = input.mask({ where: "app:start", platform: input.platform, elements }) as UiScreen;
+    input.emit("ui.snapshot", {
+      where: "app:start",
+      platform: input.platform,
+      elements: screen.elements.length,
+    });
+    return screen;
+  } catch (error) {
+    input.emit("ui.snapshot.failed", {
+      where: "app:start",
+      platform: input.platform,
+      error: (input.mask({ error: message(error) }) as { error: string }).error.slice(0, 500),
+    });
+    return undefined;
+  } finally {
+    await session.close(false).catch(() => []);
+  }
 }

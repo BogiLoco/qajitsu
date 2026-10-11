@@ -13,6 +13,7 @@ import { apiService, createBuildProject } from "../../../../tests/support/cli-bu
 import { promptOf } from "../../../../tests/support/mock-model.js";
 import { openSession } from "../session.js";
 import {
+  androidAppVersion,
   emulatorUrl,
   farmCapabilities,
   prepareMobile,
@@ -332,11 +333,15 @@ describe("mobile cases in qj run (REQ-EXEC-06, REQ-EVD-03, REQ-ENV-06)", () => {
 });
 
 describe("app binaries and devices (REQ-ENV-06)", () => {
-  const session = async (mobileYaml: string) => {
+  const session = async (mobileYaml: string, allowed?: string) => {
     const p = await createBuildProject(undefined);
     cleanups.push(p.cleanup);
     const yaml = join(p.project, ".qa", "qa.project.yaml");
-    await writeFile(yaml, `${await readFile(yaml, "utf8")}\n${mobileYaml}`);
+    const base = await readFile(yaml, "utf8");
+    await writeFile(
+      yaml,
+      `${allowed ? base.replace("allowlist: ['http://localhost:3000']", `allowlist: ['http://localhost:3000', '${allowed}']`) : base}\n${mobileYaml}`,
+    );
     expect((await p.run(["fetch", "DEMO-1"])).exitCode).toBe(0);
     return {
       p,
@@ -369,7 +374,7 @@ describe("app binaries and devices (REQ-ENV-06)", () => {
     );
     expect(asked).toEqual(["demo-org/demo-shop", sha, "app-debug"]);
     expect(fromCi).toBe(s.ws.path("env", "app", "app-debug.apk"));
-    expect([...(await readFile(fromCi))]).toEqual([1, 2, 3]);
+    expect([...(await readFile(fromCi ?? ""))]).toEqual([1, 2, 3]);
     await expect(
       resolveAppBinary(
         s,
@@ -396,7 +401,7 @@ describe("app binaries and devices (REQ-ENV-06)", () => {
       {},
       s.project.config,
     );
-    expect(await readFile(built, "utf8")).toBe("x");
+    expect(await readFile(built ?? "", "utf8")).toBe("x");
     await expect(
       resolveAppBinary(
         s,
@@ -409,6 +414,105 @@ describe("app binaries and devices (REQ-ENV-06)", () => {
       resolveAppBinary(s, { source: "path", repo: "other", path: "x" }, {}, s.project.config),
     ).rejects.toThrow(/not fetched/);
   }, 120_000);
+
+  it("REQ-EXEC-23/AC1+AC3: an app without its repository: a file, a checked download or the installed app", async () => {
+    const { s, p } = await session("");
+    const { createHash } = await import("node:crypto");
+    await writeFile(join(p.project, "shop.apk"), "apk");
+    const config = {
+      ...s.project.config,
+      environments: { ...s.project.config.environments, allowlist: ["https://builds.example.test"] },
+    };
+    expect(await resolveAppBinary(s, { source: "file", path: "shop.apk" }, {}, config)).toBe(
+      join(p.project, "shop.apk"),
+    );
+    expect(await resolveAppBinary(s, { source: "file", path: join(p.project, "shop.apk") }, {}, config)).toBe(
+      join(p.project, "shop.apk"),
+    );
+    await expect(resolveAppBinary(s, { source: "file", path: "gone.apk" }, {}, config)).rejects.toThrow(
+      "App binary gone.apk not found.",
+    );
+    expect(await resolveAppBinary(s, { source: "installed" }, {}, config)).toBeUndefined();
+    const bytes = new TextEncoder().encode("signed build");
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const asked: string[] = [];
+    const fetchFn = ((url: URL) => {
+      asked.push(url.toString());
+      return Promise.resolve(
+        url.pathname.endsWith("404.apk") ? new Response("no", { status: 404 }) : new Response(bytes),
+      );
+    }) as unknown as typeof globalThis.fetch;
+    const url = (path: string, sha = sha256) => ({
+      source: "url" as const,
+      url: `https://builds.example.test/${path}`,
+      sha256: sha,
+    });
+    const file = await resolveAppBinary(s, url("app/shop-1.4.apk"), {}, config, fetchFn);
+    expect(file).toBe(s.ws.path("env", "app", "shop-1.4.apk"));
+    expect(await readFile(file ?? "", "utf8")).toBe("signed build");
+    await expect(
+      resolveAppBinary(s, url("a.apk", "0".repeat(64)), {}, config, fetchFn),
+    ).rejects.toMatchObject({
+      code: "APP_CHECKSUM_MISMATCH",
+    });
+    await expect(resolveAppBinary(s, url("404.apk"), {}, config, fetchFn)).rejects.toThrow("HTTP 404");
+    await expect(
+      resolveAppBinary(
+        s,
+        { ...url("x.apk"), url: "https://elsewhere.example.test/x.apk" },
+        {},
+        config,
+        fetchFn,
+      ),
+    ).rejects.toThrow("is not in environments.allowlist");
+    expect(asked).toEqual([
+      "https://builds.example.test/app/shop-1.4.apk",
+      "https://builds.example.test/a.apk",
+      "https://builds.example.test/404.apk",
+    ]);
+    // AC3: a download that is not the expected file makes the mobile cases BLOCKED with the reason.
+    const mismatch = await session(
+      "mobile: { android: { app: { source: url, url: 'https://builds.example.test/a.apk', sha256: '" +
+        "0".repeat(64) +
+        "' }, app_id: dev.qajitsu.demoshop } }",
+      "https://builds.example.test",
+    );
+    const r = await prepareMobile(mismatch.s, "http://127.0.0.1:1", {}, undefined, {
+      allowBuild: false,
+      fetch: fetchFn,
+    });
+    expect(r.ok ? "" : r.reason).toMatch(
+      /^App download has SHA-256 [a-f0-9]{64}, the configuration expects 0{64}\.$/,
+    );
+  }, 120_000);
+
+  it("REQ-EXEC-23/AC2: the app version comes from the APK or from the device, when it can be read", async () => {
+    const { mkdtemp, mkdir: mk } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const sdk = await mkdtemp(join(tmpdir(), "qj-sdk-"));
+    cleanups.push(() => import("node:fs/promises").then((f) => f.rm(sdk, { recursive: true, force: true })));
+    const calls: string[] = [];
+    const run = (cmd: string, args: readonly string[]) => {
+      calls.push(`${cmd.slice(sdk.length)} ${args.join(" ")}`);
+      return Promise.resolve(
+        cmd.endsWith("aapt2")
+          ? "package: name='dev.shop' versionCode='14' versionName='1.4.2' platformBuildVersionName='14'"
+          : "    versionCode=14 minSdk=24\n    versionName=1.4.2-installed\n",
+      );
+    };
+    expect(await androidAppVersion(sdk, { apk: "/x/app.apk" }, run)).toBeUndefined();
+    await mk(join(sdk, "build-tools", "34.0.0"), { recursive: true });
+    await mk(join(sdk, "build-tools", "9.0.0"), { recursive: true });
+    expect(await androidAppVersion(sdk, { apk: "/x/app.apk" }, run)).toBe("1.4.2");
+    expect(await androidAppVersion(sdk, { serial: "emulator-5554", appId: "dev.shop" }, run)).toBe(
+      "1.4.2-installed",
+    );
+    expect(await androidAppVersion(sdk, { apk: "/x" }, () => Promise.resolve(undefined))).toBeUndefined();
+    expect(calls).toEqual([
+      "/build-tools/34.0.0/aapt2 dump badging /x/app.apk",
+      "/platform-tools/adb -s emulator-5554 shell dumpsys package dev.shop",
+    ]);
+  });
 
   it("REQ-ENV-06/AC3: without a mobile section, iOS without a farm, or a missing app the reason is clear", async () => {
     const none = await session("");
@@ -450,7 +554,7 @@ describe("app binaries and devices (REQ-ENV-06)", () => {
       {},
       build.s.project.config,
     );
-    expect(await readFile(home, "utf8")).toBe(build.s.ws.path("env", "build-home"));
+    expect(await readFile(home ?? "", "utf8")).toBe(build.s.ws.path("env", "build-home"));
     const { symlink } = await import("node:fs/promises");
     await symlink(
       join(build.p.home, "project", ".qa", "qa.project.yaml"),

@@ -48,6 +48,10 @@ mobile:
     app: { source: ci, repo: app, artifact: app-debug, file: "*.apk" } # GitHub Actions / GitLab CI of the SHA
     # app: { source: path, repo: app, path: build/app.apk }
     # app: { source: build, repo: app, command: [./gradlew, assembleDebug], output: app/build/outputs/apk/debug/app-debug.apk }
+    # Without the app's repository (REQ-EXEC-23):
+    # app: { source: file, path: builds/shop-1.4.2.apk } # relative to the project folder, or absolute
+    # app: { source: url, url: https://builds.example.com/shop-1.4.2.apk, sha256: <64 hex> } # host in environments.allowlist
+    # app: { source: installed } # already on the device; started by app_id, nothing installed
     app_id: com.example.shop
     activity: .MainActivity
     deep_link_scheme: shop # ui.goto("/cart") opens shop://cart
@@ -112,6 +116,14 @@ emulators (about 2 GiB each plus 2 GiB). `mobile.devices` does not apply with a 
 App binaries come from CI for exactly the analysed commit (REQ-ENV-06/AC1): the newest successful GitHub
 Actions run or GitLab pipeline of that SHA with the named artifact (GitLab: job name). Downloads go to the
 run's `env/app/`, which cleanup removes.
+
+When you have only a test build and no access to the app's code (REQ-EXEC-23), point `app` at a local file, at a
+download (its host must be in `environments.allowlist`, and its SHA-256 must match `sha256` or the mobile cases are
+BLOCKED with both values), or at the app already installed on the device (`source: installed`). The run records the
+app id, where it came from, its SHA-256 and, when the SDK's `aapt2` (or `adb` for an installed app) can read it, its
+version; the report shows them next to "Code". Without code, `qj plan` also records the app's first screen (and the
+environment's web pages) for the planner, so plan expectations use the names the app shows. An iOS app uploaded to a
+device farm (`farm.app`) needs no repository either.
 
 ## Security notes
 

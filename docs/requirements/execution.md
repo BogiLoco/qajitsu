@@ -326,10 +326,9 @@ test ids at all. Selector kinds cover what each platform offers, from the most s
 
 ### REQ-EXEC-22 · Snapshot of the running application for the author and the healer
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: later
-- Note: AC7 is done for web pages; the first screen of a mobile app before planning comes with REQ-EXEC-23 (an app without its repository).
 - Related: REQ-EXEC-01, REQ-EXEC-09, REQ-EXEC-21, REQ-ENV-01, INV-2, INV-8, INV-10
 
 The author sees what the application really shows instead of guessing selectors from code: code opens the running
@@ -343,12 +342,12 @@ application and records its accessible elements; the agent only reads that recor
 - [x] AC4: When a step fails because an element is missing, the healer gets the snapshot of the current page or screen, on web and on mobile (healing extends to mobile cases).
 - [x] AC5: Snapshots respect the environment allowlist; production is never opened for a snapshot.
 - [x] AC6: When the snapshot cannot be taken (environment down, page not reachable), the author works without it and the run says so; the case's status still comes only from the runner.
-- [ ] AC7: Without any repository (only a test environment), the snapshot is the source of element names: the planner also gets a snapshot of the pages and screens it can reach from the environment's start page or the app's start screen, so plan expectations use names the application really shows.
+- [x] AC7: Without any repository (only a test environment), the snapshot is the source of element names: the planner also gets a snapshot of the pages and screens it can reach from the environment's start page or the app's start screen, so plan expectations use names the application really shows.
 - [x] AC8: A plan expectation naming an element that no snapshot contains is flagged in the review like an unknown selector (REQ-PLAN-09/AC8), whether or not the code is available.
 
 ### REQ-EXEC-23 · Mobile app without access to its code
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-EXEC-06, REQ-EXEC-22, REQ-ENV-06, INV-10
@@ -357,6 +356,6 @@ Mobile cases can run when the team has only a test build of the app, not its rep
 
 **Acceptance criteria**
 
-- [ ] AC1: `mobile.android.app` and `mobile.ios.app` also accept a file (`source: file`, a local `.apk`/`.ipa`/`.app`), a download (`source: url`, checked against the allowlist, with a SHA-256 to compare), an app already installed on the device or emulator (`source: installed`, by app id), and an app already uploaded to the device farm.
-- [ ] AC2: The run records the app's version and SHA-256 when known, and the report shows them in place of the commit.
-- [ ] AC3: An app that cannot be obtained or whose SHA-256 differs makes the mobile cases BLOCKED with the reason.
+- [x] AC1: `mobile.android.app` and `mobile.ios.app` also accept a file (`source: file`, a local `.apk`/`.ipa`/`.app`), a download (`source: url`, checked against the allowlist, with a SHA-256 to compare), an app already installed on the device or emulator (`source: installed`, by app id), and an app already uploaded to the device farm.
+- [x] AC2: The run records the app's version and SHA-256 when known, and the report shows them in place of the commit.
+- [x] AC3: An app that cannot be obtained or whose SHA-256 differs makes the mobile cases BLOCKED with the reason.

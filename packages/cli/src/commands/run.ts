@@ -158,6 +158,7 @@ function mobileDevices(
           allowBuild: options.build,
           // REQ-EXEC-16/AC2: --headed shows the emulator window.
           headed: options.headed,
+          fetch: ports.fetch,
         });
       return device;
     },

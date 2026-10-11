@@ -508,6 +508,16 @@ export async function computeVerdict(
     : [];
   const matrixMd = renderMatrixMarkdown(rows);
   const csv = renderMatrixCsv(rows);
+  // REQ-EXEC-23/AC2: the tested mobile app, recorded by code when the devices were prepared.
+  const testedApp = z
+    .strictObject({
+      platform: z.string(),
+      id: z.string(),
+      source: z.string(),
+      version: z.string().optional(),
+      sha256: z.string().optional(),
+    })
+    .safeParse(ws.record.data["app"]);
   const html = (g: readonly GateResult[]): string =>
     renderReportHtml({
       ticket: ws.ticket,
@@ -520,6 +530,7 @@ export async function computeVerdict(
       attempts,
       environment,
       repos: Object.fromEntries(Object.entries(ws.record.repos).map(([k, v]) => [k, v.sha])),
+      ...(testedApp.success ? { app: testedApp.data } : {}),
       ...(versions ? { versions } : {}),
       gates: g,
       timeline,

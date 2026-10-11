@@ -1,5 +1,6 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { createAppiumDeviceFactory, type AppiumClient } from "@qajitsu/adapter-runner-mobile";
 import { createPlaywrightBrowserFactory } from "@qajitsu/adapter-runner-web";
 import type { UiScreen } from "@qajitsu/core";
 import { afterEach, describe, expect, it } from "vitest";
@@ -43,7 +44,7 @@ describe("pages of the environment for the planner (REQ-EXEC-22/AC7+AC8)", () =>
       script: [{ text: analysis }, { text: JSON.stringify(draft) }, { text: JSON.stringify(draft) }],
     });
     expect(planned.err).toBe("");
-    expect(planned.out).toMatch(/Recorded \d+ page\(s\) of local for the planner\./);
+    expect(planned.out).toMatch(/Recorded \d+ page\(s\) or screen\(s\) of local for the planner\./);
     const screens = JSON.parse(await readFile(join(p.runDir, "ui", "snapshot.json"), "utf8")) as UiScreen[];
     expect(screens[0]).toMatchObject({ where: "/", platform: "web", account: "user:standard" });
     const checkout = screens.find((s) => s.where === "/app/checkout");
@@ -55,5 +56,71 @@ describe("pages of the environment for the planner (REQ-EXEC-22/AC7+AC8)", () =>
     expect(planned.out).toContain(
       "role:button:Buy now matches no element recorded on the environment's pages",
     );
+  });
+
+  it("REQ-EXEC-22/AC7 + REQ-EXEC-23/AC1: before planning, the first screen of an installed app is recorded too", async () => {
+    let stopped = false;
+    const client = {
+      $: () => Promise.reject(new Error("unused")),
+      back: () => Promise.resolve(),
+      execute: () => Promise.resolve(),
+      keys: () => Promise.resolve(),
+      getPageSource: () =>
+        Promise.resolve(
+          '<hierarchy><android.widget.Button class="android.widget.Button" text="Add item" content-desc="add-item" displayed="true"/></hierarchy>',
+        ),
+      takeScreenshot: () => Promise.resolve(""),
+      startRecordingScreen: () => Promise.resolve(),
+      stopRecordingScreen: () => Promise.resolve(""),
+      getLogs: () => Promise.resolve([]),
+      deleteSession: () => Promise.resolve(),
+    } as unknown as AppiumClient;
+    const p = await createDemoPipeline({
+      ticket: "DEMO-4",
+      ports: {
+        snapshotBrowser: createPlaywrightBrowserFactory({
+          video: "off",
+          webSession: { storage: "sessionStorage", key: "token" },
+          actionTimeoutMs: 3000,
+        }),
+        mobileDevice: () =>
+          Promise.resolve({
+            ok: true as const,
+            factories: [
+              createAppiumDeviceFactory({
+                platform: "android",
+                connect: () => Promise.resolve(client),
+                capabilities: {},
+              }),
+            ],
+            stop: () => {
+              stopped = true;
+              return Promise.resolve();
+            },
+          }),
+      },
+    });
+    cleanups.push(p.cleanup);
+    const yaml = join(p.project, ".qa", "qa.project.yaml");
+    await writeFile(
+      yaml,
+      `${await readFile(yaml, "utf8")}\nmobile: { android: { app: { source: installed }, app_id: dev.qajitsu.demoshop } }\n`,
+    );
+    await p.run(["fetch", "DEMO-4", "--ref", "shop=main"]);
+    const draft = await readFile(
+      new URL("../../../../fixtures/plans/demo-4-draft.json", import.meta.url),
+      "utf8",
+    );
+    const planned = await p.run(["plan", "DEMO-4", "--snapshot"], {
+      script: [{ text: analysis }, { text: draft }],
+    });
+    expect(planned.err).toBe("");
+    const screens = JSON.parse(await readFile(join(p.runDir, "ui", "snapshot.json"), "utf8")) as UiScreen[];
+    expect(screens.at(-1)).toEqual({
+      where: "app:start",
+      platform: "android",
+      elements: [{ role: "Button", testid: "add-item", text: "Add item" }],
+    });
+    expect(stopped).toBe(true);
   });
 });

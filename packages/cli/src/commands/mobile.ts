@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
-import { mkdir, realpath, stat, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { platform } from "node:os";
-import { basename, isAbsolute, relative, resolve } from "node:path";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { createServer } from "node:net";
 import type { BrowserFactory } from "@qajitsu/adapter-runner-api";
 import {
@@ -81,8 +82,54 @@ export async function resolveAppBinary(
   app: AppSource,
   codeHosts: Readonly<Record<string, CodeHost>>,
   config: ProjectConfig,
-): Promise<string> {
+  fetchFn: typeof globalThis.fetch = globalThis.fetch,
+): Promise<string | undefined> {
   const { ws } = session;
+  // REQ-EXEC-23/AC1: an app without its repository.
+  if (app.source === "installed") return undefined;
+  if (app.source === "file") {
+    const file = isAbsolute(app.path) ? app.path : join(session.project.projectDir, app.path);
+    if (
+      !(await stat(file).then(
+        (st) => st.isFile() || st.isDirectory(),
+        () => false,
+      ))
+    )
+      throw new AdapterError("APP_NOT_FOUND", `App binary ${basename(file)} not found.`, {});
+    return file;
+  }
+  if (app.source === "url") {
+    const url = new URL(app.url);
+    // The same allowlist as everything else the framework calls (invariant 10).
+    if (!config.environments.allowlist.some((a) => new URL(a).origin === url.origin))
+      throw new AdapterError(
+        "APP_NOT_FOUND",
+        `App download host ${url.origin} is not in environments.allowlist.`,
+        {},
+      );
+    const response = await fetchFn(url, { redirect: "error" }).catch((error: unknown) => {
+      throw new AdapterError(
+        "APP_NOT_FOUND",
+        `App download failed: ${error instanceof Error ? error.message : String(error)}`,
+        {},
+      );
+    });
+    if (!response.ok)
+      throw new AdapterError("APP_NOT_FOUND", `App download failed: HTTP ${String(response.status)}.`, {});
+    const data = new Uint8Array(await response.arrayBuffer());
+    const actual = createHash("sha256").update(data).digest("hex");
+    // REQ-EXEC-23/AC3: a different file is never installed.
+    if (actual !== app.sha256)
+      throw new AdapterError(
+        "APP_CHECKSUM_MISMATCH",
+        `App download has SHA-256 ${actual}, the configuration expects ${app.sha256}.`,
+        {},
+      );
+    await mkdir(ws.path("env", "app"), { recursive: true, mode: 0o700 });
+    const file = ws.path("env", "app", basename(url.pathname) || "app.bin");
+    await writeFile(file, data);
+    return file;
+  }
   const repoRecord = ws.record.repos[app.repo];
   if (!repoRecord)
     throw new AdapterError("APP_NOT_FOUND", `Repository '${app.repo}' was not fetched for this run.`, {
@@ -129,6 +176,75 @@ export async function resolveAppBinary(
   return file;
 }
 
+/** Output of a tool, or undefined when it cannot run. */
+const toolOutput = (cmd: string, args: readonly string[]): Promise<string | undefined> =>
+  new Promise((done) => {
+    execFile(cmd, [...args], { timeout: 30_000, maxBuffer: 16 * 1024 * 1024 }, (e, out) => {
+      done(e ? undefined : out);
+    });
+  });
+
+/**
+ * The version of an Android app, when it can be read (REQ-EXEC-23/AC2): from the APK with the SDK's `aapt2`, or from
+ * the device with `adb dumpsys package` for an installed app. Undefined when neither works.
+ *
+ * @param sdkRoot - Android SDK root.
+ * @param target - The APK, or the device serial and app id.
+ */
+export async function androidAppVersion(
+  sdkRoot: string,
+  target: { readonly apk: string } | { readonly serial: string; readonly appId: string },
+  run: (cmd: string, args: readonly string[]) => Promise<string | undefined> = toolOutput,
+): Promise<string | undefined> {
+  if ("apk" in target) {
+    const tools = await readdir(join(sdkRoot, "build-tools")).catch(() => [] as string[]);
+    const latest = tools.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).at(-1);
+    if (latest === undefined) return undefined;
+    const out = await run(join(sdkRoot, "build-tools", latest, "aapt2"), ["dump", "badging", target.apk]);
+    return /versionName='([^']+)'/.exec(out ?? "")?.[1];
+  }
+  const out = await run(join(sdkRoot, "platform-tools", "adb"), [
+    "-s",
+    target.serial,
+    "shell",
+    "dumpsys",
+    "package",
+    target.appId,
+  ]);
+  return /versionName=(\S+)/.exec(out ?? "")?.[1];
+}
+
+/** SHA-256 of an app file; undefined for an app folder (`.app`) or no file. */
+const fileSha256 = async (file: string | undefined): Promise<string | undefined> => {
+  if (
+    file === undefined ||
+    !(await stat(file).then(
+      (st) => st.isFile(),
+      () => false,
+    ))
+  )
+    return undefined;
+  return createHash("sha256")
+    .update(await readFile(file))
+    .digest("hex");
+};
+
+/** The app a run tested (REQ-EXEC-23/AC2), kept in `run.json` and shown in the report. */
+export interface TestedApp {
+  readonly platform: "android" | "ios";
+  readonly id: string;
+  readonly source: string;
+  readonly sha256?: string | undefined;
+  readonly version?: string | undefined;
+}
+
+/** Records the tested app in `run.json` and the journal. */
+async function recordApp(session: RunSession, app: TestedApp): Promise<void> {
+  const clean = Object.fromEntries(Object.entries(app).filter(([, v]) => v !== undefined));
+  await session.ws.update({ data: { ...session.ws.record.data, app: clean } });
+  session.events.emit("run", { kind: "system", name: "orchestrator" }, "mobile.app", clean);
+}
+
 /** A device ready for mobile cases, or the reason they are BLOCKED. */
 export type PreparedMobile =
   | {
@@ -171,7 +287,12 @@ export async function prepareMobile(
   baseUrl: string,
   codeHosts: Readonly<Record<string, CodeHost>>,
   appiumHome: string | undefined,
-  options: { readonly allowBuild: boolean; readonly headed?: boolean } = { allowBuild: false },
+  options: {
+    readonly allowBuild: boolean;
+    readonly headed?: boolean;
+    /** Downloads of `source: url` apps (default: global fetch). */
+    readonly fetch?: typeof globalThis.fetch;
+  } = { allowBuild: false },
 ): Promise<PreparedMobile> {
   const { project } = session;
   const mobile = project.config.mobile;
@@ -192,7 +313,7 @@ export async function prepareMobile(
       const launchUrl = emulatorUrl(baseUrl);
       if (!/^https?:\/\/[\w.-]+(:\d+)?(\/[\w./-]*)?$/.test(launchUrl))
         return { ok: false, reason: "the environment URL cannot be passed to the app launch safely" };
-      const app = await resolveAppBinary(session, android.app, codeHosts, project.config);
+      const app = await resolveAppBinary(session, android.app, codeHosts, project.config, options.fetch);
       if (mobile.devices > 1 && !android.emulator && !android.emulators)
         return {
           ok: false,
@@ -231,7 +352,22 @@ export async function prepareMobile(
         await stop();
         return { ok: false, reason: failed.map((f) => `${f.name}: ${f.reason}`).join("; ") };
       }
-      const appium = await appiumServer(mobile, project.qaDir, appiumHome, androidSdkRoot(android.sdk_root));
+      // REQ-EXEC-23/AC2: which app the run tested, in place of a commit when there is no code.
+      const sdk = androidSdkRoot(android.sdk_root);
+      const firstSerial = started.find((d) => d.serial !== undefined)?.serial;
+      await recordApp(session, {
+        platform: "android",
+        id: android.app_id,
+        source: android.app.source,
+        sha256: await fileSha256(app),
+        version: await androidAppVersion(
+          sdk,
+          app !== undefined
+            ? { apk: app }
+            : { serial: firstSerial ?? "emulator-5554", appId: android.app_id },
+        ).catch(() => undefined),
+      });
+      const appium = await appiumServer(mobile, project.qaDir, appiumHome, sdk);
       if (appium.stop) stops.push(appium.stop);
       const factories: BrowserFactory[] = [];
       for (const device of started) {
@@ -244,7 +380,8 @@ export async function prepareMobile(
             capabilities: {
               platformName: "Android",
               "appium:automationName": "UiAutomator2",
-              "appium:app": app,
+              // REQ-EXEC-23/AC1: an installed app is started by its id, nothing is installed.
+              ...(app === undefined ? { "appium:noReset": true } : { "appium:app": app }),
               "appium:appPackage": android.app_id,
               ...(android.activity ? { "appium:appActivity": android.activity } : {}),
               ...(device.serial ? { "appium:udid": device.serial } : {}),

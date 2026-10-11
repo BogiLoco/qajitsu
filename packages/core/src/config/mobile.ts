@@ -5,8 +5,9 @@ const RelPath = z.string().regex(/^(?!\/)(?!.*\.\.)[\w./*-]+$/, "Relative path w
 const Alias = z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/);
 
 /**
- * Where the app binary comes from (REQ-ENV-06/AC1): a CI artifact of the change SHA, a file in the
- * worktree, or a build command run in the worktree.
+ * Where the app binary comes from (REQ-ENV-06/AC1): a CI artifact of the change SHA, a file in the worktree, or a
+ * build command run in the worktree. Without the app's repository (REQ-EXEC-23/AC1): a local file, a download checked
+ * against the environment allowlist and a SHA-256, or the app already installed on the device.
  */
 export const AppSourceSchema = z.discriminatedUnion("source", [
   z.strictObject({
@@ -26,6 +27,20 @@ export const AppSourceSchema = z.discriminatedUnion("source", [
     command: z.array(z.string().min(1)).min(1),
     output: RelPath,
   }),
+  z.strictObject({
+    source: z.literal("file"),
+    /** `.apk`, `.ipa` or `.app` file: absolute, or relative to the project folder (the one containing `.qa/`). */
+    path: z.string().min(1).max(1000),
+  }),
+  z.strictObject({
+    source: z.literal("url"),
+    /** HTTPS (or local HTTP) download; its origin must be in `environments.allowlist`. */
+    url: z.url(),
+    /** SHA-256 the download must have; a different file is never installed. */
+    sha256: z.string().regex(/^[a-f0-9]{64}$/, "a SHA-256 in lower-case hex"),
+  }),
+  /** The app is already installed on the device or emulator; it is started by its app id. */
+  z.strictObject({ source: z.literal("installed") }),
 ]);
 
 const DeviceName = z.string().regex(/^[a-z][a-z0-9-]{0,29}$/, "Device names look like pixel-8 or tablet");
