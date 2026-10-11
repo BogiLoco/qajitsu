@@ -756,7 +756,10 @@ async function executeCases(
       mcp: { servers: project.config.mcp.servers, allowedOrigins: [env.origin] },
       specChecks,
     };
-    const context = await buildChangeContext(ws, [], { indexCache: codeIndexCache(project) });
+    const context = await buildChangeContext(ws, [], {
+      indexCache: codeIndexCache(project),
+      testIdAttribute: project.config.web.test_id_attribute,
+    });
     // REQ-EXEC-22: the author sees what the running application shows, recorded by this trusted code.
     const snapshot = await authorSnapshot(session, plan, missing, env, ports, {
       knownPages: context.ui?.pages ?? [],
@@ -831,6 +834,7 @@ async function executeCases(
         headless: headlessFor(project.config.web.headless, live),
         slowMoMs: live?.slowMoMs,
         actionTimeoutMs: project.config.web.action_timeout_ms,
+        testIdAttribute: project.config.web.test_id_attribute,
         webSession: env.profile.web_session,
         // REQ-EVD-07/AC5: each passive check can be switched off.
         observations: {

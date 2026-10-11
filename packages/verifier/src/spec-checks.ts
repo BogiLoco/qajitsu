@@ -29,8 +29,21 @@ const FORBIDDEN_GLOBALS = new Set([
 
 const UI_ACTIONS = new Set(["click", "fill", "check", "uncheck", "select", "press", "waitFor"]);
 
-/** Selector kinds a native app can resolve (REQ-EXEC-06); `role:` and `css:` exist only in a browser. */
-const NATIVE_SELECTORS = ["testid:", "label:", "text:"];
+/** Selector kinds a native app can resolve (REQ-EXEC-06, REQ-EXEC-21/AC3); `role:` and `css:` exist only in a browser. */
+const NATIVE_SELECTORS = ["testid:", "label:", "text:", "id:", "xpath:"];
+
+/** Selector kinds a browser can resolve (REQ-EXEC-21/AC3). */
+const WEB_SELECTORS = [
+  "testid:",
+  "role:",
+  "label:",
+  "placeholder:",
+  "alt:",
+  "title:",
+  "text:",
+  "id:",
+  "css:",
+];
 
 /** `ui` operations that do not exist in a native app, and what to do instead (REQ-EXEC-06). */
 const NATIVE_UNAVAILABLE: Readonly<Record<string, string>> = {
@@ -235,8 +248,29 @@ export function checkSpecSource(
           ts.isStringLiteral(first) &&
           !NATIVE_SELECTORS.some((k) => first.text.startsWith(k))
         )
-          add("lint", `'${first.text}' cannot be found in a native app: use testid:, label: or text:`, node);
+          add(
+            "lint",
+            `'${first.text}' cannot be found in a native app: use testid:, label:, text:, id: or xpath:`,
+            node,
+          );
+        // REQ-EXEC-21/AC6: XPath follows the screen's structure and breaks with it.
+        if (UI_ACTIONS.has(name) && first && ts.isStringLiteral(first) && first.text.startsWith("xpath:"))
+          add("review", `XPath selector '${first.text}' is brittle; prefer testid:, label: or text:`, node);
       }
+      if (
+        !native &&
+        onUi &&
+        name !== undefined &&
+        UI_ACTIONS.has(name) &&
+        first &&
+        ts.isStringLiteral(first) &&
+        !WEB_SELECTORS.some((k) => first.text.startsWith(k))
+      )
+        add(
+          "lint",
+          `'${first.text}' cannot be found in a browser: use testid:, role:, label:, placeholder:, alt:, title:, text:, id: or css:`,
+          node,
+        );
       if (
         !native &&
         name !== undefined &&

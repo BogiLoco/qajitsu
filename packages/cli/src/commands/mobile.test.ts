@@ -34,7 +34,8 @@ const fakeApp = (backEmptiesCart: boolean): AppiumClient => {
   const visible = (id: string) =>
     screen === "cart" ? ["add-item", "open-checkout", "cart-count"].includes(id) : id === "checkout-title";
   const element = (sel: string): AppiumElement => {
-    const id = sel.slice(1);
+    // `testid:x` on Android is an XPath over content-desc and resource id (REQ-EXEC-21/AC2).
+    const id = /@content-desc="([^"]*)"/.exec(sel)?.[1] ?? sel.slice(1);
     return {
       click: () => {
         if (id === "add-item") items += 1;

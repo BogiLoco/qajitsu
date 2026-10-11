@@ -30,7 +30,8 @@ const fakeApp = (bug: boolean, onConnect?: () => void): AppiumClient => {
     screen === "cart" ? ["add-item", "open-checkout", "cart-count"].includes(id) : id === "checkout-title";
   return {
     $: (sel) => {
-      const id = sel.slice(1);
+      // `testid:x` on Android is an XPath over content-desc and resource id (REQ-EXEC-21/AC2).
+      const id = /@content-desc="([^"]*)"/.exec(sel)?.[1] ?? sel.slice(1);
       return Promise.resolve({
         click: () => {
           if (id === "add-item") items += 1;

@@ -972,7 +972,8 @@
         "browser": "chromium",
         "video": "retain-on-failure",
         "headless": true,
-        "action_timeout_ms": 5000
+        "action_timeout_ms": 5000,
+        "test_id_attribute": "data-testid"
       },
       "type": "object",
       "properties": {
@@ -1003,6 +1004,11 @@
           "type": "integer",
           "minimum": 500,
           "maximum": 120000
+        },
+        "test_id_attribute": {
+          "default": "data-testid",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,49}$"
         },
         "matrix": {
           "type": "object",

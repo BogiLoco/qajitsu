@@ -306,7 +306,7 @@ Mobile cases can run on several different devices at once: to finish sooner, or 
 
 ### REQ-EXEC-21 · Selectors for any web or mobile application
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: later
 - Related: REQ-EXEC-05, REQ-EXEC-06, REQ-EXEC-09, REQ-PLAN-09, INV-4
@@ -316,13 +316,13 @@ test ids at all. Selector kinds cover what each platform offers, from the most s
 
 **Acceptance criteria**
 
-- [ ] AC1: The web test id attribute is configurable (`web.test_id_attribute`, default `data-testid`, e.g. `data-qa`, `data-test`, `data-cy`); `testid:` selectors, the element inventory and the prompts use it.
-- [ ] AC2: On Android `testid:<id>` finds the accessibility id (content-desc) or the resource id (`<package>:id/<id>` or `<id>`); on iOS the accessibility identifier.
-- [ ] AC3: Web selectors also include `placeholder:`, `alt:`, `title:` and `id:` (DOM id), and `role:<role>:<name>` and `label:` work without any test id; mobile selectors include `text:`, `label:`, `id:` (resource id) and `xpath:` as the last resort.
-- [ ] AC4: The element inventory also finds Android `@+id/...` in layouts and code, Flutter `Key('...')` and `Semantics(identifier:)`, SwiftUI `.accessibilityIdentifier(...)`, and the configured web attribute.
-- [ ] AC5: The prompts of the author and the healer list the selector kinds in order of stability and contain no element ids or pages of the demo application; a test checks that.
-- [ ] AC6: Without any test id in the code, the plan check does not judge element names (nothing to compare against) and the author relies on roles, labels, texts and the UI snapshot (REQ-EXEC-22); `css:` and `xpath:` selectors are flagged in review.
-- [ ] AC7: A screen that exposes no accessible elements (canvas, game, Flutter without semantics) makes the case BLOCKED with that reason, never PASSED.
+- [x] AC1: The web test id attribute is configurable (`web.test_id_attribute`, default `data-testid`, e.g. `data-qa`, `data-test`, `data-cy`); `testid:` selectors, the element inventory and the prompts use it.
+- [x] AC2: On Android `testid:<id>` finds the accessibility id (content-desc) or the resource id (`<package>:id/<id>` or `<id>`); on iOS the accessibility identifier.
+- [x] AC3: Web selectors also include `placeholder:`, `alt:`, `title:` and `id:` (DOM id), and `role:<role>:<name>` and `label:` work without any test id; mobile selectors include `text:`, `label:`, `id:` (resource id) and `xpath:` as the last resort.
+- [x] AC4: The element inventory also finds Android `@+id/...` in layouts and code, Flutter `Key('...')` and `Semantics(identifier:)`, SwiftUI `.accessibilityIdentifier(...)`, and the configured web attribute.
+- [x] AC5: The prompts of the author and the healer list the selector kinds in order of stability and contain no element ids or pages of the demo application; a test checks that.
+- [x] AC6: Without any test id in the code, the plan check does not judge element names (nothing to compare against) and the author relies on roles, labels, texts and the UI snapshot (REQ-EXEC-22); `css:` and `xpath:` selectors are flagged in review.
+- [x] AC7: A screen that exposes no accessible elements (canvas, game, Flutter without semantics) makes the case BLOCKED with that reason, never PASSED.
 
 ### REQ-EXEC-22 · Snapshot of the running application for the author and the healer
 

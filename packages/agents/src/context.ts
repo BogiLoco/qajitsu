@@ -194,7 +194,11 @@ export async function buildChangeContext(
   ws: RunWorkspace,
   knowledge: readonly { name: string; text: string }[] = [],
   /** Project cache of code indexes by `<repo>@<sha>` (REQ-PRJ-08/AC2); without it repositories are indexed again. */
-  options: { readonly indexCache?: string | undefined } = {},
+  options: {
+    readonly indexCache?: string | undefined;
+    /** Attribute of web test ids in the code (REQ-EXEC-21/AC1); `data-testid` by default. */
+    readonly testIdAttribute?: string | undefined;
+  } = {},
 ): Promise<ChangeContext> {
   const ticket = await readTicketSnapshot(ws.path("ticket", "ticket.json"));
   const repos: ChangeContext["repos"][number][] = [];
@@ -240,7 +244,7 @@ export async function buildChangeContext(
   for (const repo of repos)
     for (const f of await uiSources(ws.path("repos", repo.alias)))
       sources.push({ path: `${repo.alias}/${f.path}`, text: f.text });
-  const ui = buildUiInventory(sources);
+  const ui = buildUiInventory(sources, [], { testIdAttribute: options.testIdAttribute });
   return {
     ticket,
     repos,

@@ -195,7 +195,7 @@ describe("author with a snapshot of the running application (REQ-EXEC-22)", () =
     const { d, context } = await deps(model);
     const [result] = await runAuthor(d, one, context, analysis, []);
     expect(result).toMatchObject({ caseId: "TC-01", attempts: 1, problems: [] });
-    expect(promptOf(model, 0)).not.toContain("What the application shows");
+    expect(promptOf(model, 0)).not.toContain("## What the application shows");
   });
 });
 

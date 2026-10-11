@@ -213,7 +213,10 @@ export async function runExplore(
         },
         {
           goal,
-          context: await buildChangeContext(ws, [], { indexCache: codeIndexCache(project) }),
+          context: await buildChangeContext(ws, [], {
+            indexCache: codeIndexCache(project),
+            testIdAttribute: project.config.web.test_id_attribute,
+          }),
           tools: recorder.tools,
           accounts,
           // Looks do not count as actions; the loop gets room for them on top of the action budget.

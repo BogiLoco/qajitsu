@@ -77,6 +77,40 @@ const attempt = async (
 };
 
 describe("web runner (REQ-EXEC-05, REQ-EXEC-07, REQ-EVD-02)", () => {
+  it("REQ-EXEC-21/AC1+AC3: any test id attribute, and pages without test ids through placeholder, alt, title, id and roles", async () => {
+    const page =
+      "data:text/html," +
+      encodeURIComponent(
+        '<button data-qa="pay">Pay</button><input placeholder="Email"><img alt="Logo" src="data:,">' +
+          '<span title="Hint">?</span><b id="total">9,99</b><button disabled>Buy</button>',
+      );
+    const session = createPlaywrightBrowserFactory({ video: "off", testIdAttribute: "data-qa" })({
+      specFile: spec("DEMO-4", "TC-01"),
+      caseId: "TC-01",
+      attempt: 1,
+      plan: plan("DEMO-4"),
+      baseUrl: "http://127.0.0.1:9",
+      allowedOrigins: [],
+      accounts: {},
+      secrets: [],
+      timeoutMs: 30_000,
+    });
+    try {
+      const d = await session.driver();
+      await d.goto(page);
+      expect(await d.property("testid:pay", "visible")).toBe(true);
+      expect(await d.property("placeholder:Email", "visible")).toBe(true);
+      expect(await d.property("alt:Logo", "visible")).toBe(true);
+      expect(await d.property("title:Hint", "visible")).toBe(true);
+      expect(await d.property("id:total", "text")).toBe("9,99");
+      expect(await d.property("role:button:Buy", "enabled")).toBe(false);
+      await expect(d.property("xpath://b", "visible")).rejects.toThrow(/not supported in a browser/);
+      expect(await d.elements?.()).toContainEqual(expect.objectContaining({ testid: "pay", text: "Pay" }));
+    } finally {
+      await session.close(false);
+    }
+  });
+
   it("REQ-EXEC-22/AC1: the parent lists the elements of a page: test ids, roles, names, texts and states", async () => {
     const shop = await startShop({ env: { DEMO_USER_PASSWORD: PASSWORD } });
     cleanups.push(() => shop.close());

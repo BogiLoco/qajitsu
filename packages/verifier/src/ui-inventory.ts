@@ -25,20 +25,45 @@ export interface UiInventory {
 
 const QUOTES = `"'\``;
 
+const escapeRegex = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 /**
  * Patterns that define an element id the runners address with `testid:`, with the platforms where it applies:
- * `data-testid` and `dataset.testid` (web), `testID` (React Native, both phones), accessibility ids on Android
- * (`setContentDescription`, `android:contentDescription`, Compose `testTag`) and on iOS (`accessibilityIdentifier`).
- * Group 1 is the opening quote, group 2 the id, group 3 what follows it.
+ * the project's test id attribute and its `dataset` property (web; `data-testid` by default, REQ-EXEC-21/AC1),
+ * `testID` (React Native), Android accessibility ids (`setContentDescription`, `android:contentDescription`, Compose
+ * `testTag`) and resource ids (`android:id="@+id/..."`, which `testid:` also finds), iOS identifiers
+ * (`accessibilityIdentifier`, SwiftUI `.accessibilityIdentifier(...)`) and Flutter `Semantics(identifier:)`, `Key` and
+ * `ValueKey` (REQ-EXEC-21/AC4). Group 1 is the opening quote, group 2 the id, group 3 what follows it.
  */
-const ID_PATTERNS: readonly { readonly pattern: RegExp; readonly platforms: readonly UiPlatform[] }[] = [
-  { pattern: /data-testid\s*=\s*\{?\s*(["'`])([^"'`$\s{}]*)(.)/g, platforms: ["web"] },
-  { pattern: /\btestID\s*=\s*\{?\s*(["'`])([^"'`$\s{}]*)(.)/g, platforms: ["android", "ios"] },
-  { pattern: /dataset\.testid\s*=\s*(["'`])([^"'`$\s]*)(.)/g, platforms: ["web"] },
-  { pattern: /(?:setContentDescription|testTag)\(\s*(["'`])([^"'`$\s]*)(.)/g, platforms: ["android"] },
-  { pattern: /android:contentDescription\s*=\s*(")([^"@\s]*)(.)/g, platforms: ["android"] },
-  { pattern: /accessibilityIdentifier\s*=\s*(["'`])([^"'`$\s]*)(.)/g, platforms: ["ios"] },
-];
+const idPatterns = (
+  testIdAttribute: string,
+): readonly { readonly pattern: RegExp; readonly platforms: readonly UiPlatform[] }[] => {
+  const dataset = testIdAttribute.startsWith("data-")
+    ? testIdAttribute.slice(5).replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())
+    : undefined;
+  return [
+    {
+      pattern: new RegExp(`${escapeRegex(testIdAttribute)}\\s*=\\s*\\{?\\s*(["'\`])([^"'\`$\\s{}]*)(.)`, "g"),
+      platforms: ["web"],
+    },
+    ...(dataset
+      ? [
+          {
+            pattern: new RegExp(`dataset\\.${escapeRegex(dataset)}\\s*=\\s*(["'\`])([^"'\`$\\s]*)(.)`, "g"),
+            platforms: ["web"] as const,
+          },
+        ]
+      : []),
+    { pattern: /\btestID\s*=\s*\{?\s*(["'`])([^"'`$\s{}]*)(.)/g, platforms: ["android", "ios"] },
+    { pattern: /(?:setContentDescription|testTag)\(\s*(["'`])([^"'`$\s]*)(.)/g, platforms: ["android"] },
+    { pattern: /android:contentDescription\s*=\s*(")([^"@\s]*)(.)/g, platforms: ["android"] },
+    { pattern: /android:id\s*=\s*(")@\+id\/([\w.]+)(.)/g, platforms: ["android"] },
+    { pattern: /accessibilityIdentifier\s*=\s*(["'`])([^"'`$\s]*)(.)/g, platforms: ["ios"] },
+    { pattern: /\.accessibilityIdentifier\(\s*(")([^"\\\s]*)(.)/g, platforms: ["ios"] },
+    { pattern: /Semantics\([^)]*?\bidentifier:\s*(["'])([^"'$\s]*)(.)/g, platforms: ["android", "ios"] },
+    { pattern: /\b(?:Value)?Key\(\s*(["'])([^"'$\s]*)(.)/g, platforms: ["android", "ios"] },
+  ];
+};
 
 const union = (a: readonly UiPlatform[], b: readonly UiPlatform[]): UiPlatform[] =>
   PLATFORMS.filter((p) => a.includes(p) || b.includes(p));
@@ -54,8 +79,14 @@ const PAGE_PATTERNS: readonly RegExp[] = [
 /**
  * The element ids and page paths one source file defines (REQ-PLAN-09/AC7). An id whose string ends where code
  * continues it (`"price-" + p.id`, `` `price-${id}` ``, `'price-'+id`) is a prefix.
+ *
+ * @param text - Source text of one file.
+ * @param testIdAttribute - Attribute of web test ids (REQ-EXEC-21/AC1).
  */
-export function scanUiSource(text: string): {
+export function scanUiSource(
+  text: string,
+  testIdAttribute = "data-testid",
+): {
   readonly ids: readonly {
     readonly id: string;
     readonly prefix: boolean;
@@ -64,7 +95,7 @@ export function scanUiSource(text: string): {
   readonly pages: readonly string[];
 } {
   const ids = new Map<string, { prefix: boolean; platforms: UiPlatform[] }>();
-  for (const { pattern, platforms } of ID_PATTERNS)
+  for (const { pattern, platforms } of idPatterns(testIdAttribute))
     for (const m of text.matchAll(pattern)) {
       // Every pattern has exactly these three groups, so each one is a string.
       const [, open, id, next] = m as unknown as [string, string, string, string];
@@ -92,11 +123,12 @@ export function scanUiSource(text: string): {
 export function buildUiInventory(
   files: readonly { readonly path: string; readonly text: string }[],
   exclude: readonly string[] = [],
+  options: { readonly testIdAttribute?: string | undefined } = {},
 ): UiInventory {
   const selectors = new Map<string, { prefix: boolean; platforms: UiPlatform[]; files: Set<string> }>();
   const pages = new Set<string>();
   for (const file of files) {
-    const found = scanUiSource(file.text);
+    const found = scanUiSource(file.text, options.testIdAttribute);
     for (const { id, prefix, platforms } of found.ids) {
       const entry = selectors.get(id) ?? { prefix, platforms: [], files: new Set<string>() };
       entry.prefix = entry.prefix && prefix;

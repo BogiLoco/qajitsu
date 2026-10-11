@@ -180,6 +180,22 @@ describe("concrete expected values (REQ-PLAN-09)", () => {
     ).toEqual([]);
   });
 
+  it("REQ-EXEC-21/AC6: code without any test id cannot judge element names; roles, labels and texts pass", () => {
+    const pagesOnly = buildUiInventory([{ path: "app.html", text: '<a href="/orders">Orders</a>' }]);
+    expect(pagesOnly.selectors).toEqual([]);
+    const elements = {
+      "role:button:Submit": { enabled: true },
+      "label:Email": { visible: true },
+      "text:Order placed": { visible: true },
+      "testid:anything": { visible: true },
+    };
+    expect(
+      checkPlanExpectations(plan([{ expect: { description: "d", elements } }], "web"), {
+        inventory: pagesOnly,
+      }),
+    ).toEqual([]);
+  });
+
   it("REQ-EXEC-22/AC8: an element no recorded page shows is flagged, with or without the code", () => {
     const screens = [
       {

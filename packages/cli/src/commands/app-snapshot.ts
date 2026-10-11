@@ -55,6 +55,7 @@ export function snapshotBrowser(
       video: "off",
       headless: true,
       actionTimeoutMs: web.action_timeout_ms,
+      testIdAttribute: web.test_id_attribute,
       webSession: env.profile.web_session,
       observations: { console: false, httpErrors: false, accessibility: false },
     })

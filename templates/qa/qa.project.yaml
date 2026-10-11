@@ -167,7 +167,7 @@ test_types: [api, web]
 # mobile: { recording: retain-on-failure, android: { app: { source: build, repo: app, command: [./gradlew, assembleDebug], output: app/build/outputs/apk/debug/app-debug.apk }, app_id: com.example.app } }
 #
 # Browser options (REQ-EXEC-05)
-# web: { browser: chromium, video: retain-on-failure, headless: true, action_timeout_ms: 5000 }
+# web: { browser: chromium, video: retain-on-failure, headless: true, action_timeout_ms: 5000, test_id_attribute: data-testid }
 #
 # Jira comment and attachments (REQ-PUB-01, REQ-PUB-02, REQ-VER-10)
 # publish: { max_attachment_mb: 10, auto: false, media_hosts: [media.atlassian.com] }

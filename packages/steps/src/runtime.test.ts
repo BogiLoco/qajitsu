@@ -464,4 +464,102 @@ describe("case runtime (REQ-EXEC-02, REQ-EVD-01, REQ-CFG-06)", () => {
     expect(String(item?.content)).not.toContain("s3cret-value");
     expect((await run(false)).evidence.map((e) => e.name)).not.toContain("failure-elements.json");
   });
+
+  it("REQ-EXEC-21/AC7: a screen that shows no element QAJitsu can address ends the attempt as an error with the reason, never FAILED or PASSED", async () => {
+    const custom = PlanSchema.parse({
+      schema: 1,
+      ticket: "DEMO-9",
+      version: 1,
+      cases: [
+        {
+          id: "TC-01",
+          title: "canvas game",
+          type: "mobile",
+          priority: "high",
+          source: [{ kind: "ac", id: "AC1" }],
+          steps: [
+            {
+              id: "S1",
+              action: "Start the game",
+              expect: { description: "d", elements: { "text:Score: 0": { visible: true } } },
+            },
+          ],
+          evidence: ["screenshot"],
+        },
+      ],
+    });
+    const run = async (elements: readonly unknown[], fails: boolean) => {
+      const driver = {
+        click: () =>
+          fails ? Promise.reject(new Error("element 'text:Start' not found")) : Promise.resolve(),
+        property: () => Promise.resolve(false),
+        screenshot: () => Promise.resolve(new Uint8Array()),
+        url: () => "app:launch",
+        dom: () => Promise.resolve("<hierarchy/>"),
+        elements: () => Promise.resolve(elements),
+      } as unknown as UiDriver;
+      const runtime = createCaseRuntime({
+        plan: custom,
+        caseId: "TC-01",
+        attempt: 1,
+        baseUrl: "http://127.0.0.1:3000",
+        transport: () => Promise.reject(new Error("no API")),
+        masker: createMasker(),
+        allowedOrigins: ["http://127.0.0.1:3000"],
+        accounts: {},
+        now: () => 0,
+        ui: () => Promise.resolve(driver),
+      });
+      runtime.beginStep("S1");
+      try {
+        await runtime.uiOp({ op: "click", selector: "text:Start" });
+        await runtime.verify("S1", "elements.text:Score: 0.visible");
+        return await runtime.finish();
+      } catch (error) {
+        return runtime.finish(error);
+      }
+    };
+    const reason = /shows no element QAJitsu can address/;
+    const action = await run([], true);
+    expect(action.outcome).toBe("error");
+    expect(action.error).toMatch(reason);
+    expect(action.error).toContain("element 'text:Start' not found");
+    const check = await run([], false);
+    // The click found its element, so the empty screen after it is the application's doing: FAILED as usual.
+    expect(check.outcome).toBe("failed");
+    const untouched = await (async () => {
+      const driver = {
+        property: () => Promise.resolve(false),
+        screenshot: () => Promise.resolve(new Uint8Array()),
+        url: () => "app:launch",
+        dom: () => Promise.resolve("<hierarchy/>"),
+        elements: () => Promise.resolve([]),
+      } as unknown as UiDriver;
+      const runtime = createCaseRuntime({
+        plan: custom,
+        caseId: "TC-01",
+        attempt: 1,
+        baseUrl: "http://127.0.0.1:3000",
+        transport: () => Promise.reject(new Error("no API")),
+        masker: createMasker(),
+        allowedOrigins: ["http://127.0.0.1:3000"],
+        accounts: {},
+        now: () => 0,
+        ui: () => Promise.resolve(driver),
+      });
+      runtime.beginStep("S1");
+      try {
+        await runtime.verify("S1", "elements.text:Score: 0.visible");
+        return await runtime.finish();
+      } catch (error) {
+        return runtime.finish(error);
+      }
+    })();
+    expect(untouched.outcome).toBe("error");
+    expect(untouched.error).toMatch(reason);
+    expect(untouched.assertions).toEqual([]);
+    // With elements on the screen a missing one is the product's or the test's problem: the usual outcomes.
+    expect((await run([{ text: "Menu" }], true)).error).not.toMatch(reason);
+    expect((await run([{ text: "Menu" }], false)).outcome).toBe("failed");
+  });
 });

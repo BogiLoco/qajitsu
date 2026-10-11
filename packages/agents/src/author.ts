@@ -52,12 +52,12 @@ export const caseId = "TC-08";
 export async function run({ step, verify, plan, ui }: CaseContext): Promise<void> {
   await step("S1", async () => {
     await ui.as("user:standard");
-    await ui.goto("/app/checkout");
-    verify("S1", "elements.testid:place-order.enabled", undefined, plan.expect("TC-08.S1.elements.testid:place-order.enabled"));
+    await ui.goto("/orders/new");
+    verify("S1", "elements.testid:submit-order.enabled", undefined, plan.expect("TC-08.S1.elements.testid:submit-order.enabled"));
   });
   await step("S2", async () => {
-    await ui.check("testid:accept-terms");
-    verify("S2", "elements.testid:place-order.enabled", undefined, plan.expect("TC-08.S2.elements.testid:place-order.enabled"));
+    await ui.check("role:checkbox:I agree to the terms");
+    verify("S2", "elements.testid:submit-order.enabled", undefined, plan.expect("TC-08.S2.elements.testid:submit-order.enabled"));
     verify("S2", "texts.0", undefined, plan.expect("TC-08.S2.texts.0"));
   });
 }
@@ -70,14 +70,14 @@ export const caseId = "TC-09";
 
 export async function run({ step, verify, plan, ui }: CaseContext): Promise<void> {
   await step("S1", async () => {
-    await ui.click("testid:add-item");
-    verify("S1", "elements.testid:cart-count.text", undefined, plan.expect("TC-09.S1.elements.testid:cart-count.text"));
+    await ui.click("testid:basket-add");
+    verify("S1", "elements.testid:basket-count.text", undefined, plan.expect("TC-09.S1.elements.testid:basket-count.text"));
   });
   await step("S2", async () => {
-    await ui.click("testid:open-checkout");
+    await ui.click("text:Summary");
     await ui.back();
-    await ui.waitFor("testid:cart-count");
-    verify("S2", "elements.testid:cart-count.text", undefined, plan.expect("TC-09.S2.elements.testid:cart-count.text"));
+    await ui.waitFor("testid:basket-count");
+    verify("S2", "elements.testid:basket-count.text", undefined, plan.expect("TC-09.S2.elements.testid:basket-count.text"));
   });
 }
 `;
@@ -94,8 +94,13 @@ Rules (checked by code; a violating spec is rejected):
   Fields are "status", "fields.<key>" (read with res.json("<key>")) or "texts.<n>". The expected value is ALWAYS plan.expect(...) with exactly the same step and field; never a literal.
 - Web and mobile steps drive the app only through ui, inside the step: await ui.as("<account alias>") opens it as an
   account, then ui.goto("/path"), ui.click(sel), ui.fill(sel, text), ui.check(sel), ui.uncheck(sel), ui.select(sel,
-  value), ui.press(sel, key), ui.waitFor(sel), ui.back(). Selectors are the plan's: testid:<id>, role:<role>:<name>,
-  label:<text>, text:<text>. Open the page before checking anything on it.
+  value), ui.press(sel, key), ui.waitFor(sel), ui.back(). Open the page before checking anything on it.
+- Selectors, the most stable first: testid:<id> (the project's test id; in a native app the accessibility id, on
+  Android also the resource id), role:<role>:<accessible name>, label:<text>, placeholder:<text>, alt:<text>,
+  title:<text>, text:<visible text>, id:<id>; css:<selector> (web) and xpath:<path> (native app) only as the last
+  resort. A native app has testid:, label:, text:, id: and xpath: only. Use the plan's selectors for expectations and
+  the ones listed under "What the application shows" for actions; when the code has no test ids, use roles, labels
+  and texts.
 - Mobile cases (type "mobile") test a native app that is already open: never ui.as (a native app cannot get a web
   session; log in through its own screens when the plan says so) and ui.goto only for deep links; perform every
   action of the step by tapping its elements (ui.click, ui.fill), ui.back() presses the Android back button.

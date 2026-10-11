@@ -35,6 +35,9 @@ const WEB_ROLES = new Set([
 export function selectorsFor(element: UiElementFact, platform: UiPlatform): string[] {
   const out: string[] = [];
   if (element.testid) out.push(`testid:${element.testid}`);
+  // REQ-EXEC-21/AC2: on Android testid: also finds the resource id, for apps without accessibility ids.
+  if (platform === "android" && element.resourceId && element.resourceId !== element.testid)
+    out.push(`testid:${element.resourceId}`);
   if (platform === "web" && element.role && element.name && WEB_ROLES.has(element.role))
     out.push(`role:${element.role}:${element.name}`);
   const text = element.text ?? (platform === "web" ? undefined : element.name);

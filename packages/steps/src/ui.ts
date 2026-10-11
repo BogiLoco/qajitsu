@@ -11,7 +11,10 @@ export function pngDimensions(png: Uint8Array): { width: number; height: number 
   return { width: view.getUint32(16), height: view.getUint32(20) };
 }
 
-/** Element selector of a spec: `testid:<id>`, `role:<role>[:<name>]`, `label:<text>`, `text:<text>` or `css:<selector>`. */
+/**
+ * Element selector of a spec: `testid:<id>`, `role:<role>[:<name>]`, `label:<text>`, `placeholder:<text>`,
+ * `alt:<text>`, `title:<text>`, `text:<text>`, `id:<id>`, `css:<selector>` or `xpath:<path>` (REQ-EXEC-21/AC3).
+ */
 export type UiSelector = string;
 
 /** Element properties a plan can expect and the parent can read (REQ-EXEC-05). */
@@ -69,7 +72,25 @@ export type UiOperation =
   | { readonly op: "back" }
   | { readonly op: "as"; readonly alias: string };
 
-const SELECTOR = /^(testid|role|label|text|css):.+$/;
+/**
+ * Selector kinds, the most stable first (REQ-EXEC-21/AC3). The web resolves testid, role, label, text, placeholder,
+ * alt, title, id and css; a native app testid (accessibility id or resource id), label, text, id (resource id) and
+ * xpath. The runner of each platform rejects the others.
+ */
+export const SELECTOR_KINDS = [
+  "testid",
+  "role",
+  "label",
+  "placeholder",
+  "alt",
+  "title",
+  "text",
+  "id",
+  "css",
+  "xpath",
+] as const;
+
+const SELECTOR = new RegExp(`^(${SELECTOR_KINDS.join("|")}):.+$`);
 
 /**
  * Validates a selector string.
@@ -78,6 +99,8 @@ const SELECTOR = /^(testid|role|label|text|css):.+$/;
  */
 export function assertSelector(selector: string): UiSelector {
   if (!SELECTOR.test(selector) || selector.length > 300)
-    throw new Error(`Invalid selector '${selector.slice(0, 60)}': use testid:, role:, label:, text: or css:`);
+    throw new Error(
+      `Invalid selector '${selector.slice(0, 60)}': use ${SELECTOR_KINDS.map((k) => `${k}:`).join(", ")}`,
+    );
   return selector;
 }

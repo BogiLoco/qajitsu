@@ -59,7 +59,12 @@ describe("element and page inventory (REQ-PLAN-09/AC7)", () => {
     ['<Button android:contentDescription="ok"/>', ["android"]],
     ['view.setContentDescription("item")', ["android"]],
     ['button.accessibilityIdentifier = "buy"', ["ios"]],
-  ])("REQ-PLAN-09/AC8: %s is an id of %j", (source, platforms) => {
+    ['Button("Buy").accessibilityIdentifier("buy-now")', ["ios"]],
+    ['<Button android:id="@+id/add_item" />', ["android"]],
+    ["Semantics(identifier: 'cart-total', child: x)", ["android", "ios"]],
+    ["ElevatedButton(key: Key('pay'), onPressed: f)", ["android", "ios"]],
+    ['ListTile(key: const ValueKey("row-" + id))', ["android", "ios"]],
+  ])("REQ-PLAN-09/AC8 + REQ-EXEC-21/AC4: %s is an id of %j", (source, platforms) => {
     expect(scanUiSource(source).ids[0]?.platforms).toEqual(platforms);
   });
 
@@ -123,5 +128,18 @@ describe("element and page inventory (REQ-PLAN-09/AC7)", () => {
     );
     expect(many).toContain("- testid:a (web) in a.html");
     expect(many).toContain("(1 more not listed)");
+  });
+
+  it("REQ-EXEC-21/AC1+AC4: the project's test id attribute is found instead of data-testid", () => {
+    const html = '<button data-qa="pay">Pay</button><i data-testid="old"></i><b data-qa={`row-${n}`}></b>';
+    expect(scanUiSource(html, "data-qa").ids).toEqual([
+      { id: "pay", prefix: false, platforms: ["web"] },
+      { id: "row-", prefix: true, platforms: ["web"] },
+    ]);
+    expect(
+      buildUiInventory([{ path: "a.html", text: html }], [], { testIdAttribute: "data-qa" }).selectors.map(
+        (s) => s.selector,
+      ),
+    ).toEqual(["testid:pay", "testid:row-"]);
   });
 });

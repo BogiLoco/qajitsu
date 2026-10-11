@@ -57,10 +57,14 @@ export interface MobileRunnerOptions {
   readonly secrets?: readonly string[];
 }
 
+/** A Java regular expression matching exactly this text. */
+const javaRegex = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 /**
- * Maps a spec selector to an Appium locator: `testid:` and `label:` are accessibility ids (Android
- * content-desc, iOS accessibilityIdentifier/label), `text:` is the visible text. `role:` and `css:`
- * do not exist in native apps.
+ * Maps a spec selector to an Appium locator (REQ-EXEC-21/AC2+AC3): `testid:` is the accessibility id, and on Android
+ * also the resource id (`<package>:id/<id>` or `<id>`), so apps with only resource ids work; `label:` is the
+ * accessibility id or label, `text:` the visible text, `id:` the resource id (iOS: the identifier) and `xpath:` an XPath
+ * of the page source, the last resort. `role:` and `css:` do not exist in native apps.
  *
  * @throws {Error} For selector kinds a native app cannot resolve.
  */
@@ -71,15 +75,25 @@ export function appiumLocator(selector: string, platform: "android" | "ios"): st
   const quoted = JSON.stringify(value);
   switch (kind) {
     case "testid":
+      // Android: content-desc, or the resource id with or without its package (XPath 1.0 of UiAutomator2).
+      return platform === "android" && !value.includes('"')
+        ? `//*[@content-desc="${value}" or @resource-id="${value}" or substring(@resource-id, string-length(@resource-id) - ${String(value.length + 4)} + 1) = ":id/${value}"]`
+        : `~${value}`;
     case "label":
       return `~${value}`;
+    case "id":
+      return platform === "android"
+        ? `android=new UiSelector().resourceIdMatches(${JSON.stringify(value.includes(":id/") ? javaRegex(value) : `.*:id/${javaRegex(value)}`)})`
+        : `~${value}`;
+    case "xpath":
+      return value;
     case "text":
       return platform === "android"
         ? `android=new UiSelector().text(${quoted})`
         : `-ios predicate string:label == ${quoted} OR value == ${quoted}`;
     default:
       throw new Error(
-        `Selector '${selector.slice(0, 60)}' is not supported in native apps: use testid:, label: or text:`,
+        `Selector '${selector.slice(0, 60)}' is not supported in native apps: use testid:, label:, text:, id: or xpath:`,
       );
   }
 }

@@ -1231,7 +1231,9 @@ qj evidence DEMO-1 --failed
   `qj bench`. Declare capabilities (`tools`, `structured_output`, `vision`, `context_window`) and `cost_per_mtok`.
 - Cost and time: `models.token_budget`, `environments.retries`, `execution.workers` (`environments.workers` is the default), `execution.web_combinations`, `web.action_timeout_ms`.
 - Strictness: `verification.auditor` (`optional`, `required`, `off`), `verification.canary: true`, `verification.triage` (`on`, `off`) for failure hints.
-- Better plans: domain notes in `.qa/knowledge/`, clear acceptance criteria in tickets, `data-testid` attributes in the UI.
+- Better plans: domain notes in `.qa/knowledge/`, clear acceptance criteria in tickets, test ids in the UI
+  (`web.test_id_attribute` if they are not `data-testid`; accessibility ids or resource ids in mobile apps). Without
+  test ids QAJitsu uses roles, labels and texts.
 
 **Extending**
 

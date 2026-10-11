@@ -209,6 +209,11 @@ export const ProjectConfigSchema = z.strictObject({
       video: z.enum(["retain-on-failure", "always", "off"]).default("retain-on-failure"),
       headless: z.boolean().default(true),
       action_timeout_ms: z.number().int().min(500).max(120_000).default(5_000),
+      /** Attribute that `testid:` selectors find, e.g. `data-qa`, `data-test`, `data-cy` (REQ-EXEC-21/AC1). */
+      test_id_attribute: z
+        .string()
+        .regex(/^[a-z][a-z0-9_-]{0,49}$/, "an attribute name such as data-qa")
+        .default("data-testid"),
       /**
        * Browser and viewport matrix (REQ-EXEC-13): web cases run in every combination; the first combination is the
        * primary run. Without it web cases run once in `browser` at 1280×800.
@@ -229,7 +234,13 @@ export const ProjectConfigSchema = z.strictObject({
         })
         .optional(),
     })
-    .default({ browser: "chromium", video: "retain-on-failure", headless: true, action_timeout_ms: 5_000 }),
+    .default({
+      browser: "chromium",
+      video: "retain-on-failure",
+      headless: true,
+      action_timeout_ms: 5_000,
+      test_id_attribute: "data-testid",
+    }),
   /** Publishing results to the ticket (REQ-PUB-01..04, REQ-VER-10). */
   publish: z
     .strictObject({

@@ -47,7 +47,7 @@ describe("snapshot of the running application (REQ-EXEC-22)", () => {
     ]);
     expect(app.elements.map((e) => selectorsFor(e, "android"))).toEqual([
       ["testid:cart-count", "text:Cart: 0 items"],
-      ["text:Pay"],
+      ["testid:pay", "text:Pay"],
       [],
     ]);
   });

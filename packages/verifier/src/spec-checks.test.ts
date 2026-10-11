@@ -329,8 +329,8 @@ describe("manual steps in specs (REQ-EXEC-11)", () => {
         "lint: ui.as() does not exist in a native app: log in through the app's own screens with ui.fill and ui.click",
         "lint: ui.goto() in a native app needs mobile.deep_link_scheme; the app is already open: tap its elements instead",
         "lint: ui.select() does not exist in a native app: tap the option with ui.click",
-        "lint: 'css:#size' cannot be found in a native app: use testid:, label: or text:",
-        "lint: 'role:button:Add' cannot be found in a native app: use testid:, label: or text:",
+        "lint: 'css:#size' cannot be found in a native app: use testid:, label:, text:, id: or xpath:",
+        "lint: 'role:button:Add' cannot be found in a native app: use testid:, label:, text:, id: or xpath:",
       ]);
       expect(blockingProblems(checkSpecSource(src, "TC-01", mobilePlan)).length).toBe(5);
     });
@@ -356,5 +356,54 @@ describe("manual steps in specs (REQ-EXEC-11)", () => {
       expect(checkSpecSource(web, "TC-01", webPlan)).toEqual([]);
       expect(web).toContain("ui.as(");
     });
+  });
+
+  it("REQ-EXEC-21/AC3+AC6: each platform takes its own selector kinds; css: and xpath: are flagged for review", () => {
+    const mobilePlan = PlanSchema.parse({
+      schema: 1,
+      ticket: "DEMO-6",
+      version: 1,
+      ...JSON.parse(
+        readFileSync(new URL("../../../fixtures/plans/demo-6-draft.json", import.meta.url), "utf8"),
+      ),
+    });
+    const mobile = readFileSync(
+      new URL("../../../fixtures/specs/demo-6/TC-01.spec.ts", import.meta.url),
+      "utf8",
+    );
+    const native = checkSpecSource(
+      mobile.replace(
+        'await ui.click("testid:add-item");',
+        'await ui.click("id:add_item");\n    await ui.click("xpath://android.widget.Button[1]");',
+      ),
+      "TC-01",
+      mobilePlan,
+    );
+    expect(native.map((p) => `${p.check}: ${p.message}`)).toEqual([
+      "review: XPath selector 'xpath://android.widget.Button[1]' is brittle; prefer testid:, label: or text:",
+    ]);
+    const webPlan = PlanSchema.parse({
+      schema: 1,
+      ticket: "DEMO-4",
+      version: 1,
+      ...JSON.parse(
+        readFileSync(new URL("../../../fixtures/plans/demo-4-draft.json", import.meta.url), "utf8"),
+      ),
+    });
+    const web = readFileSync(
+      new URL("../../../fixtures/specs/demo-4/TC-01.spec.ts", import.meta.url),
+      "utf8",
+    );
+    const kinds = checkSpecSource(
+      web.replace(
+        'await ui.check("testid:accept-terms");',
+        'await ui.fill("placeholder:Email", "a");\n    await ui.click("alt:Logo");\n    await ui.click("title:Help");\n    await ui.click("id:terms");\n    await ui.click("xpath://b");\n    await ui.check("testid:accept-terms");',
+      ),
+      "TC-01",
+      webPlan,
+    );
+    expect(kinds.map((p) => `${p.check}: ${p.message}`)).toEqual([
+      "lint: 'xpath://b' cannot be found in a browser: use testid:, role:, label:, placeholder:, alt:, title:, text:, id: or css:",
+    ]);
   });
 });

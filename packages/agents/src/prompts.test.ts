@@ -22,7 +22,7 @@ describe("planner prompt (REQ-PLAN-02, REQ-EXEC-05)", () => {
       true,
     );
     expect(ExpectationSchema.safeParse({ description: "d", visual: example("visual") }).success).toBe(true);
-    expect(PLANNER_SYSTEM).toContain("testid:<data-testid>");
+    expect(PLANNER_SYSTEM).toContain("testid:<test id>");
     expect(PLANNER_SYSTEM).toContain('lower-case letters, digits and "-" only');
   });
 });

@@ -136,7 +136,10 @@ async function acceptEditedPlan(
     const issues = checkPlanSources(
       candidate,
       sourceContext(
-        await buildChangeContext(session.ws, [], { indexCache: codeIndexCache(session.project) }),
+        await buildChangeContext(session.ws, [], {
+          indexCache: codeIndexCache(session.project),
+          testIdAttribute: session.project.config.web.test_id_attribute,
+        }),
       ),
     );
     if (issues.length > 0) return { problems: formatSourceIssues(issues).split("\n") };
@@ -276,6 +279,7 @@ export async function runPlan(
     const knowledge = await loadKnowledge(knowledgeDir(session.project), (t) => masker.containsSecret(t));
     let context = await buildChangeContext(ws, knowledge, {
       indexCache: codeIndexCache(session.project),
+      testIdAttribute: session.project.config.web.test_id_attribute,
     });
     let analysis: Analysis;
     try {
@@ -469,7 +473,10 @@ export async function runApprove(
     }
     const version = options.version === undefined ? undefined : Number(options.version);
     const { plan } = await readPlan(session.ws, version);
-    const context = await buildChangeContext(session.ws, [], { indexCache: codeIndexCache(session.project) });
+    const context = await buildChangeContext(session.ws, [], {
+      indexCache: codeIndexCache(session.project),
+      testIdAttribute: session.project.config.web.test_id_attribute,
+    });
     const issues = checkPlanSources(plan, sourceContext(context));
     if (issues.length > 0) {
       throw new ConfigError("PLAN_SOURCES_INVALID", "The plan has ungrounded sources.", {

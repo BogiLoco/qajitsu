@@ -34,16 +34,16 @@ const plan = PlanSchema.parse({
       steps: [
         {
           id: "S1",
-          action: "Open checkout",
-          expect: { description: "Disabled", elements: { "testid:place-order": { enabled: false } } },
+          action: "Open a new order",
+          expect: { description: "Disabled", elements: { "testid:submit-order": { enabled: false } } },
         },
         {
           id: "S2",
           action: "Accept the terms",
           expect: {
             description: "Enabled",
-            elements: { "testid:place-order": { enabled: true } },
-            texts: ["Place order"],
+            elements: { "testid:submit-order": { enabled: true } },
+            texts: ["Submit order"],
           },
         },
       ],
@@ -59,14 +59,14 @@ const plan = PlanSchema.parse({
         {
           id: "S1",
           action: "Add one item",
-          expect: { description: "One item", elements: { "testid:cart-count": { text: "Cart: 1 item" } } },
+          expect: { description: "One item", elements: { "testid:basket-count": { text: "1 item" } } },
         },
         {
           id: "S2",
           action: "Open checkout and press back",
           expect: {
             description: "Still one item",
-            elements: { "testid:cart-count": { text: "Cart: 1 item" } },
+            elements: { "testid:basket-count": { text: "1 item" } },
           },
         },
       ],
