@@ -242,6 +242,10 @@ describe("qajitsu ci and pipeline outputs (REQ-CI-03, REQ-CI-04)", () => {
     expect(second).not.toBe(first);
     const reused = await p.run(["approve", "DEMO-1", "--reuse-from", "latest", "--approver", "ci"]);
     expect(reused.out).toContain(`approved in run ${first}`);
+    // The author of the new run needs the analysis the plan was made from.
+    expect(await readFile(join(root, second, "analysis.json"), "utf8")).toBe(
+      await readFile(join(root, first, "analysis.json"), "utf8"),
+    );
     expect(JSON.parse(await readFile(join(root, second, "run.json"), "utf8"))).toMatchObject({
       data: { approval: { approver: `ci (reusing github:alice, run ${first})` } },
     });

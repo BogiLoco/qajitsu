@@ -496,6 +496,10 @@ async function reuseApprovedPlan(
     const name = `plan.v${String(original.version)}.${ext}`;
     await copyFile(source.path("plan", name), ws.path("plan", name));
   }
+  // The author writes the specs of the reused plan from the same analysis (endpoints of the change).
+  await copyFile(source.path("analysis.json"), ws.path("analysis.json")).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  });
   const approval = await approvePlan(ws, {
     approver: `${approver} (reusing ${original.approver}, run ${sourceRunId})`,
     now,
