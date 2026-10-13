@@ -256,7 +256,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-EXEC-19](requirements/execution.md#req-exec-19--execution-lanes-and-sequential-runs) Execution lanes and sequential runs (should, implemented, AC 5/5)
 - [REQ-EXEC-20](requirements/execution.md#req-exec-20--several-different-mobile-devices) Several different mobile devices (should, implemented, AC 5/5)
 - [REQ-EXEC-21](requirements/execution.md#req-exec-21--selectors-for-any-web-or-mobile-application) Selectors for any web or mobile application (must, implemented, AC 7/7)
-- [REQ-EXEC-22](requirements/execution.md#req-exec-22--snapshot-of-the-running-application-for-the-author-and-the-healer) Snapshot of the running application for the author and the healer (must, implemented, AC 8/8)
+- [REQ-EXEC-22](requirements/execution.md#req-exec-22--snapshot-of-the-running-application-for-the-author-and-the-healer) Snapshot of the running application for the author and the healer (must, implemented, AC 9/9)
 - [REQ-EXEC-23](requirements/execution.md#req-exec-23--mobile-app-without-access-to-its-code) Mobile app without access to its code (should, implemented, AC 3/3)
 - [REQ-VER-11](requirements/verification.md#req-ver-11--bug-fix-verification-fails-before-passes-after) Bug fix verification: fails before, passes after (should, implemented, AC 4/4)
 - [REQ-VER-12](requirements/verification.md#req-ver-12--failure-triage-hints) Failure triage hints (should, implemented, AC 4/4)

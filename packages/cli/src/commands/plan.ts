@@ -64,6 +64,8 @@ export interface PlanOptions {
   readonly env?: string | undefined;
   /** Record the environment's pages also when the code is available, or record them again. */
   readonly snapshot?: boolean | undefined;
+  /** Start the environment and the app from the worktree to record them, then stop them (REQ-EXEC-22/AC9). */
+  readonly build?: boolean | undefined;
 }
 
 /** Ports of the review loop (REQ-PLAN-04/AC1). */
@@ -295,6 +297,7 @@ export async function runPlan(
     const pages = await planSnapshot(session, io, ports, {
       env: options.env,
       force: options.snapshot === true,
+      build: options.build === true,
     });
     if (pages) context = { ...context, snapshot: pages };
     const flagsOf = await planFlagsOf(session, context);

@@ -344,6 +344,7 @@ application and records its accessible elements; the agent only reads that recor
 - [x] AC6: When the snapshot cannot be taken (environment down, page not reachable), the author works without it and the run says so; the case's status still comes only from the runner.
 - [x] AC7: Without any repository (only a test environment), the snapshot is the source of element names: the planner also gets a snapshot of the pages and screens it can reach from the environment's start page or the app's start screen, so plan expectations use names the application really shows.
 - [x] AC8: A plan expectation naming an element that no snapshot contains is flagged in the review like an unknown selector (REQ-PLAN-09/AC8), whether or not the code is available.
+- [x] AC9: `qj plan --build` starts the environment from the run's worktree and the devices of mobile cases (building the app when configured) only to record the pages and the app's first screen for the planner, then stops them; a start failure is reported and planning goes on without them.
 
 ### REQ-EXEC-23 · Mobile app without access to its code
 

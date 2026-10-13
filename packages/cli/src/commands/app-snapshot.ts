@@ -12,7 +12,10 @@ import {
   type RunWorkspace,
   type UiScreen,
 } from "@qajitsu/core";
-import type { RuntimePorts } from "../adapters.js";
+import type { CommandExec } from "@qajitsu/adapter-env-compose";
+import type { CodeHost } from "@qajitsu/core";
+import { buildAdapters, type RuntimePorts } from "../adapters.js";
+import { prepareBuild, removeEnvFiles, type PreparedBuild } from "./build-env.js";
 import type { RunSession } from "../session.js";
 import type { CommandIO } from "./fetch.js";
 import { accountLogin } from "./lanes.js";
@@ -24,6 +27,8 @@ export interface SnapshotPorts {
   readonly snapshotBrowser?: BrowserFactory;
   /** Device for the app's first screen before planning (replaced in tests); default: the mobile config. */
   readonly mobileDevice?: () => Promise<PreparedMobile>;
+  /** Runs docker and other commands of `qj plan --build` (replaced in tests). */
+  readonly buildExec?: CommandExec;
   /** A fake executor of tests: without `snapshotBrowser` no real browser is started for a snapshot. */
   readonly executor?: unknown;
 }
@@ -105,23 +110,87 @@ export async function planSnapshot(
   session: RunSession,
   io: CommandIO,
   ports: RuntimePorts & SnapshotPorts,
-  options: { readonly env?: string | undefined; readonly force: boolean },
+  options: { readonly env?: string | undefined; readonly force: boolean; readonly build?: boolean },
+): Promise<UiScreen[] | undefined> {
+  const { ws, events, masker } = session;
+  const saved = await readPlanSnapshot(ws);
+  if (saved && !options.force && options.build !== true) return saved;
+  const hasCode = Object.values(ws.record.repos).some((r) => r.role !== "tests");
+  if (hasCode && !options.force && options.build !== true) return undefined;
+  if (options.build !== true)
+    return recordForPlanner(session, io, ports, { env: options.env, force: options.force });
+  // REQ-EXEC-22/AC9: the environment (and the app) are started from the worktree only to record what they show.
+  io.write("Building the environment to record its pages and screens for the planner…\n");
+  const prepared = await prepareBuild(session, {
+    overrides: {},
+    exec: ports.buildExec,
+    fetch: ports.fetch,
+  }).catch((error: unknown): PreparedBuild => ({
+    failure: { message: error instanceof Error ? error.message : String(error), logs: [] },
+  }));
+  events.emit("plan", { kind: "system", name: "orchestrator" }, "env.build", {
+    ok: prepared.failure === undefined,
+    ...(prepared.failure ? { error: masker.maskText(prepared.failure.message) } : {}),
+  });
+  try {
+    if (prepared.failure || !prepared.build) {
+      io.writeError(
+        `The environment did not start (${masker.maskText(prepared.failure?.message ?? "no environment")}); planning without its pages.\n`,
+      );
+      return undefined;
+    }
+    return await recordForPlanner(session, io, ports, {
+      env: options.env,
+      force: true,
+      buildBaseUrl: prepared.build.baseUrl,
+    });
+  } finally {
+    await prepared.build?.stop().catch(() => undefined);
+    await removeEnvFiles(session);
+  }
+}
+
+/** The code hosts of the project, for an app built by CI (REQ-ENV-06/AC1). */
+const codeHostsOf = (session: RunSession, ports: RuntimePorts): Readonly<Record<string, CodeHost>> =>
+  buildAdapters(
+    session.project,
+    {
+      fetch: ports.fetch,
+      logger: session.logger,
+      now: ports.now,
+      resolveSecret: (r) => session.resolveSecret(r),
+      registerSecret: (v) => {
+        session.masker.register(v);
+      },
+    },
+    ports,
+  ).codeHosts;
+
+/** Records the environment's pages and the app's first screen into `ui/snapshot.json` (REQ-EXEC-22/AC7+AC9). */
+async function recordForPlanner(
+  session: RunSession,
+  io: CommandIO,
+  ports: RuntimePorts & SnapshotPorts,
+  options: { readonly env?: string | undefined; readonly force: boolean; readonly buildBaseUrl?: string },
 ): Promise<UiScreen[] | undefined> {
   const { ws, project, masker, events } = session;
-  const saved = await readPlanSnapshot(ws);
-  if (saved && !options.force) return saved;
-  const hasCode = Object.values(ws.record.repos).some((r) => r.role !== "tests");
-  if (hasCode && !options.force) return undefined;
   let env: ResolvedEnvironment;
   try {
-    env = await resolveEnvironment({ config: project.config, qaDir: project.qaDir, env: options.env });
+    env = await resolveEnvironment({
+      config: project.config,
+      qaDir: project.qaDir,
+      env: options.env,
+      ...(options.buildBaseUrl ? { buildBaseUrl: options.buildBaseUrl } : {}),
+    });
   } catch (error) {
     io.writeError(
       `No environment to record pages from (${error instanceof Error ? error.message : String(error)}); planning without them.\n`,
     );
     return undefined;
   }
-  const reached = await createRemoteEnvProvider(env, ports.fetch, { readVersion: false }).start();
+  const reached = await createRemoteEnvProvider(env, ports.fetch, {
+    readVersion: options.buildBaseUrl === undefined,
+  }).start();
   if (!reached.health.ok) {
     io.writeError(
       `Environment ${env.name} is not reachable (${reached.health.detail}); planning without its pages.\n`,
@@ -152,8 +221,9 @@ export async function planSnapshot(
         : mobile?.ios?.farm !== undefined;
     if (mobile && (appWithoutCode || options.force)) {
       const device = await (ports.mobileDevice?.() ??
-        prepareMobile(session, env.baseUrl, {}, ports.env["APPIUM_HOME"], {
-          allowBuild: false,
+        prepareMobile(session, env.baseUrl, codeHostsOf(session, ports), ports.env["APPIUM_HOME"], {
+          // AC9: with qj plan --build the app may be built from the worktree too.
+          allowBuild: options.buildBaseUrl !== undefined,
           fetch: ports.fetch,
         }));
       if (!device.ok) io.writeError(`Could not record the app's first screen: ${device.reason}\n`);

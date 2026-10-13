@@ -242,6 +242,9 @@ like an unknown selector (AC8). An environment that cannot be reached is reporte
   why each one is in or out (REQ-PLAN-08). The depth is remembered for revisions of the run.
 - `--env <profile|url>`: environment whose pages are recorded for the planner (default: `environments.default`)
 - `--snapshot`: record the environment's pages also when the code is available, or record them again
+- `--build`: start the environment from the run's worktree (and the mobile devices, building the app when configured)
+  only to record the pages and the app's first screen for the planner, then stop them (REQ-EXEC-22/AC9). Use it
+  when the application is built per run, so the plan expects the texts the application really shows.
 
 Exit codes: `0` plan written (and approved, if accepted in the review), `2` token budget exceeded, `3` errors.
 

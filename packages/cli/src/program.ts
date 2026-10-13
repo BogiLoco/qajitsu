@@ -552,10 +552,21 @@ export function createProgram(version: string, io: ProgramIO): Command {
       "environment whose pages are recorded for the planner when the code is not available",
     )
     .option("--snapshot", "record the environment's pages for the planner also when the code is available")
+    .option(
+      "--build",
+      "start the environment and the app from the worktree to record their pages and first screen for the planner, then stop them",
+    )
     .action(
       (
         ticket: string,
-        options: { run?: string; revise?: string; depth?: string; env?: string; snapshot?: boolean },
+        options: {
+          run?: string;
+          revise?: string;
+          depth?: string;
+          env?: string;
+          snapshot?: boolean;
+          build?: boolean;
+        },
       ) => withPorts((ports) => runPlan(ticket, options, commandIO, ports, review))(),
     );
 

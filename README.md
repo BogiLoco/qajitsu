@@ -290,7 +290,8 @@ The author does not have to guess selectors: before writing specs, `qj run` open
 screen of the mobile app) on the test environment and gives the author what they show, with the selectors that find
 each element. The healer gets the same view of the page or screen at the failure, on the web and on mobile. Without
 access to the code, `qj plan` records the environment's pages reachable from its start page, so the plan names
-elements as the application shows them, and flags any element no recorded page shows. A mobile app does not need its repository either:
+elements as the application shows them, and flags any element no recorded page shows. With `qj plan --build` the same happens for an
+application built from the change: QAJitsu starts it (and the emulator) only for the recording, then stops it. A mobile app does not need its repository either:
 `app: { source: file | url | installed }` tests a build file, a download checked by SHA-256 or the app already on the
 device, and the report names the app version and SHA-256 in place of the commit.
 
