@@ -57,7 +57,12 @@ export const SourceRefSchema = z.discriminatedUnion("kind", [
 /** A grounded source reference. */
 export type SourceRef = z.infer<typeof SourceRefSchema>;
 
-const Sources = z.array(SourceRefSchema).min(1, "Every claim needs at least one source");
+const Sources = z
+  .array(SourceRefSchema)
+  .min(
+    1,
+    'Every claim needs at least one source, e.g. {"kind":"ac","id":"AC1"} or {"kind":"quote","text":"<words of the ticket>"}; leave out a claim you cannot source',
+  );
 
 const QuestionSchema = z.strictObject({
   id: z.string().regex(/^Q[1-9]\d*$/),
