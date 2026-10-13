@@ -359,6 +359,19 @@ export function checkSpecSource(
   for (const id of stepCalls.keys()) {
     if (!planCase.steps.some((s) => s.id === id)) add("coverage", `step("${id}") is not a step of ${caseId}`);
   }
+  // A verify() of something the step does not expect has no expected value: plan.expect() would stop the attempt.
+  for (const key of verifiedFields) {
+    const dot = key.indexOf(".");
+    const step = planCase.steps.find((s) => s.id === key.slice(0, dot));
+    const field = key.slice(dot + 1);
+    if (!step || step.manual === true) continue;
+    const planned = plannedFields(step.expect);
+    if (!planned.includes(field))
+      add(
+        "coverage",
+        `verify("${step.id}", "${field}", ...) checks something step ${step.id} of the plan does not expect; it expects: ${planned.join(", ") || "a description only, nothing a test can compare"}`,
+      );
+  }
   return problems;
 }
 

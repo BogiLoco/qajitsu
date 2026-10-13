@@ -406,4 +406,26 @@ describe("manual steps in specs (REQ-EXEC-11)", () => {
       "lint: 'xpath://b' cannot be found in a browser: use testid:, role:, label:, placeholder:, alt:, title:, text:, id: or css:",
     ]);
   });
+
+  it("REQ-EXEC-03/AC2: a verify() of something the plan does not expect is rejected before the run", () => {
+    const mobilePlan = PlanSchema.parse({
+      schema: 1,
+      ticket: "DEMO-6",
+      version: 1,
+      ...JSON.parse(
+        readFileSync(new URL("../../../fixtures/plans/demo-6-draft.json", import.meta.url), "utf8"),
+      ),
+    });
+    const mobile = readFileSync(
+      new URL("../../../fixtures/specs/demo-6/TC-01.spec.ts", import.meta.url),
+      "utf8",
+    );
+    const invented = mobile.replace(
+      'await ui.click("testid:add-item");',
+      'await ui.click("testid:add-item");\n    verify("S1", "elements.testid:cart-badge.text", undefined, plan.expect("TC-01.S1.elements.testid:cart-badge.text"));',
+    );
+    expect(checkSpecSource(invented, "TC-01", mobilePlan).map((p) => `${p.check}: ${p.message}`)).toEqual([
+      'coverage: verify("S1", "elements.testid:cart-badge.text", ...) checks something step S1 of the plan does not expect; it expects: elements.testid:cart-count.text',
+    ]);
+  });
 });
