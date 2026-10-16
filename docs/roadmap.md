@@ -243,6 +243,7 @@ the evidence bundle as pipeline artifacts.
 <!-- req-stage:later -->
 - [REQ-CTX-08](requirements/context.md#req-ctx-08--import-existing-manual-test-cases) Import existing manual test cases (could, implemented, AC 4/4)
 - [REQ-PLAN-08](requirements/plan.md#req-plan-08--test-depth-and-budget) Test depth and budget (should, implemented, AC 3/3)
+- [REQ-PLAN-10](requirements/plan.md#req-plan-10--approval-by-a-person-or-by-models-auditable) Approval by a person or by models, auditable (could, proposed, AC 0/6)
 - [REQ-ENV-08](requirements/environment.md#req-env-08--message-capture-email-sms-and-webhooks) Message capture: email, SMS and webhooks (should, implemented, AC 5/5)
 - [REQ-ENV-09](requirements/environment.md#req-env-09--account-pools) Account pools (should, implemented, AC 5/5)
 - [REQ-EXEC-11](requirements/execution.md#req-exec-11--human-in-the-loop-steps) Human-in-the-loop steps (should, implemented, AC 7/7)
@@ -267,11 +268,13 @@ the evidence bundle as pipeline artifacts.
 - [REQ-PUB-07](requirements/publishing.md#req-pub-07--bug-reports-from-failed-cases) Bug reports from failed cases (should, implemented, AC 5/5)
 - [REQ-PUB-08](requirements/publishing.md#req-pub-08--promote-ticket-cases-to-the-regression-suite) Promote ticket cases to the regression suite (should, implemented, AC 4/4)
 - [REQ-PUB-09](requirements/publishing.md#req-pub-09--release-readiness-report) Release readiness report (could, implemented, AC 4/4)
+- [REQ-LLM-08](requirements/models.md#req-llm-08--claude-code-subscription-as-a-local-model-provider) Claude Code subscription as a local model provider (could, proposed, AC 0/6)
 - [REQ-OBS-08](requirements/observability.md#req-obs-08--map-as-planner-input) Map as planner input (could, implemented, AC 1/1)
 - [REQ-OBS-09](requirements/observability.md#req-obs-09--live-progress-of-a-run) Live progress of a run (should, implemented, AC 4/4)
 - [REQ-OBS-10](requirements/observability.md#req-obs-10--tool-versions-recorded-with-every-run) Tool versions recorded with every run (should, implemented, AC 4/4)
 - [REQ-CI-06](requirements/ci-cd.md#req-ci-06--toolchain-in-pipelines) Toolchain in pipelines (could, in-progress, AC 1/2)
 - [REQ-GEN-06](requirements/generic.md#req-gen-06--toolchain-setup) Toolchain setup (should, implemented, AC 9/9)
+- [REQ-GEN-07](requirements/generic.md#req-gen-07--external-agent-mode-claude-code-subagents-do-the-agents-work) External agent mode: Claude Code subagents do the agents' work (should, proposed, AC 0/6)
 - [REQ-PRJ-09](requirements/projects.md#req-prj-09--export-and-import-of-a-project-profile) Export and import of a project profile (could, implemented, AC 2/2)
 - [REQ-KNOW-12](requirements/knowledge.md#req-know-12--online-sources) Online sources (could, implemented, AC 2/2)
 <!-- /req-stage -->

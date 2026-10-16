@@ -143,3 +143,23 @@ plan points to an element that exists in the code under test.
 - [x] AC6: A step that is not manual and whose expect has only a description (no status, fields, texts, elements, message or visual) is flagged the same way: the test would have nothing to compare.
 - [x] AC7: The planner and the author get a selector inventory computed by code from the worktree of the run: every `data-testid` (and the mobile equivalents, e.g. Android resource ids) with the file and the page or screen it belongs to, so a model does not have to search for them.
 - [x] AC8: Every `testid:` selector in a plan must exist in that inventory for the run's commit; an unknown one is flagged like a placeholder (one automatic revision, then listed in the review), never silently accepted.
+
+### REQ-PLAN-10 · Approval by a person or by models, auditable
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: REQ-PLAN-04, REQ-PLAN-06, REQ-PLAN-07, REQ-CI-03, REQ-OBS-01, REQ-GEN-07, INV-1, INV-3, INV-5
+- Note: TO BE REVIEWED (owner, 2026-10-16): wanted as a direction (a Jira flow that a person or models can pass), to be thought through before accepting. It changes REQ-PLAN-07/AC4 ("never approved automatically") and needs its own ADR, because the approved plan is where expected values come from.
+
+A plan can pass an approval flow where each step is a person or a model, for example in Jira, so a team can automate
+QA end to end where it accepts the risk. Every approval, by whom or by what, is recorded so the testing passes an audit.
+
+**Acceptance criteria**
+
+- [ ] AC1: The project configures an approval flow of one or more steps; each step is a person (as today) or a model approver, and a model approver is off unless switched on explicitly.
+- [ ] AC2: A model approver uses a different model from the planner and checks the plan against the ticket, sources and plan checks; it can approve, ask for a revision with reasons, or hand over to a person, and its answer is validated like any agent output.
+- [ ] AC3: Every approval is recorded in `run.json` and the journal hash chain: approver kind (person or model), identity (name, or provider, model id and version), time, the SHA-256 of the approved plan, and for a model the SHA-256 of its prompt and answer.
+- [ ] AC4: The same flow can run in Jira: the plan is posted, each step's decision is a transition or comment by a person or by QAJitsu for a model step, and the hashes of the plan and of each decision are written with it.
+- [ ] AC5: Results of a plan without a human approval are marked as such in the matrix, report, junit and Jira comment, and their PASSED results are NEEDS_REVIEW unless the project explicitly accepts model-only approval.
+- [ ] AC6: `qj audit verify` checks the approval records against the journal and the approved plan; any mismatch fails the audit and the publish gates.
