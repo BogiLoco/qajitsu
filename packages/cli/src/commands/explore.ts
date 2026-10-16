@@ -24,6 +24,7 @@ import type { RuntimePorts } from "../adapters.js";
 import { codeIndexCache, openSession, type ModelPorts, type RunSession } from "../session.js";
 import { createExploreTools } from "./explore-tools.js";
 import type { CommandIO } from "./fetch.js";
+import { headlessFor, liveView } from "./live.js";
 import { chooseEnvironment, type RunPorts } from "./run.js";
 
 const SYSTEM = { kind: "system", name: "orchestrator" } as const;
@@ -38,6 +39,10 @@ export interface ExploreOptions {
   readonly timeBox?: string | undefined;
   /** Browser actions; default 40. */
   readonly maxSteps?: string | undefined;
+  /** Show the browser while the agent explores (REQ-EXEC-15/AC7). */
+  readonly headed?: boolean | undefined;
+  /** Delay before every browser action, in ms. */
+  readonly slowMo?: string | undefined;
 }
 
 /** Ports of `qajitsu explore`: the browser can be replaced in tests. */
@@ -129,6 +134,7 @@ export async function runExplore(
         {},
       );
     release = await acquireRunLock(ws.path("run.lock"));
+    const view = liveView(options, { platform: ports.platform ?? process.platform, env: ports.env });
     // REQ-EXEC-15/AC1: only an allowlisted environment (invariant 10).
     const built = options.env === undefined ? await runningBuild(session, ports.fetch) : undefined;
     if (built) io.write(`Using the environment qj env up started for this run: ${built.baseUrl}\n`);
@@ -169,6 +175,8 @@ export async function runExplore(
       env: env.name,
       minutes,
       maxSteps,
+      headed: view.headed,
+      ...(view.slowMoMs ? { slowMoMs: view.slowMoMs } : {}),
     });
     io.write(
       `Exploratory session ${id} on ${env.name} (${env.baseUrl}): ${String(minutes)} min, ${String(maxSteps)} actions\n`,
@@ -179,7 +187,9 @@ export async function runExplore(
       createPlaywrightBrowserFactory({
         browser: project.config.web.browser,
         video: "always",
-        headless: project.config.web.headless,
+        // REQ-EXEC-15/AC7: --headed shows the browser, --slow-mo slows every action down to watch it.
+        headless: headlessFor(project.config.web.headless, view),
+        ...(view.slowMoMs ? { slowMoMs: view.slowMoMs } : {}),
         actionTimeoutMs: project.config.web.action_timeout_ms,
         webSession: env.profile.web_session,
       });

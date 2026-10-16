@@ -439,6 +439,8 @@ writes `explore/<session>/report.html` and `report.md` for review. Needs a fetch
   needs no allowlist entry for its random port
 - `--time-box <minutes>`: stop after this many minutes (default 10), enforced by code
 - `--max-steps <n>`: stop after this many browser actions (default 40), enforced by code
+- `--headed`: show the browser, to watch the agent explore live (needs a display)
+- `--slow-mo <ms>`: wait this many milliseconds before every browser action, to follow it
 
 Exit codes: `0` the session ran (whatever it observed), `2` the environment is not healthy, `3` errors.
 

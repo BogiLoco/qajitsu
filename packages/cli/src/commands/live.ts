@@ -34,6 +34,33 @@ export function headlessFor(configured: boolean, live: Pick<LiveRun, "headed"> |
 }
 
 /**
+ * A visible browser or emulator and a delay before every action (REQ-EXEC-16/AC2, REQ-EXEC-15/AC7), checked before
+ * anything starts.
+ *
+ * @throws {ConfigError} `HEADED_NO_DISPLAY` or `SLOW_MO_INVALID`.
+ */
+export function liveView(
+  options: Pick<LiveOptions, "headed" | "slowMo">,
+  machine: { readonly platform: string; readonly env: Readonly<Record<string, string | undefined>> },
+): { readonly headed: boolean; readonly slowMoMs?: number | undefined } {
+  const headed = options.headed === true;
+  // A Linux machine without an X or Wayland display cannot show a window (CI, SSH).
+  if (headed && machine.platform === "linux" && !machine.env["DISPLAY"] && !machine.env["WAYLAND_DISPLAY"])
+    throw new ConfigError(
+      "HEADED_NO_DISPLAY",
+      "--headed needs a display (DISPLAY or WAYLAND_DISPLAY); run it on a desktop or without --headed.",
+      {},
+    );
+  let slowMoMs: number | undefined;
+  if (options.slowMo !== undefined) {
+    slowMoMs = Number(options.slowMo);
+    if (!Number.isInteger(slowMoMs) || slowMoMs < 0 || slowMoMs > 10_000)
+      throw new ConfigError("SLOW_MO_INVALID", "--slow-mo takes milliseconds between 0 and 10000.", {});
+  }
+  return { headed, ...(slowMoMs ? { slowMoMs } : {}) };
+}
+
+/**
  * Validates the live options against the approved plan and the machine before anything runs (REQ-EXEC-16/AC1+AC2).
  *
  * @throws {ConfigError} `RUN_CASES_UNKNOWN`, `HEADED_NO_DISPLAY`, `STEP_NEEDS_TERMINAL` or `SLOW_MO_INVALID`.
@@ -63,20 +90,7 @@ export function prepareLiveRun(
       );
     selected = new Set(ids);
   }
-  const headed = options.headed === true;
-  // A Linux machine without an X or Wayland display cannot show a window (CI, SSH).
-  if (headed && machine.platform === "linux" && !machine.env["DISPLAY"] && !machine.env["WAYLAND_DISPLAY"])
-    throw new ConfigError(
-      "HEADED_NO_DISPLAY",
-      "--headed needs a display (DISPLAY or WAYLAND_DISPLAY); run it on a desktop or without --headed.",
-      {},
-    );
-  let slowMoMs: number | undefined;
-  if (options.slowMo !== undefined) {
-    slowMoMs = Number(options.slowMo);
-    if (!Number.isInteger(slowMoMs) || slowMoMs < 0 || slowMoMs > 10_000)
-      throw new ConfigError("SLOW_MO_INVALID", "--slow-mo takes milliseconds between 0 and 10000.", {});
-  }
+  const { headed, slowMoMs } = liveView(options, machine);
   let pause: StepPause | undefined;
   if (options.step === true) {
     const ask = io.ask;

@@ -724,10 +724,20 @@ export function createProgram(version: string, io: ProgramIO): Command {
     )
     .option("--time-box <minutes>", "stop after this many minutes (default 10)")
     .option("--max-steps <n>", "stop after this many browser actions (default 40)")
+    .option("--headed", "show the browser while the agent explores")
+    .option("--slow-mo <ms>", "wait this many ms before every browser action, to follow it")
     .action(
       (
         ticket: string,
-        options: { goal: string; run?: string; env?: string; timeBox?: string; maxSteps?: string },
+        options: {
+          goal: string;
+          run?: string;
+          env?: string;
+          timeBox?: string;
+          maxSteps?: string;
+          headed?: boolean;
+          slowMo?: string;
+        },
       ) => withPorts((ports) => runExplore(ticket, options, commandIO, ports))(),
     );
   explore

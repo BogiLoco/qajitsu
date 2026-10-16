@@ -250,7 +250,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-EXEC-12](requirements/execution.md#req-exec-12--visual-regression) Visual regression (could, implemented, AC 4/4)
 - [REQ-EXEC-13](requirements/execution.md#req-exec-13--browser-and-viewport-matrix) Browser and viewport matrix (could, implemented, AC 3/3)
 - [REQ-EXEC-14](requirements/execution.md#req-exec-14--locale-testing) Locale testing (could, implemented, AC 3/3)
-- [REQ-EXEC-15](requirements/execution.md#req-exec-15--exploratory-sessions) Exploratory sessions (could, implemented, AC 6/6)
+- [REQ-EXEC-15](requirements/execution.md#req-exec-15--exploratory-sessions) Exploratory sessions (could, implemented, AC 7/7)
 - [REQ-EXEC-16](requirements/execution.md#req-exec-16--run-one-case-with-a-live-view) Run one case with a live view (should, implemented, AC 4/4)
 - [REQ-EXEC-17](requirements/execution.md#req-exec-17--regression-runs-of-promoted-packs) Regression runs of promoted packs (should, implemented, AC 4/4)
 - [REQ-EXEC-18](requirements/execution.md#req-exec-18--compare-the-ui-with-the-design-in-figma) Compare the UI with the design in Figma (could, accepted, AC 0/4)

@@ -136,6 +136,26 @@ describe("qajitsu explore (REQ-EXEC-15)", () => {
     expect(again.out).not.toContain("Using the environment qj env up started");
   }, 120_000);
 
+  it("REQ-EXEC-15/AC7: --slow-mo slows the browser down and is journaled; invalid values and --headed without a display stop before anything starts", async () => {
+    const { run, runDir } = await pipeline();
+    const look: Turn[] = [{ tools: [{ name: "explore_goto", input: { path: "/app/products" } }] }];
+    const slow = await run(["explore", "DEMO-4", "--goal", "Look", "--max-steps", "1", "--slow-mo", "5"], {
+      script: look,
+    });
+    expect(slow.exitCode).toBe(0);
+    const journal = await readFile(join(runDir, "journal", "events.jsonl"), "utf8");
+    expect(journal).toMatch(/"event":"explore\.start","details":\{[^}]*"headed":false,"slowMoMs":5\}/);
+    const invalid = await run(["explore", "DEMO-4", "--goal", "Look", "--slow-mo", "fast"], { script: look });
+    expect(invalid.exitCode).toBe(3);
+    expect(invalid.err).toContain("SLOW_MO_INVALID");
+    const linux = await createDemoPipeline({ ticket: "DEMO-4", ports: { platform: "linux" } });
+    cleanups.push(linux.cleanup);
+    expect((await linux.run(["fetch", "DEMO-4", "--ref", "shop=main"])).exitCode).toBe(0);
+    const headed = await linux.run(["explore", "DEMO-4", "--goal", "Look", "--headed"], { script: look });
+    expect(headed.exitCode).toBe(3);
+    expect(headed.err).toContain("HEADED_NO_DISPLAY");
+  }, 120_000);
+
   it("REQ-EXEC-15/AC5: the step budget is enforced by code and the session keeps what it recorded", async () => {
     const { run, runDir } = await pipeline();
     const looping: Turn[] = [{ tools: [{ name: "explore_goto", input: { path: "/app/products" } }] }];

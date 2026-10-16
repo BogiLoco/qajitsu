@@ -865,7 +865,7 @@ qj bug SHOP-482 --cases TC-03                        # FAILED case → bug in th
 qj promote SHOP-482 --dry-run                        # PASSED cases as a pack for the tests repository
 qj regression --env staging --packs SHOP-482         # promoted packs again, no models
 qj release 2.4.0 --publish SHOP-500                  # readiness of every ticket of a fix version
-qj explore SHOP-482 --goal "check the cart around the change" --time-box 15
+qj explore SHOP-482 --goal "check the cart around the change" --time-box 15 --headed --slow-mo 500
 qj explore promote SHOP-482 --session S01 --observation O2
 
 # Results

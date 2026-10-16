@@ -214,6 +214,7 @@ session. It reports observations for a human to assess, never statuses.
 - [x] AC4: A person can turn an observation into a draft plan case; it runs only after plan approval.
 - [x] AC5: The time box and step budget are enforced by code; when reached the session stops and keeps what it recorded.
 - [x] AC6: Each session ends with a report for human review (`report.md`, `report.html`): goal, how it ended, the observations with the screenshots of their steps, the action timeline, and the video, trace, network and console files; observations are proposals for a person, never statuses.
+- [x] AC7: `--headed` shows the browser while the agent explores and `--slow-mo <ms>` slows every action down, checked like `qj run` (a display is needed); both are journaled with the session.
 
 ### REQ-EXEC-16 · Run one case with a live view
 
