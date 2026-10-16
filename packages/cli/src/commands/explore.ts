@@ -11,9 +11,11 @@ import {
   acquireRunLock,
   listPlanVersions,
   readPlan,
+  resolveEnvironment,
   writePlanVersion,
   type ExploreSession,
   type Plan,
+  type ResolvedEnvironment,
   type TestCase,
 } from "@qajitsu/core";
 import { renderExploreHtml, renderExploreMarkdown } from "@qajitsu/report";
@@ -66,6 +68,32 @@ const nextSessionId = async (session: RunSession): Promise<string> => {
 };
 
 /**
+ * The environment `qj env up` started from this run's worktree, when it still answers (REQ-EXEC-15/AC1). It listens on
+ * 127.0.0.1 only, like a `qj run --build` environment, so no allowlist entry is needed for its random port.
+ */
+async function runningBuild(
+  session: RunSession,
+  fetchFn: typeof globalThis.fetch,
+): Promise<ResolvedEnvironment | undefined> {
+  const recorded = session.ws.record.data["build"] as
+    { readonly services?: Record<string, { readonly url?: string }> } | undefined;
+  const services = Object.entries(recorded?.services ?? {});
+  const base = session.project.config.build?.base_service;
+  const url = (services.find(([name]) => name === base) ?? services[0])?.[1].url;
+  if (url === undefined || !/^http:\/\/127\.0\.0\.1:\d+$/.test(url)) return undefined;
+  const env = await resolveEnvironment({
+    config: session.project.config,
+    qaDir: session.project.qaDir,
+    buildBaseUrl: url,
+  }).catch(() => undefined);
+  if (!env) return undefined;
+  const reached = await createRemoteEnvProvider(env, fetchFn, { readVersion: false })
+    .start()
+    .catch(() => undefined);
+  return reached?.health.ok ? env : undefined;
+}
+
+/**
  * `qajitsu explore <TICKET> --goal <text> [--time-box <min>] [--max-steps <n>] [--env <profile|url>]`: an
  * exploratory session (REQ-EXEC-15). The explorer agent asks for browser actions; the trusted parent performs them
  * in a browser limited to the environment allowlist, records a screenshot after each one, the video, trace, network
@@ -102,7 +130,9 @@ export async function runExplore(
       );
     release = await acquireRunLock(ws.path("run.lock"));
     // REQ-EXEC-15/AC1: only an allowlisted environment (invariant 10).
-    const env = await chooseEnvironment(session, io, options.env);
+    const built = options.env === undefined ? await runningBuild(session, ports.fetch) : undefined;
+    if (built) io.write(`Using the environment qj env up started for this run: ${built.baseUrl}\n`);
+    const env = built ?? (await chooseEnvironment(session, io, options.env));
     const reached = await createRemoteEnvProvider(env, ports.fetch, { readVersion: false }).start();
     if (!reached.health.ok) {
       io.writeError(

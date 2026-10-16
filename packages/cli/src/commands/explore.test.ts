@@ -1,7 +1,8 @@
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createDemoPipeline } from "../../../../tests/support/cli-pipeline.js";
+import { startShop } from "../../../../examples/demo-shop/api/server.mjs";
+import { createDemoPipeline, DEMO_PASSWORD } from "../../../../tests/support/cli-pipeline.js";
 import type { Turn } from "../../../../tests/support/mock-model.js";
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -105,6 +106,34 @@ describe("qajitsu explore (REQ-EXEC-15)", () => {
     expect(journal).toContain('"explore.refused"');
     expect(journal).toContain('"explore.end"');
     expect(journal).not.toContain("fictional-demo-password");
+  }, 120_000);
+
+  it("REQ-EXEC-15/AC1: without --env the session uses the environment qj env up started for the run", async () => {
+    const { run, runDir } = await pipeline();
+    // A second shop on a port the allowlist does not know, recorded as qj env up records a built environment.
+    const shop = await startShop({ env: { DEMO_USER_PASSWORD: DEMO_PASSWORD } });
+    cleanups.push(() => shop.close());
+    const recordFile = join(runDir, "run.json");
+    const record = JSON.parse(await readFile(recordFile, "utf8")) as { data: Record<string, unknown> };
+    record.data["build"] = {
+      project: "qj-demo-4-test",
+      ports: { api: Number(new URL(shop.url).port) },
+      services: { api: { kind: "compose", url: shop.url } },
+    };
+    await writeFile(recordFile, JSON.stringify(record, null, 2));
+    const result = await run(["explore", "DEMO-4", "--goal", "Look", "--max-steps", "1"], {
+      script: [{ tools: [{ name: "explore_goto", input: { path: "/app/products" } }] }],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.out).toContain(`Using the environment qj env up started for this run: ${shop.url}`);
+    expect((await sessionOf(runDir)).actions[0]?.url).toContain(shop.url);
+    // When it no longer answers, the usual environment is used.
+    await shop.close();
+    const again = await run(["explore", "DEMO-4", "--goal", "Look", "--max-steps", "1"], {
+      script: [{ tools: [{ name: "explore_goto", input: { path: "/app/products" } }] }],
+    });
+    expect(again.exitCode).toBe(0);
+    expect(again.out).not.toContain("Using the environment qj env up started");
   }, 120_000);
 
   it("REQ-EXEC-15/AC5: the step budget is enforced by code and the session keeps what it recorded", async () => {

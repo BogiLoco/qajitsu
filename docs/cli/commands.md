@@ -434,7 +434,9 @@ writes `explore/<session>/report.html` and `report.md` for review. Needs a fetch
 
 - `--goal <text>`: what to explore (required), e.g. "checkout around the terms change"
 - `--run <id>`: run id (default: latest run of the ticket)
-- `--env <profile|url>`: environment profile from `.qa/envs` or a URL (default: `environments.default`)
+- `--env <profile|url>`: environment profile from `.qa/envs` or a URL (default: the environment `qajitsu env up`
+  started for this run when it answers, else `environments.default`); an `env up` environment listens on 127.0.0.1 and
+  needs no allowlist entry for its random port
 - `--time-box <minutes>`: stop after this many minutes (default 10), enforced by code
 - `--max-steps <n>`: stop after this many browser actions (default 40), enforced by code
 
