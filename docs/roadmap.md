@@ -262,7 +262,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-VER-11](requirements/verification.md#req-ver-11--bug-fix-verification-fails-before-passes-after) Bug fix verification: fails before, passes after (should, implemented, AC 4/4)
 - [REQ-VER-12](requirements/verification.md#req-ver-12--failure-triage-hints) Failure triage hints (should, implemented, AC 4/4)
 - [REQ-VER-13](requirements/verification.md#req-ver-13--why-a-case-was-blocked) Why a case was BLOCKED (should, implemented, AC 3/3)
-- [REQ-VER-14](requirements/verification.md#req-ver-14--mutation-check-of-a-change) Mutation check of a change (could, proposed, AC 0/9)
+- [REQ-VER-14](requirements/verification.md#req-ver-14--mutation-check-of-a-change) Mutation check of a change (could, proposed, AC 0/10)
 - [REQ-EVD-07](requirements/evidence.md#req-evd-07--passive-observations-during-tests) Passive observations during tests (should, implemented, AC 5/5)
 - [REQ-EVD-08](requirements/evidence.md#req-evd-08--failure-screenshots-mark-the-failing-element) Failure screenshots mark the failing element (should, implemented, AC 5/5)
 - [REQ-PUB-05](requirements/publishing.md#req-pub-05--optional-integrations) Optional integrations (could, deferred, AC 1/4)

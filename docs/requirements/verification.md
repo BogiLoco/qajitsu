@@ -208,3 +208,4 @@ ticket's statuses.
 - [ ] AC7: `qj mutate promote <TICKET> --mutant <id>` turns a survivor into a draft plan case that targets it; it runs only after plan approval.
 - [ ] AC8: Mutation results are journaled and hashed like other check records, are never published as test results or change a case status, and `qj bench` can report each model's mutation score as a measure of the tests it writes.
 - [ ] AC9: Optionally a model proposes mutants that fit the ticket (e.g. rounding before summing); they are applied by code to changed lines only, labelled as model-proposed, and judged like the others.
+- [ ] AC10: A mutant that is not counted (does not build, does not start, BLOCKED, time-out) is replaced by the next one from the same seed, up to twice `--max` attempts and never more; the report separates valid mutants (killed and survived) from not counted ones with their reasons and logs, and warns when too few valid mutants remain for the score to mean much.
