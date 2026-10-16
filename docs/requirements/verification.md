@@ -189,7 +189,7 @@ explains the cause and the next step in the user's terms; the status stays BLOCK
 - Status: proposed
 - Priority: could
 - Stage: later
-- Related: REQ-VER-11, REQ-VER-09, REQ-EXEC-17, REQ-EXEC-19, REQ-ENV-03, REQ-LLM-06, INV-1, INV-3, INV-6
+- Related: REQ-VER-11, REQ-VER-09, REQ-VER-12, REQ-VER-13, REQ-EXEC-17, REQ-EXEC-19, REQ-ENV-03, REQ-LLM-06, INV-1, INV-3, INV-6
 - Note: TO BE REVIEWED (owner, 2026-10-16): agreed as a direction, to be thought through before accepting (cost per mutant, which languages and operators first, how equivalent mutants are handled).
 
 Green results of a ticket say the tests passed, not that they would catch a mistake in the change. `qj mutate` builds
@@ -209,3 +209,4 @@ ticket's statuses.
 - [ ] AC8: Mutation results are journaled and hashed like other check records, are never published as test results or change a case status, and `qj bench` can report each model's mutation score as a measure of the tests it writes.
 - [ ] AC9: Optionally a model proposes mutants that fit the ticket (e.g. rounding before summing); they are applied by code to changed lines only, labelled as model-proposed, and judged like the others.
 - [ ] AC10: A mutant that is not counted (does not build, does not start, BLOCKED, time-out) is replaced by the next one from the same seed, up to twice `--max` attempts and never more; the report separates valid mutants (killed and survived) from not counted ones with their reasons and logs, and warns when too few valid mutants remain for the score to mean much.
+- [ ] AC11: Besides the static report, a model may analyse the results: why each survivor got through, the missing case to add (as a draft for `qj mutate promote`), groups and priorities of weak spots, and candidates for equivalent mutants; every statement cites an existing mutant diff, line, test or evidence and is dropped without one, numbers are checked against the computed results and the text is rejected on mismatch, and the analysis is shown as a suggestion with its model, hashed like other check records, never changing the score or marking a mutant equivalent.
