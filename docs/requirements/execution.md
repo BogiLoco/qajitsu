@@ -361,3 +361,24 @@ Mobile cases can run when the team has only a test build of the app, not its rep
 - [x] AC1: `mobile.android.app` and `mobile.ios.app` also accept a file (`source: file`, a local `.apk`/`.ipa`/`.app`), a download (`source: url`, checked against the allowlist, with a SHA-256 to compare), an app already installed on the device or emulator (`source: installed`, by app id), and an app already uploaded to the device farm.
 - [x] AC2: The run records the app's version and SHA-256 when known, and the report shows them in place of the commit.
 - [x] AC3: An app that cannot be obtained or whose SHA-256 differs makes the mobile cases BLOCKED with the reason.
+
+### REQ-EXEC-24 · Exploratory sessions of command-line tools
+
+- Status: accepted
+- Priority: should
+- Stage: later
+- Related: REQ-EXEC-15, REQ-GEN-05, REQ-GEN-03, REQ-OBS-01, INV-1, INV-2, INV-8, INV-10, ADR-0004
+
+Exploratory sessions (REQ-EXEC-15) also for any command-line tool, QAJitsu's own `qj` first: an agent gets a goal such
+as "try qj env up and qj explore on the same run", runs commands like a tester in a terminal, and records what looks
+wrong. The trusted parent runs every command; the agent only asks for them and proposes observations.
+
+**Acceptance criteria**
+
+- [ ] AC1: `qj explore <TICKET> --cli <tool> --goal "<text>"` starts a session in a throwaway sandbox folder (a copy of a fixture project, e.g. the demo shop) with the same time box and step budget as browser sessions.
+- [ ] AC2: The agent's tools run only the named tool, with an argument array and never a shell, in the sandbox folder, with a scrubbed environment (no secrets of the person, fictional ones from the fixture), a timeout per command, and the environment allowlist for any network the tool uses.
+- [ ] AC3: The agent can answer a command's prompts, run a command in the background, send it Ctrl+C, read files inside the sandbox and list processes, ports and containers the tool left behind; every action, its exit code, output, and changed files are recorded as evidence with SHA-256 by the trusted parent.
+- [ ] AC4: Observations (possible bug, usability, question, risk) cite the actions that reproduce them; code drops an observation whose steps are not actions of the session; the session produces no test statuses.
+- [ ] AC5: The report (`report.md`, `report.html`) lists the goal, every command with its output and exit code, the observations with their steps, and what was left running at the end; everything the session started is stopped and removed when it ends, also on a time-out.
+- [ ] AC6: `qj explore promote` turns a CLI observation into a draft case for a later CLI runner, or into a regression test proposal for the tool's own test suite; nothing runs without approval.
+- [ ] AC7: Any command-line tool can be explored, not only `qj`: `explore.cli.<name>` in `.qa/qa.project.yaml` names its program, the fixture folder copied into every sandbox, setup commands (argument arrays), environment variables and secrets by `secret://` reference, the hosts it may reach and the timeout per command; a tool without such an entry is refused.
