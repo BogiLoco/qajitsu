@@ -45,6 +45,12 @@ Then for each ticket: `qj plan <T>` (review in the terminal), `qj run <T> --buil
 run (`qj fetch`, `qj plan`, `qj approve` again) `qj run <T> --build --set api.<FLAG>=1` (the targeting case FAILED).
 `qj evidence <T> --failed` shows what failed; `qj clean <T>` removes containers and worktrees.
 
+To watch it: `qj plan <T> --build` records the app's pages and first screen for the planner; `qj run <T> --build
+--slow-mo 1000` slows every browser action down; `qj explore <T> --goal "..." --headed --slow-mo 500` shows an
+exploratory session live (after `qj env up <T>` in another terminal). For two browsers at once add
+`web: { headless: false, matrix: { browsers: [chromium, firefox] } }` and `execution: { web_combinations: 2 }` to
+`.qa/qa.project.yaml`; for two emulators add `devices: 2` under `mobile:` and `headless: false` to its emulator.
+
 `docker-compose.dev.yml` starts the API manually on port 3000 (`node api/server.mjs --port 3000` works too, for
 `qj run <T> --env local`); QAJitsu never uses it.
 
