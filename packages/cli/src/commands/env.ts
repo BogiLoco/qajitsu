@@ -17,6 +17,7 @@ import { loadProject } from "../project.js";
 import { openSession, type ModelPorts } from "../session.js";
 import { parseOverrides, prepareBuild, removeEnvFiles, type PreparedBuild } from "./build-env.js";
 import type { CommandIO } from "./fetch.js";
+import { holdUntil } from "../hold.js";
 import type { RunPorts } from "./run.js";
 
 const fail = (io: CommandIO, error: unknown, mask: (t: string) => string): number => {
@@ -218,7 +219,7 @@ export async function runEnvUp(
       return 0;
     }
     io.write("Press Ctrl+C to stop.\n");
-    await stopped;
+    await holdUntil(stopped);
     const { logs } = await built.stop();
     prepared = {};
     await removeEnvFiles(session);
