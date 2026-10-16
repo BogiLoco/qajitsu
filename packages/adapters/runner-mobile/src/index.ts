@@ -26,6 +26,7 @@ export {
   type Spawn,
 } from "./emulator.js";
 export { connectAppium } from "./connect.js";
+export { pageSourceElements } from "./page-source.js";
 
 /** Adapter metadata used by `qajitsu doctor` and the adapter table in the docs. */
 export const ADAPTER = {

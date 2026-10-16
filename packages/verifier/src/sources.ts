@@ -95,6 +95,18 @@ export function checkSource(source: SourceRef, context: SourceContext): string |
         : `ticket has ${String(ticket.acceptanceCriteria.length)} acceptance criteria, ${source.id} does not exist`;
     }
     case "quote": {
+      // A quote of a criterion as the prompt shows it ("AC2: <text>"): the label is QAJitsu's own rendering, so the
+      // text after it must be verbatim in exactly that criterion.
+      const labelled = /^\s*AC(\d+)\s*:\s*([\s\S]+)$/.exec(source.text) as [string, string, string] | null;
+      if (labelled) {
+        const rest = normalize(labelled[2]);
+        const criterion = ticket.acceptanceCriteria[Number(labelled[1]) - 1];
+        if (rest.split(" ").length < QUOTE_MIN_WORDS || rest.length < QUOTE_MIN_CHARS)
+          return `quote is too short to ground anything (at least ${String(QUOTE_MIN_WORDS)} words and ${String(QUOTE_MIN_CHARS)} characters)`;
+        return criterion !== undefined && normalize(criterion).includes(rest)
+          ? undefined
+          : "quote is not verbatim in the ticket snapshot";
+      }
       const needle = normalize(source.text);
       if (needle.split(" ").length < QUOTE_MIN_WORDS || needle.length < QUOTE_MIN_CHARS) {
         return `quote is too short to ground anything (at least ${String(QUOTE_MIN_WORDS)} words and ${String(QUOTE_MIN_CHARS)} characters)`;

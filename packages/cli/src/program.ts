@@ -547,8 +547,27 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--run <id>", "run id (default: latest run of the ticket)")
     .option("--revise <instruction>", "write a new plan version following this instruction")
     .option("--depth <depth>", "smoke (high-risk cases), standard (high and medium) or full (every case)")
-    .action((ticket: string, options: { run?: string; revise?: string; depth?: string }) =>
-      withPorts((ports) => runPlan(ticket, options, commandIO, ports, review))(),
+    .option(
+      "--env <profile|url>",
+      "environment whose pages are recorded for the planner when the code is not available",
+    )
+    .option("--snapshot", "record the environment's pages for the planner also when the code is available")
+    .option(
+      "--build",
+      "start the environment and the app from the worktree to record their pages and first screen for the planner, then stop them",
+    )
+    .action(
+      (
+        ticket: string,
+        options: {
+          run?: string;
+          revise?: string;
+          depth?: string;
+          env?: string;
+          snapshot?: boolean;
+          build?: boolean;
+        },
+      ) => withPorts((ports) => runPlan(ticket, options, commandIO, ports, review))(),
     );
 
   program
@@ -558,6 +577,10 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--run <id>", "run id (default: latest run of the ticket)")
     .option("--version <n>", "plan version (default: latest)")
     .option("--confirm-open-questions", "approve although the plan has open questions")
+    .option(
+      "--confirm-placeholders",
+      "approve although code flags expectations it cannot check (placeholders, unknown fields or selectors)",
+    )
     .option("--approver <name>", "who approves (CI: the reviewer or the /qa approve author)")
     .option("--reuse-from <run>", "reuse the plan approved in this earlier run if the ticket did not change")
     .action(
@@ -567,6 +590,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
           run?: string;
           version?: string;
           confirmOpenQuestions?: boolean;
+          confirmPlaceholders?: boolean;
           approver?: string;
           reuseFrom?: string;
         },
@@ -614,6 +638,10 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--slow-mo <ms>", "with --headed: wait this long before every browser action")
     .option("--step", "pause before every step and continue on Enter (terminal only)")
     .option(
+      "--sequential",
+      "one case at a time in plan order, across API, web and mobile (default: lanes run at the same time)",
+    )
+    .option(
       "--fix-check",
       "with --build: verify a bug fix: cases marked reproduces must FAIL before the fix and PASS with it",
     )
@@ -631,6 +659,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
           headed?: boolean;
           slowMo?: string;
           step?: boolean;
+          sequential?: boolean;
         },
       ) => {
         const { fixCheck, ...runOptions } = options;
@@ -695,10 +724,20 @@ export function createProgram(version: string, io: ProgramIO): Command {
     )
     .option("--time-box <minutes>", "stop after this many minutes (default 10)")
     .option("--max-steps <n>", "stop after this many browser actions (default 40)")
+    .option("--headed", "show the browser while the agent explores")
+    .option("--slow-mo <ms>", "wait this many ms before every browser action, to follow it")
     .action(
       (
         ticket: string,
-        options: { goal: string; run?: string; env?: string; timeBox?: string; maxSteps?: string },
+        options: {
+          goal: string;
+          run?: string;
+          env?: string;
+          timeBox?: string;
+          maxSteps?: string;
+          headed?: boolean;
+          slowMo?: string;
+        },
       ) => withPorts((ports) => runExplore(ticket, options, commandIO, ports))(),
     );
   explore

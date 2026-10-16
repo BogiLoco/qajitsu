@@ -67,6 +67,40 @@ describe("healer (REQ-EXEC-09)", () => {
     expect(promptOf(model, 0)).toContain('<untrusted_data source=\\"dom\\">');
   });
 
+  it("REQ-EXEC-22/AC4: the healer sees the elements of the screen at the failure, also for a mobile case", async () => {
+    const mobilePlan = PlanSchema.parse({
+      schema: 1,
+      ticket: "DEMO-6",
+      version: 1,
+      ...JSON.parse(
+        readFileSync(new URL("../../../fixtures/plans/demo-6-draft.json", import.meta.url), "utf8"),
+      ),
+    });
+    const good = readFileSync(
+      new URL("../../../fixtures/specs/demo-6/TC-01.spec.ts", import.meta.url),
+      "utf8",
+    );
+    const { deps, ws, model } = await setup("```ts\n" + good + "```");
+    const specFile = ws.path("specs", "TC-01.spec.ts");
+    await writeFile(specFile, good.replace('"testid:open-checkout"', '"text:Go to checkout"'));
+    const result = await healSpec(deps, mobilePlan, {
+      caseId: "TC-01",
+      specFile,
+      error: "text:Go to checkout not found",
+      screen: {
+        where: "app:start",
+        platform: "android",
+        elements: [{ role: "Button", testid: "open-checkout", text: "Checkout" }],
+      },
+      attempt: 1,
+    });
+    expect(result.problems).toEqual([]);
+    const prompt = promptOf(model, 0);
+    expect(prompt).toContain("## What the page or screen showed at the failure");
+    expect(prompt).toContain("- testid:open-checkout: Button");
+    expect(prompt).toContain("in a native app");
+  });
+
   it("REQ-EXEC-09/AC2: a heal that touches verify() or adds try/catch is rejected", async () => {
     const cheat = broken.replace(/verify\(\s*"S3",\s*"fields\.lines\.length"[\s\S]*?\);\n/, "");
     expect(cheat).not.toBe(broken);

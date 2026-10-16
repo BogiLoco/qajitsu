@@ -2,7 +2,11 @@ import { writeEnvFiles } from "@qajitsu/adapter-env-compose";
 import {
   ConfigError,
   QajitsuError,
+  accountMembers,
   acquireRunLock,
+  laneWorkers,
+  mobileDevices,
+  poolCapacityWarnings,
   checkBuildConfig,
   resolveEnvironment,
   type EnvProblem,
@@ -11,8 +15,15 @@ import { createMasker } from "@qajitsu/steps";
 import { createCliSecretResolver, type RuntimePorts } from "../adapters.js";
 import { loadProject } from "../project.js";
 import { openSession, type ModelPorts } from "../session.js";
-import { parseOverrides, prepareBuild, removeEnvFiles, type PreparedBuild } from "./build-env.js";
+import {
+  acquireEnvLock,
+  parseOverrides,
+  prepareBuild,
+  removeEnvFiles,
+  type PreparedBuild,
+} from "./build-env.js";
 import type { CommandIO } from "./fetch.js";
+import { holdUntil } from "../hold.js";
 import type { RunPorts } from "./run.js";
 
 const fail = (io: CommandIO, error: unknown, mask: (t: string) => string): number => {
@@ -53,15 +64,27 @@ export async function runEnvCheck(
             ? { buildBaseUrl: "http://127.0.0.1:1" }
             : {}),
         });
-        for (const [alias, account] of Object.entries(env.profile.accounts)) {
-          for (const [field, value] of Object.entries(account))
-            if (typeof value === "string" && value.startsWith("secret://") && !(await secretExists(value)))
-              problems.push({
-                where: `accounts.${alias}.${field}`,
-                problem: `secret ${value} cannot be resolved`,
-              });
+        for (const [alias, entry] of Object.entries(env.profile.accounts)) {
+          const { members } = accountMembers(entry);
+          for (const [i, account] of members.entries())
+            for (const field of ["username", "password"] as const) {
+              const value = account[field];
+              if (value.startsWith("secret://") && !(await secretExists(value)))
+                problems.push({
+                  where: `accounts.${alias}${members.length > 1 ? `.pool[${String(i)}]` : ""}.${field}`,
+                  problem: `secret ${value} cannot be resolved`,
+                });
+            }
         }
         io.write(`Environment profile: ${env.name}\n`);
+        // REQ-ENV-09/AC5: a pool smaller than the cases that can need it at once makes cases wait (not an error).
+        const lanes = laneWorkers(project.config);
+        for (const warning of poolCapacityWarnings(env.profile, {
+          api: lanes.api,
+          web: lanes.web * lanes.webCombinations,
+          mobile: project.config.mobile ? mobileDevices(project.config.mobile).length : 0,
+        }))
+          io.write(`! accounts: ${warning}\n`);
       } catch (error) {
         problems.push({
           where: `environment ${selected}`,
@@ -166,6 +189,13 @@ export async function runEnvUp(
         {},
       );
     release = await acquireRunLock(ws.path("run.lock"));
+    // The environment stays locked while it runs; the run lock is handed back once it is up (see below).
+    const releaseEnv = await acquireEnvLock(session);
+    const releaseRun = release;
+    release = async () => {
+      await releaseEnv();
+      await releaseRun();
+    };
     const stopped = new Promise<void>((resolve) => (stopRequested = resolve));
     signals.on("SIGINT", onSignal);
     signals.on("SIGTERM", onSignal);
@@ -190,6 +220,8 @@ export async function runEnvUp(
         build: { project: built.project, ports: built.ports, services: built.services },
       },
     });
+    // REQ-EXEC-15/AC1: commands that use the running environment (qj explore) may take the run now.
+    await releaseRun();
     io.write(
       `Environment ${built.project} is up; base URL ${built.baseUrl}\n${Object.entries(built.services)
         .map(([name, s]) => `  ${name}: ${s.url}${built.stubs.includes(name) ? " (stub)" : ""}`)
@@ -202,7 +234,7 @@ export async function runEnvUp(
       return 0;
     }
     io.write("Press Ctrl+C to stop.\n");
-    await stopped;
+    await holdUntil(stopped);
     const { logs } = await built.stop();
     prepared = {};
     await removeEnvFiles(session);

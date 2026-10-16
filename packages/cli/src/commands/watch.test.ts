@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PlanSchema, type RunEvent } from "@qajitsu/core";
 import { afterEach, describe, expect, it } from "vitest";
-import { createBuildProject } from "../../../../tests/support/cli-build.js";
+import { apiService, createBuildProject } from "../../../../tests/support/cli-build.js";
 import { createProgressPrinter, liveScreenshots, teeEvents } from "./progress.js";
 import { computeWatchProgress, serveWatch, WATCH_PAGE } from "./watch.js";
 import { openSession } from "../session.js";
@@ -234,5 +234,36 @@ describe("qj watch (REQ-OBS-09/AC2+AC4)", () => {
       expect((await fetch(`${watch.url}${path}`)).status).toBe(404);
     expect((await fetch(`${watch.url}progress.json`, { method: "POST" })).status).toBe(405);
     expect(JSON.stringify(await readFile(join(dir, "results", "TC-01.json"), "utf8"))).toContain("passed");
+  }, 240_000);
+
+  it("REQ-OBS-09/AC3: a watch opened before the run shows the statuses the run computed, not NEEDS_REVIEW", async () => {
+    // With the auditor on, the run records the hash of checks/audit.json in run.json after the watch opened it.
+    const p = await createBuildProject(`${apiService()}\nverification: { auditor: optional, triage: off }`);
+    cleanups.push(p.cleanup);
+    const dir = await p.prepare();
+    const ports = {
+      env: {},
+      home: p.home,
+      now: () => new Date(),
+      random: () => 0,
+      fetch: globalThis.fetch,
+      gitExec: () => Promise.reject(new Error("no git")),
+    } as unknown as Parameters<typeof openSession>[3];
+    // Opened while the run has not started: its run.json has no results and no check hashes yet.
+    const session = await openSession("DEMO-1", undefined, p.project, ports);
+    const watch = await serveWatch(session, 0, () => Date.now());
+    cleanups.unshift(watch.close);
+    await p.run(["run", "DEMO-1", "--build"]);
+    const statuses = (
+      JSON.parse(await readFile(join(dir, "run.json"), "utf8")) as { data: { results: unknown } }
+    ).data.results;
+    const progress = (await (await fetch(`${watch.url}progress.json`)).json()) as {
+      cases: { id: string; status?: string }[];
+    };
+    expect(Object.fromEntries(progress.cases.map((c) => [c.id, c.status]))).toEqual(statuses);
+    expect(progress.cases.map((c) => [c.id, c.status])).toEqual([
+      ["TC-01", "PASSED"],
+      ["TC-02", "PASSED"],
+    ]);
   }, 240_000);
 });

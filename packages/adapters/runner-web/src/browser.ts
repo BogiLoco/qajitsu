@@ -12,10 +12,12 @@ import {
   type UiDriver,
   type UiProperty,
 } from "@qajitsu/steps";
-import { OBSERVATIONS_FILE, type PassiveObservations } from "@qajitsu/core";
+import { OBSERVATIONS_FILE, type PassiveObservations, type UiElementFact } from "@qajitsu/core";
+import { ariaElements } from "./aria.js";
 import {
   chromium,
   firefox,
+  selectors,
   webkit,
   type Browser,
   type BrowserContext,
@@ -37,6 +39,8 @@ export interface WebRunnerOptions {
   readonly slowMoMs?: number | undefined;
   /** Timeout of one UI action (click, fill, wait). */
   readonly actionTimeoutMs?: number;
+  /** Attribute `testid:` selectors find, e.g. `data-qa` (REQ-EXEC-21/AC1); `data-testid` by default. */
+  readonly testIdAttribute?: string;
   readonly viewport?: { readonly width: number; readonly height: number };
   /** Passive observations (REQ-EVD-07); all on by default. They never change a status. */
   readonly observations?: {
@@ -66,12 +70,48 @@ async function axeViolations(
   return found;
 }
 
+/** Visible elements with a test id, read in the page (CDP evaluation): id, tag, text and state. */
+const testIdScript = (
+  attribute: string,
+): string => `[...document.querySelectorAll(${JSON.stringify(`[${attribute}]`)})]
+  .filter((e) => e.getClientRects().length > 0)
+  .slice(0, 400)
+  .map((e) => ({
+    testid: e.getAttribute(${JSON.stringify(attribute)}),
+    role: e.tagName.toLowerCase(),
+    text: (e.innerText || "").trim().replace(/\\s+/g, " ").slice(0, 120),
+    disabled: e.disabled === true || e.getAttribute("aria-disabled") === "true",
+    checked: e.checked === true,
+  }))`;
+
+/**
+ * The elements of a page for a snapshot (REQ-EXEC-22/AC1): every accessible element from Playwright's accessibility
+ * snapshot, then every visible element with a test id.
+ */
+async function pageElements(page: Page, testIdAttribute: string): Promise<UiElementFact[]> {
+  const accessible = ariaElements(await page.locator("body").ariaSnapshot({ timeout: 5000 }));
+  const withId = await page.evaluate<
+    { testid: string; role: string; text: string; disabled: boolean; checked: boolean }[]
+  >(testIdScript(testIdAttribute));
+  return [
+    ...withId.map((e) => ({
+      testid: e.testid,
+      role: e.role,
+      ...(e.text !== "" ? { text: e.text } : {}),
+      ...(e.disabled ? { disabled: true } : {}),
+      ...(e.checked ? { checked: true } : {}),
+    })),
+    ...accessible,
+  ];
+}
+
 /**
  * Turns a spec selector into a Playwright locator: test ids and accessible roles first, CSS last
  * (REQ-EXEC-05/AC2).
  *
  * @param page - Page.
- * @param selector - `testid:<id>`, `role:<role>[:<name>]`, `label:<text>`, `text:<text>` or `css:<selector>`.
+ * @param selector - `testid:<id>`, `role:<role>[:<name>]`, `label:`, `placeholder:`, `alt:`, `title:`, `text:`,
+ *   `id:<dom id>` or `css:<selector>` (REQ-EXEC-21/AC3).
  */
 export function locate(page: Page, selector: string): Locator {
   const i = selector.indexOf(":");
@@ -87,12 +127,22 @@ export function locate(page: Page, selector: string): Locator {
     }
     case "label":
       return page.getByLabel(rest, { exact: true });
+    case "placeholder":
+      return page.getByPlaceholder(rest, { exact: true });
+    case "alt":
+      return page.getByAltText(rest, { exact: true });
+    case "title":
+      return page.getByTitle(rest, { exact: true });
     case "text":
       return page.getByText(rest, { exact: true });
+    case "id":
+      return page.locator(`[id=${JSON.stringify(rest)}]`);
     case "css":
       return page.locator(rest);
     default:
-      throw new Error(`Invalid selector '${selector}'`);
+      throw new Error(
+        `Selector '${selector.slice(0, 60)}' is not supported in a browser: use testid:, role:, label:, placeholder:, alt:, title:, text:, id: or css:`,
+      );
   }
 }
 
@@ -134,6 +184,7 @@ export function maskHar(text: string, maskText: (t: string) => string): string {
 export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): BrowserFactory {
   const video = options.video ?? "retain-on-failure";
   const timeout = options.actionTimeoutMs ?? 5_000;
+  const testIdAttribute = options.testIdAttribute ?? "data-testid";
   return (input: AttemptInput): BrowserSession => {
     const masker = createMasker({ secrets: input.secrets });
     const observed: PassiveObservations = { console: [], http: [], accessibility: [] };
@@ -144,6 +195,8 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
     const start = async (): Promise<UiDriver> => {
       const dir = await mkdtemp(join(tmpdir(), "qj-web-"));
       const type = options.browser === "firefox" ? firefox : options.browser === "webkit" ? webkit : chromium;
+      // REQ-EXEC-21/AC1: getByTestId finds the project's attribute (one project per process).
+      selectors.setTestIdAttribute(testIdAttribute);
       const browser = await type.launch({
         headless: options.headless ?? true,
         ...(options.slowMoMs ? { slowMo: options.slowMoMs } : {}),
@@ -300,6 +353,7 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
             .first()
             .boundingBox({ timeout: 1000 })
             .catch(() => null)) ?? undefined,
+        elements: () => pageElements(p, testIdAttribute),
       };
     };
 

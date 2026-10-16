@@ -147,6 +147,47 @@ describe("report formats (REQ-EVD-05)", () => {
     // REQ-ENV-05/AC2: readers see what was not real.
     expect(html).toContain("stubbed (not real):</strong> payments (wiremock)");
   });
+
+  it("REQ-EXEC-23/AC2: without the code, the report names the tested app, its version and SHA-256", () => {
+    const base = {
+      ticket: "DEMO-6",
+      summary: "s",
+      runId: "20261003-1046-aaaa",
+      generatedAt: "2026-10-03T11:00:00Z",
+      plan: PlanSchema.parse({
+        schema: 1,
+        ticket: "DEMO-6",
+        version: 1,
+        summary: "s",
+        cases: [
+          {
+            id: "TC-01",
+            title: "App start",
+            type: "mobile",
+            priority: "high",
+            source: [{ kind: "ac", id: "AC1" }],
+            steps: [{ id: "S1", action: "a", expect: { description: "d", texts: ["x"] } }],
+            evidence: ["screenshot"],
+          },
+        ],
+      }),
+      planSha256: "f".repeat(64),
+      rows: [],
+      attempts: {},
+      environment: { name: "test", baseUrl: "https://test.example" },
+      repos: {},
+      gates: [],
+    };
+    expect(
+      renderReportHtml({
+        ...base,
+        app: { id: "dev.shop", source: "url", version: "1.4.2", sha256: "e".repeat(64) },
+      }),
+    ).toContain("Code: – · App: dev.shop 1.4.2 (url) sha256 <code>eeeeeeeeeeeeeeee…</code>");
+    expect(renderReportHtml({ ...base, app: { id: "dev.shop", source: "installed" } })).toContain(
+      "Code: – · App: dev.shop (version unknown) (installed) · plan sha256",
+    );
+  });
 });
 
 describe("summary validation (REQ-VER-08/AC2)", () => {

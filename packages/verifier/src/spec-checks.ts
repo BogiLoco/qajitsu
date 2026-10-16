@@ -29,6 +29,34 @@ const FORBIDDEN_GLOBALS = new Set([
 
 const UI_ACTIONS = new Set(["click", "fill", "check", "uncheck", "select", "press", "waitFor"]);
 
+/** Selector kinds a native app can resolve (REQ-EXEC-06, REQ-EXEC-21/AC3); `role:` and `css:` exist only in a browser. */
+const NATIVE_SELECTORS = ["testid:", "label:", "text:", "id:", "xpath:"];
+
+/** Selector kinds a browser can resolve (REQ-EXEC-21/AC3). */
+const WEB_SELECTORS = [
+  "testid:",
+  "role:",
+  "label:",
+  "placeholder:",
+  "alt:",
+  "title:",
+  "text:",
+  "id:",
+  "css:",
+];
+
+/** `ui` operations that do not exist in a native app, and what to do instead (REQ-EXEC-06). */
+const NATIVE_UNAVAILABLE: Readonly<Record<string, string>> = {
+  as: "ui.as() does not exist in a native app: log in through the app's own screens with ui.fill and ui.click",
+  select: "ui.select() does not exist in a native app: tap the option with ui.click",
+};
+
+/** Options of the static checks that depend on the project. */
+export interface SpecCheckOptions {
+  /** The native app declares `mobile.deep_link_scheme`, so `ui.goto()` may open a deep link in mobile cases. */
+  readonly deepLinks?: boolean;
+}
+
 const FORBIDDEN_MEMBERS = new Set([
   "constructor",
   "prototype",
@@ -53,6 +81,82 @@ const calleeName = (call: ts.CallExpression): string | undefined => {
   return undefined;
 };
 
+/** The id of the step whose function (`step("S1", async () => ...)`) contains a node, if any. */
+const enclosingStep = (node: ts.Node): string | undefined => {
+  for (let n = node.parent; !ts.isSourceFile(n); n = n.parent) {
+    if (!(ts.isArrowFunction(n) || ts.isFunctionExpression(n))) continue;
+    const call = n.parent;
+    if (ts.isCallExpression(call) && calleeName(call) === "step" && call.arguments[1] === n) {
+      const id = call.arguments[0];
+      return id !== undefined && ts.isStringLiteral(id) ? id.text : undefined;
+    }
+  }
+  return undefined;
+};
+
+/**
+ * The element selectors a spec uses (REQ-EXEC-22/AC3): the first argument of every `ui.*` action and the selector of
+ * every `verify(..., "elements.<selector>.<property>", ...)`, in the order they appear.
+ *
+ * @param source - Spec source.
+ */
+export function specSelectors(source: string): string[] {
+  const sf = ts.createSourceFile("spec.ts", source, ts.ScriptTarget.ES2023, true, ts.ScriptKind.TS);
+  const out: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const name = calleeName(node);
+      const [first, second] = node.arguments;
+      const onUi =
+        ts.isPropertyAccessExpression(node.expression) &&
+        ts.isIdentifier(node.expression.expression) &&
+        node.expression.expression.text === "ui";
+      if (onUi && name !== undefined && UI_ACTIONS.has(name) && first && ts.isStringLiteral(first))
+        out.push(first.text);
+      if (name === "verify" && second && ts.isStringLiteral(second)) {
+        const m = /^elements\.(.+)\.(?:visible|enabled|checked|text|value)$/.exec(second.text);
+        if (m?.[1] !== undefined) out.push(m[1]);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
+}
+
+/**
+ * Steps of a spec that do nothing but verify: no `ui.*` and no API call inside their function (REQ-EXEC-01). A step
+ * whose plan action changes the application then checks a state nobody produced.
+ *
+ * @param source - Spec source.
+ * @returns Step ids, in the order they appear.
+ */
+export function stepsWithoutActions(source: string): string[] {
+  const sf = ts.createSourceFile("spec.ts", source, ts.ScriptTarget.ES2023, true, ts.ScriptKind.TS);
+  const out: string[] = [];
+  const acts = (node: ts.Node): boolean => {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+      const target = node.expression.expression;
+      const root =
+        ts.isCallExpression(target) && ts.isPropertyAccessExpression(target.expression)
+          ? target.expression.expression
+          : target;
+      if (ts.isIdentifier(root) && root.text !== "plan" && calleeName(node) !== "expect") return true;
+    }
+    return ts.forEachChild(node, acts) === true;
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && calleeName(node) === "step") {
+      const [id, fn] = node.arguments;
+      if (id && ts.isStringLiteral(id) && fn && !acts(fn)) out.push(id.text);
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
+}
+
 /**
  * Lint, plan coverage and assertion lock of one spec (REQ-EXEC-03/AC1..AC3, invariant 4). Pure AST
  * checks, no execution:
@@ -62,17 +166,26 @@ const calleeName = (call: ts.CallExpression): string | undefined => {
  * - every plan step has exactly one `step("Sx")` and at least one `verify("Sx", ...)`; a manual step
  *   (REQ-EXEC-11) has its `step("Sx", () => {})` and no `verify()`;
  * - every `verify()` has 4 arguments and the 4th is `plan.expect("<case>.<step>.<field>")` with the
- *   same step and field as the call, so expected values always come from the approved plan.
+ *   same step and field as the call, so expected values always come from the approved plan;
+ * - a mobile case uses only what a native app offers: no `ui.as()` or `ui.select()`, `ui.goto()` only with a deep
+ *   link scheme, and `testid:`, `label:` or `text:` selectors (the device would refuse the rest at run time).
  *
  * @param source - Spec source.
  * @param caseId - Case the spec must implement.
  * @param plan - Approved plan.
+ * @param options - Project-dependent options.
  */
-export function checkSpecSource(source: string, caseId: string, plan: Plan): SpecProblem[] {
+export function checkSpecSource(
+  source: string,
+  caseId: string,
+  plan: Plan,
+  options: SpecCheckOptions = {},
+): SpecProblem[] {
   const problems: SpecProblem[] = [];
   const sf = ts.createSourceFile(`${caseId}.spec.ts`, source, ts.ScriptTarget.ES2023, true, ts.ScriptKind.TS);
   const planCase = plan.cases.find((c) => c.id === caseId);
   if (!planCase) return [{ check: "coverage", message: `${caseId} is not in the approved plan` }];
+  const native = planCase.type === "mobile";
 
   let exportsCaseId = false;
   let exportsRun = false;
@@ -149,7 +262,50 @@ export function checkSpecSource(source: string, caseId: string, plan: Plan): Spe
         if (!first || !ts.isStringLiteral(first)) add("coverage", "step() needs a literal step id", node);
         else stepCalls.set(first.text, (stepCalls.get(first.text) ?? 0) + 1);
       }
+      const onUi =
+        ts.isPropertyAccessExpression(node.expression) &&
+        ts.isIdentifier(node.expression.expression) &&
+        node.expression.expression.text === "ui";
+      if (native && onUi && name !== undefined) {
+        const unavailable = NATIVE_UNAVAILABLE[name];
+        if (unavailable !== undefined) add("lint", unavailable, node);
+        if (name === "goto" && options.deepLinks !== true)
+          add(
+            "lint",
+            "ui.goto() in a native app needs mobile.deep_link_scheme; the app is already open: tap its elements instead",
+            node,
+          );
+        if (
+          UI_ACTIONS.has(name) &&
+          first &&
+          ts.isStringLiteral(first) &&
+          !NATIVE_SELECTORS.some((k) => first.text.startsWith(k))
+        )
+          add(
+            "lint",
+            `'${first.text}' cannot be found in a native app: use testid:, label:, text:, id: or xpath:`,
+            node,
+          );
+        // REQ-EXEC-21/AC6: XPath follows the screen's structure and breaks with it.
+        if (UI_ACTIONS.has(name) && first && ts.isStringLiteral(first) && first.text.startsWith("xpath:"))
+          add("review", `XPath selector '${first.text}' is brittle; prefer testid:, label: or text:`, node);
+      }
       if (
+        !native &&
+        onUi &&
+        name !== undefined &&
+        UI_ACTIONS.has(name) &&
+        first &&
+        ts.isStringLiteral(first) &&
+        !WEB_SELECTORS.some((k) => first.text.startsWith(k))
+      )
+        add(
+          "lint",
+          `'${first.text}' cannot be found in a browser: use testid:, role:, label:, placeholder:, alt:, title:, text:, id: or css:`,
+          node,
+        );
+      if (
+        !native &&
         name !== undefined &&
         UI_ACTIONS.has(name) &&
         first &&
@@ -178,6 +334,14 @@ export function checkSpecSource(source: string, caseId: string, plan: Plan): Spe
         } else {
           const stepId = first.text;
           const field = node.arguments[1].text;
+          // REQ-EXEC-03/AC2: a verify() belongs to the step whose function contains it; the runtime refuses others.
+          const owner = enclosingStep(node);
+          if (owner !== stepId)
+            add(
+              "coverage",
+              `verify("${stepId}", ...) must be inside step("${stepId}", ...); ${owner === undefined ? "it is outside every step" : `it is inside step("${owner}", ...)`}`,
+              node,
+            );
           verifiedSteps.add(stepId);
           verifiedFields.add(`${stepId}.${field}`);
           const expected = node.arguments[3];
@@ -227,6 +391,19 @@ export function checkSpecSource(source: string, caseId: string, plan: Plan): Spe
   }
   for (const id of stepCalls.keys()) {
     if (!planCase.steps.some((s) => s.id === id)) add("coverage", `step("${id}") is not a step of ${caseId}`);
+  }
+  // A verify() of something the step does not expect has no expected value: plan.expect() would stop the attempt.
+  for (const key of verifiedFields) {
+    const dot = key.indexOf(".");
+    const step = planCase.steps.find((s) => s.id === key.slice(0, dot));
+    const field = key.slice(dot + 1);
+    if (!step || step.manual === true) continue;
+    const planned = plannedFields(step.expect);
+    if (!planned.includes(field))
+      add(
+        "coverage",
+        `verify("${step.id}", "${field}", ...) checks something step ${step.id} of the plan does not expect; it expects: ${planned.join(", ") || "a description only, nothing a test can compare"}`,
+      );
   }
   return problems;
 }

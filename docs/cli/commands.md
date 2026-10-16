@@ -222,11 +222,29 @@ When the project has earlier runs, the application map around the change (`map/a
 and last failed screens, endpoints and transitions) is given to the planner, which may add regression cases citing it
 (REQ-OBS-08); a map that cannot be built is a warning and planning continues.
 
+The planner and the author also get the element ids (`data-testid`, `testID`, Android content descriptions, …) and
+page paths that code finds in the run's worktree (REQ-PLAN-09/AC7). Before a plan version is shown, code checks every
+expectation (REQ-PLAN-09): placeholders instead of values (`expected_total`, `<total>`, TBD), fields that are not in
+the OpenAPI response of the step's call or have another type, steps with a description only, and `testid:` selectors
+the code does not define. A draft with findings goes back to the planner once; what is still flagged is listed under
+"Cannot be checked as written" and approving it needs a separate `yes`.
+
+When the run has no code of the application (only a test environment), code opens the environment's start page in a
+headless browser as the first account alias of the profile, follows links on the same origin (up to 12 pages) and
+gives the planner what each page shows, with the selectors that find each element (REQ-EXEC-22/AC7). The pages are
+saved in `ui/snapshot.json` of the run, masked; an expectation naming an element no recorded page shows is flagged
+like an unknown selector (AC8). An environment that cannot be reached is reported and planning goes on without it.
+
 - `--run <id>`: run id (default: latest run of the ticket)
 - `--revise <instruction>`: write a new plan version following this instruction
 - `--depth <depth>`: `smoke` (high-risk cases), `standard` (high and medium) or `full` (every case, the default).
   The planner rates every case's risk as its priority; code keeps the cases of the depth and records in the plan
   why each one is in or out (REQ-PLAN-08). The depth is remembered for revisions of the run.
+- `--env <profile|url>`: environment whose pages are recorded for the planner (default: `environments.default`)
+- `--snapshot`: record the environment's pages also when the code is available, or record them again
+- `--build`: start the environment from the run's worktree (and the mobile devices, building the app when configured)
+  only to record the pages and the app's first screen for the planner, then stop them (REQ-EXEC-22/AC9). Use it
+  when the application is built per run, so the plan expects the texts the application really shows.
 
 Exit codes: `0` plan written (and approved, if accepted in the review), `2` token budget exceeded, `3` errors.
 
@@ -237,15 +255,25 @@ Approves and freezes a plan version without the interactive loop (SHA-256 in `ru
 - `--run <id>`: run id (default: latest run of the ticket)
 - `--version <n>`: plan version (default: latest)
 - `--confirm-open-questions`: approve although the plan has open questions
+- `--confirm-placeholders`: approve although code flags expectations it cannot check (REQ-PLAN-09/AC4); the flags
+  and who confirmed them are recorded in `run.json`
 - `--approver <name>`: who approves (CI: the reviewer or the `/qa approve` author)
 - `--reuse-from <run>`: reuse the plan approved in this earlier run if the ticket did not change
 
-Exit codes: `0` approved, `3` not approvable (ungrounded sources, open questions, changed ticket) or errors.
+Exit codes: `0` approved, `3` not approvable (ungrounded sources, open questions, expectations that cannot be checked,
+changed ticket) or errors.
 
 ### `qajitsu run <ticket>`
 
 Executes the approved plan: the author writes specs, static checks run, the sandbox executes them, code computes
 statuses, gates, auditor and canary run, reports are written.
+
+Before the author writes a spec, code records what the running application shows (REQ-EXEC-22): each web case's pages
+opened as the case's account in a headless browser, and the first screen of the native app on the run's device
+(started before the author and reused by the mobile lane). The author gets every element with the selectors that find
+it, as untrusted data; a selector the author writes that matches nothing recorded and no element id of the code goes
+back to it once with the closest recorded ones. A failed web or mobile attempt keeps `failure-elements.json` (what the
+page or screen showed, masked), which the healer gets; mobile cases are healed too and a healed case is never PASSED.
 
 - `--run <id>`: run id (default: latest run of the ticket)
 - `--env <profile|url>`: environment profile from `.qa/envs` or a URL (default: `environments.default`)
@@ -259,6 +287,10 @@ statuses, gates, auditor and canary run, reports are written.
 - `--step`: in a terminal, pause before every step with its action and expected result: Enter runs it, `c` runs the
   rest without stopping, `q` stops the case (BLOCKED, also in its retries); paused time does not count toward the
   case's time limit
+- `--sequential`: one case at a time in plan order, across the API, web and mobile lanes and every device
+  (REQ-EXEC-19/AC2); also `execution.sequential: true`. Without it the lanes run at the same time: API cases
+  (`execution.workers.api`), web cases (`execution.workers.web`, with `execution.web_combinations` browser combinations
+  at once) and mobile cases on every device; each case holds its own pool accounts while it runs (REQ-ENV-09)
 - `--fix-check`: with `--build`, verify a bug fix (REQ-VER-11): after this run, a sibling run builds the commit the
   change branched from and runs the same approved plan and specs; every case marked `reproduces` must be FAILED before
   the fix and PASSED with it. Both results appear side by side in the report and the Jira comment.
@@ -402,9 +434,13 @@ writes `explore/<session>/report.html` and `report.md` for review. Needs a fetch
 
 - `--goal <text>`: what to explore (required), e.g. "checkout around the terms change"
 - `--run <id>`: run id (default: latest run of the ticket)
-- `--env <profile|url>`: environment profile from `.qa/envs` or a URL (default: `environments.default`)
+- `--env <profile|url>`: environment profile from `.qa/envs` or a URL (default: the environment `qajitsu env up`
+  started for this run when it answers, else `environments.default`); an `env up` environment listens on 127.0.0.1 and
+  needs no allowlist entry for its random port
 - `--time-box <minutes>`: stop after this many minutes (default 10), enforced by code
 - `--max-steps <n>`: stop after this many browser actions (default 40), enforced by code
+- `--headed`: show the browser, to watch the agent explore live (needs a display)
+- `--slow-mo <ms>`: wait this many milliseconds before every browser action, to follow it
 
 Exit codes: `0` the session ran (whatever it observed), `2` the environment is not healthy, `3` errors.
 
@@ -575,7 +611,9 @@ Exit codes: `0` searched, `3` errors.
 
 ### `qajitsu env check`
 
-Lists every missing or invalid variable of the environment profile and the `--build` configuration; starts nothing.
+Lists every missing or invalid variable of the environment profile and the `--build` configuration (every account of
+a pool included); starts nothing. Warns (`! accounts:`) when an account pool is smaller than the number of cases that
+can need it at once (REQ-ENV-09/AC5); those cases wait for a free account, which is not an error.
 
 - `--env <profile>`: environment profile (default: `build.profile` or `environments.default`)
 

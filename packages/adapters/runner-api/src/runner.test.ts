@@ -237,4 +237,54 @@ describe("API runner (REQ-EXEC-04, REQ-EXEC-08, REQ-EVD-01)", () => {
       expect.objectContaining({ outcome: "error", error: "login failed: 401" }),
     ]);
   });
+
+  it("REQ-ENV-09/AC2+AC5 + REQ-EXEC-19/AC4: each attempt gets its accounts, gives them back, and the journal names the lane and pool member", async () => {
+    const { options, lines } = await setup("BUG_CART_TOTAL_ROUNDING");
+    const contexts: unknown[] = [];
+    let released = 0;
+    const results = await runCases({
+      ...options,
+      lane: "web",
+      login: async (context) => {
+        contexts.push(context);
+        return {
+          ...(await options.login()),
+          leased: { "user:standard": "user:standard#2" },
+          release: () => (released += 1),
+        };
+      },
+      specs: new Map([["TC-01", join(specDir, "TC-01.spec.ts")]]),
+      executor: inProcess,
+      retries: 1,
+    });
+    const attempts = results.get("TC-01")?.attempts.length ?? 0;
+    expect(attempts).toBe(2);
+    expect(released).toBe(attempts);
+    expect(contexts).toEqual([
+      { caseId: "TC-01", attempt: 1, specFile: join(specDir, "TC-01.spec.ts"), lane: "web" },
+      { caseId: "TC-01", attempt: 2, specFile: join(specDir, "TC-01.spec.ts"), lane: "web" },
+    ]);
+    const { events } = parseEventLines(lines.join(""));
+    expect(events.filter((e) => e.event === "case.accounts").map((e) => e.details)).toEqual([
+      { caseId: "TC-01", attempt: 1, lane: "web", accounts: { "user:standard": "user:standard#2" } },
+      { caseId: "TC-01", attempt: 2, lane: "web", accounts: { "user:standard": "user:standard#2" } },
+    ]);
+    expect(events.find((e) => e.event === "case.attempt.start")?.details).toMatchObject({ lane: "web" });
+    // The user name never reaches the journal.
+    expect(lines.join("\n")).not.toContain("standard@");
+  });
+
+  it("REQ-ENV-09/AC2: the accounts go back also when the attempt throws", async () => {
+    const { options } = await setup();
+    let released = 0;
+    const results = await runCases({
+      ...options,
+      login: async () => ({ ...(await options.login()), release: () => (released += 1) }),
+      specs: new Map([["TC-01", join(specDir, "TC-01.spec.ts")]]),
+      executor: () => Promise.reject(new Error("sandbox died")),
+      retries: 0,
+    }).catch((error: unknown) => error);
+    expect(results).toBeInstanceOf(Error);
+    expect(released).toBe(1);
+  });
 });

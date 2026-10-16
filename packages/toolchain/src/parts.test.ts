@@ -238,7 +238,7 @@ describe("prechecks on Linux (REQ-GEN-06/AC6)", () => {
   const needs = (image: string) => ({
     tools: new Map(),
     browsers: [],
-    android: { packages: ["emulator", image], emulator: { systemImage: image, avd: "qj" } },
+    android: { packages: ["emulator", image], emulators: [{ systemImage: image, avd: "qj" }], atOnce: 1 },
   });
   const androidStep = [step("android", { bytes: 100 })];
 
@@ -262,6 +262,33 @@ describe("prechecks on Linux (REQ-GEN-06/AC6)", () => {
     ]);
     expect(checks.find((c) => c.name === "memory")?.detail).toContain("8 GiB or more is recommended");
     expect(checks.find((c) => c.name === "disk")?.detail).toBe("free space unknown");
+  });
+
+  it("REQ-EXEC-20/AC5: the memory precheck counts every emulator that runs at once; each image is checked", async () => {
+    const three = {
+      tools: new Map(),
+      browsers: [],
+      android: {
+        packages: ["emulator"],
+        emulators: [
+          { systemImage: "system-images;android-34;google_apis;x86_64", avd: "a" },
+          { systemImage: "system-images;android-30;google_apis;arm64-v8a", avd: "b" },
+        ],
+        atOnce: 3,
+      },
+    };
+    const checks = await runPrechecks(androidStep, three, ports({ totalMemory: 6 * 1024 ** 3 }), dir);
+    expect(checks.filter((c) => c.name === "system image").map((c) => c.ok)).toEqual([true, false]);
+    expect(checks.find((c) => c.name === "memory")).toMatchObject({
+      ok: false,
+      detail: expect.stringContaining(
+        "3 emulators at once need at least 8 GiB; use fewer devices",
+      ) as unknown,
+    });
+    const enough = await runPrechecks(androidStep, three, ports({ totalMemory: 10 * 1024 ** 3 }), dir);
+    expect(enough.find((c) => c.name === "memory")?.detail).toBe(
+      "10 GiB; 3 emulators at once run, 16 GiB or more is recommended",
+    );
   });
 
   it("REQ-GEN-06/AC6: Linux on ARM64 has no Android emulator build", async () => {
@@ -291,9 +318,7 @@ describe("prechecks on Linux (REQ-GEN-06/AC6)", () => {
     );
     const failed = Object.fromEntries(checks.filter((c) => !c.ok).map((c) => [c.name, c.detail]));
     expect(Object.keys(failed)).toEqual(["system image", "virtualisation", "memory", "unzip"]);
-    expect(failed["system image"]).toContain(
-      "set mobile.android.emulator.system_image to the x86_64 variant",
-    );
+    expect(failed["system image"]).toContain("use the x86_64 variant in mobile.android");
     expect(failed["virtualisation"]).toContain("add the user to the kvm group");
     expect(failed["memory"]).toContain("at least 4 GiB");
   });
@@ -490,7 +515,8 @@ describe("smoke tests (REQ-GEN-06/AC8)", () => {
     const listed = { code: 0, stdout: "emulator | 1\nsystem-images;android-34;google_apis;arm64-v8a | 1" };
     const android = {
       packages: ["emulator", "system-images;android-34;google_apis;arm64-v8a"],
-      emulator: { systemImage: "system-images;android-34;google_apis;arm64-v8a", avd: "qj" },
+      emulators: [{ systemImage: "system-images;android-34;google_apis;arm64-v8a", avd: "qj" }],
+      atOnce: 1,
     };
     const e = entry("android", { path: sdk, parts: [...android.packages, "avd:qj"] });
     const noAccel = scripted({

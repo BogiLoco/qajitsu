@@ -38,6 +38,7 @@ describe("Android emulator (REQ-ENV-06/AC2)", () => {
     const emu = await startAndroidEmulator({
       sdkRoot: "/sdk",
       avdHome: "/toolchain/android/avd",
+      deviceProfile: "pixel_8",
       avd: "qajitsu",
       systemImage: "system-images;android-34;google_apis;arm64-v8a",
       headless: true,
@@ -49,7 +50,7 @@ describe("Android emulator (REQ-ENV-06/AC2)", () => {
     });
     expect(emu.serial).toBe("emulator-5556");
     expect(calls).toContain(
-      "avdmanager create avd --name qajitsu --package system-images;android-34;google_apis;arm64-v8a --force",
+      "avdmanager create avd --name qajitsu --package system-images;android-34;google_apis;arm64-v8a --device pixel_8 --force",
     );
     expect(spawned[0]).toEqual([
       "emulator",

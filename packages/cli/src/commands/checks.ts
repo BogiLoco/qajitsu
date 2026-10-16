@@ -2,11 +2,13 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { runCases, type RunCasesOptions } from "@qajitsu/adapter-runner-api";
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
-import { createUsageTracker, runAuditor, runTriage, type AuditInput } from "@qajitsu/agents";
+import { createUsageTracker, runAuditor, runBlockedHints, runTriage, type AuditInput } from "@qajitsu/agents";
 import {
   AuditRecordSchema,
   CanaryRecordSchema,
   TriageRecordSchema,
+  BlockedRecordSchema,
+  type BlockedRecord,
   type TriageRecord,
   type AuditRecord,
   type CanaryRecord,
@@ -14,7 +16,7 @@ import {
   type Plan,
   sha256,
 } from "@qajitsu/core";
-import { buildCanaryPlan, canaryCaught, checkTriageHints } from "@qajitsu/verifier";
+import { buildCanaryPlan, canaryCaught, checkBlockedHints, checkTriageHints } from "@qajitsu/verifier";
 import type { RunSession } from "../session.js";
 import { computeVerdict } from "./verdict.js";
 
@@ -285,5 +287,84 @@ export async function triageRun(session: RunSession, now: () => Date): Promise<T
   }
   await ws.update({ data: { ...ws.record.data, tokens: usage.total } });
   await writeRecord(session, "triage.json", record);
+  return record;
+}
+
+/**
+ * Explains every BLOCKED case with a likely cause and a next step (REQ-VER-13) and writes `checks/blocked.json`. Hints
+ * are kept only when their citations exist; a model error is recorded and the run goes on. Hints never change a
+ * status (invariant 1). Switched with `verification.triage`, like the hints for FAILED cases.
+ */
+export async function blockedRun(session: RunSession, now: () => Date): Promise<BlockedRecord | undefined> {
+  const { project, ws, masker, events } = session;
+  if (project.config.verification.triage === "off") return undefined;
+  const verdict = await computeVerdict(session, now);
+  const blocked = verdict.cases.filter((c) => c.status === "BLOCKED").map((c) => c.caseId);
+  if (blocked.length === 0) return undefined;
+  const specs: Record<string, string> = {};
+  for (const caseId of blocked) {
+    const spec = await readFile(ws.path("specs", `${caseId}.spec.ts`), "utf8").catch(() => undefined);
+    if (spec !== undefined) specs[caseId] = masker.maskText(spec);
+  }
+  const cases = blocked.flatMap((caseId) => {
+    const result = verdict.results.get(caseId);
+    return result
+      ? [{ caseId, result, evidence: result.attempts.at(-1)?.evidence ?? [], spec: specs[caseId] }]
+      : [];
+  });
+  const texts: Record<string, string> = {};
+  for (const m of verdict.manifest)
+    if (cases.some((c) => c.evidence.includes(m.path)) && !["screenshot", "video", "trace"].includes(m.kind))
+      texts[m.path] = masker.maskText((await readFile(ws.path("evidence", m.path), "utf8")).slice(0, 4000));
+  const logNames = await runLogs(ws.path("logs"), 10);
+  const logs: Record<string, string> = {};
+  for (const name of logNames)
+    logs[name] = masker.maskText(
+      (await readFile(ws.path("logs", name), "utf8").catch(() => "")).slice(-3000),
+    );
+  const usage = createUsageTracker({
+    events,
+    budget: project.config.models.token_budget,
+    alreadyUsed: Number(ws.record.data["tokens"] ?? 0),
+  });
+  let record: BlockedRecord;
+  try {
+    const answer = await runBlockedHints(
+      {
+        ws,
+        models: session.models,
+        events,
+        usage,
+        now,
+        maskJson: (v: unknown) => masker.maskJson(v),
+        maskText: (t: string) => masker.maskText(t),
+      },
+      { plan: verdict.plan, cases, texts, logs },
+    );
+    const checked = checkBlockedHints(
+      answer.hints.map((h) => ({
+        ...h,
+        justification: masker.maskText(h.justification),
+        next: masker.maskText(h.next),
+      })),
+      {
+        results: verdict.results,
+        manifest: verdict.manifest.map((m) => m.path),
+        logs: logNames,
+        specs,
+        blocked,
+      },
+    );
+    record = BlockedRecordSchema.parse({ schema: 1, status: "done", model: answer.model, ...checked });
+  } catch (error) {
+    record = {
+      schema: 1,
+      status: "failed",
+      error: masker.maskText(error instanceof Error ? error.message : String(error)).slice(0, 500),
+    };
+    events.emit("triage", SYSTEM, "blocked.failed", { error: record.error });
+  }
+  await ws.update({ data: { ...ws.record.data, tokens: usage.total } });
+  await writeRecord(session, "blocked.json", record);
   return record;
 }

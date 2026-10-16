@@ -7,6 +7,7 @@ import {
   AuditRecordSchema,
   CanaryRecordSchema,
   TriageRecordSchema,
+  BlockedRecordSchema,
   CaseResultFileSchema,
   loadApprovedPlan,
   parseEventLines,
@@ -15,6 +16,7 @@ import {
   journalAnchor,
   OBSERVATIONS_FILE,
   planForLocale,
+  mobileDevices,
   webCombinations,
   type CaseResultFile,
   type TestStatus,
@@ -184,6 +186,33 @@ export async function computeVerdict(
           { combo: combo.id, status: c.status },
         ]);
   }
+  // REQ-EXEC-20/AC3: in matrix mode every further device is evaluated by the same code; a mobile case is PASSED only
+  // when it passed on every device.
+  const mobile = session.project.config.mobile;
+  const devices = mobile?.distribute === "matrix" ? mobileDevices(mobile).map((d) => d.name) : [];
+  const perDevice = new Map<string, { combo: string; status: TestStatus }[]>();
+  for (const name of devices.slice(1)) {
+    const dir = ws.path("results", "devices", name);
+    const deviceResults = new Map<string, CaseResultFile>();
+    for (const file of (await readdir(dir).catch(() => [] as string[])).filter((f) => f.endsWith(".json"))) {
+      const text = await readFile(join(dir, file), "utf8");
+      const parsed = CaseResultFileSchema.safeParse(JSON.parse(text) as unknown);
+      if (parsed.success && parsed.data.caseId === file.slice(0, -5)) {
+        deviceResults.set(parsed.data.caseId, parsed.data);
+        matrixResults.push({ name: `results/devices/${name}/${file}`, text });
+      } else malformed.push(`results/devices/${name}/${file}: not a valid results file`);
+    }
+    for (const c of plan.cases.filter((x) => x.type === "mobile")) {
+      // A device that left no result for a case that ran on the primary device is BLOCKED, never skipped.
+      const status = deviceResults.has(c.id)
+        ? evaluateCases({ ...plan, cases: [c] }, deviceResults, manifest, manifestCheck)[0]?.status
+        : results.has(c.id)
+          ? ("BLOCKED" as TestStatus)
+          : undefined;
+      if (status !== undefined)
+        perDevice.set(c.id, [...(perDevice.get(c.id) ?? []), { combo: name, status }]);
+    }
+  }
   // REQ-EXEC-14: each locale run is evaluated against the plan resolved for that locale.
   const perLocale = new Map<string, { locale: string; status: TestStatus }[]>();
   for (const name of (await readdir(ws.path("results", "locale")).catch(() => [] as string[])).sort()) {
@@ -202,7 +231,11 @@ export async function computeVerdict(
         perLocale.set(c.caseId, [...(perLocale.get(c.caseId) ?? []), { locale: name, status: c.status }]);
   }
   const combined = evaluated.cases.map((c) => {
-    const others = [...(perCombination.get(c.caseId) ?? []), ...(perLocale.get(c.caseId) ?? [])];
+    const others = [
+      ...(perCombination.get(c.caseId) ?? []),
+      ...(perDevice.get(c.caseId) ?? []),
+      ...(perLocale.get(c.caseId) ?? []),
+    ];
     return others.length > 0
       ? { ...c, status: combineStatuses([c.status, ...others.map((o) => o.status)]) }
       : c;
@@ -214,6 +247,9 @@ export async function computeVerdict(
       : undefined;
   };
   const combinationsOf = (caseId: string, primaryStatus: TestStatus): string | undefined => {
+    const onDevices = perDevice.get(caseId);
+    if (onDevices && devices[0])
+      return [`${devices[0]} ${primaryStatus}`, ...onDevices.map((o) => `${o.combo} ${o.status}`)].join(", ");
     const others = perCombination.get(caseId);
     return others && combos[0]
       ? [`${combos[0].id} ${primaryStatus}`, ...others.map((o) => `${o.combo} ${o.status}`)].join(", ")
@@ -256,12 +292,16 @@ export async function computeVerdict(
   const canary = await readChecked("canary.json", CanaryRecordSchema, verification.canary);
   // REQ-VER-12: hints are shown next to the results and never read by status computation (invariant 1).
   const triage = await readChecked("triage.json", TriageRecordSchema, false);
-  const hintOf = new Map(
-    (triage?.status === "done" ? triage.hints : []).map((h) => [
-      h.caseId,
-      masker.maskText(`${h.category}: ${h.justification}`),
-    ]),
-  );
+  // REQ-VER-13: hints for BLOCKED cases, shown the same way, with the next step.
+  const blockedHints = await readChecked("blocked.json", BlockedRecordSchema, false);
+  const hintOf = new Map([
+    ...(triage?.status === "done" ? triage.hints : []).map(
+      (h) => [h.caseId, masker.maskText(`${h.category}: ${h.justification}`)] as const,
+    ),
+    ...(blockedHints?.status === "done" ? blockedHints.hints : []).map(
+      (h) => [h.caseId, masker.maskText(`${h.category}: ${h.justification} Next: ${h.next}`)] as const,
+    ),
+  ]);
   const checked = applyVerificationChecks(combined, audit, canary, integrity);
   const cases = combined.map((c, i) => ({ ...c, status: checked[i]?.status ?? c.status }));
   const checkNotes = [
@@ -288,6 +328,12 @@ export async function computeVerdict(
       ? [`Failure hints by ${triage.model}: suggestions with cited evidence, not statuses.`]
       : []),
     ...(triage?.status === "failed" ? [`Failure hints not available: ${triage.error}`] : []),
+    ...(blockedHints?.status === "done" && blockedHints.hints.length > 0
+      ? [`Hints for BLOCKED cases by ${blockedHints.model}: likely cause and next step, not statuses.`]
+      : []),
+    ...(blockedHints?.status === "failed"
+      ? [`Hints for BLOCKED cases not available: ${blockedHints.error}`]
+      : []),
     ...checked
       .filter((c) => c.downgradedBy)
       .map((c) => `${c.caseId} → NEEDS_REVIEW (${c.downgradedBy ?? ""})`),
@@ -323,7 +369,9 @@ export async function computeVerdict(
       status: c.status,
       stepsPassed: c.stepsPassed,
       stepsTotal: c.stepsTotal,
-      ...(c.status === "FAILED" && hintOf.has(c.caseId) ? { hint: hintOf.get(c.caseId) } : {}),
+      ...((c.status === "FAILED" || c.status === "BLOCKED") && hintOf.has(c.caseId)
+        ? { hint: hintOf.get(c.caseId) }
+        : {}),
       ...manualOf(c.caseId),
       ...(() => {
         const primaryStatus = evaluated.cases.find((e) => e.caseId === c.caseId)?.status ?? c.status;
@@ -460,6 +508,16 @@ export async function computeVerdict(
     : [];
   const matrixMd = renderMatrixMarkdown(rows);
   const csv = renderMatrixCsv(rows);
+  // REQ-EXEC-23/AC2: the tested mobile app, recorded by code when the devices were prepared.
+  const testedApp = z
+    .strictObject({
+      platform: z.string(),
+      id: z.string(),
+      source: z.string(),
+      version: z.string().optional(),
+      sha256: z.string().optional(),
+    })
+    .safeParse(ws.record.data["app"]);
   const html = (g: readonly GateResult[]): string =>
     renderReportHtml({
       ticket: ws.ticket,
@@ -472,6 +530,7 @@ export async function computeVerdict(
       attempts,
       environment,
       repos: Object.fromEntries(Object.entries(ws.record.repos).map(([k, v]) => [k, v.sha])),
+      ...(testedApp.success ? { app: testedApp.data } : {}),
       ...(versions ? { versions } : {}),
       gates: g,
       timeline,

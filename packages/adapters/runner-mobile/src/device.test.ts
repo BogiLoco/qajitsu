@@ -12,18 +12,24 @@ const SOURCE = `<hierarchy><android.widget.TextView text="Cart: 1 item" content-
 
 const fakeClient = () => {
   const calls: string[] = [];
-  const element = (sel: string): AppiumElement => ({
-    click: () => Promise.resolve(calls.push(`click ${sel}`)),
-    setValue: (v) => Promise.resolve(calls.push(`set ${sel}=${v}`)),
-    isDisplayed: () => Promise.resolve(sel !== "~gone"),
-    isEnabled: () => Promise.resolve(true),
-    getAttribute: (n) => Promise.resolve(n === "checked" ? "false" : null),
-    getText: () => Promise.resolve(" Cart: 1 item "),
-    waitForDisplayed: (o) => {
-      calls.push(`wait ${sel}${o.reverse ? " hidden" : ""}`);
-      return Promise.resolve(true);
-    },
-  });
+  // `testid:x` on Android is an XPath over content-desc and resource id; the calls name the id.
+  const element = (locator: string): AppiumElement => {
+    const sel = /@content-desc="([^"]*)"/.test(locator)
+      ? `~${/@content-desc="([^"]*)"/.exec(locator)?.[1] ?? ""}`
+      : locator;
+    return {
+      click: () => Promise.resolve(calls.push(`click ${sel}`)),
+      setValue: (v) => Promise.resolve(calls.push(`set ${sel}=${v}`)),
+      isDisplayed: () => Promise.resolve(sel !== "~gone"),
+      isEnabled: () => Promise.resolve(true),
+      getAttribute: (n) => Promise.resolve(n === "checked" ? "false" : null),
+      getText: () => Promise.resolve(" Cart: 1 item "),
+      waitForDisplayed: (o) => {
+        calls.push(`wait ${sel}${o.reverse ? " hidden" : ""}`);
+        return Promise.resolve(true);
+      },
+    };
+  };
   const client: AppiumClient = {
     $: (sel) => Promise.resolve(element(sel)),
     back: () => Promise.resolve(calls.push("back")),
@@ -42,12 +48,25 @@ const input = { secrets: ["token-123"] } as unknown as AttemptInput;
 
 describe("Appium device driver (REQ-EXEC-06, REQ-EVD-03)", () => {
   it("REQ-EXEC-06/AC1: maps selectors to accessibility ids and UiSelector/predicates; rejects web-only kinds", () => {
-    expect(appiumLocator("testid:checkout", "android")).toBe("~checkout");
+    expect(appiumLocator("testid:checkout", "android")).toBe(
+      '//*[@content-desc="checkout" or @resource-id="checkout" or substring(@resource-id, string-length(@resource-id) - 12 + 1) = ":id/checkout"]',
+    );
+    expect(appiumLocator("testid:checkout", "ios")).toBe("~checkout");
+    expect(appiumLocator('testid:a"b', "android")).toBe('~a"b');
+    // REQ-EXEC-21/AC3: resource ids and XPath as the last resort.
+    expect(appiumLocator("id:add_item", "android")).toBe(
+      'android=new UiSelector().resourceIdMatches(".*:id/add_item")',
+    );
+    expect(appiumLocator("id:dev.shop:id/pay.now", "android")).toBe(
+      'android=new UiSelector().resourceIdMatches("dev\\\\.shop:id/pay\\\\.now")',
+    );
+    expect(appiumLocator("id:pay", "ios")).toBe("~pay");
+    expect(appiumLocator("xpath://android.widget.Button[2]", "android")).toBe("//android.widget.Button[2]");
     expect(appiumLocator("label:Pay", "ios")).toBe("~Pay");
     expect(appiumLocator('text:Say "hi"', "android")).toBe('android=new UiSelector().text("Say \\"hi\\"")');
     expect(appiumLocator("text:Pay", "ios")).toBe('-ios predicate string:label == "Pay" OR value == "Pay"');
     expect(() => appiumLocator("css:#x", "android")).toThrow(/not supported in native apps/);
-    expect(() => appiumLocator("role:button", "ios")).toThrow(/testid:, label: or text:/);
+    expect(() => appiumLocator("role:button", "ios")).toThrow(/testid:, label:, text:, id: or xpath:/);
     expect(sourceTexts(SOURCE)).toBe("Cart: 1 item\ncart-count\nCheckout\ncheckout\nA & B");
   });
 
@@ -82,6 +101,12 @@ describe("Appium device driver (REQ-EXEC-06, REQ-EVD-03)", () => {
     expect(await d.property("testid:x", "value")).toBe("Cart: 1 item");
     expect(new TextDecoder().decode(await d.screenshot(false))).toBe("png");
     expect(await d.dom()).toBe(SOURCE);
+    // REQ-EXEC-22/AC1: the elements of the screen for a snapshot.
+    expect(await d.elements?.()).toEqual([
+      { role: "TextView", testid: "cart-count", text: "Cart: 1 item" },
+      { role: "Button", testid: "checkout", text: "Checkout" },
+      { role: "y", text: "A & B" },
+    ]);
     await expect(d.select("testid:x", "a")).rejects.toThrow(/not available/);
     await expect(d.useAccount("user:standard")).rejects.toThrow(/log in through the app/);
     expect(caps).toEqual({ platformName: "Android", "appium:automationName": "UiAutomator2" });

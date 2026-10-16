@@ -33,6 +33,44 @@ const ScriptLoginSchema = z.strictObject({
 
 const LoginSchema = z.union([HttpLoginSchema, ScriptLoginSchema]);
 
+/** Lanes a run executes cases in (REQ-EXEC-19). */
+export const LANES = ["api", "web", "mobile"] as const;
+
+/** One lane of {@link LANES}. */
+export type Lane = (typeof LANES)[number];
+
+/** One test account. */
+const AccountSchema = z.strictObject({
+  username: SecretOrText,
+  password: z.string().regex(/^secret:\/\/[a-z0-9-]+\/.+$/, "Passwords must be secret:// references"),
+  /** Extra fields merged into the login body for this alias, e.g. `{ ttl_seconds: 0 }` for an expired session. */
+  login_extra: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}),
+  /** Lanes that may use this account, e.g. `[mobile]` for an app that allows one session per user (REQ-ENV-09/AC3). */
+  lanes: z.array(z.enum(LANES)).min(1).optional(),
+});
+
+/** A test account as configured. */
+export type AccountConfig = z.infer<typeof AccountSchema>;
+
+/**
+ * An alias: one account, or a pool of accounts (REQ-ENV-09/AC1). `shared: true` lets cases running at the same time
+ * use the same account (e.g. a read-only admin); otherwise each running case holds its account for itself.
+ */
+const AccountEntrySchema = z.union([
+  AccountSchema.extend({ shared: z.boolean().default(false) }),
+  z.strictObject({ pool: z.array(AccountSchema).min(1).max(200), shared: z.boolean().default(false) }),
+]);
+
+/** An alias entry of `accounts`. */
+export type AccountEntry = z.infer<typeof AccountEntrySchema>;
+
+/** The accounts of an alias, in order, and whether running cases may share them. */
+export function accountMembers(entry: AccountEntry): { members: AccountConfig[]; shared: boolean } {
+  if ("pool" in entry) return { members: entry.pool, shared: entry.shared };
+  const { shared, ...account } = entry;
+  return { members: [account], shared };
+}
+
 /** Schema of `.qa/envs/<profile>.yaml` (REQ-ENV-01). */
 export const EnvProfileSchema = z.strictObject({
   base_url: z.url(),
@@ -42,16 +80,14 @@ export const EnvProfileSchema = z.strictObject({
   version_path: z.string().startsWith("/").optional(),
   /** Field of the version response holding the deployed SHA. */
   version_field: z.string().default("sha"),
-  /** Test accounts by alias (`user:standard`); credentials are `secret://` references or plain user names. */
+  /**
+   * Test accounts by alias (`user:standard`); credentials are `secret://` references or plain user names. An alias is
+   * one account or a pool of accounts handed out one per running case (REQ-ENV-09).
+   */
   accounts: z
     .record(
       z.string().regex(/^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$/, "Use aliases like user:standard"),
-      z.strictObject({
-        username: SecretOrText,
-        password: z.string().regex(/^secret:\/\/[a-z0-9-]+\/.+$/, "Passwords must be secret:// references"),
-        /** Extra fields merged into the login body for this alias, e.g. `{ ttl_seconds: 0 }` for an expired session. */
-        login_extra: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}),
-      }),
+      AccountEntrySchema,
     )
     .default({}),
   login: LoginSchema.optional(),

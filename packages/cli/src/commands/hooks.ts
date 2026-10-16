@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
-import type { ResolvedEnvironment } from "@qajitsu/core";
+import { accountMembers, type ResolvedEnvironment } from "@qajitsu/core";
 import type { RunSession } from "../session.js";
 
 /** Runs a hook script: command, argument array, environment, working folder and timeout. */
@@ -69,8 +69,8 @@ export async function runRunHook(
     return { ok: false, script, log };
   }
   // Account secrets are known to the masker before the hook writes anything (invariant 8).
-  for (const account of Object.values(env.profile.accounts))
-    for (const value of Object.values(account))
+  for (const entry of Object.values(env.profile.accounts))
+    for (const value of accountMembers(entry).members.flatMap((m) => [m.username, m.password]))
       if (typeof value === "string" && value.startsWith("secret://"))
         await session.resolveSecret(value).catch(() => undefined);
   const [command, args] = /\.(mjs|cjs|js)$/.test(file) ? [process.execPath, [file]] : [file, []];

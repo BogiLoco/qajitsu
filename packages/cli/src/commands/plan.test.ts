@@ -145,6 +145,72 @@ describe("qajitsu plan / approve (REQ-PLAN-01..06, REQ-GEN-05)", () => {
     expect(result.out).toContain("Changes v1 → v2:\n~ TC-01");
   });
 
+  /** The fixture draft with a placeholder instead of TC-01's expected total. */
+  const placeholderDraft = () => {
+    const bad = structuredClone(draft) as {
+      cases: { steps: { expect: { fields?: Record<string, unknown> } }[] }[];
+    };
+    const step = bad.cases[0]?.steps[0];
+    if (step) step.expect.fields = { total: "expected_rounded_value" };
+    return bad;
+  };
+
+  it("REQ-PLAN-09/AC3: a draft with a placeholder goes back to the planner once, automatically", async () => {
+    await fetched();
+    const result = await run(["plan", "DEMO-1"], {
+      script: [
+        ...fullScript.slice(0, 1),
+        { text: JSON.stringify(placeholderDraft()) },
+        { text: JSON.stringify(draft) },
+      ],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.out).not.toContain("Cannot be checked");
+    expect(await readFile(join(runDir(), "plan", "plan.v1.yaml"), "utf8")).toContain("total: 1.01");
+    const prompts = result.model.mock.doGenerateCalls.map((c) => JSON.stringify(c.prompt));
+    expect(prompts[2]).toContain("Problems found by code");
+    expect(prompts[2]).toContain("expected_rounded_value");
+    const events = parseEventLines(await readFile(join(runDir(), "journal", "events.jsonl"), "utf8")).events;
+    expect(events.find((e) => e.event === "plan.quality")?.details).toEqual({ flags: 1, revising: true });
+  });
+
+  it("REQ-PLAN-09/AC3+AC4: what is still flagged is listed in the review and needs its own 'yes', recorded", async () => {
+    await fetched();
+    const bad = JSON.stringify(placeholderDraft());
+    const result = await run(["plan", "DEMO-1"], {
+      script: [...fullScript.slice(0, 1), { text: bad }, { text: bad }],
+      answers: ["a", "no", "a", "yes"],
+    });
+    expect(result.out).toContain(
+      'Cannot be checked as written (1):\n  ! TC-01 S1 fields.total = "expected_rounded_value": looks like a placeholder, not a value to compare',
+    );
+    expect(result.out).toContain("Approved plan v1");
+    const record = JSON.parse(await readFile(join(runDir(), "run.json"), "utf8")) as {
+      data: { planFlags: { confirmedBy: string; flags: { field: string }[] } };
+    };
+    expect(record.data.planFlags.confirmedBy).toBe("qa-lead");
+    expect(record.data.planFlags.flags.map((f) => f.field)).toEqual(["fields.total"]);
+  });
+
+  it("REQ-PLAN-09/AC4: qj approve refuses flagged expectations without --confirm-placeholders", async () => {
+    await fetched();
+    const bad = JSON.stringify(placeholderDraft());
+    expect(
+      (await run(["plan", "DEMO-1"], { script: [...fullScript.slice(0, 1), { text: bad }, { text: bad }] }))
+        .out,
+    ).toContain("Cannot be checked as written (1)");
+    const refused = await run(["approve", "DEMO-1"]);
+    expect(refused.exitCode).toBe(3);
+    expect(refused.err).toContain("PLAN_UNCHECKABLE");
+    expect(refused.err).toContain("TC-01 S1 fields.total");
+    const confirmed = await run(["approve", "DEMO-1", "--confirm-placeholders", "--approver", "ci"]);
+    expect(confirmed.exitCode).toBe(0);
+    const record = JSON.parse(await readFile(join(runDir(), "run.json"), "utf8")) as {
+      data: { planFlags: { confirmedBy: string } };
+    };
+    expect(record.data.planFlags.confirmedBy).toBe("ci");
+  });
+
   it("REQ-PLAN-05/AC2: approving with open questions needs an explicit 'yes'", async () => {
     await fetched();
     const withQuestions = {

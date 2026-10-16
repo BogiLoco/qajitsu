@@ -1,11 +1,12 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { Plan } from "@qajitsu/core";
+import type { Plan, UiScreen } from "@qajitsu/core";
 import {
   assertionLockDiff,
   blockingProblems,
   checkSpecSource,
   formatSpecProblems,
+  renderUiSnapshot,
   typecheckSpecs,
   type SpecProblem,
 } from "@qajitsu/verifier";
@@ -18,9 +19,10 @@ import { modelForRole, type AgentStageDeps } from "./roles-run.js";
 export const HEALER_MAX_ATTEMPTS = 2;
 
 /** System prompt of the healer role (REQ-EXEC-09). */
-export const HEALER_SYSTEM = `You are the healer of QAJitsu. A web test could not run because a selector or a wait did not match the page.
+export const HEALER_SYSTEM = `You are the healer of QAJitsu. A web or mobile test could not run because a selector or a wait did not match the page or the screen of the app.
 ${UNTRUSTED_DATA_RULES}
-You may change ONLY selectors (testid:, role:, label:, text:, css:) and waits (ui.waitFor). You must keep every step(), every verify() call and every plan.expect(...) exactly as they are, and you must not add try/catch. Code checks this and rejects any other change.
+You may change ONLY selectors (testid:, role:, label:, text:, css: on the web; testid:, label:, text: in a native app) and waits (ui.waitFor).
+Prefer a selector listed for the element under "What the page or screen showed at the failure"; those are the ones that find it. You must keep every step(), every verify() call and every plan.expect(...) exactly as they are, and you must not add try/catch. Code checks this and rejects any other change.
 Answer with the complete spec in one \`\`\`ts code block and nothing else.`;
 
 /** What the healer sees about the failure. */
@@ -32,6 +34,8 @@ export interface HealRequest {
   readonly error: string;
   /** DOM of the page at the failure (masked), when available. */
   readonly dom?: string | undefined;
+  /** The elements of the page or screen at the failure (masked), when recorded (REQ-EXEC-22/AC4). */
+  readonly screen?: UiScreen | undefined;
   /** 1-based heal attempt. */
   readonly attempt: number;
 }
@@ -66,6 +70,14 @@ export async function healSpec(
       "```",
       "## Error",
       untrusted("error", request.error),
+      ...(request.screen
+        ? [
+            untrusted(
+              "ui/failure",
+              renderUiSnapshot([request.screen], 120, "What the page or screen showed at the failure"),
+            ),
+          ]
+        : []),
       ...(request.dom
         ? ["## Page DOM at the failure (truncated)", untrusted("dom", request.dom.slice(0, 20_000))]
         : []),
@@ -83,7 +95,7 @@ export async function healSpec(
   if (code !== undefined) {
     problems = [
       ...assertionLockDiff(original, code),
-      ...blockingProblems(checkSpecSource(code, request.caseId, plan)),
+      ...blockingProblems(checkSpecSource(code, request.caseId, plan, deps.specChecks)),
     ];
   }
   let file: string | undefined;

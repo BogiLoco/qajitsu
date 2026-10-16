@@ -66,6 +66,13 @@ describe("invariant 2: agents never write results or evidence (REQ-VER-03)", () 
       { tool: "write_file", input: { path: "imported/cases.json", content: '{"cases":[]}' } },
     ],
     [
+      "records a screen with the element it wants the plan check to accept (REQ-EXEC-22/AC8)",
+      {
+        tool: "write_file",
+        input: { path: "ui/snapshot.json", content: '[{"where":"/","platform":"web","elements":[]}]' },
+      },
+    ],
+    [
       "marks the canary as caught (REQ-VER-09)",
       { tool: "move_file", input: { path: "specs/x.json", to: "Checks/canary.json" } },
     ],

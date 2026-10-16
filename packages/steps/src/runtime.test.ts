@@ -348,4 +348,218 @@ describe("case runtime (REQ-EXEC-02, REQ-EVD-01, REQ-CFG-06)", () => {
       pass: false,
     });
   });
+
+  it("REQ-EXEC-06/AC1: a native app is open from the start, so a step may check an element before any action", async () => {
+    const custom = (type: "web" | "mobile") =>
+      PlanSchema.parse({
+        schema: 1,
+        ticket: "DEMO-6",
+        version: 1,
+        cases: [
+          {
+            id: "TC-01",
+            title: "first screen",
+            type,
+            priority: "high",
+            source: [{ kind: "ac", id: "AC1" }],
+            steps: [
+              {
+                id: "S1",
+                action: "Look at the cart",
+                expect: { description: "d", elements: { "testid:cart-count": { text: "Cart: 0 items" } } },
+              },
+            ],
+            evidence: ["screenshot"],
+          },
+        ],
+      });
+    const driver = {
+      property: () => Promise.resolve("Cart: 0 items"),
+      screenshot: () => Promise.resolve(new Uint8Array()),
+      url: () => "app:launch",
+      dom: () => Promise.resolve(""),
+    } as unknown as UiDriver;
+    const runtime = (type: "web" | "mobile") =>
+      createCaseRuntime({
+        plan: custom(type),
+        caseId: "TC-01",
+        attempt: 1,
+        baseUrl: "http://127.0.0.1:3000",
+        transport: () => Promise.reject(new Error("no API")),
+        masker: createMasker(),
+        allowedOrigins: ["http://127.0.0.1:3000"],
+        accounts: {},
+        now: () => 0,
+        ui: () => Promise.resolve(driver),
+      });
+    const mobile = runtime("mobile");
+    mobile.beginStep("S1");
+    await mobile.verify("S1", "elements.testid:cart-count.text");
+    expect((await mobile.finish()).assertions[0]).toMatchObject({ actual: "Cart: 0 items", pass: true });
+    // A browser starts empty: checking an element before opening a page is a test error, not a verdict.
+    const web = runtime("web");
+    web.beginStep("S1");
+    await expect(web.verify("S1", "elements.testid:cart-count.text")).rejects.toThrow(
+      "verify('S1', 'elements.testid:cart-count.text') needs an open page: call ui.goto() first",
+    );
+  });
+
+  it("REQ-EXEC-22/AC4: a failed UI attempt keeps the elements of the page, masked; a driver without them adds nothing", async () => {
+    const custom = PlanSchema.parse({
+      schema: 1,
+      ticket: "DEMO-6",
+      version: 1,
+      cases: [
+        {
+          id: "TC-01",
+          title: "first screen",
+          type: "mobile",
+          priority: "high",
+          source: [{ kind: "ac", id: "AC1" }],
+          steps: [
+            {
+              id: "S1",
+              action: "Look at the cart",
+              expect: { description: "d", elements: { "testid:cart-count": { text: "Cart: 1 item" } } },
+            },
+          ],
+          evidence: ["screenshot"],
+        },
+      ],
+    });
+    const masker = createMasker({ secrets: ["s3cret-value"] });
+    const run = async (elements: boolean) => {
+      const driver = {
+        property: () => Promise.resolve("Cart: 0 items"),
+        screenshot: () => Promise.resolve(new Uint8Array()),
+        url: () => "app:launch",
+        dom: () => Promise.resolve("<hierarchy/>"),
+        ...(elements
+          ? {
+              elements: () => Promise.resolve([{ testid: "cart-count", text: "Cart: 0 items s3cret-value" }]),
+            }
+          : {}),
+      } as unknown as UiDriver;
+      const runtime = createCaseRuntime({
+        plan: custom,
+        caseId: "TC-01",
+        attempt: 1,
+        baseUrl: "http://127.0.0.1:3000",
+        transport: () => Promise.reject(new Error("no API")),
+        masker,
+        allowedOrigins: ["http://127.0.0.1:3000"],
+        accounts: {},
+        now: () => 0,
+        ui: () => Promise.resolve(driver),
+      });
+      runtime.beginStep("S1");
+      await runtime.verify("S1", "elements.testid:cart-count.text");
+      return runtime.finish();
+    };
+    const record = await run(true);
+    expect(record.outcome).toBe("failed");
+    const item = record.evidence.find((e) => e.name === "failure-elements.json");
+    expect(item?.kind).toBe("dom");
+    expect(String(item?.content)).toContain('"testid": "cart-count"');
+    expect(String(item?.content)).not.toContain("s3cret-value");
+    expect((await run(false)).evidence.map((e) => e.name)).not.toContain("failure-elements.json");
+  });
+
+  it("REQ-EXEC-21/AC7: a screen that shows no element QAJitsu can address ends the attempt as an error with the reason, never FAILED or PASSED", async () => {
+    const custom = PlanSchema.parse({
+      schema: 1,
+      ticket: "DEMO-9",
+      version: 1,
+      cases: [
+        {
+          id: "TC-01",
+          title: "canvas game",
+          type: "mobile",
+          priority: "high",
+          source: [{ kind: "ac", id: "AC1" }],
+          steps: [
+            {
+              id: "S1",
+              action: "Start the game",
+              expect: { description: "d", elements: { "text:Score: 0": { visible: true } } },
+            },
+          ],
+          evidence: ["screenshot"],
+        },
+      ],
+    });
+    const run = async (elements: readonly unknown[], fails: boolean) => {
+      const driver = {
+        click: () =>
+          fails ? Promise.reject(new Error("element 'text:Start' not found")) : Promise.resolve(),
+        property: () => Promise.resolve(false),
+        screenshot: () => Promise.resolve(new Uint8Array()),
+        url: () => "app:launch",
+        dom: () => Promise.resolve("<hierarchy/>"),
+        elements: () => Promise.resolve(elements),
+      } as unknown as UiDriver;
+      const runtime = createCaseRuntime({
+        plan: custom,
+        caseId: "TC-01",
+        attempt: 1,
+        baseUrl: "http://127.0.0.1:3000",
+        transport: () => Promise.reject(new Error("no API")),
+        masker: createMasker(),
+        allowedOrigins: ["http://127.0.0.1:3000"],
+        accounts: {},
+        now: () => 0,
+        ui: () => Promise.resolve(driver),
+      });
+      runtime.beginStep("S1");
+      try {
+        await runtime.uiOp({ op: "click", selector: "text:Start" });
+        await runtime.verify("S1", "elements.text:Score: 0.visible");
+        return await runtime.finish();
+      } catch (error) {
+        return runtime.finish(error);
+      }
+    };
+    const reason = /shows no element QAJitsu can address/;
+    const action = await run([], true);
+    expect(action.outcome).toBe("error");
+    expect(action.error).toMatch(reason);
+    expect(action.error).toContain("element 'text:Start' not found");
+    const check = await run([], false);
+    // The click found its element, so the empty screen after it is the application's doing: FAILED as usual.
+    expect(check.outcome).toBe("failed");
+    const untouched = await (async () => {
+      const driver = {
+        property: () => Promise.resolve(false),
+        screenshot: () => Promise.resolve(new Uint8Array()),
+        url: () => "app:launch",
+        dom: () => Promise.resolve("<hierarchy/>"),
+        elements: () => Promise.resolve([]),
+      } as unknown as UiDriver;
+      const runtime = createCaseRuntime({
+        plan: custom,
+        caseId: "TC-01",
+        attempt: 1,
+        baseUrl: "http://127.0.0.1:3000",
+        transport: () => Promise.reject(new Error("no API")),
+        masker: createMasker(),
+        allowedOrigins: ["http://127.0.0.1:3000"],
+        accounts: {},
+        now: () => 0,
+        ui: () => Promise.resolve(driver),
+      });
+      runtime.beginStep("S1");
+      try {
+        await runtime.verify("S1", "elements.text:Score: 0.visible");
+        return await runtime.finish();
+      } catch (error) {
+        return runtime.finish(error);
+      }
+    })();
+    expect(untouched.outcome).toBe("error");
+    expect(untouched.error).toMatch(reason);
+    expect(untouched.assertions).toEqual([]);
+    // With elements on the screen a missing one is the product's or the test's problem: the usual outcomes.
+    expect((await run([{ text: "Menu" }], true)).error).not.toMatch(reason);
+    expect((await run([{ text: "Menu" }], false)).outcome).toBe("failed");
+  });
 });

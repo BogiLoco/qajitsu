@@ -171,6 +171,38 @@ describe("plan store (REQ-PLAN-02, REQ-PLAN-04, REQ-PLAN-06)", () => {
     expect(md).not.toContain("Already covered");
   });
 
+  it("REQ-PLAN-04/AC1: the reviewer sees element expectations of web and mobile steps", () => {
+    const first = draft.cases[0];
+    if (!first) throw new Error("fixture");
+    const md = renderPlanMarkdown(
+      parsePlan({
+        schema: 1,
+        ticket: "DEMO-4",
+        version: 1,
+        ...draft,
+        cases: [
+          {
+            ...first,
+            type: "web",
+            steps: [
+              {
+                id: "S1",
+                action: "Open checkout",
+                expect: {
+                  description: "Place order is disabled",
+                  elements: { "testid:place-order": { enabled: false } },
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(md).toContain(
+      'Expect: Place order is disabled (elements {"testid:place-order":{"enabled":false}})',
+    );
+  });
+
   it("REQ-CTX-06/AC2: existing tests that already cover the ticket are listed for the reviewer", () => {
     const md = renderPlanMarkdown(
       parsePlan({

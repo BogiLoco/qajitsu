@@ -56,6 +56,8 @@ export const DEFAULT_PROTECTED_PATHS: readonly string[] = [
   "map/",
   // Live screenshots of a running case for `qj watch` (REQ-OBS-09), written by the trusted parent.
   "live/",
+  // Pages and screens recorded before planning (REQ-EXEC-22/AC7): the plan check accepts elements they show.
+  "ui/",
   "run.json",
 ];
 

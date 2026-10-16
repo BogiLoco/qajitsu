@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:http";
 import {
   QajitsuError,
   loadApprovedPlan,
+  openRunWorkspace,
   parseEventLines,
   processAlive,
   type Plan,
@@ -186,7 +187,12 @@ export async function serveWatch(
       data?: Record<string, unknown>;
     };
     if (!final && record.data?.["results"] !== undefined) {
-      const verdict = await computeVerdict(session, () => new Date(now())).catch(() => undefined);
+      // The run wrote run.json after this watch opened it: statuses are computed from the record as it is now (its
+      // check hashes included), never from the copy opened at the start.
+      const current = await openRunWorkspace(ws.root, ws.ticket, ws.runId).catch(() => undefined);
+      const verdict = current
+        ? await computeVerdict({ ...session, ws: current }, () => new Date(now())).catch(() => undefined)
+        : undefined;
       if (verdict) final = new Map(verdict.cases.map((c) => [c.caseId, c.status]));
     }
     const holder = Number((await readFile(ws.path("run.lock"), "utf8").catch(() => "")).trim());

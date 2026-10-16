@@ -94,3 +94,25 @@ Deferred: AC4 (a verified run with a cloud provider) is parked until a cloud key
 
 - [x] AC1: Tokens and estimated cost per call, role, model and run are recorded in the journal.
 - [x] AC2: A per-run token budget stops the run with BLOCKED when exceeded.
+
+### REQ-LLM-08 · Claude Code subscription as a local model provider
+
+- Status: deprecated
+- Priority: could
+- Stage: later
+- Related: REQ-LLM-01, REQ-LLM-02, REQ-LLM-03, REQ-LLM-07, ADR-0003, INV-2, INV-8, INV-11
+- Deprecated: removed by the owner on 2026-10-16. Anthropic does not allow third-party products to offer claude.ai login or subscription limits (Agent SDK overview).
+- Replaced by REQ-GEN-07
+
+On a workstation a tester can let QAJitsu's roles run on their Claude Code subscription instead of paid API calls,
+with a different Claude model per role. CI keeps using API keys. Claude Code only answers prompts: its own tools never
+run, and every QAJitsu tool still goes through the guard.
+
+**Acceptance criteria**
+
+- [ ] AC1: A provider of `type: claude-code` runs the local `claude` command in print mode (argument array, no shell) with the role's model (`claude-code/opus`, `claude-code/sonnet`, `claude-code/haiku` or a full model id), so `models.roles` can give each role its own model.
+- [ ] AC2: Claude Code's built-in tools are disabled and the user's and project's Claude Code settings, hooks and CLAUDE.md files are not loaded; no session is stored.
+- [ ] AC3: Structured answers use Claude Code's JSON schema output and pass the same validation and repair as other providers; a missing `claude` command, a logged-out session or a usage limit fails the stage with the reason, never a guessed result.
+- [ ] AC4: Roles that use tools get QAJitsu's read-only tools through an MCP server of QAJitsu that applies the guard and journals every call; without it the provider's profile has no tools.
+- [ ] AC5: Tokens and the cost Claude Code reports are recorded per call and role like other providers; the run notes that the subscription was used.
+- [ ] AC6: In CI (`CI` set) a `claude-code` role is refused with a message to configure an API provider.

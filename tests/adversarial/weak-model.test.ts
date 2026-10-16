@@ -63,4 +63,15 @@ describe("weak models (REQ-LLM-05/AC2)", () => {
     expect(statuses["TC-01"]).not.toBe("PASSED");
     expect(["BLOCKED", "NEEDS_REVIEW", "FAILED"]).toContain(statuses["TC-01"]);
   }, 180_000);
+
+  it("REQ-EXEC-03/AC2 + REQ-LLM-05/AC2: an author that verifies after the step never gets PASSED", async () => {
+    // The check of the buggy field moved behind the step: rejected before anything runs, never counted as done.
+    const outside = (await fixture("TC-01")).replace(
+      /\n(\s*)(verify\("S1", "fields\.total"[^\n]*\n)([\s\S]*?)\n\}\s*$/,
+      "\n$3\n  $2}\n",
+    );
+    expect(outside).not.toBe(await fixture("TC-01"));
+    const { statuses } = await runWithAuthor([code(outside), code(outside), code(await fixture("TC-02"))]);
+    expect(statuses["TC-01"]).toBe("BLOCKED");
+  }, 180_000);
 });

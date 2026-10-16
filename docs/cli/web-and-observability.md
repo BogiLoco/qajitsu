@@ -34,8 +34,15 @@ export async function run({ step, verify, plan, api, ui }: CaseContext): Promise
 }
 ```
 
-- Selectors: `testid:<id>`, `role:<role>[:<name>]`, `label:<text>`, `text:<text>`; `css:<selector>` works but is flagged
-  for review (REQ-EXEC-05/AC2).
+- Selectors, the most stable first (REQ-EXEC-21): `testid:<id>`, `role:<role>[:<name>]`, `label:<text>`,
+  `placeholder:<text>`, `alt:<text>`, `title:<text>`, `text:<text>`, `id:<dom id>`; `css:<selector>` works but is
+  flagged for review (REQ-EXEC-05/AC2). `testid:` finds the attribute set in `web.test_id_attribute` (`data-testid` by
+  default; e.g. `data-qa`, `data-test`, `data-cy`). An application without test ids is tested through roles, labels
+  and texts.
+- Native apps (REQ-EXEC-21/AC2+AC3): `testid:<id>` is the accessibility id and, on Android, also the resource id
+  (`<package>:id/<id>` or `<id>`); then `label:`, `text:`, `id:<resource id>` and `xpath:<path>` as the last resort,
+  flagged for review. A page or screen that shows no element QAJitsu can address (a canvas, a game, an app without
+  accessibility semantics) makes the case BLOCKED with that reason.
 - UI expectations in the plan: `texts: [...]` (visible text) and `elements: { "<selector>": { visible, enabled, checked, text, value } }`.
 - `verify()` values come from the live page and the approved plan; values written in the spec are ignored.
 
@@ -47,7 +54,14 @@ video; HAR (credentials masked) and the browser console for every case. `web.vid
 
 ```yaml
 # .qa/qa.project.yaml
-web: { browser: chromium, video: retain-on-failure, headless: true, action_timeout_ms: 5000 }
+web:
+  {
+    browser: chromium,
+    video: retain-on-failure,
+    headless: true,
+    action_timeout_ms: 5000,
+    test_id_attribute: data-testid,
+  }
 environments: { workers: 2 } # cases in parallel (REQ-EXEC-10)
 # .qa/envs/<profile>.yaml
 web_session: { storage: sessionStorage, key: token } # where the app keeps its session token
@@ -55,7 +69,8 @@ web_session: { storage: sessionStorage, key: token } # where the app keeps its s
 
 ## Healer (REQ-EXEC-09)
 
-A web case that could not run (selector or wait error, not a failed assertion) gets up to two healed attempts. The
+A web or mobile case that could not run (selector or wait error, not a failed assertion) gets up to two healed
+attempts, with the elements of the page or screen at the failure (REQ-EXEC-22/AC4). The
 healer may change selectors and waits only: an AST diff rejects any change to `step()`, `verify()`,
 `plan.expect(...)` and any added `try/catch`. Healed specs live in `specs/healed/vN/`; the original stays. A healed
 case that passes is **NEEDS_REVIEW**, never PASSED.

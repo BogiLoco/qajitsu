@@ -214,6 +214,7 @@ session. It reports observations for a human to assess, never statuses.
 - [x] AC4: A person can turn an observation into a draft plan case; it runs only after plan approval.
 - [x] AC5: The time box and step budget are enforced by code; when reached the session stops and keeps what it recorded.
 - [x] AC6: Each session ends with a report for human review (`report.md`, `report.html`): goal, how it ended, the observations with the screenshots of their steps, the action timeline, and the video, trace, network and console files; observations are proposals for a person, never statuses.
+- [x] AC7: `--headed` shows the browser while the agent explores and `--slow-mo <ms>` slows every action down, checked like `qj run` (a display is needed); both are journaled with the session.
 
 ### REQ-EXEC-16 · Run one case with a live view
 
@@ -268,3 +269,95 @@ difference asks a person to look; it does not fail the case.
 - [ ] AC2: A difference above the threshold makes the case NEEDS_REVIEW (never FAILED, never PASSED) with the design, the screenshot, the diff and the changed regions marked (REQ-EVD-08) as evidence; the exported frame is kept in the evidence with its SHA-256 and the Figma version it came from.
 - [ ] AC3: When a Figma layer is named like an element selector (e.g. `testid:pay`), its position, size, colour, font and text are compared with the element in the browser or on the device within configured tolerances; each difference is listed with expected (design) and actual (app) values and marked on the screenshot.
 - [ ] AC4: Figma not reachable, a missing node or a missing token makes the design check BLOCKED with the reason; the rest of the step is checked as usual.
+
+### REQ-EXEC-19 · Execution lanes and sequential runs
+
+- Status: implemented
+- Priority: should
+- Stage: later
+- Related: INV-1, REQ-EXEC-10, REQ-EXEC-13, REQ-EXEC-16, REQ-ENV-09
+
+API, web and mobile cases of one run run at the same time in separate lanes, each with its own number of cases at
+once; a run can also go one case at a time.
+
+**Acceptance criteria**
+
+- [x] AC1: API, web and mobile cases run in separate lanes at the same time; `execution.workers.api` and `execution.workers.web` set how many cases of each run at once (default `environments.workers`), and mobile cases start as soon as their devices are ready instead of after the other cases.
+- [x] AC2: `qj run --sequential` (or `execution.sequential: true`) runs one case at a time in plan order across all lanes and devices; `--cases` runs only the named cases.
+- [x] AC3: `execution.web_combinations` (default 1) runs that many browser and viewport combinations of `web.matrix` at the same time; each combination keeps its own results and evidence.
+- [x] AC4: Order and concurrency never change how a status is computed: each case writes its own results file and evidence, and its journal events carry the case and the lane.
+- [x] AC5: `--headed` and `--step` keep one case at a time.
+
+### REQ-EXEC-20 · Several different mobile devices
+
+- Status: implemented
+- Priority: should
+- Stage: later
+- Related: REQ-EXEC-06, REQ-EXEC-10, REQ-ENV-06, REQ-GEN-06, REQ-EXEC-19
+
+Mobile cases can run on several different devices at once: to finish sooner, or to check every case on each device.
+
+**Acceptance criteria**
+
+- [x] AC1: `mobile.android.emulators` lists emulator profiles (name, AVD, system image, hardware profile), each started as its own emulator with its own Appium session; `mobile.ios.farm.devices` lists device and OS version pairs for a device farm.
+- [x] AC2: `mobile.distribute: split` divides the mobile cases among the devices; `matrix` runs every mobile case on every device, the first device being the primary run.
+- [x] AC3: In matrix mode each device keeps its own results and evidence; a case is PASSED only when it passed on every device, and the report shows the status per device.
+- [x] AC4: A device that cannot start is reported with the reason and the other devices go on: in matrix mode its results are BLOCKED, in split mode its cases run on the devices that started.
+- [x] AC5: `qj setup` installs the system image and creates the AVD of every emulator profile, and its memory precheck counts every emulator.
+
+### REQ-EXEC-21 · Selectors for any web or mobile application
+
+- Status: implemented
+- Priority: must
+- Stage: later
+- Related: REQ-EXEC-05, REQ-EXEC-06, REQ-EXEC-09, REQ-PLAN-09, INV-4
+
+Tests must work on applications as they are: with any test id attribute, with Android resource ids only, or with no
+test ids at all. Selector kinds cover what each platform offers, from the most stable to the last resort.
+
+**Acceptance criteria**
+
+- [x] AC1: The web test id attribute is configurable (`web.test_id_attribute`, default `data-testid`, e.g. `data-qa`, `data-test`, `data-cy`); `testid:` selectors, the element inventory and the prompts use it.
+- [x] AC2: On Android `testid:<id>` finds the accessibility id (content-desc) or the resource id (`<package>:id/<id>` or `<id>`); on iOS the accessibility identifier.
+- [x] AC3: Web selectors also include `placeholder:`, `alt:`, `title:` and `id:` (DOM id), and `role:<role>:<name>` and `label:` work without any test id; mobile selectors include `text:`, `label:`, `id:` (resource id) and `xpath:` as the last resort.
+- [x] AC4: The element inventory also finds Android `@+id/...` in layouts and code, Flutter `Key('...')` and `Semantics(identifier:)`, SwiftUI `.accessibilityIdentifier(...)`, and the configured web attribute.
+- [x] AC5: The prompts of the author and the healer list the selector kinds in order of stability and contain no element ids or pages of the demo application; a test checks that.
+- [x] AC6: Without any test id in the code, the plan check does not judge element names (nothing to compare against) and the author relies on roles, labels, texts and the UI snapshot (REQ-EXEC-22); `css:` and `xpath:` selectors are flagged in review.
+- [x] AC7: A screen that exposes no accessible elements (canvas, game, Flutter without semantics) makes the case BLOCKED with that reason, never PASSED.
+
+### REQ-EXEC-22 · Snapshot of the running application for the author and the healer
+
+- Status: implemented
+- Priority: must
+- Stage: later
+- Related: REQ-EXEC-01, REQ-EXEC-09, REQ-EXEC-21, REQ-ENV-01, INV-2, INV-8, INV-10
+
+The author sees what the application really shows instead of guessing selectors from code: code opens the running
+application and records its accessible elements; the agent only reads that record.
+
+**Acceptance criteria**
+
+- [x] AC1: Before the author writes a UI case, the trusted parent opens the pages the case names (web, after logging in with the case's account alias) or the start screen of the app (mobile) on the run's environment and records the accessibility snapshot: role, name, label, text, test id, resource id and a ready selector for each element.
+- [x] AC2: The snapshot is masked like evidence before an agent sees it, is limited in size, and is passed to the author and the healer as untrusted data; recording it is journaled and produces no results or evidence.
+- [x] AC3: A selector the author writes that matches no element of the snapshot is reported back to the author with the closest elements before the spec runs.
+- [x] AC4: When a step fails because an element is missing, the healer gets the snapshot of the current page or screen, on web and on mobile (healing extends to mobile cases).
+- [x] AC5: Snapshots respect the environment allowlist; production is never opened for a snapshot.
+- [x] AC6: When the snapshot cannot be taken (environment down, page not reachable), the author works without it and the run says so; the case's status still comes only from the runner.
+- [x] AC7: Without any repository (only a test environment), the snapshot is the source of element names: the planner also gets a snapshot of the pages and screens it can reach from the environment's start page or the app's start screen, so plan expectations use names the application really shows.
+- [x] AC8: A plan expectation naming an element that no snapshot contains is flagged in the review like an unknown selector (REQ-PLAN-09/AC8), whether or not the code is available.
+- [x] AC9: `qj plan --build` starts the environment from the run's worktree and the devices of mobile cases (building the app when configured) only to record the pages and the app's first screen for the planner, then stops them; a start failure is reported and planning goes on without them.
+
+### REQ-EXEC-23 · Mobile app without access to its code
+
+- Status: implemented
+- Priority: should
+- Stage: later
+- Related: REQ-EXEC-06, REQ-EXEC-22, REQ-ENV-06, INV-10
+
+Mobile cases can run when the team has only a test build of the app, not its repository.
+
+**Acceptance criteria**
+
+- [x] AC1: `mobile.android.app` and `mobile.ios.app` also accept a file (`source: file`, a local `.apk`/`.ipa`/`.app`), a download (`source: url`, checked against the allowlist, with a SHA-256 to compare), an app already installed on the device or emulator (`source: installed`, by app id), and an app already uploaded to the device farm.
+- [x] AC2: The run records the app's version and SHA-256 when known, and the report shows them in place of the commit.
+- [x] AC3: An app that cannot be obtained or whose SHA-256 differs makes the mobile cases BLOCKED with the reason.

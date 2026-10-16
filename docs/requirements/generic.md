@@ -91,3 +91,24 @@ QAJitsu was tested with, without touching tools the user installed and without c
 - [x] AC7: Sources can be private mirrors (npm registry with a `secret://` token, Playwright download host, Java and Android mirrors, Homebrew), through a proxy and with a company CA certificate, configured per machine or per project; `qj doctor --online` checks they answer. `qj setup --download <dir>` collects everything for an offline machine and `qj setup --from <dir>` installs from it.
 - [x] AC8: After installing, a smoke test proves the tools work (Java runs, the SDK lists its packages, the emulator's acceleration check passes, Appium lists its drivers, the browser starts); `--smoke` also boots the emulator once. A failure names the tool and the next step; nothing is reported ready that did not pass.
 - [x] AC9: `qj doctor --fix` runs `qj setup` for what `qj doctor` found missing; tools' own usage analytics (Homebrew, Appium) are switched off in the processes QAJitsu starts.
+
+### REQ-GEN-07 · External agent mode: Claude Code subagents do the agents' work
+
+- Status: proposed
+- Priority: should
+- Stage: later
+- Related: REQ-GEN-04, REQ-PLAN-04, REQ-PLAN-07, REQ-PLAN-09, REQ-EXEC-03, REQ-EXEC-09, REQ-LLM-02, REQ-PLAN-10, ADR-0003, ADR-0009, INV-1, INV-2, INV-3, INV-4
+- Note: TO BE REVIEWED (owner, 2026-10-16): the idea is agreed, the design is not; think it through before accepting (protection without the guard while Claude Code runs, how drafts reach QAJitsu, how the run shows an external agent wrote them).
+
+A tester works in their own Claude Code session (their subscription) and lets its subagents, each on its own model,
+write the analysis, the plan, the specs and the heals. QAJitsu calls no model: it checks every draft with the same
+code as its own agents' output, executes, and computes the verdict. A person still approves the plan.
+
+**Acceptance criteria**
+
+- [ ] AC1: The plugin ships subagents `qa-analyst`, `qa-planner`, `qa-author` and `qa-healer`, each with its own model setting, that write drafts into the run's `drafts/` folder only.
+- [ ] AC2: `qj plan <TICKET> --draft <dir>` takes the analysis and plan drafts instead of calling models and applies every check of planning (schema, verbatim sources, plan quality, snapshot); problems are printed for the subagent to fix, and a clean draft becomes the next plan version for review.
+- [ ] AC3: `qj run <TICKET> --no-author` calls no model: cases without a spec are BLOCKED with the reason, and every spec passes the static checks, assertion lock and plan coverage as today; `qj heal <TICKET> --case <id> --draft <file>` accepts a healed spec only through the assertion-lock diff, and a healed case is never PASSED.
+- [ ] AC4: Plugin hooks deny Claude Code writes to `results/`, `evidence/`, `plan/plan.approved.yaml`, `run.json`, `checks/`, `manual/` and `journal/`, and deny running `qj approve`, `qj answer` and `qj publish` from the session.
+- [ ] AC5: `qj approve` refuses to run inside an agent session (Claude Code's environment) and asks the person in their own terminal; approval stays human as in REQ-PLAN-07/AC4.
+- [ ] AC6: Every draft taken is journaled with its SHA-256 and the run records that its drafts came from an external agent; hashes and publish gates catch any change to results, evidence, checks or the approved plan, whatever wrote it.

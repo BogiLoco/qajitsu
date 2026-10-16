@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { resolve, sep } from "node:path";
 import { z } from "zod";
-import { AdapterError, type EnvProvider, type ResolvedEnvironment } from "@qajitsu/core";
+import { AdapterError, accountMembers, type EnvProvider, type ResolvedEnvironment } from "@qajitsu/core";
 
 const allowed = (env: ResolvedEnvironment, url: URL): void => {
   if (url.origin !== env.origin) {
@@ -116,6 +116,11 @@ export async function loginAccounts(
     /** Runs a login script (replaced in tests); default: `execFile` with an argument array. */
     readonly runScript?: ScriptRunner;
   },
+  /**
+   * The pool member to log in per alias (REQ-ENV-09/AC2); only these aliases are logged in. Without it every alias
+   * logs in with its first account.
+   */
+  select?: Readonly<Record<string, number>>,
 ): Promise<{
   accounts: Record<string, Record<string, string>>;
   secrets: string[];
@@ -125,7 +130,16 @@ export async function loginAccounts(
   const sessions: Record<string, string> = {};
   const secrets: string[] = [];
   const login = env.profile.login;
-  for (const [alias, account] of Object.entries(env.profile.accounts)) {
+  const chosen = Object.entries(
+    select ?? Object.fromEntries(Object.keys(env.profile.accounts).map((a) => [a, 0])),
+  );
+  for (const [alias, index] of chosen) {
+    const entry = env.profile.accounts[alias];
+    const account = entry ? accountMembers(entry).members[index] : undefined;
+    if (!account)
+      throw new AdapterError("ENV_ACCOUNT_UNKNOWN", `No account ${String(index + 1)} for ${alias}.`, {
+        alias,
+      });
     const username = account.username.startsWith("secret://")
       ? await deps.resolveSecret(account.username)
       : account.username;

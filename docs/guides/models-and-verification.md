@@ -98,9 +98,17 @@ Hints are suggestions: they never change a status or a count. They appear as a s
 the status in the report and in their own section of the Jira comment. `checks/triage.json` is hashed into
 `run.json` like the other check records, so an edited hint fails the `checks-intact` gate.
 
+After a run with BLOCKED cases the same role explains each one (REQ-VER-13): `spec` (the generated test is wrong),
+`plan` (an expectation names something the application does not show), `environment`, `tooling` (browser, device,
+Appium) or `configuration`, with one concrete next step. It sees the plan, the runner record with the error, the spec
+with line numbers, text evidence such as the page source, and log tails, and cites the `error`, spec lines, steps,
+evidence or logs. Code keeps only citations that exist. The hints are printed under the result table of `qj run`,
+appear in the matrix and report, and are kept in `checks/blocked.json`, hashed like the other records; they never
+change a status.
+
 ```yaml
 verification:
-  triage: on # off: no model calls for FAILED cases
+  triage: on # off: no model calls for FAILED or BLOCKED cases
 ```
 
 ## The canary (REQ-VER-09)

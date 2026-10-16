@@ -48,6 +48,10 @@ mobile:
     app: { source: ci, repo: app, artifact: app-debug, file: "*.apk" } # GitHub Actions / GitLab CI of the SHA
     # app: { source: path, repo: app, path: build/app.apk }
     # app: { source: build, repo: app, command: [./gradlew, assembleDebug], output: app/build/outputs/apk/debug/app-debug.apk }
+    # Without the app's repository (REQ-EXEC-23):
+    # app: { source: file, path: builds/shop-1.4.2.apk } # relative to the project folder, or absolute
+    # app: { source: url, url: https://builds.example.com/shop-1.4.2.apk, sha256: <64 hex> } # host in environments.allowlist
+    # app: { source: installed } # already on the device; started by app_id, nothing installed
     app_id: com.example.shop
     activity: .MainActivity
     deep_link_scheme: shop # ui.goto("/cart") opens shop://cart
@@ -70,9 +74,56 @@ gives each its own UiAutomator2 port on one Appium server and splits the mobile 
 its cases one after another (REQ-EXEC-10/AC2). A device farm opens N sessions. Without `emulator`, `devices` must
 be 1. Every emulator needs memory: two or three are realistic on a laptop.
 
+### Several different devices (REQ-EXEC-20)
+
+```yaml
+mobile:
+  distribute: matrix # every case on every device; split (default) divides the cases among them
+  android:
+    app: { source: ci, repo: app, artifact: app-debug, file: "*.apk" }
+    app_id: com.example.shop
+    emulators:
+      - {
+          name: pixel-8,
+          avd: qj-pixel-8,
+          system_image: "system-images;android-34;google_apis;arm64-v8a",
+          device: pixel_8,
+        }
+      - {
+          name: small,
+          avd: qj-small,
+          system_image: "system-images;android-30;google_apis;arm64-v8a",
+          device: small_phone,
+        }
+      - {
+          name: tablet,
+          avd: qj-tablet,
+          system_image: "system-images;android-33;google_apis;arm64-v8a",
+          device: pixel_tablet,
+        }
+  # iOS on a farm: ios.farm.devices: [{ name: iphone-15, device: iPhone 15, os_version: "17" }, ...]
+```
+
+Each profile is its own emulator (`device` is the avdmanager hardware profile) with its own Appium session; all of
+them run at the same time, one case at a time each. With `distribute: split` the cases are divided among them; with
+`matrix` every mobile case runs on every device: the first device writes the run's results, the others
+`results/devices/<name>/` with evidence under `devices/<name>/`, and a case is PASSED only when it passed on every
+device (the report shows `Devices: pixel-8 PASSED, small FAILED, tablet PASSED`). A device that does not start is
+reported with the reason: in matrix mode its results are BLOCKED, in split mode its cases go to the others.
+`qj setup` installs every system image and creates every AVD with its hardware profile; its memory check counts all
+emulators (about 2 GiB each plus 2 GiB). `mobile.devices` does not apply with a list.
+
 App binaries come from CI for exactly the analysed commit (REQ-ENV-06/AC1): the newest successful GitHub
 Actions run or GitLab pipeline of that SHA with the named artifact (GitLab: job name). Downloads go to the
 run's `env/app/`, which cleanup removes.
+
+When you have only a test build and no access to the app's code (REQ-EXEC-23), point `app` at a local file, at a
+download (its host must be in `environments.allowlist`, and its SHA-256 must match `sha256` or the mobile cases are
+BLOCKED with both values), or at the app already installed on the device (`source: installed`). The run records the
+app id, where it came from, its SHA-256 and, when the SDK's `aapt2` (or `adb` for an installed app) can read it, its
+version; the report shows them next to "Code". Without code, `qj plan` also records the app's first screen (and the
+environment's web pages) for the planner, so plan expectations use the names the app shows. An iOS app uploaded to a
+device farm (`farm.app`) needs no repository either.
 
 ## Security notes
 

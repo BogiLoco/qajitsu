@@ -10,6 +10,7 @@ import {
   checkSpecSource,
   formatSpecProblems,
   stepsTypesEntry,
+  stepsWithoutActions,
   typecheckSpecs,
 } from "./spec-checks.js";
 
@@ -109,6 +110,36 @@ describe("static checks of generated specs (REQ-EXEC-03)", () => {
     expect(checkSpecSource(lazy, "TC-01", plan).map((p) => [p.check, p.message])).toEqual([
       ["coverage", 'expectation S1 fields.total has no verify("S1", "fields.total", ...) call'],
     ]);
+  });
+
+  it("REQ-EXEC-03/AC2: verify() runs inside the function of its own step", () => {
+    const tc1 = readFileSync(
+      new URL("../../../fixtures/specs/demo-1/TC-01.spec.ts", import.meta.url),
+      "utf8",
+    );
+    expect(checkSpecSource(tc1, "TC-01", plan)).toEqual([]);
+    // Moved after the step: the runtime would throw; the static check says so before anything runs.
+    const outside = good.replace(
+      /\n\}\s*$/,
+      '\n  verify("S2", "status", 1, plan.expect("TC-02.S2.status"));\n}\n',
+    );
+    expect(messages(outside)).toContain(
+      'coverage: verify("S2", ...) must be inside step("S2", ...); it is outside every step',
+    );
+    // Inside another step's function: attributed to the wrong step.
+    const wrongStep = good.replace(
+      'verify("S1", "status", res.status, plan.expect("TC-02.S1.status"))',
+      'verify("S1", "status", res.status, plan.expect("TC-02.S1.status"));\n    verify("S2", "status", res.status, plan.expect("TC-02.S2.status"))',
+    );
+    expect(messages(wrongStep)).toContain(
+      'coverage: verify("S2", ...) must be inside step("S2", ...); it is inside step("S1", ...)',
+    );
+    // A helper function declared inside the step still counts as inside it.
+    const helper = good.replace(
+      'verify("S1", "status", res.status, plan.expect("TC-02.S1.status"))',
+      'const check = () => verify("S1", "status", res.status, plan.expect("TC-02.S1.status"));\n    check()',
+    );
+    expect(messages(helper).filter((m) => m.includes("must be inside"))).toEqual([]);
   });
 
   it("requires the caseId and run exports", () => {
@@ -268,5 +299,145 @@ describe("manual steps in specs (REQ-EXEC-11)", () => {
         manualPlan,
       ).map((p) => p.message),
     ).toContain("step S9 is manual: a person reports its outcome, the spec must not verify it");
+  });
+
+  describe("native app cases (REQ-EXEC-06)", () => {
+    const mobilePlan = PlanSchema.parse({
+      schema: 1,
+      ticket: "DEMO-6",
+      version: 1,
+      ...JSON.parse(
+        readFileSync(new URL("../../../fixtures/plans/demo-6-draft.json", import.meta.url), "utf8"),
+      ),
+    });
+    const mobile = readFileSync(
+      new URL("../../../fixtures/specs/demo-6/TC-01.spec.ts", import.meta.url),
+      "utf8",
+    );
+    const at = (src: string, options?: { deepLinks?: boolean }) =>
+      checkSpecSource(src, "TC-01", mobilePlan, options).map((p) => `${p.check}: ${p.message}`);
+
+    it("REQ-EXEC-06/AC1: the reference mobile spec passes", () => {
+      expect(at(mobile)).toEqual([]);
+    });
+
+    it("REQ-EXEC-06/AC1: web-only operations and selectors are rejected before the run, with what to do instead", () => {
+      const src = mobile.replace(
+        'await ui.click("testid:add-item");',
+        'await ui.as("user:standard");\n    await ui.goto("/app/cart");\n    await ui.select("css:#size", "M");\n    await ui.click("role:button:Add");\n    await ui.click("testid:add-item");',
+      );
+      expect(at(src)).toEqual([
+        "lint: ui.as() does not exist in a native app: log in through the app's own screens with ui.fill and ui.click",
+        "lint: ui.goto() in a native app needs mobile.deep_link_scheme; the app is already open: tap its elements instead",
+        "lint: ui.select() does not exist in a native app: tap the option with ui.click",
+        "lint: 'css:#size' cannot be found in a native app: use testid:, label:, text:, id: or xpath:",
+        "lint: 'role:button:Add' cannot be found in a native app: use testid:, label:, text:, id: or xpath:",
+      ]);
+      expect(blockingProblems(checkSpecSource(src, "TC-01", mobilePlan)).length).toBe(5);
+    });
+
+    it("REQ-EXEC-06/AC1: ui.goto is allowed with a deep link scheme; web cases keep every operation", () => {
+      const src = mobile.replace(
+        'await ui.click("testid:add-item");',
+        'await ui.goto("/cart");\n    await ui.click("testid:add-item");',
+      );
+      expect(at(src, { deepLinks: true })).toEqual([]);
+      const web = readFileSync(
+        new URL("../../../fixtures/specs/demo-4/TC-01.spec.ts", import.meta.url),
+        "utf8",
+      );
+      const webPlan = PlanSchema.parse({
+        schema: 1,
+        ticket: "DEMO-4",
+        version: 1,
+        ...JSON.parse(
+          readFileSync(new URL("../../../fixtures/plans/demo-4-draft.json", import.meta.url), "utf8"),
+        ),
+      });
+      expect(checkSpecSource(web, "TC-01", webPlan)).toEqual([]);
+      expect(web).toContain("ui.as(");
+    });
+  });
+
+  it("REQ-EXEC-21/AC3+AC6: each platform takes its own selector kinds; css: and xpath: are flagged for review", () => {
+    const mobilePlan = PlanSchema.parse({
+      schema: 1,
+      ticket: "DEMO-6",
+      version: 1,
+      ...JSON.parse(
+        readFileSync(new URL("../../../fixtures/plans/demo-6-draft.json", import.meta.url), "utf8"),
+      ),
+    });
+    const mobile = readFileSync(
+      new URL("../../../fixtures/specs/demo-6/TC-01.spec.ts", import.meta.url),
+      "utf8",
+    );
+    const native = checkSpecSource(
+      mobile.replace(
+        'await ui.click("testid:add-item");',
+        'await ui.click("id:add_item");\n    await ui.click("xpath://android.widget.Button[1]");',
+      ),
+      "TC-01",
+      mobilePlan,
+    );
+    expect(native.map((p) => `${p.check}: ${p.message}`)).toEqual([
+      "review: XPath selector 'xpath://android.widget.Button[1]' is brittle; prefer testid:, label: or text:",
+    ]);
+    const webPlan = PlanSchema.parse({
+      schema: 1,
+      ticket: "DEMO-4",
+      version: 1,
+      ...JSON.parse(
+        readFileSync(new URL("../../../fixtures/plans/demo-4-draft.json", import.meta.url), "utf8"),
+      ),
+    });
+    const web = readFileSync(
+      new URL("../../../fixtures/specs/demo-4/TC-01.spec.ts", import.meta.url),
+      "utf8",
+    );
+    const kinds = checkSpecSource(
+      web.replace(
+        'await ui.check("testid:accept-terms");',
+        'await ui.fill("placeholder:Email", "a");\n    await ui.click("alt:Logo");\n    await ui.click("title:Help");\n    await ui.click("id:terms");\n    await ui.click("xpath://b");\n    await ui.check("testid:accept-terms");',
+      ),
+      "TC-01",
+      webPlan,
+    );
+    expect(kinds.map((p) => `${p.check}: ${p.message}`)).toEqual([
+      "lint: 'xpath://b' cannot be found in a browser: use testid:, role:, label:, placeholder:, alt:, title:, text:, id: or css:",
+    ]);
+  });
+
+  it("REQ-EXEC-03/AC2: a verify() of something the plan does not expect is rejected before the run", () => {
+    const mobilePlan = PlanSchema.parse({
+      schema: 1,
+      ticket: "DEMO-6",
+      version: 1,
+      ...JSON.parse(
+        readFileSync(new URL("../../../fixtures/plans/demo-6-draft.json", import.meta.url), "utf8"),
+      ),
+    });
+    const mobile = readFileSync(
+      new URL("../../../fixtures/specs/demo-6/TC-01.spec.ts", import.meta.url),
+      "utf8",
+    );
+    const invented = mobile.replace(
+      'await ui.click("testid:add-item");',
+      'await ui.click("testid:add-item");\n    verify("S1", "elements.testid:cart-badge.text", undefined, plan.expect("TC-01.S1.elements.testid:cart-badge.text"));',
+    );
+    expect(checkSpecSource(invented, "TC-01", mobilePlan).map((p) => `${p.check}: ${p.message}`)).toEqual([
+      'coverage: verify("S1", "elements.testid:cart-badge.text", ...) checks something step S1 of the plan does not expect; it expects: elements.testid:cart-count.text',
+    ]);
+  });
+
+  it("REQ-EXEC-01/AC1: steps that only verify are found; ui, API and inbox calls are actions, plan.expect is not", () => {
+    const spec = [
+      'await step("S1", async () => { verify("S1", "elements.testid:a.text", undefined, plan.expect("TC-01.S1.elements.testid:a.text")); });',
+      'await step("S2", async () => { await ui.click("testid:b"); });',
+      'await step("S3", async () => { const r = await api.as("user:standard").get("/cart"); verify("S3", "status", r.status, plan.expect("TC-01.S3.status")); });',
+      'await step("S4", async () => { const m = await inbox.wait("S4"); });',
+      'await step("S5", () => {});',
+    ].join("\n");
+    expect(stepsWithoutActions(spec)).toEqual(["S1", "S5"]);
   });
 });

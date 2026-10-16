@@ -42,6 +42,8 @@ export type {
   ScreenBox,
   ScreenMark,
   StepPause,
+  UiElementFact,
+  UiScreen,
   VisualCheck,
 } from "./runner.js";
 export type { SecretProvider } from "./secret-provider.js";

@@ -1,0 +1,87 @@
+import { PlanSchema } from "@qajitsu/core";
+import { checkSpecSource } from "@qajitsu/verifier";
+import { describe, expect, it } from "vitest";
+import { AUTHOR_SYSTEM, EXAMPLE_MOBILE_SPEC, EXAMPLE_SPEC, EXAMPLE_WEB_SPEC } from "./author.js";
+
+const plan = PlanSchema.parse({
+  schema: 1,
+  ticket: "DEMO-4",
+  version: 1,
+  summary: "Examples of the author prompt.",
+  cases: [
+    {
+      id: "TC-07",
+      title: "API example",
+      type: "api",
+      priority: "high",
+      source: [{ kind: "ac", id: "AC1" }],
+      evidence: ["response"],
+      steps: [
+        {
+          id: "S1",
+          action: "Add an item and read it",
+          expect: { description: "Item stored", status: 200, fields: { quantity: 2 } },
+        },
+      ],
+    },
+    {
+      id: "TC-08",
+      title: "Web example",
+      type: "web",
+      priority: "high",
+      source: [{ kind: "ac", id: "AC1" }],
+      evidence: ["screenshot"],
+      steps: [
+        {
+          id: "S1",
+          action: "Open a new order",
+          expect: { description: "Disabled", elements: { "testid:submit-order": { enabled: false } } },
+        },
+        {
+          id: "S2",
+          action: "Accept the terms",
+          expect: {
+            description: "Enabled",
+            elements: { "testid:submit-order": { enabled: true } },
+            texts: ["Submit order"],
+          },
+        },
+      ],
+    },
+    {
+      id: "TC-09",
+      title: "Mobile example",
+      type: "mobile",
+      priority: "high",
+      source: [{ kind: "ac", id: "AC1" }],
+      evidence: ["screenshot"],
+      steps: [
+        {
+          id: "S1",
+          action: "Add one item",
+          expect: { description: "One item", elements: { "testid:basket-count": { text: "1 item" } } },
+        },
+        {
+          id: "S2",
+          action: "Open checkout and press back",
+          expect: {
+            description: "Still one item",
+            elements: { "testid:basket-count": { text: "1 item" } },
+          },
+        },
+      ],
+    },
+  ],
+});
+
+describe("author prompt (REQ-EXEC-01, REQ-EXEC-05)", () => {
+  it("REQ-EXEC-01/AC1 + REQ-EXEC-05/AC1: the API and web examples the author is shown pass the static checks", () => {
+    expect(checkSpecSource(EXAMPLE_SPEC, "TC-07", plan)).toEqual([]);
+    expect(checkSpecSource(EXAMPLE_WEB_SPEC, "TC-08", plan)).toEqual([]);
+    expect(checkSpecSource(EXAMPLE_MOBILE_SPEC, "TC-09", plan)).toEqual([]);
+    expect(EXAMPLE_MOBILE_SPEC).not.toContain("ui.as");
+    expect(AUTHOR_SYSTEM).toContain("never ui.as");
+    expect(AUTHOR_SYSTEM).toContain(EXAMPLE_WEB_SPEC);
+    expect(AUTHOR_SYSTEM).toContain('"elements.<selector>.<property>"');
+  });
+});

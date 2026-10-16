@@ -32,8 +32,8 @@ export const nativeAbi = (host: Host): string => (host.arch === "arm64" ? "arm64
 const imageAbi = (image: string): string | undefined => image.split(";").at(-1);
 
 async function emulatorChecks(needs: ToolchainNeeds, ports: PrecheckPorts): Promise<Precheck[]> {
-  const emulator = needs.android?.emulator;
-  if (!emulator) return [];
+  const emulators = needs.android?.emulators ?? [];
+  if (emulators.length === 0) return [];
   const out: Precheck[] = [];
   // Google publishes the emulator for Linux x86_64 and macOS (x86_64, arm64) only (repository2-3.xml).
   const built = !(ports.host.os === "linux" && ports.host.arch === "arm64");
@@ -45,17 +45,19 @@ async function emulatorChecks(needs: ToolchainNeeds, ports: PrecheckPorts): Prom
       : "the Android emulator has no build for Linux on ARM64; run Android tests against a device farm or another machine with mobile.appium.url, or --skip android",
     tools: ["android"],
   });
-  const abi = imageAbi(emulator.systemImage);
   const native = nativeAbi(ports.host);
-  const abiOk = abi === native || (native === "x86_64" && abi === "x86");
-  out.push({
-    name: "system image",
-    ok: abiOk,
-    detail: abiOk
-      ? `${emulator.systemImage} runs natively on ${ports.host.arch}`
-      : `${emulator.systemImage} is built for ${abi ?? "?"}, this ${ports.host.arch} machine runs ${native} images; set mobile.android.emulator.system_image to the ${native} variant`,
-    tools: ["android"],
-  });
+  for (const image of [...new Set(emulators.map((e) => e.systemImage))]) {
+    const abi = imageAbi(image);
+    const abiOk = abi === native || (native === "x86_64" && abi === "x86");
+    out.push({
+      name: "system image",
+      ok: abiOk,
+      detail: abiOk
+        ? `${image} runs natively on ${ports.host.arch}`
+        : `${image} is built for ${abi ?? "?"}, this ${ports.host.arch} machine runs ${native} images; use the ${native} variant in mobile.android`,
+      tools: ["android"],
+    });
+  }
   const accel =
     ports.host.os === "darwin"
       ? (await ports.exec("sysctl", ["-n", "kern.hv_support"]))?.trim() === "1"
@@ -74,16 +76,21 @@ async function emulatorChecks(needs: ToolchainNeeds, ports: PrecheckPorts): Prom
         : `/dev/kvm is missing or not accessible (add the user to the kvm group; in a VM, enable nested virtualisation); ${farm}`,
     tools: ["android"],
   });
+  // REQ-EXEC-20/AC5: about 2 GiB per emulator plus 2 GiB for the rest; twice that is comfortable.
+  const n = Math.max(1, needs.android?.atOnce ?? 1);
+  const minimum = (2 + 2 * n) * GIB;
+  const comfortable = (4 + 4 * n) * GIB;
   const memory = ports.totalMemory;
+  const what = n === 1 ? "the emulator" : `${String(n)} emulators at once`;
   out.push({
     name: "memory",
-    ok: memory >= 4 * GIB,
+    ok: memory >= minimum,
     detail:
-      memory >= 8 * GIB
+      memory >= comfortable
         ? `${(memory / GIB).toFixed(0)} GiB`
-        : memory >= 4 * GIB
-          ? `${(memory / GIB).toFixed(0)} GiB; the emulator runs, 8 GiB or more is recommended`
-          : `${(memory / GIB).toFixed(1)} GiB; the emulator needs at least 4 GiB; ${farm}`,
+        : memory >= minimum
+          ? `${(memory / GIB).toFixed(0)} GiB; ${what} run, ${(comfortable / GIB).toFixed(0)} GiB or more is recommended`
+          : `${(memory / GIB).toFixed(1)} GiB; ${what} need at least ${(minimum / GIB).toFixed(0)} GiB; use fewer devices, or ${farm}`,
     tools: ["android"],
   });
   return out;

@@ -1,4 +1,4 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
   ConfigError,
@@ -14,8 +14,10 @@ import {
   type ReviewComment,
   type RunWorkspace,
   type Ticket,
+  type UiScreen,
 } from "@qajitsu/core";
 import { cachedTestsIndex, renderTestsRepo, type TestsRepoIndex } from "./tests-repo.js";
+import { buildUiInventory, renderUiInventory, renderUiSnapshot, type UiInventory } from "@qajitsu/verifier";
 
 /** Diffs longer than this are replaced by a file list; agents read the rest with tools (REQ-CTX-05/AC5). */
 export const DIFF_INLINE_LIMIT = 30_000;
@@ -121,6 +123,29 @@ export interface ChangeContext {
   readonly imported: readonly ImportedCase[];
   /** The application map around the change, computed by code before planning (REQ-OBS-08). */
   readonly mapAround?: MapAround | undefined;
+  /** Element ids and pages of the code under test, computed by code from the worktrees (REQ-PLAN-09/AC7). */
+  readonly ui?: UiInventory | undefined;
+  /** Pages and screens of the running application, recorded by code before writing specs (REQ-EXEC-22/AC1). */
+  readonly snapshot?: readonly UiScreen[] | undefined;
+}
+
+const UI_EXTENSIONS = /\.(html?|[cm]?jsx?|tsx?|vue|svelte|xml|java|kt|swift|dart)$/;
+const UI_SKIP = new Set(["node_modules", ".git", "dist", "build", "coverage", ".next", "vendor", "Pods"]);
+
+/** Source files of a worktree that can define element ids or pages, read for the inventory. */
+async function uiSources(root: string, prefix = "", out: { path: string; text: string }[] = []) {
+  for (const entry of await readdir(join(root, prefix), { withFileTypes: true }).catch(() => [])) {
+    if (out.length >= 5000) break;
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      if (!UI_SKIP.has(entry.name)) await uiSources(root, rel, out);
+    } else if (entry.isFile() && UI_EXTENSIONS.test(entry.name) && !entry.name.includes(".test.")) {
+      const info = await stat(join(root, rel)).catch(() => undefined);
+      if (info && info.size <= 512 * 1024)
+        out.push({ path: rel, text: await readFile(join(root, rel), "utf8") });
+    }
+  }
+  return out;
 }
 
 /**
@@ -169,7 +194,11 @@ export async function buildChangeContext(
   ws: RunWorkspace,
   knowledge: readonly { name: string; text: string }[] = [],
   /** Project cache of code indexes by `<repo>@<sha>` (REQ-PRJ-08/AC2); without it repositories are indexed again. */
-  options: { readonly indexCache?: string | undefined } = {},
+  options: {
+    readonly indexCache?: string | undefined;
+    /** Attribute of web test ids in the code (REQ-EXEC-21/AC1); `data-testid` by default. */
+    readonly testIdAttribute?: string | undefined;
+  } = {},
 ): Promise<ChangeContext> {
   const ticket = await readTicketSnapshot(ws.path("ticket", "ticket.json"));
   const repos: ChangeContext["repos"][number][] = [];
@@ -210,6 +239,12 @@ export async function buildChangeContext(
   const docs = await readRunDocs(ws.path("knowledge", "chunks.json"));
   const imported = await readImportedCases(ws.path("imported", "cases.json"));
   const mapAround = await readMapAround(ws.path("map", "around.json"));
+  // REQ-PLAN-09/AC7: what the code under test defines, so agents need not search for it (and cannot invent it).
+  const sources: { path: string; text: string }[] = [];
+  for (const repo of repos)
+    for (const f of await uiSources(ws.path("repos", repo.alias)))
+      sources.push({ path: `${repo.alias}/${f.path}`, text: f.text });
+  const ui = buildUiInventory(sources, [], { testIdAttribute: options.testIdAttribute });
   return {
     ticket,
     repos,
@@ -219,6 +254,7 @@ export async function buildChangeContext(
     docs,
     imported,
     ...(mapAround ? { mapAround } : {}),
+    ...(ui.selectors.length > 0 || ui.pages.length > 0 ? { ui } : {}),
   };
 }
 
@@ -260,7 +296,11 @@ export function renderImportedCase(c: ImportedCase): string {
  *
  * @param context - Change context.
  */
-export function renderChangeContext(context: ChangeContext): string {
+export function renderChangeContext(
+  context: ChangeContext,
+  /** The analyst gets no element inventory: it classifies the change; planner and author write steps with it. */
+  options: { readonly ui?: boolean } = {},
+): string {
   const t = context.ticket;
   const ticketText = [
     `Key: ${t.key}`,
@@ -330,6 +370,20 @@ export function renderChangeContext(context: ChangeContext): string {
     );
     for (const c of context.imported) parts.push(untrusted(`imported/${c.id}`, renderImportedCase(c)));
   }
+  if (context.ui && options.ui !== false)
+    parts.push(untrusted("ui/inventory", renderUiInventory(context.ui)));
+  // REQ-EXEC-22/AC7: without the code, what the environment's pages show is how the planner names elements.
+  if (context.snapshot && context.snapshot.length > 0 && options.ui !== false)
+    parts.push(
+      untrusted(
+        "ui/snapshot",
+        renderUiSnapshot(
+          context.snapshot,
+          60,
+          "What the environment's pages show (recorded by QAJitsu before planning; name elements with these selectors; not a source to cite)",
+        ),
+      ),
+    );
   const around = context.mapAround;
   if (around && (around.changed.length > 0 || around.untested.length > 0)) {
     // REQ-OBS-08: computed by code from past runs; labels come from routes, OpenAPI and visited URLs, so wrapped.
@@ -337,7 +391,12 @@ export function renderChangeContext(context: ChangeContext): string {
       `## Application map around the change (from ${String(around.runs)} past run(s); cite as {kind: map, id})`,
       untrusted("map/around", renderMapAround(around)),
     );
-  }
+  } else
+    // Without a map nothing can be cited from it; models otherwise turn page names into {kind: map} sources.
+    parts.push(
+      "## Application map around the change\nNone for this change: do not cite {kind: map} sources.",
+    );
+
   if (context.knowledge.length > 0) {
     parts.push("## Project knowledge (from .qa/knowledge, maintained by the team)");
     for (const k of context.knowledge) parts.push(untrusted(`knowledge/${k.name}`, k.text));

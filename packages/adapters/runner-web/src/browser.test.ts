@@ -77,6 +77,81 @@ const attempt = async (
 };
 
 describe("web runner (REQ-EXEC-05, REQ-EXEC-07, REQ-EVD-02)", () => {
+  it("REQ-EXEC-21/AC1+AC3: any test id attribute, and pages without test ids through placeholder, alt, title, id and roles", async () => {
+    const page =
+      "data:text/html," +
+      encodeURIComponent(
+        '<button data-qa="pay">Pay</button><input placeholder="Email"><img alt="Logo" src="data:,">' +
+          '<span title="Hint">?</span><b id="total">9,99</b><button disabled>Buy</button>',
+      );
+    const session = createPlaywrightBrowserFactory({ video: "off", testIdAttribute: "data-qa" })({
+      specFile: spec("DEMO-4", "TC-01"),
+      caseId: "TC-01",
+      attempt: 1,
+      plan: plan("DEMO-4"),
+      baseUrl: "http://127.0.0.1:9",
+      allowedOrigins: [],
+      accounts: {},
+      secrets: [],
+      timeoutMs: 30_000,
+    });
+    try {
+      const d = await session.driver();
+      await d.goto(page);
+      expect(await d.property("testid:pay", "visible")).toBe(true);
+      expect(await d.property("placeholder:Email", "visible")).toBe(true);
+      expect(await d.property("alt:Logo", "visible")).toBe(true);
+      expect(await d.property("title:Hint", "visible")).toBe(true);
+      expect(await d.property("id:total", "text")).toBe("9,99");
+      expect(await d.property("role:button:Buy", "enabled")).toBe(false);
+      await expect(d.property("xpath://b", "visible")).rejects.toThrow(/not supported in a browser/);
+      expect(await d.elements?.()).toContainEqual(expect.objectContaining({ testid: "pay", text: "Pay" }));
+    } finally {
+      await session.close(false);
+    }
+  });
+
+  it("REQ-EXEC-22/AC1: the parent lists the elements of a page: test ids, roles, names, texts and states", async () => {
+    const shop = await startShop({ env: { DEMO_USER_PASSWORD: PASSWORD } });
+    cleanups.push(() => shop.close());
+    const login = (await (
+      await fetch(`${shop.url}/auth/login`, {
+        method: "POST",
+        body: JSON.stringify({ username: "standard", password: PASSWORD }),
+      })
+    ).json()) as { token: string };
+    const session = createPlaywrightBrowserFactory({
+      video: "off",
+      webSession: { storage: "sessionStorage", key: "token" },
+    })({
+      specFile: spec("DEMO-4", "TC-01"),
+      caseId: "TC-01",
+      attempt: 1,
+      plan: plan("DEMO-4"),
+      baseUrl: shop.url,
+      allowedOrigins: [shop.url],
+      accounts: {},
+      sessions: { "user:standard": login.token },
+      secrets: [login.token],
+      timeoutMs: 30_000,
+    });
+    try {
+      const driver = await session.driver();
+      await driver.useAccount("user:standard");
+      await driver.goto("/app/checkout");
+      const elements = (await driver.elements?.()) ?? [];
+      expect(elements).toContainEqual(
+        expect.objectContaining({ testid: "place-order", role: "button", disabled: true }),
+      );
+      expect(elements).toContainEqual(expect.objectContaining({ testid: "accept-terms" }));
+      expect(elements).toContainEqual(expect.objectContaining({ role: "button", disabled: true }));
+      expect(elements.some((e) => e.role === "checkbox")).toBe(true);
+      expect(JSON.stringify(elements)).not.toContain(login.token);
+    } finally {
+      await session.close(false);
+    }
+  });
+
   it("REQ-EXEC-05/AC3 + REQ-EVD-02/AC1+AC3 + REQ-NFR-04/AC1: a passing web case (BUG-05 off) has a screenshot per step, HAR and console log, no video", async () => {
     const { record, token } = await attempt("DEMO-4", "TC-01");
     expect(record.outcome).toBe("passed");
@@ -101,11 +176,15 @@ describe("web runner (REQ-EXEC-05, REQ-EXEC-07, REQ-EVD-02)", () => {
       "S2-annotations.json",
       "failure.png",
       "failure.html",
+      "failure-elements.json",
       "trace.zip",
       "video.webm",
       "network.har",
       "console.log",
     ]);
+    // REQ-EXEC-22/AC4: what the page showed at the failure, for the healer.
+    const elements = String(record.evidence.find((e) => e.name === "failure-elements.json")?.content);
+    expect(elements).toContain('"testid": "place-order"');
   });
 
   it("REQ-NFR-04/AC1: BUG-06 (price format) is FAILED; without it PASSED", async () => {

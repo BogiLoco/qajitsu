@@ -1,7 +1,7 @@
 import type { KnowledgePorts } from "./knowledge.js";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { compareDeployedSha, createRemoteEnvProvider, loginAccounts } from "@qajitsu/adapter-env-remote";
+import { compareDeployedSha, createRemoteEnvProvider } from "@qajitsu/adapter-env-remote";
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
 import {
   createSandboxExecutor,
@@ -10,6 +10,7 @@ import {
   runCases,
   type AttemptExecutor,
   type ContractValidator,
+  type RunCasesOptions,
 } from "@qajitsu/adapter-runner-api";
 import {
   browserUnavailable,
@@ -22,6 +23,8 @@ import {
   ConfigError,
   CaseResultFileSchema,
   acquireRunLock,
+  createAccountLeases,
+  laneWorkers,
   QajitsuError,
   exitCodeFor,
   loadApprovedPlan,
@@ -29,8 +32,10 @@ import {
   selectExecutableSpecs,
   planForLocale,
   webCombinations,
+  type BlockedRecord,
   type CaseResultFile,
   type Plan,
+  type UiElementFact,
   type ResolvedEnvironment,
   type VisualCheck,
   type WebCombination,
@@ -41,7 +46,7 @@ import { buildAdapters, type RuntimePorts } from "../adapters.js";
 import { codeIndexCache, openSession, type ModelPorts, type RunSession } from "../session.js";
 import type { CommandIO } from "./fetch.js";
 import { anchorJournal, computeVerdict, writeReports } from "./verdict.js";
-import { auditRun, triageRun, runCanary } from "./checks.js";
+import { auditRun, blockedRun, triageRun, runCanary } from "./checks.js";
 import { createManualPrompter } from "./manual.js";
 import { formatEstimate, readRunHistory } from "./estimate.js";
 import { rootOf } from "./runs.js";
@@ -49,8 +54,11 @@ import { runMessages, type MessagePorts, type RunMessages } from "./messages.js"
 import { approvalContext, changedParts, type ApprovalContext } from "./context-fingerprint.js";
 import { runRunHook, type HookExec } from "./hooks.js";
 import { prepareMobile, type PreparedMobile } from "./mobile.js";
+import { accountLogin, runLimited, runMobileLane } from "./lanes.js";
+import { authorSnapshot } from "./app-snapshot.js";
 import { exportRunTelemetry } from "./telemetry.js";
 import {
+  acquireEnvLock,
   blockAfterStartFailure,
   effectiveConfig,
   finishRunResources,
@@ -77,6 +85,8 @@ export interface RunOptions extends LiveOptions {
   readonly set?: readonly string[] | undefined;
   /** The person running the command; recorded with manual step answers given in this terminal (REQ-EXEC-11). */
   readonly user?: string | undefined;
+  /** One case at a time, in plan order, across every lane and device (REQ-EXEC-19/AC2). */
+  readonly sequential?: boolean | undefined;
 }
 
 /** Ports `run` needs beyond the common ones; the executor is replaceable in tests. */
@@ -100,6 +110,8 @@ export interface RunPorts extends KnowledgePorts, MessagePorts {
   readonly hookExec?: HookExec;
   /** Operating system, for the display check of `--headed` (default: the process's). */
   readonly platform?: string;
+  /** Browser for the snapshot before the author (replaced in tests); default: headless Playwright (REQ-EXEC-22). */
+  readonly snapshotBrowser?: BrowserFactory;
 }
 
 const RUNNER = { kind: "runner", name: "api" } as const;
@@ -112,6 +124,48 @@ const blockedResult = (caseId: string, reason: string): CaseResultFile =>
     runner: "api",
     attempts: [{ attempt: 1, outcome: "error", assertions: [], error: reason, steps: [], evidence: [] }],
   });
+
+/**
+ * The devices of the run's mobile cases, started on the first call and shared by later ones (REQ-EXEC-06,
+ * REQ-EXEC-22): the snapshot before the author and the mobile lane use the same emulators.
+ */
+function mobileDevices(
+  session: RunSession,
+  env: ResolvedEnvironment,
+  ports: RuntimePorts & ModelPorts & RunPorts,
+  options: { readonly build: boolean; readonly headed: boolean; readonly cases: readonly string[] },
+): { readonly get: () => Promise<PreparedMobile>; readonly started: () => boolean } {
+  let device: Promise<PreparedMobile> | undefined;
+  return {
+    get: () => {
+      if (device) return device;
+      const { codeHosts } = buildAdapters(
+        session.project,
+        {
+          fetch: ports.fetch,
+          logger: session.logger,
+          now: ports.now,
+          resolveSecret: (r) => session.resolveSecret(r),
+          registerSecret: (v) => {
+            session.masker.register(v);
+          },
+        },
+        ports,
+      );
+      session.events.emit("run", SYSTEM, "mobile.prepare", { cases: options.cases });
+      device =
+        ports.mobileDevice?.() ??
+        prepareMobile(session, env.baseUrl, codeHosts, ports.env["APPIUM_HOME"], {
+          allowBuild: options.build,
+          // REQ-EXEC-16/AC2: --headed shows the emulator window.
+          headed: options.headed,
+          fetch: ports.fetch,
+        });
+      return device;
+    },
+    started: () => device !== undefined,
+  };
+}
 
 /**
  * Runs the web cases again in every further browser and viewport combination (REQ-EXEC-13/AC1): results go to
@@ -128,6 +182,8 @@ async function runMatrix(
     readonly blocked: ReadonlyMap<string, string>;
     readonly run: (combo: WebCombination, cases: Plan["cases"], dir: string) => Promise<unknown>;
     readonly unavailable: (combo: WebCombination) => string | undefined;
+    /** Combinations at the same time (REQ-EXEC-19/AC3). */
+    readonly concurrency: number;
   },
 ): Promise<void> {
   const cases = plan.cases.filter(
@@ -138,7 +194,7 @@ async function runMatrix(
       !c.steps.some((s) => s.manual === true),
   );
   if (cases.length === 0) return;
-  for (const combo of combos) {
+  const one = async (combo: WebCombination): Promise<void> => {
     const dir = session.ws.path("results", "matrix", combo.id);
     await mkdir(dir, { recursive: true });
     const reason = deps.unavailable(combo);
@@ -155,10 +211,14 @@ async function runMatrix(
             flag: "wx",
           },
         );
-      continue;
+      return;
     }
     await deps.run(combo, cases, dir);
-  }
+  };
+  await runLimited(
+    combos.map((combo) => () => one(combo)),
+    deps.concurrency,
+  );
 }
 
 /**
@@ -204,6 +264,54 @@ async function runLocales(
       continue;
     }
     await deps.run(localePlan, locale, dir);
+  }
+}
+
+/**
+ * Prepares the mobile devices and runs the mobile lane on them (REQ-EXEC-06, REQ-EXEC-20): a platform that is not
+ * available makes the mobile cases BLOCKED with the reason (REQ-ENV-06/AC3); the devices stop afterwards, also on
+ * Ctrl+C.
+ */
+async function runMobile(
+  session: RunSession,
+  plan: Plan,
+  mobileCases: Plan["cases"],
+  io: CommandIO,
+  results: Map<string, CaseResultFile>,
+  options: {
+    readonly sequential: boolean;
+    readonly onDevice: (stop: () => Promise<void>) => void;
+    readonly run: Parameters<typeof runMobileLane>[0]["run"];
+    /** The devices, started once per run: before the author when it records the app's first screen (REQ-EXEC-22). */
+    readonly device: () => Promise<PreparedMobile>;
+  },
+): Promise<Map<string, CaseResultFile>> {
+  const { project } = session;
+  const device = await options.device();
+  if (!device.ok) {
+    io.writeError(`Mobile cases are BLOCKED: ${device.reason}\n`);
+    await writeBlocked(
+      session,
+      mobileCases.map((c) => c.id),
+      `mobile device not available: ${device.reason}`,
+      results,
+    );
+    return new Map();
+  }
+  options.onDevice(device.stop);
+  try {
+    return await runMobileLane({
+      session,
+      plan,
+      cases: mobileCases,
+      device,
+      distribute: project.config.mobile?.distribute ?? "split",
+      sequential: options.sequential,
+      run: options.run,
+      warn: io.writeError,
+    });
+  } finally {
+    await device.stop();
   }
 }
 
@@ -312,6 +420,19 @@ export async function runRun(
     messages = runMessages(session, ports);
     // REQ-WS-04/AC2: one process per run; other runs of the ticket may run in parallel.
     release = await acquireRunLock(ws.path("run.lock"));
+    if (options.build) {
+      // REQ-GEN-05/AC2: a run that builds its environment never clashes with one qj env up runs for it.
+      const releaseEnv = await acquireEnvLock(session).catch(async (error: unknown) => {
+        await release?.();
+        release = undefined;
+        throw error;
+      });
+      const releaseRun = release;
+      release = async () => {
+        await releaseEnv();
+        await releaseRun();
+      };
+    }
     const { plan, approval } = await loadApprovedPlan(ws);
     // REQ-EXEC-16: chosen cases, a visible browser or emulator and step pauses are checked before anything runs.
     const live = prepareLiveRun(options, plan, io, events, {
@@ -470,6 +591,7 @@ export async function runRun(
           build: options.build === true,
           onDevice: (stop) => deviceStops.push(stop),
           live,
+          sequential: options.sequential === true,
         });
         if (pending.length > 0)
           io.write(`Rejected spec files (not in the approved plan or misplaced): ${pending.join(", ")}\n`);
@@ -517,6 +639,18 @@ export async function runRun(
       if (triage?.status === "failed") io.writeError(`Failure hints not available: ${triage.error}\n`);
       if (triage) await writeReports(session, await computeVerdict(session, ports.now));
     }
+    // REQ-VER-13: why each BLOCKED case could not be judged and what to do next; suggestions, never statuses.
+    let blockedHints: BlockedRecord | undefined;
+    if (
+      ws.record.data["bench"] === undefined &&
+      ws.record.data["regression"] === undefined &&
+      verdict.cases.some((c) => c.status === "BLOCKED")
+    ) {
+      blockedHints = await blockedRun(session, ports.now);
+      if (blockedHints?.status === "failed")
+        io.writeError(`Hints for BLOCKED cases not available: ${blockedHints.error}\n`);
+      if (blockedHints) await writeReports(session, await computeVerdict(session, ports.now));
+    }
     await ws.update({
       status: "completed",
       stage: "run",
@@ -529,6 +663,13 @@ export async function runRun(
     const telemetry = await exportRunTelemetry(session, ports.fetch);
     if (telemetry?.error !== undefined) io.writeError(`Telemetry export failed: ${telemetry.error}\n`);
     io.write(`${verdict.matrixMd}\n`);
+    // REQ-VER-13/AC3: under the table, apart from the computed statuses.
+    if (blockedHints?.status === "done" && blockedHints.hints.length > 0)
+      io.write(
+        `Why BLOCKED (suggestions by ${blockedHints.model}, not statuses):\n${blockedHints.hints
+          .map((h) => `  ${h.caseId} ${h.category}: ${h.justification}\n    Next: ${h.next}`)
+          .join("\n")}\n`,
+      );
     io.write(`Report: ${ws.path("report", "report.html")}\n`);
     if (!verdict.ok) {
       io.writeError(
@@ -579,6 +720,8 @@ async function executeCases(
     readonly startedAt?: number | undefined;
     /** Chosen cases, headed browser and step pauses (REQ-EXEC-16). */
     readonly live?: LiveRun | undefined;
+    /** One case at a time (REQ-EXEC-19/AC2). */
+    readonly sequential?: boolean | undefined;
   } = {
     build: false,
     onDevice: () => undefined,
@@ -592,6 +735,17 @@ async function executeCases(
       .filter((x): x is string => x !== undefined),
   );
   const live = run.live;
+  // Android unless only an iOS app is configured.
+  const mobilePlatform =
+    project.config.mobile?.ios && !project.config.mobile.android ? ("ios" as const) : ("android" as const);
+  const devices = mobileDevices(session, env, ports, {
+    build: run.build,
+    headed: live?.headed === true,
+    cases: plan.cases.filter((c) => c.type === "mobile").map((c) => c.id),
+  });
+  // REQ-EXEC-06: ui.goto() may open a deep link only when every configured native app declares a scheme.
+  const apps = [project.config.mobile?.android, project.config.mobile?.ios].filter((a) => a !== undefined);
+  const specChecks = { deepLinks: apps.length > 0 && apps.every((a) => a.deep_link_scheme !== undefined) };
   // REQ-EXEC-16/AC1: cases not chosen with --cases are not run (and get no spec); they are NOT_RUN, never PASSED.
   const notRun = new Map<string, string>();
   if (live?.selected)
@@ -635,11 +789,23 @@ async function executeCases(
       maskText: (t: string) => masker.maskText(t),
       // REQ-EXEC-01/AC2: exploration through MCP stays inside the environment allowlist (invariant 10).
       mcp: { servers: project.config.mcp.servers, allowedOrigins: [env.origin] },
+      specChecks,
     };
+    const context = await buildChangeContext(ws, [], {
+      indexCache: codeIndexCache(project),
+      testIdAttribute: project.config.web.test_id_attribute,
+    });
+    // REQ-EXEC-22: the author sees what the running application shows, recorded by this trusted code.
+    const snapshot = await authorSnapshot(session, plan, missing, env, ports, {
+      knownPages: context.ui?.pages ?? [],
+      device: missing.some((c) => c.type === "mobile") ? devices.get : undefined,
+      platform: mobilePlatform,
+      io,
+    });
     const authored = await runAuthor(
       deps,
       { ...plan, cases: missing },
-      await buildChangeContext(ws, [], { indexCache: codeIndexCache(project) }),
+      { ...context, ...(snapshot.length > 0 ? { snapshot } : {}) },
       analysis,
       Object.keys(env.profile.accounts),
       () =>
@@ -663,7 +829,7 @@ async function executeCases(
   const specs = new Map<string, string>();
   for (const file of execute) {
     const caseId = /(TC-\d{2,4})\.spec\.ts$/.exec(file)?.[1] ?? "";
-    const problems = await checkSpec(await readFile(file, "utf8"), caseId, plan);
+    const problems = await checkSpec(await readFile(file, "utf8"), caseId, plan, specChecks);
     if (notRun.has(caseId)) continue;
     if (problems.length > 0)
       blocked.set(caseId, `spec failed static checks: ${formatSpecProblems(problems)}`);
@@ -703,6 +869,7 @@ async function executeCases(
         headless: headlessFor(project.config.web.headless, live),
         slowMoMs: live?.slowMoMs,
         actionTimeoutMs: project.config.web.action_timeout_ms,
+        testIdAttribute: project.config.web.test_id_attribute,
         webSession: env.profile.web_session,
         // REQ-EVD-07/AC5: each passive check can be switched off.
         observations: {
@@ -746,15 +913,19 @@ async function executeCases(
     executor,
     baseUrl: env.baseUrl,
     allowedOrigins: [env.origin],
-    login: () =>
-      loginAccounts(env, {
+    // REQ-ENV-09: each attempt holds its own pool accounts while it runs.
+    login: accountLogin(
+      env,
+      createAccountLeases(env.profile, { waitMs: project.config.execution.account_wait_s * 1000 }),
+      {
         fetch: ports.fetch,
         qaDir: project.qaDir,
         resolveSecret: (r) => session.resolveSecret(r),
         registerSecret: (v) => {
           masker.register(v);
         },
-      }),
+      },
+    ),
     contract,
     events,
     now: ports.now,
@@ -769,81 +940,166 @@ async function executeCases(
     ),
     onScreenshot: liveScreenshots(ws.path("live")),
   };
-  const ran = await runCases({
-    ...base,
-    ...watched,
-    // REQ-EXEC-16/AC3: only the primary run pauses; one case at a time so the person follows one.
-    ...(live?.pause ? { pause: live.pause } : {}),
-    plan: { ...plan, cases: plan.cases.filter((c) => !blocked.has(c.id) && c.type !== "mobile") },
-    specs,
-    evidence,
-    resultsDir: ws.path("results"),
-    retries: project.config.environments.retries,
-    workers: live?.pause || live?.headed ? 1 : project.config.environments.workers,
-    // REQ-EXEC-09: web cases that could not run get at most two healed attempts.
-    heal: async (caseId, specFile, failed, healAttempt) => {
-      // Regression runs run the promoted specs as they are: no healing (REQ-EXEC-17/AC1).
-      if (regression.success || plan.cases.find((c) => c.id === caseId)?.type !== "web") return undefined;
-      const usage = createUsageTracker({
-        events,
-        budget: project.config.models.token_budget,
-        alreadyUsed: Number(ws.record.data["tokens"] ?? 0),
-      });
-      const dom = failed.evidence.find((e) => e.kind === "dom")?.content;
-      const { file } = await healSpec(
-        {
-          ws,
-          models: session.models,
-          events,
-          usage,
-          now: ports.now,
-          maskJson: (v: unknown) => masker.maskJson(v),
-          maskText: (t: string) => masker.maskText(t),
-        },
-        plan,
-        {
-          caseId,
-          specFile,
-          error: masker.maskText(failed.error ?? "unknown error"),
-          dom: typeof dom === "string" ? dom : undefined,
-          attempt: healAttempt,
-        },
-      ).catch((error: unknown) => {
-        events.emit("heal", { kind: "agent", name: "healer" }, "heal.error", {
-          caseId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        return { file: undefined };
-      });
-      return file;
-    },
+  // REQ-EXEC-19: API, web and mobile lanes run at the same time, each with its own cases at once; --sequential,
+  // --headed and --step go one case at a time (REQ-EXEC-16/AC3, REQ-EXEC-19/AC5).
+  const lanes = laneWorkers(project.config, {
+    sequential: run.sequential === true || live?.pause !== undefined || live?.headed === true,
   });
+  const active = plan.cases.filter((c) => !blocked.has(c.id));
+  const ran = new Map<string, CaseResultFile>();
+  const heal: RunCasesOptions["heal"] = async (caseId, specFile, failed, healAttempt) => {
+    // Regression runs run the promoted specs as they are: no healing (REQ-EXEC-17/AC1).
+    // REQ-EXEC-09 + REQ-EXEC-22/AC4: web and mobile cases are healed; API cases have no selectors.
+    const type = plan.cases.find((c) => c.id === caseId)?.type;
+    if (regression.success || (type !== "web" && type !== "mobile")) return undefined;
+    const usage = createUsageTracker({
+      events,
+      budget: project.config.models.token_budget,
+      alreadyUsed: Number(ws.record.data["tokens"] ?? 0),
+    });
+    const dom = failed.evidence.find((e) => e.name === "failure.html")?.content;
+    const recorded = failed.evidence.find((e) => e.name === "failure-elements.json")?.content;
+    let elements: UiElementFact[] | undefined;
+    try {
+      elements = typeof recorded === "string" ? (JSON.parse(recorded) as UiElementFact[]) : undefined;
+    } catch {
+      elements = undefined;
+    }
+    const { file } = await healSpec(
+      {
+        ws,
+        models: session.models,
+        events,
+        usage,
+        now: ports.now,
+        maskJson: (v: unknown) => masker.maskJson(v),
+        maskText: (t: string) => masker.maskText(t),
+        specChecks,
+      },
+      plan,
+      {
+        caseId,
+        specFile,
+        error: masker.maskText(failed.error ?? "unknown error"),
+        dom: typeof dom === "string" ? dom : undefined,
+        ...(elements
+          ? {
+              screen: {
+                where: "the failure",
+                platform: type === "web" ? ("web" as const) : mobilePlatform,
+                elements,
+              },
+            }
+          : {}),
+        attempt: healAttempt,
+      },
+    ).catch((error: unknown) => {
+      events.emit("heal", { kind: "agent", name: "healer" }, "heal.error", {
+        caseId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { file: undefined };
+    });
+    return file;
+  };
+  const primaryLane = (lane: "api" | "web") => async (): Promise<void> => {
+    const cases = active.filter((c) => c.type === lane);
+    if (cases.length === 0) return;
+    events.emit("run", SYSTEM, "lane.start", { lane, cases: cases.length, workers: lanes[lane] });
+    const laneRan = await runCases({
+      ...base,
+      ...watched,
+      // REQ-EXEC-16/AC3: only the primary run pauses; one case at a time so the person follows one.
+      ...(live?.pause ? { pause: live.pause } : {}),
+      lane,
+      plan: { ...plan, cases },
+      specs,
+      evidence,
+      resultsDir: ws.path("results"),
+      retries: project.config.environments.retries,
+      workers: lanes[lane],
+      // REQ-EXEC-09: web cases that could not run get at most two healed attempts.
+      ...(lane === "web" ? { heal } : {}),
+    });
+    for (const [id, r] of laneRan) ran.set(id, r);
+  };
+  const matrix = (concurrency: number) => (): Promise<void> =>
+    runMatrix(session, plan, combos.slice(1), {
+      specs,
+      blocked,
+      concurrency,
+      run: (combo, cases, dir) =>
+        runCases({
+          ...base,
+          lane: "web",
+          executor: executorFor(combo),
+          plan: { ...plan, cases },
+          specs,
+          evidence,
+          resultsDir: dir,
+          evidencePrefix: `matrix/${combo.id}/`,
+          visual: visualFor(combo.id),
+          retries: project.config.environments.retries,
+          workers: lanes.web,
+        }),
+      unavailable: (combo) =>
+        ports.browserUnavailable
+          ? ports.browserUnavailable(combo.browser)
+          : ports.executor
+            ? undefined
+            : browserUnavailable(combo.browser),
+    });
+  const mobileCases = active.filter((c) => c.type === "mobile" && specs.has(c.id));
+  const mobileRan = new Map<string, CaseResultFile>();
+  const mobileLane = async (): Promise<void> => {
+    if (mobileCases.length === 0) {
+      // Started for the snapshot but nothing to run on it: stop it now.
+      if (devices.started()) {
+        const d = await devices.get();
+        if (d.ok) await d.stop();
+      }
+      return;
+    }
+    for (const [id, r] of await runMobile(session, plan, mobileCases, io, results, {
+      device: devices.get,
+      onDevice: run.onDevice,
+      sequential: lanes.sequential,
+      run: (factory, cases, where) =>
+        runCases({
+          ...base,
+          ...(where.primary ? watched : {}),
+          lane: "mobile",
+          executor: ports.mobileExecutor?.(factory) ?? createSandboxExecutor({ browser: factory }),
+          ...(live?.pause && where.primary ? { pause: live.pause } : {}),
+          plan: { ...plan, cases },
+          specs: new Map([...specs].filter(([id]) => cases.some((c) => c.id === id))),
+          evidence,
+          resultsDir: where.resultsDir,
+          ...(where.evidencePrefix ? { evidencePrefix: where.evidencePrefix } : {}),
+          retries: project.config.environments.retries,
+          workers: 1,
+          // REQ-EXEC-22/AC4: the primary device heals like the web lane.
+          ...(where.primary ? { heal } : {}),
+        }),
+    }))
+      mobileRan.set(id, r);
+  };
+  // REQ-EXEC-19/AC3: with web_combinations > 1 the other browsers run next to the primary one.
+  const together = lanes.webCombinations > 1;
+  await runLimited(
+    [
+      primaryLane("api"),
+      primaryLane("web"),
+      mobileLane,
+      ...(together ? [matrix(lanes.webCombinations - 1)] : []),
+    ],
+    lanes.sequential ? 1 : 4,
+  );
+  if (!together) await matrix(1)();
   // REQ-VER-09: the canary re-runs one PASSED case with an inverted expectation; it must fail.
   if (project.config.verification.canary) await runCanary(session, plan, ran, specs, base);
+  for (const [id, r] of mobileRan) ran.set(id, r);
   for (const [id, r] of ran) results.set(id, r);
-  await runMatrix(session, plan, combos.slice(1), {
-    specs,
-    blocked,
-    run: (combo, cases, dir) =>
-      runCases({
-        ...base,
-        executor: executorFor(combo),
-        plan: { ...plan, cases },
-        specs,
-        evidence,
-        resultsDir: dir,
-        evidencePrefix: `matrix/${combo.id}/`,
-        visual: visualFor(combo.id),
-        retries: project.config.environments.retries,
-        workers: project.config.environments.workers,
-      }),
-    unavailable: (combo) =>
-      ports.browserUnavailable
-        ? ports.browserUnavailable(combo.browser)
-        : ports.executor
-          ? undefined
-          : browserUnavailable(combo.browser),
-  });
   await runLocales(session, plan, {
     specs,
     blocked,
@@ -859,78 +1115,9 @@ async function executeCases(
         visual: visualFor(`${primaryVariant}-${locale.name}`),
         locale,
         retries: project.config.environments.retries,
-        workers: project.config.environments.workers,
+        workers: lanes.api,
       }),
   });
-  // REQ-EXEC-06/AC3, REQ-EXEC-10/AC2: mobile cases run after the others, one at a time per device.
-  const mobileCases = plan.cases.filter((c) => c.type === "mobile" && !blocked.has(c.id) && specs.has(c.id));
-  if (mobileCases.length > 0) {
-    const { codeHosts } = buildAdapters(
-      project,
-      {
-        fetch: ports.fetch,
-        logger: session.logger,
-        now: ports.now,
-        resolveSecret: (r) => session.resolveSecret(r),
-        registerSecret: (v) => {
-          masker.register(v);
-        },
-      },
-      ports,
-    );
-    events.emit("run", SYSTEM, "mobile.prepare", { cases: mobileCases.map((c) => c.id) });
-    const device = await (ports.mobileDevice?.() ??
-      prepareMobile(session, env.baseUrl, codeHosts, ports.env["APPIUM_HOME"], {
-        allowBuild: run.build,
-        // REQ-EXEC-16/AC2: --headed shows the emulator window.
-        headed: live?.headed === true,
-      }));
-    if (!device.ok) {
-      // REQ-ENV-06/AC3: a platform that is not available here is reported, never silently skipped.
-      io.writeError(`Mobile cases are BLOCKED: ${device.reason}\n`);
-      await writeBlocked(
-        session,
-        mobileCases.map((c) => c.id),
-        `mobile device not available: ${device.reason}`,
-        results,
-      );
-    } else {
-      // Ctrl+C during mobile cases still stops the emulator and the Appium server.
-      run.onDevice(device.stop);
-      try {
-        // REQ-EXEC-10/AC2: cases split round-robin among the devices; one case at a time per device.
-        const groups = device.factories.map((factory, d) => ({
-          factory,
-          cases: mobileCases.filter((_, i) => i % device.factories.length === d),
-        }));
-        const perDevice = await Promise.all(
-          groups
-            .filter((g) => g.cases.length > 0)
-            .map((g) =>
-              runCases({
-                ...base,
-                ...watched,
-                executor: ports.mobileExecutor?.(g.factory) ?? createSandboxExecutor({ browser: g.factory }),
-                ...(live?.pause ? { pause: live.pause } : {}),
-                plan: { ...plan, cases: g.cases },
-                specs: new Map([...specs].filter(([id]) => g.cases.some((c) => c.id === id))),
-                evidence,
-                resultsDir: ws.path("results"),
-                retries: project.config.environments.retries,
-                workers: 1,
-              }),
-            ),
-        );
-        for (const mobileRan of perDevice)
-          for (const [id, r] of mobileRan) {
-            results.set(id, r);
-            ran.set(id, r);
-          }
-      } finally {
-        await device.stop();
-      }
-    }
-  }
   events.emit("run", RUNNER, "cases.done", { cases: ran.size });
   return rejected.map((f) => f.slice(ws.dir.length + 1));
 }

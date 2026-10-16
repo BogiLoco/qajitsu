@@ -166,7 +166,13 @@ export async function appVersions(
           ? `CI artifact '${app.artifact}' (${app.file}) of ${app.repo}, for the commit of each run`
           : app.source === "build"
             ? `built in the ${app.repo} worktree of each run: ${app.command.join(" ")} → ${app.output}`
-            : `${app.path} in the ${app.repo} worktree of each run`,
+            : app.source === "path"
+              ? `${app.path} in the ${app.repo} worktree of each run`
+              : app.source === "file"
+                ? `file ${app.path} (REQ-EXEC-23)`
+                : app.source === "url"
+                  ? `downloaded from ${new URL(app.url).origin}, SHA-256 ${app.sha256.slice(0, 12)}…`
+                  : "already installed on the device",
     });
   }
   if (config.mobile?.ios?.farm)

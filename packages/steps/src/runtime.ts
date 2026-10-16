@@ -450,7 +450,30 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     return response;
   };
 
+  /**
+   * REQ-EXEC-21/AC7: a page or screen without any element QAJitsu can address (a canvas, a game, an app without
+   * accessibility semantics) cannot be tested through its elements; the error says so, so the case is BLOCKED with
+   * that reason instead of FAILED.
+   */
+  const unaddressable = async (d: UiDriver): Promise<boolean> =>
+    d.elements !== undefined &&
+    !d.url().startsWith("about:") &&
+    (await d.elements().catch(() => [undefined])).length === 0;
+  /** An action of this attempt found an element: an empty screen later is what the application did, not a canvas. */
+  let addressed = false;
+  const NO_ELEMENTS =
+    "the page or screen shows no element QAJitsu can address (a canvas, a game or an app without accessibility semantics), so it cannot be tested through its elements";
   const uiOp = async (operation: UiOperation): Promise<void> => {
+    try {
+      await uiAction(operation);
+      if ("selector" in operation) addressed = true;
+    } catch (error) {
+      if (driver && (await unaddressable(driver)))
+        throw new Error(`${describeError(error)}; ${NO_ELEMENTS}`, { cause: error });
+      throw error;
+    }
+  };
+  const uiAction = async (operation: UiOperation): Promise<void> => {
     if (currentStep === undefined) throw new Error("UI actions must run inside step()");
     lastAction.set(currentStep, "ui");
     const d = await browser();
@@ -743,8 +766,14 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         );
       }
       const expected = expectationOf(planCase, stepId, field, `${caseId}.${stepId}.${field}`);
-      if (!driver) throw new Error(`verify('${stepId}', '${field}') needs the browser to be open`);
-      record(expected, await driver.property(assertSelector(rest.slice(0, -1).join(".")), property));
+      // A native app is open from the start of the case; a browser has no page until ui.goto().
+      if (!driver && planCase.type === "mobile") await browser();
+      if (!driver)
+        throw new Error(`verify('${stepId}', '${field}') needs an open page: call ui.goto() first`);
+      const actual = await driver.property(assertSelector(rest.slice(0, -1).join(".")), property);
+      if (!addressed && !isDeepStrictEqual(actual, expected) && (await unaddressable(driver)))
+        throw new Error(`verify('${stepId}', '${field}'): ${NO_ELEMENTS}`);
+      record(expected, actual);
       return;
     }
     const expected = expectationOf(planCase, stepId, field, `${caseId}.${stepId}.${field}`);
@@ -899,6 +928,15 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         } catch {
           // The page is gone; video and trace from the runner still show what happened.
         }
+        // REQ-EXEC-22/AC4: the elements on the page or screen at the failure, for the healer and the reviewer.
+        const elements = await driver.elements?.().catch(() => undefined);
+        if (elements !== undefined)
+          evidence.push({
+            stepId: "case",
+            kind: "dom",
+            name: "failure-elements.json",
+            content: masker.maskText(`${JSON.stringify(elements, null, 2)}\n`),
+          });
       }
       return {
         caseId,

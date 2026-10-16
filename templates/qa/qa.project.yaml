@@ -99,6 +99,14 @@ test_types: [api, web]
 # Run budget (REQ-PLAN-08): once a limit is reached the remaining cases are NOT_RUN with the reason.
 # budget: { max_minutes: 30, max_cost_usd: 2.00 }
 
+# How cases run (REQ-EXEC-19): API, web and mobile lanes at the same time; each case holds its own pool accounts
+# (accounts: { user:standard: { pool: [...] } } in envs/<name>.yaml). sequential: true runs one case at a time.
+# execution:
+#   workers: { api: 4, web: 2 } # default environments.workers
+#   web_combinations: 1 # browser combinations of web.matrix at once
+#   account_wait_s: 300
+#   sequential: false
+
 # Visual regression (REQ-EXEC-12): baselines in .qa/baselines/, accepted with `qj baseline accept`.
 # visual: { threshold: 0.001, color_threshold: 0.1 }
 
@@ -157,9 +165,10 @@ test_types: [api, web]
 #
 # Android and iOS (REQ-ENV-06, docs/guides/mobile.md)
 # mobile: { recording: retain-on-failure, android: { app: { source: build, repo: app, command: [./gradlew, assembleDebug], output: app/build/outputs/apk/debug/app-debug.apk }, app_id: com.example.app } }
+# Without the app's code (REQ-EXEC-23): app: { source: file, path: app.apk } | { source: url, url: https://..., sha256: <hex> } | { source: installed }
 #
 # Browser options (REQ-EXEC-05)
-# web: { browser: chromium, video: retain-on-failure, headless: true, action_timeout_ms: 5000 }
+# web: { browser: chromium, video: retain-on-failure, headless: true, action_timeout_ms: 5000, test_id_attribute: data-testid }
 #
 # Jira comment and attachments (REQ-PUB-01, REQ-PUB-02, REQ-VER-10)
 # publish: { max_attachment_mb: 10, auto: false, media_hosts: [media.atlassian.com] }
