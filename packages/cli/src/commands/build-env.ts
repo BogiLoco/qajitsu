@@ -10,6 +10,7 @@ import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
 import {
   CaseResultFileSchema,
   ConfigError,
+  acquireRunLock,
   checkBuildConfig,
   cleanRunFiles,
   type CaseResultFile,
@@ -205,4 +206,25 @@ export function effectiveConfig(
     environment: { name: env.name, ...env.profile },
     overrides,
   });
+}
+
+/**
+ * Locks the environment of a run (REQ-GEN-05/AC2): held by `qj env up` while its environment runs and by every command
+ * that builds one for the run, so two environments of the same run never clash. The run lock stays free for commands
+ * that only use the running environment, such as `qj explore`.
+ *
+ * @throws {ConfigError} `RUN_LOCKED` when another process runs the environment of this run.
+ */
+export async function acquireEnvLock(session: RunSession): Promise<() => Promise<void>> {
+  try {
+    return await acquireRunLock(session.ws.path("env.lock"));
+  } catch (error) {
+    if (error instanceof ConfigError && error.code === "RUN_LOCKED")
+      throw new ConfigError(
+        "RUN_LOCKED",
+        `The environment of this run is in use by another process (${error.message}); stop its qj env up first, or use it with qj explore.`,
+        error.context,
+      );
+    throw error;
+  }
 }

@@ -15,7 +15,7 @@ import {
 import type { CommandExec } from "@qajitsu/adapter-env-compose";
 import type { CodeHost } from "@qajitsu/core";
 import { buildAdapters, type RuntimePorts } from "../adapters.js";
-import { prepareBuild, removeEnvFiles, type PreparedBuild } from "./build-env.js";
+import { acquireEnvLock, prepareBuild, removeEnvFiles, type PreparedBuild } from "./build-env.js";
 import type { RunSession } from "../session.js";
 import type { CommandIO } from "./fetch.js";
 import { accountLogin } from "./lanes.js";
@@ -120,6 +120,7 @@ export async function planSnapshot(
   if (options.build !== true)
     return recordForPlanner(session, io, ports, { env: options.env, force: options.force });
   // REQ-EXEC-22/AC9: the environment (and the app) are started from the worktree only to record what they show.
+  const releaseEnv = await acquireEnvLock(session);
   io.write("Building the environment to record its pages and screens for the planner…\n");
   const prepared = await prepareBuild(session, {
     overrides: {},
@@ -147,6 +148,7 @@ export async function planSnapshot(
   } finally {
     await prepared.build?.stop().catch(() => undefined);
     await removeEnvFiles(session);
+    await releaseEnv();
   }
 }
 

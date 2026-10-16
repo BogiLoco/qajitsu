@@ -15,7 +15,13 @@ import { createMasker } from "@qajitsu/steps";
 import { createCliSecretResolver, type RuntimePorts } from "../adapters.js";
 import { loadProject } from "../project.js";
 import { openSession, type ModelPorts } from "../session.js";
-import { parseOverrides, prepareBuild, removeEnvFiles, type PreparedBuild } from "./build-env.js";
+import {
+  acquireEnvLock,
+  parseOverrides,
+  prepareBuild,
+  removeEnvFiles,
+  type PreparedBuild,
+} from "./build-env.js";
 import type { CommandIO } from "./fetch.js";
 import { holdUntil } from "../hold.js";
 import type { RunPorts } from "./run.js";
@@ -183,6 +189,13 @@ export async function runEnvUp(
         {},
       );
     release = await acquireRunLock(ws.path("run.lock"));
+    // The environment stays locked while it runs; the run lock is handed back once it is up (see below).
+    const releaseEnv = await acquireEnvLock(session);
+    const releaseRun = release;
+    release = async () => {
+      await releaseEnv();
+      await releaseRun();
+    };
     const stopped = new Promise<void>((resolve) => (stopRequested = resolve));
     signals.on("SIGINT", onSignal);
     signals.on("SIGTERM", onSignal);
@@ -207,6 +220,8 @@ export async function runEnvUp(
         build: { project: built.project, ports: built.ports, services: built.services },
       },
     });
+    // REQ-EXEC-15/AC1: commands that use the running environment (qj explore) may take the run now.
+    await releaseRun();
     io.write(
       `Environment ${built.project} is up; base URL ${built.baseUrl}\n${Object.entries(built.services)
         .map(([name, s]) => `  ${name}: ${s.url}${built.stubs.includes(name) ? " (stub)" : ""}`)

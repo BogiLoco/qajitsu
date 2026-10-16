@@ -58,6 +58,7 @@ import { accountLogin, runLimited, runMobileLane } from "./lanes.js";
 import { authorSnapshot } from "./app-snapshot.js";
 import { exportRunTelemetry } from "./telemetry.js";
 import {
+  acquireEnvLock,
   blockAfterStartFailure,
   effectiveConfig,
   finishRunResources,
@@ -419,6 +420,19 @@ export async function runRun(
     messages = runMessages(session, ports);
     // REQ-WS-04/AC2: one process per run; other runs of the ticket may run in parallel.
     release = await acquireRunLock(ws.path("run.lock"));
+    if (options.build) {
+      // REQ-GEN-05/AC2: a run that builds its environment never clashes with one qj env up runs for it.
+      const releaseEnv = await acquireEnvLock(session).catch(async (error: unknown) => {
+        await release?.();
+        release = undefined;
+        throw error;
+      });
+      const releaseRun = release;
+      release = async () => {
+        await releaseEnv();
+        await releaseRun();
+      };
+    }
     const { plan, approval } = await loadApprovedPlan(ws);
     // REQ-EXEC-16: chosen cases, a visible browser or emulator and step pauses are checked before anything runs.
     const live = prepareLiveRun(options, plan, io, events, {

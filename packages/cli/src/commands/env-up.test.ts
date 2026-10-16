@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { acquireRunLock } from "@qajitsu/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { apiService, createBuildProject, record } from "../../../../tests/support/cli-build.js";
 
@@ -46,6 +47,26 @@ describe("qajitsu env up (REQ-GEN-05/AC2)", () => {
     expect(journal).toContain('"env.up"');
     expect(journal).toContain('"env.down"');
     expect(signals.listenerCount("SIGINT")).toBe(0);
+  }, 120_000);
+
+  it("REQ-GEN-05/AC2 + REQ-EXEC-15/AC1: once the environment is up the run is free for explore, while building another environment for it is refused", async () => {
+    const signals = new EventEmitter();
+    const p = await createBuildProject(undefined, { ports: { signals } });
+    cleanups.push(p.cleanup);
+    const dir = await p.prepare();
+    const running = p.run(["env", "up", "DEMO-1"]);
+    await startedBuild(dir);
+    // The run lock is free for commands that use the running environment (qj explore takes it).
+    const release = await acquireRunLock(join(dir, "run.lock"));
+    await release();
+    // A second environment for the same run would clash with the running one.
+    const build = await p.run(["run", "DEMO-1", "--build"]);
+    expect(build.exitCode).toBe(3);
+    expect(build.err).toContain("RUN_LOCKED");
+    expect(build.err).toContain("environment");
+    signals.emit("SIGINT");
+    expect((await running).exitCode).toBe(0);
+    await expect(readFile(join(dir, "env.lock"), "utf8")).rejects.toThrow();
   }, 120_000);
 
   it("REQ-GEN-05/AC2 + REQ-ENV-04/AC3: a start failure ends with exit code 2 and names the service logs", async () => {
