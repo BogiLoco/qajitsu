@@ -190,6 +190,16 @@ describe("author with a snapshot of the running application (REQ-EXEC-22)", () =
     expect(await readFile(ws.path("specs", "TC-01.spec.ts"), "utf8")).toBe(guessed);
   });
 
+  it("REQ-EXEC-01/AC1: a UI step that only verifies goes back to the author once with the plan's action", async () => {
+    const idle = good.replace('await ui.click("testid:add-item");', "");
+    const model = scriptedModel([{ text: "```ts\n" + idle + "```" }, { text: "```ts\n" + good + "```" }]);
+    const { d, ws, context } = await deps(model);
+    const [result] = await runAuthor(d, one, context, analysis, []);
+    expect(result).toMatchObject({ caseId: "TC-01", attempts: 2, problems: [] });
+    expect(await readFile(ws.path("specs", "TC-01.spec.ts"), "utf8")).toBe(good);
+    expect(promptOf(model, 1)).toContain('- step(\\"S1\\"): the plan says \\"Add one item to the cart\\"');
+  });
+
   it("REQ-EXEC-22/AC6: without a snapshot the author writes the spec as before", async () => {
     const model = scriptedModel([{ text: "```ts\n" + guessed + "```" }]);
     const { d, context } = await deps(model);

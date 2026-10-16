@@ -11,6 +11,7 @@ import {
   renderUiSnapshot,
   snapshotSelectors,
   specSelectors,
+  stepsWithoutActions,
   typecheckSpecs,
   unknownSelectors,
   type SpecCheckOptions,
@@ -301,14 +302,22 @@ export async function runAuthor(
             : await checkSpec(code, planCase.id, plan, deps.specChecks);
         // REQ-EXEC-22/AC3: selectors that match nothing recorded go back to the author once, with the closest ones;
         // the question does not use up an attempt, and the answer is accepted when it passes the checks.
-        const unknown =
-          code !== undefined && problems.length === 0 && !askedAboutSelectors
-            ? unknownSelectors(specSelectors(code), planCase.type, {
-                screens: screensFor(planCase.type),
-                inventory: context.ui,
+        const ask = code !== undefined && problems.length === 0 && !askedAboutSelectors;
+        const unknown = ask
+          ? unknownSelectors(specSelectors(code), planCase.type, {
+              screens: screensFor(planCase.type),
+              inventory: context.ui,
+            })
+          : [];
+        // REQ-EXEC-01: a UI step that only verifies checks a state nobody produced; its plan action says what to do.
+        const idle =
+          ask && planCase.type !== "api"
+            ? stepsWithoutActions(code).flatMap((id) => {
+                const s = planCase.steps.find((x) => x.id === id);
+                return s && s.manual !== true ? [s] : [];
               })
             : [];
-        if (code !== undefined && unknown.length > 0) {
+        if (code !== undefined && (unknown.length > 0 || idle.length > 0)) {
           askedAboutSelectors = true;
           const known = snapshotSelectors(
             screensFor(planCase.type),
@@ -324,11 +333,24 @@ export async function runAuthor(
             {
               role: "user",
               content: [
-                "These selectors match no element of the recorded pages or screens and no element id in the code:",
-                ...unknown.map(
-                  (s) => `- ${s} (closest recorded: ${closestSelectors(s, known).join(", ") || "none"})`,
-                ),
-                "Use a recorded selector instead. Keep one only if its element appears after an action of the spec. Answer with the complete spec.",
+                ...(unknown.length > 0
+                  ? [
+                      "These selectors match no element of the recorded pages or screens and no element id in the code:",
+                      ...unknown.map(
+                        (s) =>
+                          `- ${s} (closest recorded: ${closestSelectors(s, known).join(", ") || "none"})`,
+                      ),
+                      "Use a recorded selector instead. Keep one only if its element appears after an action of the spec.",
+                    ]
+                  : []),
+                ...(idle.length > 0
+                  ? [
+                      "These steps only verify; they perform no action, so they check a state nobody produced:",
+                      ...idle.map((s) => `- step("${s.id}"): the plan says "${s.action}"`),
+                      "Perform that action through ui in the step before its verify() (tap or fill the elements that do it). Keep a step without action only if its action needs nothing.",
+                    ]
+                  : []),
+                "Answer with the complete spec.",
               ].join("\n"),
             },
           ];

@@ -10,6 +10,7 @@ import {
   checkSpecSource,
   formatSpecProblems,
   stepsTypesEntry,
+  stepsWithoutActions,
   typecheckSpecs,
 } from "./spec-checks.js";
 
@@ -427,5 +428,16 @@ describe("manual steps in specs (REQ-EXEC-11)", () => {
     expect(checkSpecSource(invented, "TC-01", mobilePlan).map((p) => `${p.check}: ${p.message}`)).toEqual([
       'coverage: verify("S1", "elements.testid:cart-badge.text", ...) checks something step S1 of the plan does not expect; it expects: elements.testid:cart-count.text',
     ]);
+  });
+
+  it("REQ-EXEC-01/AC1: steps that only verify are found; ui, API and inbox calls are actions, plan.expect is not", () => {
+    const spec = [
+      'await step("S1", async () => { verify("S1", "elements.testid:a.text", undefined, plan.expect("TC-01.S1.elements.testid:a.text")); });',
+      'await step("S2", async () => { await ui.click("testid:b"); });',
+      'await step("S3", async () => { const r = await api.as("user:standard").get("/cart"); verify("S3", "status", r.status, plan.expect("TC-01.S3.status")); });',
+      'await step("S4", async () => { const m = await inbox.wait("S4"); });',
+      'await step("S5", () => {});',
+    ].join("\n");
+    expect(stepsWithoutActions(spec)).toEqual(["S1", "S5"]);
   });
 });

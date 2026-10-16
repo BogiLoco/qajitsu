@@ -125,6 +125,39 @@ export function specSelectors(source: string): string[] {
 }
 
 /**
+ * Steps of a spec that do nothing but verify: no `ui.*` and no API call inside their function (REQ-EXEC-01). A step
+ * whose plan action changes the application then checks a state nobody produced.
+ *
+ * @param source - Spec source.
+ * @returns Step ids, in the order they appear.
+ */
+export function stepsWithoutActions(source: string): string[] {
+  const sf = ts.createSourceFile("spec.ts", source, ts.ScriptTarget.ES2023, true, ts.ScriptKind.TS);
+  const out: string[] = [];
+  const acts = (node: ts.Node): boolean => {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+      const target = node.expression.expression;
+      const root =
+        ts.isCallExpression(target) && ts.isPropertyAccessExpression(target.expression)
+          ? target.expression.expression
+          : target;
+      if (ts.isIdentifier(root) && root.text !== "plan" && calleeName(node) !== "expect") return true;
+    }
+    return ts.forEachChild(node, acts) === true;
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && calleeName(node) === "step") {
+      const [id, fn] = node.arguments;
+      if (id && ts.isStringLiteral(id) && fn && !acts(fn)) out.push(id.text);
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
+}
+
+/**
  * Lint, plan coverage and assertion lock of one spec (REQ-EXEC-03/AC1..AC3, invariant 4). Pure AST
  * checks, no execution:
  * - only `import type` from `@qajitsu/steps`; no dynamic import, no `process`, `require`, `fetch`,

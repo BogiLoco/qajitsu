@@ -210,6 +210,25 @@ describe("concrete expected values (REQ-PLAN-09)", () => {
     ).toEqual(["elements.label:nav-cart"]);
   });
 
+  it("REQ-PLAN-09: a native element expecting a different text and value can never pass and is flagged", () => {
+    const elements = {
+      "testid:cart-count": { text: "Cart: 1 item", value: "1" },
+      "testid:qty": { text: "2", value: "2" },
+    };
+    expect(
+      checkPlanExpectations(plan([{ expect: { description: "d", elements } }], "mobile")).map((f) => [
+        f.field,
+        f.reason,
+      ]),
+    ).toEqual([
+      [
+        "elements.testid:cart-count.value",
+        "in a native app text and value of testid:cart-count are the same visible text: expect text only",
+      ],
+    ]);
+    expect(checkPlanExpectations(plan([{ expect: { description: "d", elements } }], "web"))).toEqual([]);
+  });
+
   it("REQ-EXEC-21/AC6: code without any test id cannot judge element names; roles, labels and texts pass", () => {
     const pagesOnly = buildUiInventory([{ path: "app.html", text: '<a href="/orders">Orders</a>' }]);
     expect(pagesOnly.selectors).toEqual([]);

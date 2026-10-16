@@ -224,6 +224,16 @@ export function checkPlanExpectations(
             if (problem) flag("schema", `${response.where}: ${problem}`, `fields.${k}`, v);
           }
       }
+      // In a native app text and value read the same thing: different expectations for both can never pass.
+      if (c.type === "mobile")
+        for (const [sel, state] of Object.entries(e.elements ?? {}))
+          if (state.text !== undefined && state.value !== undefined && state.text !== state.value)
+            flag(
+              "selector",
+              `in a native app text and value of ${sel} are the same visible text: expect text only`,
+              `elements.${sel}.value`,
+              state.value,
+            );
       const target = CASE_PLATFORMS[c.type];
       // REQ-EXEC-22/AC8: with recorded pages of the case's platform, every element must be one of them or in the code.
       const recorded = (options.snapshot ?? []).filter(
