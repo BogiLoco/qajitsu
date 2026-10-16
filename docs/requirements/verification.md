@@ -183,3 +183,28 @@ explains the cause and the next step in the user's terms; the status stays BLOCK
 - [x] AC1: Each BLOCKED case gets a hint: `spec` (the generated test is wrong, e.g. an operation a native app does not have), `plan` (an expectation names something the application does not show), `environment`, `tooling` (device, browser, Appium) or `configuration`, with a next step and citations of the error, the spec line, the journal or the page source.
 - [x] AC2: The hint never changes the status; a hint without an existing citation is dropped; a model error leaves the case without a hint.
 - [x] AC3: `qj run` prints the hint under the summary table, and the report and matrix show it as a suggestion, separate from the computed status.
+
+### REQ-VER-14 · Mutation check of a change
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: REQ-VER-11, REQ-VER-09, REQ-EXEC-17, REQ-EXEC-19, REQ-ENV-03, REQ-LLM-06, INV-1, INV-3, INV-6
+- Note: TO BE REVIEWED (owner, 2026-10-16): agreed as a direction, to be thought through before accepting (cost per mutant, which languages and operators first, how equivalent mutants are handled).
+
+Green results of a ticket say the tests passed, not that they would catch a mistake in the change. `qj mutate` builds
+copies of the changed code with small, deliberate mistakes (mutants), runs the same approved specs against each one,
+and reports which mistakes the tests caught and which they let through. It measures the tests; it never changes the
+ticket's statuses.
+
+**Acceptance criteria**
+
+- [ ] AC1: `qj mutate <TICKET>` needs a run whose approved specs PASSED on the unchanged code (the baseline) and whose environment can be built from the worktree; only cases PASSED in the baseline take part, and without a baseline or a buildable environment the command stops with the reason.
+- [ ] AC2: Code creates the mutants, never a model: only in lines the change touched, with a fixed catalogue of operators (comparison, boolean, arithmetic, constant ±1, removed call, changed return value) and a seed, up to `--max <n>` (default 10); each mutant is its own worktree copy recorded as a diff with its SHA-256.
+- [ ] AC3: Each mutant is built and run like `qj run --build` in its own environment, through the lanes and in parallel within limits, with the approved specs only and no model call; the approved plan and specs are hash-checked before every mutant.
+- [ ] AC4: Per mutant code computes: killed (a case that PASSED in the baseline is FAILED), survived (every such case still PASSED), or not counted (build or start failure, BLOCKED, FLAKY, time-out), with the reason; not counted is never reported as killed.
+- [ ] AC5: `--with-regression` also runs the promoted regression packs (REQ-EXEC-17) against every mutant; the report gives the score of the ticket's tests and of tests plus regression separately, and names the tests that killed each mutant.
+- [ ] AC6: The report (`mutation/report.html`, `.md`, JSON) shows the score, every surviving mutant with its file, line and diff, and the evidence of killed ones; a person can mark a survivor as equivalent (no behaviour change) with a reason, recorded and kept out of the score.
+- [ ] AC7: `qj mutate promote <TICKET> --mutant <id>` turns a survivor into a draft plan case that targets it; it runs only after plan approval.
+- [ ] AC8: Mutation results are journaled and hashed like other check records, are never published as test results or change a case status, and `qj bench` can report each model's mutation score as a measure of the tests it writes.
+- [ ] AC9: Optionally a model proposes mutants that fit the ticket (e.g. rounding before summing); they are applied by code to changed lines only, labelled as model-proposed, and judged like the others.
