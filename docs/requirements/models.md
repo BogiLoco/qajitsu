@@ -97,11 +97,12 @@ Deferred: AC4 (a verified run with a cloud provider) is parked until a cloud key
 
 ### REQ-LLM-08 · Claude Code subscription as a local model provider
 
-- Status: proposed
+- Status: deprecated
 - Priority: could
 - Stage: later
 - Related: REQ-LLM-01, REQ-LLM-02, REQ-LLM-03, REQ-LLM-07, ADR-0003, INV-2, INV-8, INV-11
-- Note: not to be built without Anthropic's approval: Anthropic does not allow third-party products to offer claude.ai login or subscription limits (Agent SDK overview, checked 2026-10-16). REQ-GEN-07 covers the need without it.
+- Deprecated: removed by the owner on 2026-10-16. Anthropic does not allow third-party products to offer claude.ai login or subscription limits (Agent SDK overview).
+- Replaced by REQ-GEN-07
 
 On a workstation a tester can let QAJitsu's roles run on their Claude Code subscription instead of paid API calls,
 with a different Claude model per role. CI keeps using API keys. Claude Code only answers prompts: its own tools never

@@ -268,7 +268,6 @@ the evidence bundle as pipeline artifacts.
 - [REQ-PUB-07](requirements/publishing.md#req-pub-07--bug-reports-from-failed-cases) Bug reports from failed cases (should, implemented, AC 5/5)
 - [REQ-PUB-08](requirements/publishing.md#req-pub-08--promote-ticket-cases-to-the-regression-suite) Promote ticket cases to the regression suite (should, implemented, AC 4/4)
 - [REQ-PUB-09](requirements/publishing.md#req-pub-09--release-readiness-report) Release readiness report (could, implemented, AC 4/4)
-- [REQ-LLM-08](requirements/models.md#req-llm-08--claude-code-subscription-as-a-local-model-provider) Claude Code subscription as a local model provider (could, proposed, AC 0/6)
 - [REQ-OBS-08](requirements/observability.md#req-obs-08--map-as-planner-input) Map as planner input (could, implemented, AC 1/1)
 - [REQ-OBS-09](requirements/observability.md#req-obs-09--live-progress-of-a-run) Live progress of a run (should, implemented, AC 4/4)
 - [REQ-OBS-10](requirements/observability.md#req-obs-10--tool-versions-recorded-with-every-run) Tool versions recorded with every run (should, implemented, AC 4/4)

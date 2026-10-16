@@ -9,8 +9,8 @@
 ADR-0003 gives QAJitsu its own agent loop: every tool call of its agents goes through the guard (write bans, URL
 allowlist, journal). Testers who work in Claude Code want its subagents, each on a model they choose and on their own
 subscription, to do the analyst's, planner's, author's and healer's work. Anthropic does not allow third-party products
-to offer claude.ai login or subscription limits, so QAJitsu must not call Claude Code itself (REQ-LLM-08 stays
-proposed); the person runs Claude Code and QAJitsu only receives files.
+to offer claude.ai login or subscription limits, so QAJitsu must not call Claude Code itself (REQ-LLM-08 is
+deprecated); the person runs Claude Code and QAJitsu only receives files.
 
 ## Decision
 
