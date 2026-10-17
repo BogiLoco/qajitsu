@@ -46,7 +46,7 @@ Makes a project the active one and shows its open work (REQ-PRJ-03).
 
 Exit codes: `0` switched, `3` unknown project.
 
-### `qajitsu projects list`
+### `qajitsu projects list` (also `qajitsu projects`)
 
 Every registered project with readiness, ticket prefixes, open work and its `.qa/` folder; `*` marks the active one.
 

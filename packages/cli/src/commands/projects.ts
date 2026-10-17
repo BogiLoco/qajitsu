@@ -14,6 +14,7 @@ import {
   setActiveProject,
   setProjectArchived,
   type ProjectRecord,
+  type ResolvedProject,
 } from "@qajitsu/core";
 import type { RuntimePorts } from "../adapters.js";
 import { projectChecks } from "../doctor-project.js";
@@ -184,9 +185,21 @@ export async function runProjects(
       return 0;
     }
     for (const p of projects) {
-      const ready = await loadProject(dirname(p.qa_dir)).then(
-        () => "ready",
-        () => "not ready",
+      // The same readiness as `qj status`: configuration, secrets, Docker and the tools its test types need.
+      const resolved: ResolvedProject = {
+        slug: p.slug,
+        record: p,
+        paths: projectPaths(home, p.slug),
+        via: "--all",
+      };
+      const ready = await loadProject(dirname(p.qa_dir), resolved).then(
+        async (project) => {
+          const problems = (
+            await projectChecks(project, { ...ports, project: resolved }, { online: false })
+          ).filter((c) => !c.ok);
+          return problems.length === 0 ? "ready" : `not ready (${problems.map((c) => c.name).join(", ")})`;
+        },
+        () => "not ready (configuration)",
       );
       const work = await openWork(p, home);
       io.write(

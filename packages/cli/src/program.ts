@@ -233,8 +233,9 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .command("projects")
     .description("List the registered projects or print the active one");
   projects
-    .command("list")
-    .description("Every project with readiness, ticket prefixes and open work")
+    // `qj projects` alone lists them, as its description says.
+    .command("list", { isDefault: true })
+    .description("Every project with readiness, ticket prefixes and open work (the default)")
     .option("--archived", "include archived projects")
     .action(async (options: { archived?: boolean }) => {
       io.setExitCode(
