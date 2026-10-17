@@ -259,7 +259,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-EXEC-21](requirements/execution.md#req-exec-21--selectors-for-any-web-or-mobile-application) Selectors for any web or mobile application (must, implemented, AC 7/7)
 - [REQ-EXEC-22](requirements/execution.md#req-exec-22--snapshot-of-the-running-application-for-the-author-and-the-healer) Snapshot of the running application for the author and the healer (must, implemented, AC 9/9)
 - [REQ-EXEC-23](requirements/execution.md#req-exec-23--mobile-app-without-access-to-its-code) Mobile app without access to its code (should, implemented, AC 3/3)
-- [REQ-EXEC-24](requirements/execution.md#req-exec-24--exploratory-sessions-of-command-line-tools) Exploratory sessions of command-line tools (should, accepted, AC 0/7)
+- [REQ-EXEC-24](requirements/execution.md#req-exec-24--exploratory-sessions-of-command-line-tools) Exploratory sessions of command-line tools (should, implemented, AC 7/7)
 - [REQ-VER-11](requirements/verification.md#req-ver-11--bug-fix-verification-fails-before-passes-after) Bug fix verification: fails before, passes after (should, implemented, AC 4/4)
 - [REQ-VER-12](requirements/verification.md#req-ver-12--failure-triage-hints) Failure triage hints (should, implemented, AC 4/4)
 - [REQ-VER-13](requirements/verification.md#req-ver-13--why-a-case-was-blocked) Why a case was BLOCKED (should, implemented, AC 3/3)

@@ -439,15 +439,51 @@ writes `explore/<session>/report.html` and `report.md` for review. Needs a fetch
   needs no allowlist entry for its random port
 - `--time-box <minutes>`: stop after this many minutes (default 10), enforced by code
 - `--max-steps <n>`: stop after this many browser actions (default 40), enforced by code
+- `--cli <tool>`: explore a command-line tool instead of the application (REQ-EXEC-24, see below)
 - `--headed`: show the browser, to watch the agent explore live (needs a display)
 - `--slow-mo <ms>`: wait this many milliseconds before every browser action, to follow it
 
 Exit codes: `0` the session ran (whatever it observed), `2` the environment is not healthy, `3` errors.
 
+#### Command-line tools (`--cli`, REQ-EXEC-24)
+
+`qajitsu explore <ticket> --cli <tool> --goal "<text>"` explores any command-line tool described under `explore.cli`
+in `.qa/qa.project.yaml`, QAJitsu's own `qj` included. Each session runs in a throwaway sandbox: a copy of the tool's
+fixture folder with its own HOME and TMPDIR, only PATH, LANG, TERM and the configured variables (secrets by
+`secret://`, `{{sandbox}}` and `{{home}}` templates), and an HTTP proxy that lets the tool reach loopback and its
+allowlist only. The agent asks for commands (`cli_run` with prompt answers, `cli_start`, `cli_send`, `cli_signal` for
+Ctrl+C, `cli_wait`, `cli_read`, `cli_list`, `cli_leftovers`); QAJitsu runs only the configured program, with
+argument arrays and never a shell, refuses arguments that name paths outside the sandbox, and records each action's
+exit code, changed files and masked output with SHA-256. When the session ends, also after a time-out or an error,
+the teardown commands run and every process or container the session left is stopped; the report lists what was left
+running, what was stopped and the hosts the proxy refused. A tool that ignores proxy variables is not stopped by the
+proxy.
+
+```yaml
+explore:
+  cli:
+    mytool:
+      command: [./bin/mytool] # program and fixed arguments; ./ and ../ are from .qa/
+      description: Deploys the shop to a test cluster.
+      fixture: fixtures/mytool-sandbox # copied into every sandbox
+      setup: [[git, init]] # or { command: [...], ok_exit_codes: [0, 2] }
+      teardown: [[./bin/mytool, down]]
+      env:
+        MYTOOL_TOKEN: { secret: secret://env/MYTOOL_TEST_TOKEN }
+        DOCKER_CONFIG: { value: "{{home}}/.docker" }
+      allowlist: [https://staging.example.com]
+      timeout_s: 120
+```
+
+The demo shop configures `qj` itself: `qj explore DEMO-1 --cli qj --goal "qj env up and qj explore on the same run,
+with Ctrl+C in the middle"`.
+
 ### `qajitsu explore promote <ticket>`
 
 Turns an observation into a draft web case in a new plan version, with the observation as its source and the recorded
-actions as steps. It runs only after the plan is approved.
+actions as steps. It runs only after the plan is approved. For a command-line session it writes a regression test
+proposal instead, `explore/<session>/promotions/<observation>.md`: the commands that reproduce it, what happened, what
+was expected and the steps as JSON; nothing runs until someone adds it to a test suite.
 
 - `--session <id>`: exploratory session, e.g. `S01` (required)
 - `--observation <id>`: observation, e.g. `O1` (required)

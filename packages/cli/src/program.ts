@@ -725,6 +725,10 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--time-box <minutes>", "stop after this many minutes (default 10)")
     .option("--max-steps <n>", "stop after this many browser actions (default 40)")
     .option("--headed", "show the browser while the agent explores")
+    .option(
+      "--cli <tool>",
+      "explore this command-line tool of explore.cli in a sandbox instead of the application",
+    )
     .option("--slow-mo <ms>", "wait this many ms before every browser action, to follow it")
     .action(
       (
@@ -737,6 +741,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
           maxSteps?: string;
           headed?: boolean;
           slowMo?: string;
+          cli?: string;
         },
       ) => withPorts((ports) => runExplore(ticket, options, commandIO, ports))(),
     );

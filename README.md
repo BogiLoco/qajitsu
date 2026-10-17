@@ -866,6 +866,7 @@ qj promote SHOP-482 --dry-run                        # PASSED cases as a pack fo
 qj regression --env staging --packs SHOP-482         # promoted packs again, no models
 qj release 2.4.0 --publish SHOP-500                  # readiness of every ticket of a fix version
 qj explore SHOP-482 --goal "check the cart around the change" --time-box 15 --headed --slow-mo 500
+qj explore DEMO-1 --cli qj --goal "qj env up and qj explore on the same run, with Ctrl+C in the middle"
 qj explore promote SHOP-482 --session S01 --observation O2
 
 # Results
@@ -1067,6 +1068,12 @@ verification: { auditor: optional, canary: true, triage: on }
   performs and records every action (screenshots, video, trace, network), enforces the time box and step budget, and
   writes a review report with observations and steps to reproduce. Observations are proposals, never statuses;
   `qj explore promote` turns one into a draft plan case.
+- **Exploring command-line tools.** `qj explore <TICKET> --cli <tool> --goal "..."` lets the agent use any CLI
+  described in `explore.cli` (QAJitsu's own `qj` in the demo) like a tester in a terminal: it answers prompts,
+  presses Ctrl+C, runs commands side by side and checks what was left running. Every session runs in a throwaway
+  sandbox with its own HOME, only the configured variables and an allowlist proxy; QAJitsu runs only that program,
+  with argument arrays, records every command's exit code, output and changed files, and stops everything the session
+  started. `qj explore promote` turns an observation into a regression test proposal.
 - **Exploration through MCP.** The author can look at the running app through MCP servers (e.g. Playwright MCP) to
   find selectors: `mcp.servers` in the project config, only the listed tools, every call through the guard and the
   journal, URLs checked against the environment allowlist, nothing stored as results or evidence.

@@ -5,6 +5,7 @@ import type { BrowserFactory } from "@qajitsu/adapter-runner-api";
 import { createPlaywrightBrowserFactory } from "@qajitsu/adapter-runner-web";
 import { buildChangeContext, createUsageTracker, runExplorer } from "@qajitsu/agents";
 import {
+  CliExploreSessionSchema,
   ConfigError,
   ExploreSessionSchema,
   QajitsuError,
@@ -24,6 +25,7 @@ import type { RuntimePorts } from "../adapters.js";
 import { codeIndexCache, openSession, type ModelPorts, type RunSession } from "../session.js";
 import { createExploreTools } from "./explore-tools.js";
 import type { CommandIO } from "./fetch.js";
+import { writeCliPromotion, type CliExplorePorts } from "./explore-cli.js";
 import { headlessFor, liveView } from "./live.js";
 import { chooseEnvironment, type RunPorts } from "./run.js";
 
@@ -43,10 +45,12 @@ export interface ExploreOptions {
   readonly headed?: boolean | undefined;
   /** Delay before every browser action, in ms. */
   readonly slowMo?: string | undefined;
+  /** Explore this command-line tool of `explore.cli` instead of the application in a browser (REQ-EXEC-24). */
+  readonly cli?: string | undefined;
 }
 
 /** Ports of `qajitsu explore`: the browser can be replaced in tests. */
-export interface ExplorePorts {
+export interface ExplorePorts extends CliExplorePorts {
   readonly exploreBrowser?: BrowserFactory;
 }
 
@@ -56,7 +60,13 @@ const fail = (io: CommandIO, error: unknown, mask: (t: string) => string): numbe
   return 3;
 };
 
-const numberOption = (raw: string | undefined, fallback: number, name: string, max: number): number => {
+/** A positive number option (minutes, actions), or its default; anything else is `OPTION_INVALID`. */
+export const numberOption = (
+  raw: string | undefined,
+  fallback: number,
+  name: string,
+  max: number,
+): number => {
   if (raw === undefined) return fallback;
   const n = Number(raw);
   if (!Number.isFinite(n) || n <= 0 || n > max)
@@ -64,7 +74,8 @@ const numberOption = (raw: string | undefined, fallback: number, name: string, m
   return n;
 };
 
-const nextSessionId = async (session: RunSession): Promise<string> => {
+/** The next free exploratory session id of a run (`S01`, `S02`, ...), shared by browser and CLI sessions. */
+export const nextSessionId = async (session: RunSession): Promise<string> => {
   const used = (await readdir(session.ws.path("explore")).catch(() => [] as string[]))
     .map((d) => /^S(\d{2,3})$/.exec(d)?.[1])
     .filter((n): n is string => n !== undefined)
@@ -113,6 +124,11 @@ export async function runExplore(
   io: CommandIO,
   ports: RuntimePorts & ModelPorts & RunPorts & ExplorePorts,
 ): Promise<number> {
+  // REQ-EXEC-24: a command-line tool instead of the application in a browser.
+  if (options.cli !== undefined) {
+    const { runCliExplore } = await import("./explore-cli.js");
+    return runCliExplore(rawKey, { ...options, cli: options.cli }, io, ports);
+  }
   const masker = createMasker();
   let release: (() => Promise<void>) | undefined;
   try {
@@ -356,25 +372,37 @@ export async function runExplorePromote(
   try {
     const session = await openSession(rawKey, options.run, io.cwd, ports, masker);
     const { ws } = session;
+    if (!/^S\d{2,3}$/.test(options.session))
+      throw new ConfigError("EXPLORE_SESSION_NOT_FOUND", `No exploratory session ${options.session}.`, {});
+    const raw = JSON.parse(
+      await readFile(ws.path("explore", options.session, "session.json"), "utf8").catch(() => {
+        throw new ConfigError("EXPLORE_SESSION_NOT_FOUND", `No exploratory session ${options.session}.`, {});
+      }),
+    ) as { kind?: unknown };
+    // REQ-EXEC-24/AC6: a command-line session becomes a regression test proposal, not a plan case.
+    if (raw.kind === "cli") {
+      const file = await writeCliPromotion(
+        CliExploreSessionSchema.parse(raw),
+        options.observation,
+        ws.path("explore", options.session),
+      );
+      session.events.emit("explore", { kind: "user", name: "cli" }, "explore.promoted", {
+        session: options.session,
+        observation: options.observation,
+        proposal: file.slice(ws.dir.length + 1),
+      });
+      io.write(
+        `Regression test proposal written: ${file}\nNothing runs until it is added to a test suite.\n`,
+      );
+      return 0;
+    }
     if (ws.record.data["approval"] !== undefined)
       throw new ConfigError(
         "PLAN_ALREADY_APPROVED",
         "The plan of this run is approved and frozen; explore and promote in a new run.",
         {},
       );
-    if (!/^S\d{2,3}$/.test(options.session))
-      throw new ConfigError("EXPLORE_SESSION_NOT_FOUND", `No exploratory session ${options.session}.`, {});
-    const record = ExploreSessionSchema.parse(
-      JSON.parse(
-        await readFile(ws.path("explore", options.session, "session.json"), "utf8").catch(() => {
-          throw new ConfigError(
-            "EXPLORE_SESSION_NOT_FOUND",
-            `No exploratory session ${options.session}.`,
-            {},
-          );
-        }),
-      ),
-    );
+    const record = ExploreSessionSchema.parse(raw);
     const observation = record.observations.find((o) => o.id === options.observation);
     if (!observation)
       throw new ConfigError(

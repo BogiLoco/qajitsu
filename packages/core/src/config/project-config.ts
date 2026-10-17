@@ -124,6 +124,15 @@ const RepoSchema = z.strictObject({
  * Schema of `.qa/qa.project.yaml` (REQ-GEN-01). This is the stage-1 subset; later stages extend it
  * (services and env templates REQ-CFG-02, cleanup REQ-WS-03, publish options REQ-PUB-*).
  */
+/** A setup or teardown command of a command-line tool's sandbox (REQ-EXEC-24/AC7). */
+const SandboxCommand = z.union([
+  z.array(z.string().min(1)).min(1),
+  z.strictObject({
+    command: z.array(z.string().min(1)).min(1),
+    ok_exit_codes: z.array(z.number().int().min(0).max(255)).min(1).default([0]),
+  }),
+]);
+
 export const ProjectConfigSchema = z.strictObject({
   project: z.string().regex(/^[a-z][a-z0-9-]*$/, "Use a lowercase project slug"),
   jira: z
@@ -356,6 +365,49 @@ export const ProjectConfigSchema = z.strictObject({
       gcp: z.strictObject({ project: z.string().regex(/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/) }).optional(),
     })
     .default({}),
+  /**
+   * Command-line tools an agent may explore (REQ-EXEC-24): each session runs in a throwaway sandbox made from the
+   * fixture folder, with its own HOME and only the variables listed here; the trusted parent runs only `command`,
+   * with argument arrays and never a shell. `{{sandbox}}` in values becomes the sandbox folder and `{{home}}` the
+   * person's real home, only where a value names it (e.g. `DOCKER_CONFIG: { value: "{{home}}/.docker" }`).
+   */
+  explore: z
+    .strictObject({
+      cli: z
+        .record(
+          z.string().regex(/^[a-z][a-z0-9_-]{0,30}$/),
+          z.strictObject({
+            /** Program and fixed leading arguments, e.g. `[node, ../../packages/cli/dist/bin.js]`; relative paths are from `.qa/`. */
+            command: z.array(z.string().min(1)).min(1),
+            /** What the tool is, for the agent. */
+            description: z.string().max(1000).default(""),
+            /** Folder copied into every sandbox (relative to `.qa/`); an empty sandbox when absent. */
+            fixture: z.string().min(1).optional(),
+            /**
+             * Commands run in the sandbox before the session: argument arrays (relative programs from `.qa/`), or
+             * `{ command, ok_exit_codes }` when an exit code other than 0 is fine (e.g. `qj init` reporting NOT READY).
+             */
+            setup: z.array(SandboxCommand).default([]),
+            /** Commands run in the sandbox after the session, also after a time-out, before everything left is stopped. */
+            teardown: z.array(SandboxCommand).default([]),
+            /** Variables the tool gets; nothing else of the person's environment except PATH, LANG and TERM. */
+            env: z
+              .record(
+                z.string().regex(/^[A-Z_][A-Z0-9_]*$/),
+                z.union([
+                  z.strictObject({ value: z.string().max(2000) }),
+                  z.strictObject({ secret: SecretRef }),
+                ]),
+              )
+              .default({}),
+            /** Origins the tool may reach through the session's proxy; loopback is always allowed. */
+            allowlist: z.array(z.url()).default([]),
+            timeout_s: z.number().int().min(1).max(3600).default(120),
+          }),
+        )
+        .default({}),
+    })
+    .default({ cli: {} }),
   /**
    * MCP servers agents may use to explore the application (REQ-EXEC-01): started per stage without a shell, with a
    * minimal environment, outside the run workspace. Only the listed tools are offered, every call goes through the

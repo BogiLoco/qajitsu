@@ -54,7 +54,7 @@ export const AGENT_ROLES: readonly AgentRoleDefinition[] = [
   {
     role: "explorer",
     purpose:
-      "Explore the application towards a session goal through browser actions the trusted parent performs and records; report observations, never statuses.",
+      "Explore the application or a command-line tool towards a session goal through actions the trusted parent performs and records; report observations, never statuses.",
     tools: [
       "explore_look",
       "explore_goto",
@@ -64,10 +64,19 @@ export const AGENT_ROLES: readonly AgentRoleDefinition[] = [
       "explore_press",
       "explore_back",
       "explore_login_as",
+      // REQ-EXEC-24: command-line sessions; the trusted parent runs every command in the sandbox.
+      "cli_run",
+      "cli_start",
+      "cli_send",
+      "cli_signal",
+      "cli_wait",
+      "cli_read",
+      "cli_list",
+      "cli_leftovers",
       "record_observation",
     ],
     requires: { tools: true, structuredOutput: true, contextWindow: 64_000 },
-    requirements: ["REQ-EXEC-15"],
+    requirements: ["REQ-EXEC-15", "REQ-EXEC-24"],
   },
   {
     role: "triage",

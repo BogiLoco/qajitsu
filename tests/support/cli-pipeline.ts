@@ -6,6 +6,7 @@ import { createPlaywrightTransport, executeAttempt, type AttemptExecutor } from 
 import { createPlaywrightBrowserFactory } from "@qajitsu/adapter-runner-web";
 import { startShop } from "../../examples/demo-shop/api/server.mjs";
 import { createProgram } from "../../packages/cli/src/program.js";
+import type { ExplorePorts } from "../../packages/cli/src/commands/explore.js";
 import type { RunPorts } from "../../packages/cli/src/commands/run.js";
 import { createCliProject, gitExec } from "./cli-project.js";
 import { scriptedModel, type Turn } from "./mock-model.js";
@@ -71,7 +72,7 @@ export async function createDemoPipeline(
     ticket?: string;
     wrapExecutor?: (executor: AttemptExecutor) => AttemptExecutor;
     /** Extra ports, e.g. `browserUnavailable` for the browser matrix. */
-    ports?: Partial<RunPorts>;
+    ports?: Partial<RunPorts & ExplorePorts>;
     /** Changes the fixture plan draft before planning. */
     transformPlan?: (draft: string) => string;
     /** Changes a fixture spec before the run. */
