@@ -924,7 +924,9 @@ qj ci comment SHOP-482 --change https://github.com/shop-org/backend/pull/12
 | 2         | no FAILED, but something is BLOCKED, FLAKY, NOT_RUN or NEEDS_REVIEW (or a publish gate failed) |
 | 3         | configuration or framework error                                                               |
 
-These are the codes of `qj run`, `qj test`, `qj resume`, `qj export` and `qj regression`. Commands that ask before
+These are the codes of `qj run`, `qj test`, `qj resume`, `qj export` and `qj regression`. A command-line usage problem
+(a missing argument, an unknown option or command) exits `3` for every command, never `1`; `--help` and `--version`
+exit `0`. Commands that ask before
 they act use `2` for "not confirmed" (`publish`, `bug`, `promote`, `baseline accept`, `release --publish`);
 `qj release` exits `1` when the release is not ready; `qj audit verify` exits `1` when a chain is broken; `qj doctor`
 and `qj init` exit `2` or `3` when something is missing; `qj setup` exits `1` when a tool failed or needs a manual

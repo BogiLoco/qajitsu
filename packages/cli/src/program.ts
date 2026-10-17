@@ -118,6 +118,9 @@ export function createProgram(version: string, io: ProgramIO): Command {
       "project to work in (default: QAJITSU_PROJECT, the ticket prefix, the active project)",
     )
     .configureOutput({ writeOut: io.write, writeErr: io.writeError })
+    // REQ-CI-04: usage problems are thrown, so the entry point exits 3 instead of Commander's 1 ("a test FAILED");
+    // set before the commands are added, so every command inherits it.
+    .exitOverride()
     // Global options go before the command (`qj --project bank fetch BANK-1`), so `clean --project` is its own.
     .enablePositionalOptions()
     .showHelpAfterError();

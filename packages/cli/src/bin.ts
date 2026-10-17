@@ -7,6 +7,7 @@ import { createInterface } from "node:readline/promises";
 import { createGitExec } from "@qajitsu/core";
 import { applyToolchainEnv } from "@qajitsu/toolchain";
 import { createProgram } from "./program.js";
+import { usageExitCode } from "./exit-code.js";
 import { readVersion } from "./version.js";
 
 const interactive = process.stdin.isTTY && process.env["CI"] === undefined;
@@ -105,4 +106,10 @@ const program = createProgram(readVersion(), {
     : {}),
 });
 
-await program.parseAsync(process.argv);
+try {
+  await program.parseAsync(process.argv);
+} catch (error) {
+  const code = usageExitCode(error);
+  if (code === undefined) throw error;
+  process.exitCode = code;
+}
