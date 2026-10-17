@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { explorerReportCheck, ExplorerReportSchema, type ExplorerSessionView } from "./explorer-report.js";
+import {
+  explorerReportCheck,
+  ExplorerReportSchema,
+  firstCommandHint,
+  type ExplorerSessionView,
+} from "./explorer-report.js";
 
 const view = (over: Partial<ExplorerSessionView> = {}): ExplorerSessionView => ({
   actions: () => [
@@ -240,5 +245,16 @@ describe("explorer report check (REQ-EXEC-25)", () => {
         }),
       ),
     ).toEqual([]);
+  });
+
+  it("REQ-EXEC-15/AC8: an explorer that answers before acting is shown the first command to run, taken from the checklist", () => {
+    expect(firstCommandHint(["qj status", "qj use demo-shop"], "qj")).toBe(
+      'cli_run with {"args": ["status"]}',
+    );
+    expect(firstCommandHint(["run `qj doctor --models`"], "qj")).toBe(
+      'cli_run with {"args": ["doctor", "--models"]}',
+    );
+    expect(firstCommandHint(["check the help"], "qj")).toBe('cli_run with {"args": ["--help"]}');
+    expect(firstCommandHint([], "qj")).toBe('cli_run with {"args": ["--help"]}');
   });
 });

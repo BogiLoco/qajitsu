@@ -184,6 +184,23 @@ export function explorerReportCheck(
   };
 }
 
+/**
+ * The first command a command-line explorer should run, as a concrete tool call (REQ-EXEC-15/AC8): taken from the
+ * first checklist item that names the tool ("qj status" → `["status"]`, flags included), else `--help`. Weak models
+ * that answer before acting follow a concrete call better than a rule.
+ *
+ * @param checks - Items of `--check`.
+ * @param tool - Name of the explored tool, e.g. `qj`.
+ */
+export function firstCommandHint(checks: readonly string[], tool: string): string {
+  for (const check of checks) {
+    const m = new RegExp(`(?<![\\w-])${escape(tool)}((?:\\s+[^\\s\`'"]+)+)`).exec(check);
+    const args = (m?.[1] ?? "").trim().split(/\s+/).filter(Boolean);
+    if (args.length > 0) return `cli_run with {"args": [${args.map((a) => JSON.stringify(a)).join(", ")}]}`;
+  }
+  return 'cli_run with {"args": ["--help"]}';
+}
+
 /** How every explorer answers; shared by the browser and command-line prompts (REQ-EXEC-25/AC2). */
 export const EXPLORER_REPORT_RULES = `When you are done, answer with one JSON object only:
 {"checklist": [{"item": "one thing the goal asks", "actions": ["A01", "A02"]},
