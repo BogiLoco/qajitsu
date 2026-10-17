@@ -7,6 +7,7 @@ import {
   ExplorerReportSchema,
   firstCommandHint,
   type ExplorerReport,
+  type ExplorerReportCheck,
   type ExplorerSessionView,
 } from "./explorer-report.js";
 import { runStructuredAgent, type AgentTool } from "./loop.js";
@@ -47,6 +48,30 @@ const journaled =
   };
 
 /**
+ * The accepted answer without the claims code could not confirm (REQ-EXEC-25/AC9); each removal is journaled.
+ */
+const withoutDropped = (
+  deps: AgentStageDeps,
+  report: ExplorerReport,
+  check: ExplorerReportCheck,
+): ExplorerReport => {
+  const dropped = check.dropped();
+  for (const d of dropped)
+    deps.events.emit(
+      "explore",
+      { kind: "agent", name: "explorer" },
+      "explore.claim_dropped",
+      deps.maskJson(d),
+    );
+  const gone = new Set(dropped.map((d) => d.text));
+  return {
+    ...report,
+    findings: report.findings.filter((f) => !gone.has(f.text)),
+    summary: gone.has(report.summary) ? "" : report.summary,
+  };
+};
+
+/**
  * Runs the explorer for one session (REQ-EXEC-15). The tools are built by the caller: they perform each action in
  * the browser of the trusted parent and record it (screenshots, journal) before the model sees the result, so the
  * agent can only ask for actions and propose observations. The step budget is passed to the loop; the time box is
@@ -72,19 +97,17 @@ export async function runExplorer(
   const role = AGENT_ROLES.find((r) => r.role === "explorer");
   if (!role) throw new ConfigError("ROLE_MISSING", "The explorer role is not defined.", { role: "explorer" });
   const model = await modelForRole(deps.models, "explorer");
+  // REQ-EXEC-15/AC8 + REQ-EXEC-25: the answer is a claim, checked against the recorded actions.
+  const check = explorerReportCheck(
+    { ...input.session, flags: false },
+    "act on the application towards the goal (explore_goto, explore_click, explore_fill, ...)",
+  );
   const { value } = await runStructuredAgent({
     stage: "explore",
     role: "explorer",
     model,
     system: EXPLORER_SYSTEM,
-    // REQ-EXEC-15/AC8 + REQ-EXEC-25: the answer is a claim, checked against the recorded actions.
-    validate: journaled(
-      deps,
-      explorerReportCheck(
-        { ...input.session, flags: false },
-        "act on the application towards the goal (explore_goto, explore_click, explore_fill, ...)",
-      ),
-    ),
+    validate: journaled(deps, check),
     retryWithTools: true,
     prompt: [
       `## Session goal (from the person who started the session)\n${input.goal}`,
@@ -100,7 +123,7 @@ export async function runExplorer(
     maxSteps: input.maxSteps,
     ...(input.signal ? { signal: input.signal } : {}),
   });
-  return value;
+  return withoutDropped(deps, value, check);
 }
 
 /** System prompt of the explorer for a command-line tool (REQ-EXEC-24). */
@@ -153,19 +176,17 @@ export async function runCliExplorer(
   const role = AGENT_ROLES.find((r) => r.role === "explorer");
   if (!role) throw new ConfigError("ROLE_MISSING", "The explorer role is not defined.", { role: "explorer" });
   const model = await modelForRole(deps.models, "explorer");
+  // REQ-EXEC-24/AC8 + REQ-EXEC-25: also no flag or subcommand in the answer that no command ran.
+  const check = explorerReportCheck(
+    { ...input.session, flags: true, tool: input.tool.name },
+    `call your tools: your next reply must be a tool call, not the JSON answer. Start with ${firstCommandHint(input.session.checks, input.tool.name)}, then the other commands of the goal one by one`,
+  );
   const { value } = await runStructuredAgent({
     stage: "explore",
     role: "explorer",
     model,
     system: CLI_EXPLORER_SYSTEM,
-    // REQ-EXEC-24/AC8 + REQ-EXEC-25: also no flag in the answer that no command ran.
-    validate: journaled(
-      deps,
-      explorerReportCheck(
-        { ...input.session, flags: true, tool: input.tool.name },
-        `call your tools: your next reply must be a tool call, not the JSON answer. Start with ${firstCommandHint(input.session.checks, input.tool.name)}, then the other commands of the goal one by one`,
-      ),
-    ),
+    validate: journaled(deps, check),
     retryWithTools: true,
     prompt: [
       `## Session goal (from the person who started the session)\n${input.goal}`,
@@ -182,5 +203,5 @@ export async function runCliExplorer(
     maxSteps: input.maxSteps,
     ...(input.signal ? { signal: input.signal } : {}),
   });
-  return value;
+  return withoutDropped(deps, value, check);
 }

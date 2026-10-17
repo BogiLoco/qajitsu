@@ -58,6 +58,13 @@ const subcommandsIn = (text: string, tool: string | undefined): string[] =>
         ),
       ].filter((s) => s !== "");
 
+/**
+ * The explorer's prose without what it quotes ('…', "…", “…”, ‘…’): a quote cites what a tool printed, not a
+ * command the explorer claims to have run (REQ-EXEC-25/AC7). Apostrophes inside words ("doesn't") are not quotes.
+ */
+const unquoted = (text: string): string =>
+  text.replace(/(?<!\w)'[^'\n]*'(?!\w)|"[^"\n]*"|“[^”\n]*”|‘[^’\n]*’/g, " ");
+
 /** Words of a checklist item, roughly stemmed, to tell a rephrased item from a swapped one. */
 const words = (text: string): Set<string> =>
   new Set(
@@ -91,12 +98,12 @@ const likeness = (a: Set<string>, b: Set<string>): number => {
  * @param howToAct - What the agent should do when it has done nothing yet, named for its tools.
  * @returns A validator for the agent loop; it keeps state, so build one per session.
  */
-export function explorerReportCheck(
-  view: ExplorerSessionView,
-  howToAct: string,
-): (report: ExplorerReport) => string[] {
+export function explorerReportCheck(view: ExplorerSessionView, howToAct: string): ExplorerReportCheck {
   let undoneSentBack = false;
-  return (report) => {
+  let findingsSentBack = false;
+  let dropped: { text: string; reason: string }[] = [];
+  const check = (report: ExplorerReport): string[] => {
+    dropped = [];
     const actions = view.actions();
     if (actions.length === 0)
       return [`you did nothing yet: ${howToAct} first, then summarise only what the tools answered`];
@@ -152,25 +159,41 @@ export function explorerReportCheck(
       const item = view.checks[i] ?? entry.item;
       const what = `checklist item ${String(i + 1)} "${item}"`;
       const written = view.checks[i] !== undefined;
-      if (entry.actions.length > 0) cited(what, entry.actions, item, written);
+      if (entry.actions.length > 0) cited(what, entry.actions, written ? item : unquoted(item), written);
       else if (entry.not_done === undefined)
         errors.push(`${what} has neither actions nor not_done: do it, or say why it was not done`);
       else {
         // REQ-EXEC-25/AC8: a command that failed still ran; its error is the result, not a reason to skip it.
-        const by = ranIt(item, written);
+        const by = ranIt(written ? item : unquoted(item), written);
         if (by.length > 0)
           errors.push(
             `${what} is not_done, but ${by.join(", ")} ran it: a command that ran is done whatever its exit code or error, which is what you report; cite ${by.join(", ")}`,
           );
       }
     });
-    for (const f of report.findings) cited(`finding "${f.text}"`, f.actions, f.text);
+    // REQ-EXEC-25/AC9: findings and the comment are sent back once; if the explorer insists, a claim code cannot
+    // confirm is dropped and journaled, so one bad sentence does not lose the checklist of a whole session.
+    const claims: { text: string; reasons: string[] }[] = [];
+    for (const f of report.findings) {
+      const before = errors.length;
+      cited(`finding "${f.text}"`, f.actions, unquoted(f.text));
+      claims.push({ text: f.text, reasons: errors.splice(before) });
+    }
     if (view.flags) {
       const all = [...args.values()].flat();
-      for (const flag of flagsIn(report.summary).filter((f) => !ran(f, all)))
-        errors.push(`the summary names ${flag}, which no action of this session ran`);
+      claims.push({
+        text: report.summary,
+        reasons: flagsIn(unquoted(report.summary))
+          .filter((f) => !ran(f, all))
+          .map((f) => `the summary names ${f}, which no action of this session ran`),
+      });
     }
-    if (errors.length > 0) return errors;
+    const unconfirmed = claims.filter((c) => c.reasons.length > 0);
+    if (errors.length > 0 || (unconfirmed.length > 0 && !findingsSentBack)) {
+      if (unconfirmed.length > 0) findingsSentBack = true;
+      return [...errors, ...unconfirmed.flatMap((c) => c.reasons)];
+    }
+    dropped = unconfirmed.map((c) => ({ text: c.text, reason: c.reasons.join("; ") }));
     const undone = report.checklist
       .map((entry, i) => ({ item: view.checks[i] ?? entry.item, done: entry.actions.length > 0 }))
       .filter((e) => !e.done);
@@ -182,7 +205,14 @@ export function explorerReportCheck(
     }
     return [];
   };
+  return Object.assign(check, { dropped: () => dropped });
 }
+
+/** The code check of an explorer's answer, and what it dropped from the answer it accepted. */
+export type ExplorerReportCheck = ((report: ExplorerReport) => string[]) & {
+  /** Findings (or the comment) of the last accepted answer that code could not confirm and removed. */
+  readonly dropped: () => readonly { readonly text: string; readonly reason: string }[];
+};
 
 /**
  * The first command a command-line explorer should run, as a concrete tool call (REQ-EXEC-15/AC8): taken from the

@@ -257,4 +257,67 @@ describe("explorer report check (REQ-EXEC-25)", () => {
     expect(firstCommandHint(["check the help"], "qj")).toBe('cli_run with {"args": ["--help"]}');
     expect(firstCommandHint([], "qj")).toBe('cli_run with {"args": ["--help"]}');
   });
+
+  it("REQ-EXEC-25/AC7: text the explorer quotes from a tool's output is not a command it claims to have run", () => {
+    const session = view({
+      tool: "qj",
+      checks: ["qj use no-such-project", "qj init"],
+      actions: () => [
+        { id: "A01", args: ["use", "no-such-project"] },
+        { id: "A02", args: ["init"] },
+      ],
+    });
+    expect(
+      explorerReportCheck(
+        session,
+        "x",
+      )(
+        report({
+          checklist: [done("use", "A01"), done("init", "A02")],
+          findings: [
+            {
+              text: "qj use no-such-project says 'create it with qajitsu init' instead of 'qj init --force'",
+              actions: ["A01"],
+            },
+            { text: 'the hint reads "run qj init first"', actions: ["A01"] },
+          ],
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("REQ-EXEC-25/AC9: a finding code cannot confirm is sent back once, then dropped; the rest of the answer is kept", () => {
+    const session = view({
+      tool: "qj",
+      checks: ["qj doctor"],
+      actions: () => [
+        { id: "A01", args: ["doctor"] },
+        { id: "A02", args: ["use", "x"] },
+      ],
+    });
+    const check = explorerReportCheck(session, "x");
+    const answer = report({
+      checklist: [done("doctor", "A01")],
+      findings: [
+        { text: "qj doctor exits 3", actions: ["A02"] },
+        { text: "doctor lists android twice", actions: ["A01"] },
+      ],
+    });
+    expect(check(answer)).toEqual([
+      'finding "qj doctor exits 3" names doctor, which none of its actions (A02) ran',
+    ]);
+    expect(check.dropped()).toEqual([]);
+    expect(check(answer)).toEqual([]);
+    expect(check.dropped()).toEqual([
+      {
+        text: "qj doctor exits 3",
+        reason: 'finding "qj doctor exits 3" names doctor, which none of its actions (A02) ran',
+      },
+    ]);
+    // Checklist problems are never dropped: they keep the answer from being accepted.
+    const strict = explorerReportCheck(session, "x");
+    const bad = report({ checklist: [done("doctor", "A02")], findings: [] });
+    expect(strict(bad)).toHaveLength(1);
+    expect(strict(bad)).toHaveLength(1);
+  });
 });

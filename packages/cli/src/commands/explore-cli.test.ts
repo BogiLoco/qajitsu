@@ -560,6 +560,66 @@ describe("qajitsu explore --cli (REQ-EXEC-24)", () => {
     await expect(stat(sandbox)).rejects.toThrow();
   }, 120_000);
 
+  it("REQ-EXEC-25/AC9: a finding the explorer insists on but code cannot confirm is dropped; the checklist of the session is kept", async () => {
+    const p = await project();
+    // Session S09 of qwen3: the same unconfirmed finding twice.
+    const r = await p.run(
+      [
+        "explore",
+        "DEMO-4",
+        "--cli",
+        "tool",
+        "--goal",
+        "S09",
+        "--check",
+        "tool hello",
+        "--check",
+        "tool fail",
+      ],
+      {
+        script: [
+          { tools: [{ name: "cli_run", input: { args: ["hello"] } }] },
+          { tools: [{ name: "cli_run", input: { args: ["fail"] } }] },
+          {
+            text: JSON.stringify({
+              checklist: [
+                { item: "tool hello", actions: ["A01"] },
+                { item: "tool fail", actions: ["A02"] },
+              ],
+              findings: [
+                { text: "tool fail exits 2", actions: ["A01"] },
+                { text: "hello prints 'tool fail' nowhere", actions: ["A01"] },
+              ],
+            }),
+          },
+          {
+            text: JSON.stringify({
+              checklist: [
+                { item: "tool hello", actions: ["A01"] },
+                { item: "tool fail", actions: ["A02"] },
+              ],
+              findings: [
+                { text: "tool fail exits 2", actions: ["A01"] },
+                { text: "hello prints 'tool fail' nowhere", actions: ["A01"] },
+              ],
+            }),
+          },
+        ],
+      },
+    );
+    expect(r.err).toBe("");
+    const session = CliExploreSessionSchema.parse(
+      JSON.parse(await readFile(join(p.runDir, "explore", "S01", "session.json"), "utf8")),
+    );
+    expect(session.endReason).toBe("finished");
+    expect(session.checklist.map((c) => c.actions)).toEqual([["A01"], ["A02"]]);
+    // The quoted 'tool fail' is a quote, kept; the unconfirmed claim is gone and journaled.
+    expect(session.findings.map((f) => f.text)).toEqual(["hello prints 'tool fail' nowhere"]);
+    const journal = await readFile(join(p.runDir, "journal", "events.jsonl"), "utf8");
+    expect(journal).toContain('"event":"explore.claim_dropped"');
+    expect(journal).toContain("tool fail exits 2");
+  }, 120_000);
+
   it("REQ-EXEC-25/AC1: without --check the explorer's own checklist is kept and marked as written by it", async () => {
     const p = await project();
     const r = await p.run(["explore", "DEMO-4", "--cli", "tool", "--goal", "Say hello"], {
