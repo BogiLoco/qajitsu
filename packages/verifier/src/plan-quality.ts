@@ -120,11 +120,17 @@ function operationOf(
   return isObject(operation) ? { operation, verb: verb.toUpperCase(), path } : undefined;
 }
 
-/** Whether the documented operation answers 401 to a caller who is not logged in. */
+/**
+ * Whether the documented operation needs a logged-in caller: it answers 401, or it is under `security` (its own, else
+ * the document's); `security: []` on an operation opts it out.
+ */
 function needsLogin(doc: Schema, action: string): string | undefined {
   const op = operationOf(doc, action);
-  const responses = op && isObject(op.operation["responses"]) ? op.operation["responses"] : undefined;
-  return op && responses && "401" in responses ? `${op.verb} ${op.path}` : undefined;
+  if (!op) return undefined;
+  const responses = isObject(op.operation["responses"]) ? op.operation["responses"] : {};
+  const security = "security" in op.operation ? op.operation["security"] : doc["security"];
+  const secured = Array.isArray(security) && security.length > 0;
+  return "401" in responses || secured ? `${op.verb} ${op.path}` : undefined;
 }
 
 /** The response schema of the call a step names (`POST /cart/discount`) for a status. */
@@ -202,7 +208,7 @@ export function checkPlanExpectations(
           caseId: c.id,
           stepId: step.id,
           kind: "account",
-          reason: `${needsLogin(doc, step.action) ?? ""} answers 401 without login, but the case names no test account: add one to data, e.g. user: user:standard`,
+          reason: `${needsLogin(doc, step.action) ?? ""} needs a login (401 without one), but the case names no test account: add one to data, e.g. user: user:standard`,
         });
     }
     for (const s of c.steps) {

@@ -423,7 +423,7 @@ describe("concrete expected values (REQ-PLAN-09)", () => {
         stepId: "S1",
         kind: "account",
         reason:
-          "GET /cart answers 401 without login, but the case names no test account: add one to data, e.g. user: user:standard",
+          "GET /cart needs a login (401 without one), but the case names no test account: add one to data, e.g. user: user:standard",
       },
     ]);
     expect(checkPlanExpectations(withData({ user: "user:standard" }, [cart]), { openapi })).toEqual([]);
@@ -435,5 +435,24 @@ describe("concrete expected values (REQ-PLAN-09)", () => {
       checkPlanExpectations(withData({}, [{ action: "GET /health", expect: { status: 200 } }]), { openapi }),
     ).toEqual([]);
     expect(checkPlanExpectations(withData({}, [cart]))).toEqual([]);
+    // Login can also be declared with security instead of a 401 response; `security: []` opts an operation out.
+    const secured = {
+      openapi: "3.0.3",
+      security: [{ bearer: [] }],
+      paths: {
+        "/orders": { post: { responses: { "201": { description: "created" } } } },
+        "/health": { get: { security: [], responses: { "200": { description: "ok" } } } },
+      },
+    };
+    expect(
+      checkPlanExpectations(withData({}, [{ action: "POST /orders", expect: { status: 201 } }]), {
+        openapi: secured,
+      }),
+    ).toMatchObject([{ stepId: "S1", kind: "account" }]);
+    expect(
+      checkPlanExpectations(withData({}, [{ action: "GET /health", expect: { status: 200 } }]), {
+        openapi: secured,
+      }),
+    ).toEqual([]);
   });
 });
