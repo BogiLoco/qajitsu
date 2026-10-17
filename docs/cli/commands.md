@@ -276,7 +276,8 @@ back to it once with the closest recorded ones. A failed web or mobile attempt k
 page or screen showed, masked), which the healer gets; mobile cases are healed too and a healed case is never PASSED.
 
 - `--run <id>`: run id (default: latest run of the ticket)
-- `--env <profile|url>`: environment profile from `.qa/envs` or a URL (default: `environments.default`)
+- `--env <profile|url>`: environment profile from `.qa/envs` or a URL (default: the environment `qajitsu env up`
+  started for this run while it answers, else `environments.default`)
 - `--build`: build the application from the fetched worktrees
 - `--keep`: with `--build`, keep containers and worktrees after the run
 - `--set <service.VAR=value>`: with `--build`, override an overridable service variable (repeatable)
@@ -729,8 +730,9 @@ Exit codes: `0` listed (also when there are none), `3` errors or an unknown run.
 
 The active project at a glance (REQ-PRJ-05): configuration readiness, default environment, knowledge base, and every
 ticket with unfinished work, its state ("plan v2 waiting for approval", "results not published", "interrupted during
-run") and the command that continues it, with the ticket's latest notes. Computed from the run folders;
-`context.json` in the project home is only an index of it.
+run") and the command that continues it, with the ticket's latest notes, then the environments still running for its
+runs (`run --build`, `env up --detach`) with their URLs and `qajitsu clean` to stop them. Computed from the run
+folders; `context.json` in the project home is only an index of it.
 
 - `--all`: every project
 - `--rebuild`: rebuild `context.json` from the run folders

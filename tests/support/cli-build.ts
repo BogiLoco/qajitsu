@@ -54,7 +54,7 @@ export const createBuildProject = async (
   options: {
     readonly buildExec?: CommandExec;
     readonly now?: () => Date;
-    readonly ports?: Partial<RunPorts & Pick<RuntimePorts, "fetch">>;
+    readonly ports?: Partial<RunPorts & Pick<RuntimePorts, "fetch" | "dockerExec">>;
   } = {},
 ) => {
   const { home, project } = await createCliProject(

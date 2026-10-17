@@ -1,4 +1,6 @@
+import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { runningEnvironments } from "@qajitsu/adapter-env-compose";
 import { dirname, join } from "node:path";
 import {
   ConfigError,
@@ -177,11 +179,27 @@ async function projectStatus(project: LoadedProject, ports: RuntimePorts): Promi
     );
     await rename(tmp, file);
   }
+  // REQ-PRJ-05/AC6: environments of this project's runs that are still running, so none is forgotten for days.
+  const runsRoot = rootOf(project, ports);
+  const running = (await runningEnvironments(ports.dockerExec)).filter((e) =>
+    existsSync(join(runsRoot, e.ticket, e.runId)),
+  );
+  const environments =
+    running.length === 0
+      ? []
+      : [
+          `Environments running (${String(running.length)}):`,
+          ...running.map(
+            (e) =>
+              `  ${e.ticket}  run ${e.runId}  ${String(e.containers)} container(s)  ${e.urls.join(", ") || "(no published port)"} · stop: qajitsu clean ${e.ticket} --run ${e.runId}`,
+          ),
+        ];
   return [
     `Configuration: ${problems.length === 0 ? "ready" : `not ready (${problems.map((p) => p.name).join(", ")})`} · ${project.qaDir}`,
     `Default environment: ${project.config.environments.default ?? "(none: pass --env)"}`,
     `Knowledge base: ${await knowledgeSummary(project)}`,
     ...renderWork(open, done),
+    ...environments,
   ];
 }
 

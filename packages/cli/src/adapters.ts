@@ -1,3 +1,4 @@
+import type { CommandExec } from "@qajitsu/adapter-env-compose";
 import { join } from "node:path";
 import { createGitHubCodeHost } from "@qajitsu/adapter-codehost-github";
 import { createGitLabCodeHost } from "@qajitsu/adapter-codehost-gitlab";
@@ -46,6 +47,8 @@ export interface RuntimePorts {
   readonly project?: ResolvedProject;
   /** Runs the `op`, `aws` and `gcloud` CLIs of secret managers (replaced in tests). */
   readonly secretCliExec?: SecretCliExec;
+  /** Runs docker to find environments still running (replaced in tests; REQ-PRJ-05/AC6). */
+  readonly dockerExec?: CommandExec;
   /** Asks tools for their versions (replaced in tests; REQ-GEN-03/AC4, REQ-OBS-10). */
   readonly versionExec?: VersionExec;
   /** Playwright and its browsers (replaced in tests). */
