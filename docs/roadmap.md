@@ -90,7 +90,7 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 - [REQ-CFG-07](requirements/config-secrets.md#req-cfg-07--test-accounts-as-aliases) Test accounts as aliases (must, implemented, AC 2/2)
 - [REQ-EXEC-01](requirements/execution.md#req-exec-01--executable-specs-from-the-approved-plan) Executable specs from the approved plan (must, implemented, AC 3/3)
 - [REQ-EXEC-02](requirements/execution.md#req-exec-02--steps-library-step-and-verify) Steps library: `step()` and `verify()` (must, implemented, AC 4/4)
-- [REQ-EXEC-03](requirements/execution.md#req-exec-03--static-checks-before-execution) Static checks before execution (must, implemented, AC 4/4)
+- [REQ-EXEC-03](requirements/execution.md#req-exec-03--static-checks-before-execution) Static checks before execution (must, implemented, AC 5/5)
 - [REQ-EXEC-04](requirements/execution.md#req-exec-04--api-testing) API testing (must, implemented, AC 3/3)
 - [REQ-EXEC-08](requirements/execution.md#req-exec-08--retries-and-flaky) Retries and FLAKY (must, implemented, AC 3/3)
 - [REQ-VER-02](requirements/verification.md#req-ver-02--verdict-from-runner-output-only) Verdict from runner output only (must, implemented, AC 3/3)

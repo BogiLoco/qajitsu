@@ -405,6 +405,32 @@ export function checkSpecSource(
         `verify("${step.id}", "${field}", ...) checks something step ${step.id} of the plan does not expect; it expects: ${planned.join(", ") || "a description only, nothing a test can compare"}`,
       );
   }
+  // A case that runs as a test account logs in as it: without it every call answers 401 and the case would end
+  // FAILED as if the product were broken (exploratory testing F21).
+  const account = Object.values(planCase.data).find(
+    (v): v is string => typeof v === "string" && /^user:[\w.-]+$/.test(v),
+  );
+  if (account !== undefined && (planCase.type === "api" || planCase.type === "web")) {
+    const client = planCase.type === "api" ? "api" : "ui";
+    const loggedIn = new Set<string>();
+    const findLogins = (node: ts.Node): void => {
+      if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        node.expression.name.text === "as" &&
+        node.arguments[0] !== undefined &&
+        ts.isStringLiteral(node.arguments[0])
+      )
+        loggedIn.add(node.arguments[0].text);
+      ts.forEachChild(node, findLogins);
+    };
+    findLogins(sf);
+    if (!loggedIn.has(account))
+      add(
+        "coverage",
+        `${caseId} runs as ${account} (data.user in the plan) but the spec never logs in as it: use ${client}.as("${account}") for its calls`,
+      );
+  }
   return problems;
 }
 

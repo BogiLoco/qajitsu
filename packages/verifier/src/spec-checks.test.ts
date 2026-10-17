@@ -440,4 +440,28 @@ describe("manual steps in specs (REQ-EXEC-11)", () => {
     ].join("\n");
     expect(stepsWithoutActions(spec)).toEqual(["S1", "S5"]);
   });
+
+  it("REQ-EXEC-03/AC5: a case that runs as a test account must log in as it; a spec that does not is refused before it runs", () => {
+    const tc01 = readFileSync(
+      new URL("../../../fixtures/specs/demo-1/TC-01.spec.ts", import.meta.url),
+      "utf8",
+    );
+    expect(checkSpecSource(tc01, "TC-01", plan)).toEqual([]);
+    // Exploratory testing F21: gemma4 wrote api.get("/cart") for a case with data.user; every call got 401 and
+    // the case ended FAILED as if the cart were broken.
+    const anonymous = tc01
+      .replace('  const shopper = api.as("user:standard");\n', "")
+      .replaceAll("shopper.", "api.");
+    expect(checkSpecSource(anonymous, "TC-01", plan)).toEqual([
+      {
+        check: "coverage",
+        message:
+          'TC-01 runs as user:standard (data.user in the plan) but the spec never logs in as it: use api.as("user:standard") for its calls',
+      },
+    ]);
+    // Another account than the plan's is no login as it either.
+    expect(
+      checkSpecSource(tc01.replace('api.as("user:standard")', 'api.as("user:admin")'), "TC-01", plan),
+    ).toHaveLength(1);
+  });
 });
