@@ -163,3 +163,27 @@ QA end to end where it accepts the risk. Every approval, by whom or by what, is 
 - [ ] AC4: The same flow can run in Jira: the plan is posted, each step's decision is a transition or comment by a person or by QAJitsu for a model step, and the hashes of the plan and of each decision are written with it.
 - [ ] AC5: Results of a plan without a human approval are marked as such in the matrix, report, junit and Jira comment, and their PASSED results are NEEDS_REVIEW unless the project explicitly accepts model-only approval.
 - [ ] AC6: `qj audit verify` checks the approval records against the journal and the approved plan; any mismatch fails the audit and the publish gates.
+
+### REQ-PLAN-11 · Exploration before planning, accepted by a person
+
+- Status: proposed
+- Priority: should
+- Stage: later
+- Related: REQ-EXEC-15, REQ-EXEC-24, REQ-EXEC-25, REQ-PLAN-03, REQ-PLAN-04, REQ-PLAN-05, REQ-PLAN-06, REQ-KNOW-01, INV-3, INV-4
+- Note: TO BE REVIEWED (owner, 2026-10-17): the flow is wanted (explore first, then plan from what a person accepted); the review command, the knowledge hand-over (AC8) and the shape of the plan source are to be confirmed before accepting.
+
+Exploratory sessions run before the plan: browser, mobile or command-line, on the ticket's change. A person reviews
+what they found and accepts or rejects each observation, finding and not-done checklist item. The planner then sees
+only what the person accepted and may propose cases from it, each citing its source; the plan is still reviewed and
+approved as usual. Exploration says what is worth testing; it never says what the right result is.
+
+**Acceptance criteria**
+
+- [ ] AC1: `qj explore review <TICKET> [--session S01]` lists every observation (`O1`), finding (`F1`) and not-done checklist item (`C3`) of the run's sessions with their actions and evidence, and records for each one accepted or rejected, by whom, when and an optional note; `--accept O1,F2` and `--reject O3` do the same without prompts (CI, scripts). Nothing is accepted by default and an agent cannot accept.
+- [ ] AC2: Every decision is journaled with the person and the SHA-256 of the session's `session.json`; if the session file changes after a decision, the decision no longer counts and the item must be reviewed again.
+- [ ] AC3: `qj plan` gives the planner the accepted items of the run's sessions (title, kind, what was seen, the steps as recorded actions) as untrusted data; rejected and unreviewed items never reach it, and the plan review says how many accepted items were offered.
+- [ ] AC4: A case proposed from exploration cites its source (`explore:S01/O2`); code rejects a citation of an item that does not exist, is not accepted, or belongs to another run.
+- [ ] AC5: Expected values of such a case come from the ticket, the documentation, an imported case or the person, cited as usual (REQ-PLAN-03, REQ-PLAN-09); what the application did during exploration is never an expected value. A case without such a source becomes an open question (REQ-PLAN-05), never an expectation copied from the observation.
+- [ ] AC6: An accepted not-done checklist item becomes a proposed case or an open question; the plan review lists those it covers and those it does not, so a gap left by exploration stays visible.
+- [ ] AC7: The plan review marks cases from exploration with their source and links to the session report; the plan is approved and frozen as any other (REQ-PLAN-04, REQ-PLAN-06); nothing from exploration runs before that.
+- [ ] AC8: An accepted observation can be kept in the project's knowledge base as known behaviour of the area it concerns (`qj explore review --keep O1`), so planners of later tickets touching that area see it, cited and checked like any other document.

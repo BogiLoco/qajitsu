@@ -244,6 +244,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-CTX-08](requirements/context.md#req-ctx-08--import-existing-manual-test-cases) Import existing manual test cases (could, implemented, AC 4/4)
 - [REQ-PLAN-08](requirements/plan.md#req-plan-08--test-depth-and-budget) Test depth and budget (should, implemented, AC 3/3)
 - [REQ-PLAN-10](requirements/plan.md#req-plan-10--approval-by-a-person-or-by-models-auditable) Approval by a person or by models, auditable (could, proposed, AC 0/6)
+- [REQ-PLAN-11](requirements/plan.md#req-plan-11--exploration-before-planning-accepted-by-a-person) Exploration before planning, accepted by a person (should, proposed, AC 0/8)
 - [REQ-ENV-08](requirements/environment.md#req-env-08--message-capture-email-sms-and-webhooks) Message capture: email, SMS and webhooks (should, implemented, AC 5/5)
 - [REQ-ENV-09](requirements/environment.md#req-env-09--account-pools) Account pools (should, implemented, AC 5/5)
 - [REQ-EXEC-11](requirements/execution.md#req-exec-11--human-in-the-loop-steps) Human-in-the-loop steps (should, implemented, AC 7/7)
