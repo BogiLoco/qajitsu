@@ -44,6 +44,7 @@ import { createMasker } from "@qajitsu/steps";
 import { formatSpecProblems } from "@qajitsu/verifier";
 import { buildAdapters, type RuntimePorts } from "../adapters.js";
 import { codeIndexCache, openSession, type ModelPorts, type RunSession } from "../session.js";
+import { runningBuild } from "./env-up-reuse.js";
 import type { CommandIO } from "./fetch.js";
 import { anchorJournal, computeVerdict, writeReports } from "./verdict.js";
 import { auditRun, blockedRun, triageRun, runCanary } from "./checks.js";
@@ -488,6 +489,16 @@ export async function runRun(
       };
     }
     const built = prepared.build;
+    // REQ-ENV-07/AC3: without --env or --build, the environment `qj env up` started for this run, while it answers.
+    const reusedEnvironment = async (): Promise<ResolvedEnvironment | undefined> => {
+      if (options.env !== undefined) return undefined;
+      const up = await runningBuild(session, ports.fetch);
+      if (up) {
+        io.write(`Using the environment qj env up started for this run: ${up.baseUrl}\n`);
+        events.emit("run", SYSTEM, "env.selected", { env: up.name, via: "env up", baseUrl: up.baseUrl });
+      }
+      return up;
+    };
     const env = options.build
       ? await resolveEnvironment({
           config: project.config,
@@ -495,7 +506,7 @@ export async function runRun(
           env: options.env,
           buildBaseUrl: built?.baseUrl ?? "http://127.0.0.1:9",
         })
-      : await chooseEnvironment(session, io, options.env);
+      : ((await reusedEnvironment()) ?? (await chooseEnvironment(session, io, options.env)));
     // REQ-ENV-01/AC1, REQ-ENV-02: health and deployed version through the EnvProvider seam (ADR-0005); a built
     // environment is checked on the profile's health path too, its version is the worktree's.
     const reached = prepared.failure

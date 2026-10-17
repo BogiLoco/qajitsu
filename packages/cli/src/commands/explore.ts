@@ -12,11 +12,9 @@ import {
   acquireRunLock,
   listPlanVersions,
   readPlan,
-  resolveEnvironment,
   writePlanVersion,
   type ExploreSession,
   type Plan,
-  type ResolvedEnvironment,
   type TestCase,
 } from "@qajitsu/core";
 import { renderExploreHtml, renderExploreMarkdown } from "@qajitsu/report";
@@ -28,6 +26,7 @@ import { checkOption, checklistLine, sessionClaims } from "./explore-checklist.j
 import { createExploreTools } from "./explore-tools.js";
 import type { CommandIO } from "./fetch.js";
 import { writeCliPromotion, type CliExplorePorts } from "./explore-cli.js";
+import { runningBuild } from "./env-up-reuse.js";
 import { headlessFor, liveView } from "./live.js";
 import { chooseEnvironment, type RunPorts } from "./run.js";
 
@@ -86,32 +85,6 @@ export const nextSessionId = async (session: RunSession): Promise<string> => {
     .map(Number);
   return `S${String(Math.max(0, ...used) + 1).padStart(2, "0")}`;
 };
-
-/**
- * The environment `qj env up` started from this run's worktree, when it still answers (REQ-EXEC-15/AC1). It listens on
- * 127.0.0.1 only, like a `qj run --build` environment, so no allowlist entry is needed for its random port.
- */
-async function runningBuild(
-  session: RunSession,
-  fetchFn: typeof globalThis.fetch,
-): Promise<ResolvedEnvironment | undefined> {
-  const recorded = session.ws.record.data["build"] as
-    { readonly services?: Record<string, { readonly url?: string }> } | undefined;
-  const services = Object.entries(recorded?.services ?? {});
-  const base = session.project.config.build?.base_service;
-  const url = (services.find(([name]) => name === base) ?? services[0])?.[1].url;
-  if (url === undefined || !/^http:\/\/127\.0\.0\.1:\d+$/.test(url)) return undefined;
-  const env = await resolveEnvironment({
-    config: session.project.config,
-    qaDir: session.project.qaDir,
-    buildBaseUrl: url,
-  }).catch(() => undefined);
-  if (!env) return undefined;
-  const reached = await createRemoteEnvProvider(env, fetchFn, { readVersion: false })
-    .start()
-    .catch(() => undefined);
-  return reached?.health.ok ? env : undefined;
-}
 
 /**
  * `qajitsu explore <TICKET> --goal <text> [--time-box <min>] [--max-steps <n>] [--env <profile|url>]`: an
