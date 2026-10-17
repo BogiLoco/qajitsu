@@ -1172,10 +1172,13 @@ export function createProgram(version: string, io: ProgramIO): Command {
   // without saying what was missing. `projects` lists by default and `explore` runs its own session.
   for (const group of program.commands)
     if (group.commands.length > 0 && !["projects", "explore"].includes(group.name()))
-      group.action(() => {
+      group.allowExcessArguments(true).action((_options: unknown, command: Command) => {
         const names = group.commands.map((c) => c.name()).filter((n) => n !== "help");
+        const [unknown] = command.args;
         io.writeError(
-          `error: '${group.name()}' needs a command: ${names.join(", ")}\n\n${group.helpInformation()}`,
+          unknown === undefined
+            ? `error: '${group.name()}' needs a command: ${names.join(", ")}\n\n${group.helpInformation()}`
+            : `error: unknown command '${unknown}' for '${group.name()}'; it has: ${names.join(", ")}\n`,
         );
         io.setExitCode(3);
       });

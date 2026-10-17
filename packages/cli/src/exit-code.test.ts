@@ -57,5 +57,19 @@ describe("exit codes of command-line usage problems (REQ-CI-04, REQ-GEN-05)", ()
       // Exploratory testing F4: it said nothing about what was missing.
       expect(err, group).toMatch(new RegExp(`^error: '${group}' needs a command: .*\\b${sub}\\b`));
     }
+    // A subcommand that does not exist is named as such, not as "too many arguments" (regression of the F4 fix).
+    let err = "";
+    let code: number | undefined;
+    await createProgram("1.0.0", {
+      write: () => undefined,
+      writeError: (t) => (err += t),
+      cwd: process.cwd(),
+      nodeVersion: process.version,
+      setExitCode: (c) => (code = c),
+    })
+      .exitOverride()
+      .parseAsync(["node", "qj", "baseline", "list", "DEMO-1"]);
+    expect(code).toBe(3);
+    expect(err).toMatch(/^error: unknown command 'list' for 'baseline'; it has: accept/);
   });
 });
