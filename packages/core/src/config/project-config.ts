@@ -26,6 +26,11 @@ const CapabilityOverrideSchema = z.strictObject({
   structured_output: z.boolean().optional(),
   vision: z.boolean().optional(),
   context_window: z.number().int().positive().optional(),
+  /**
+   * Thinking mode of a reasoning model on Ollama (e.g. Qwen3, DeepSeek-R1), sent as `think`. Some models answer tool
+   * requests only when it is set explicitly: without it Qwen3 thinks and returns neither text nor a tool call.
+   */
+  think: z.boolean().optional(),
   /** USD per million input and output tokens, for cost estimates (REQ-LLM-07). */
   cost_per_mtok: z
     .strictObject({ input: z.number().nonnegative(), output: z.number().nonnegative() })

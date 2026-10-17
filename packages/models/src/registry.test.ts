@@ -18,7 +18,7 @@ const config = parseProjectConfig({
       local: {
         type: "ollama",
         base_url: "http://localhost:11434/api",
-        models: { "my-model": { tools: true, context_window: 65536 } },
+        models: { "my-model": { tools: true, context_window: 65536, think: false } },
       },
       company: {
         type: "openai-compatible",
@@ -106,7 +106,11 @@ describe("model registry (REQ-LLM-01, REQ-LLM-02)", () => {
     expect(fake.requests[0]?.url.href).toBe("http://localhost:11434/api/chat");
     const mine = await registry.resolve("local/my-model");
     await generateText({ model: mine.model, prompt: "ping" }).catch(() => undefined);
-    expect(JSON.parse(fake.requests[1]?.body ?? "{}")).toMatchObject({ options: { num_ctx: 65536 } });
+    // A declared thinking mode is sent too: Qwen3 calls tools only with it (REQ-LLM-03).
+    expect(JSON.parse(fake.requests[1]?.body ?? "{}")).toMatchObject({
+      options: { num_ctx: 65536 },
+      think: false,
+    });
   });
 
   it("REQ-LLM-02/AC1: roles fall back to default; unknown providers are configuration errors", async () => {

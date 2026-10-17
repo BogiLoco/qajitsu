@@ -21,6 +21,14 @@ models:
     # auditor: unset → the first declared model that is not the author's (REQ-VER-06/AC3)
 ```
 
+Thinking models in Ollama (Qwen3, DeepSeek-R1) behave differently with and without their thinking phase; Qwen3, for
+example, calls tools only when thinking is set explicitly. `think: true` (or `false`) on the model passes the setting to
+Ollama; without it Ollama's default applies:
+
+```yaml
+qwen3:14b: { tools: true, structured_output: true, vision: false, context_window: 65536, think: true }
+```
+
 `qajitsu doctor --models` probes every role and lists missing capabilities. A role refuses a model without a
 capability it needs (tools, structured output, vision for the auditor, context window).
 
