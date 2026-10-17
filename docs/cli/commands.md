@@ -442,8 +442,26 @@ writes `explore/<session>/report.html` and `report.md` for review. Needs a fetch
 - `--cli <tool>`: explore a command-line tool instead of the application (REQ-EXEC-24, see below)
 - `--headed`: show the browser, to watch the agent explore live (needs a display)
 - `--slow-mo <ms>`: wait this many milliseconds before every browser action, to follow it
+- `--check <item>`: one item of the goal's checklist (repeatable, up to 30); without it the explorer splits the goal
+  into its own checklist, which the report marks as written by the explorer
 
 Exit codes: `0` the session ran (whatever it observed), `2` the environment is not healthy, `3` errors.
+
+The explorer's answer is checked by code, not trusted (REQ-EXEC-15/AC8, REQ-EXEC-25). It must act before it answers;
+it reports every checklist item, in order, as done with the actions that did it or as not done with the reason;
+each finding cites actions; an action id that was not recorded is refused. While the step budget lasts, items left
+undone are sent back once to be done. In command-line sessions every flag named in an item, a finding or the comment
+must be in the arguments of an action that ran. Refused answers are journaled (`explore.answer_rejected`). A session
+that ends by the time box, the step budget or an error before an accepted answer lists every `--check` item as not
+reached. The report shows the checklist, the findings and the explorer's comment last; the terminal says how many
+items were done and names those that were not:
+
+```bash
+qj explore DEMO-1 --cli qj --goal "doctor and init" \
+  --check "qj doctor" --check "qj init without a slug" --check "qj init --qa-dir does-not-exist"
+# Session S05 ended: finished; 4 actions, 1 observation(s).
+# Checklist: 3 of 3 item(s) done.
+```
 
 #### Command-line tools (`--cli`, REQ-EXEC-24)
 

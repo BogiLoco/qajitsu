@@ -1,5 +1,12 @@
-import { z } from "zod";
 import { renderChangeContext, UNTRUSTED_DATA_RULES, type ChangeContext } from "./context.js";
+import {
+  checklistPrompt,
+  EXPLORER_REPORT_RULES,
+  explorerReportCheck,
+  ExplorerReportSchema,
+  type ExplorerReport,
+  type ExplorerSessionView,
+} from "./explorer-report.js";
 import { runStructuredAgent, type AgentTool } from "./loop.js";
 import { modelForRole, stageGuard, type AgentStageDeps } from "./roles-run.js";
 import { AGENT_ROLES } from "./roles.js";
@@ -20,25 +27,22 @@ How to work:
 - When something looks wrong, surprising or unclear, call record_observation with a short title, kind (possible-bug,
   ux, question, risk), severity, what you expected and what you saw, and the action ids that reproduce it, in order.
 - Stay close to the goal and the ticket; your step budget and time box are limited and enforced.
-When you are done, answer with one JSON object only: {"summary": "what you explored and the main findings"}`;
+${EXPLORER_REPORT_RULES}`;
 
-/**
- * Act before summarising (REQ-EXEC-15/AC8): a model may describe testing it never did, so code rejects the final
- * summary of any explorer while the session has no recorded action. The loop keeps the tools in the repair round.
- *
- * @param actions - Actions the trusted parent recorded so far.
- * @param howToAct - What the agent should do first, named for its tools.
- * @returns The rejection, or nothing once the session has acted.
- */
-export function actBeforeSummarising(actions: () => number, howToAct: string): () => string[] {
-  return () =>
-    actions() === 0
-      ? [`you did nothing yet: ${howToAct} first, then summarise only what the tools answered`]
-      : [];
-}
-
-/** The explorer's final answer. */
-export const ExplorerSummarySchema = z.strictObject({ summary: z.string().max(4000) });
+/** Journals every rejected answer, so an audit shows what the explorer claimed and why code refused it. */
+const journaled =
+  (deps: AgentStageDeps, check: (r: ExplorerReport) => string[]) =>
+  (report: ExplorerReport): string[] => {
+    const errors = check(report);
+    if (errors.length > 0)
+      deps.events.emit(
+        "explore",
+        { kind: "agent", name: "explorer" },
+        "explore.answer_rejected",
+        deps.maskJson({ errors }),
+      );
+    return errors;
+  };
 
 /**
  * Runs the explorer for one session (REQ-EXEC-15). The tools are built by the caller: they perform each action in
@@ -48,7 +52,7 @@ export const ExplorerSummarySchema = z.strictObject({ summary: z.string().max(40
  *
  * @param deps - Stage dependencies (models, events, usage, masking).
  * @param input - Goal, change context, tools, account aliases, step budget and abort signal.
- * @returns The explorer's summary.
+ * @returns The explorer's answer, checked against the session.
  */
 export async function runExplorer(
   deps: AgentStageDeps,
@@ -57,12 +61,12 @@ export async function runExplorer(
     readonly context: ChangeContext;
     readonly tools: readonly AgentTool[];
     readonly accounts: readonly string[];
-    /** Actions recorded so far: a summary before any is rejected and the agent asked to act. */
-    readonly actions: () => number;
+    /** What the session recorded so far, and the person's checklist; the answer is checked against it. */
+    readonly session: Omit<ExplorerSessionView, "flags">;
     readonly maxSteps: number;
     readonly signal?: AbortSignal;
   },
-): Promise<z.infer<typeof ExplorerSummarySchema>> {
+): Promise<ExplorerReport> {
   const role = AGENT_ROLES.find((r) => r.role === "explorer");
   if (!role) throw new Error("explorer role missing");
   const model = await modelForRole(deps.models, "explorer");
@@ -71,18 +75,23 @@ export async function runExplorer(
     role: "explorer",
     model,
     system: EXPLORER_SYSTEM,
-    validate: actBeforeSummarising(
-      input.actions,
-      "act on the application towards the goal (explore_goto, explore_click, explore_fill, ...)",
+    // REQ-EXEC-15/AC8 + REQ-EXEC-25: the answer is a claim, checked against the recorded actions.
+    validate: journaled(
+      deps,
+      explorerReportCheck(
+        { ...input.session, flags: false },
+        "act on the application towards the goal (explore_goto, explore_click, explore_fill, ...)",
+      ),
     ),
     retryWithTools: true,
     prompt: [
       `## Session goal (from the person who started the session)\n${input.goal}`,
+      checklistPrompt(input.session.checks),
       `Account aliases: ${input.accounts.length > 0 ? input.accounts.join(", ") : "(none)"}.`,
       renderChangeContext(input.context),
-      "Explore now. Finish with the JSON summary.",
+      "Explore now. Finish with the JSON answer.",
     ].join("\n\n"),
-    schema: ExplorerSummarySchema,
+    schema: ExplorerReportSchema,
     tools: input.tools,
     guard: stageGuard(deps, "explore", role),
     usage: deps.usage,
@@ -112,7 +121,7 @@ How to work:
   record_observation with a short title, kind (possible-bug, ux, question, risk), severity, what you expected and
   what you saw, and the action ids that reproduce it, in order.
 - Stay close to the goal; your step budget and time box are limited and enforced.
-When you are done, answer with one JSON object only: {"summary": "what you explored and the main findings"}`;
+${EXPLORER_REPORT_RULES}`;
 
 /**
  * Runs the explorer on a command-line tool (REQ-EXEC-24). The tools are built by the caller and run every command in
@@ -121,7 +130,7 @@ When you are done, answer with one JSON object only: {"summary": "what you explo
  *
  * @param deps - Stage dependencies (models, events, usage, masking).
  * @param input - Goal, the tool's name, command and description, the ticket context, tools, step budget and signal.
- * @returns The explorer's summary.
+ * @returns The explorer's answer, checked against the session.
  */
 export async function runCliExplorer(
   deps: AgentStageDeps,
@@ -130,12 +139,12 @@ export async function runCliExplorer(
     readonly tool: { readonly name: string; readonly command: string; readonly description: string };
     readonly context: ChangeContext;
     readonly tools: readonly AgentTool[];
-    /** Actions recorded so far: a summary before any is rejected and the agent asked to act. */
-    readonly actions: () => number;
+    /** What the session recorded so far, and the person's checklist; the answer is checked against it. */
+    readonly session: Omit<ExplorerSessionView, "flags">;
     readonly maxSteps: number;
     readonly signal?: AbortSignal;
   },
-): Promise<z.infer<typeof ExplorerSummarySchema>> {
+): Promise<ExplorerReport> {
   const role = AGENT_ROLES.find((r) => r.role === "explorer");
   if (!role) throw new Error("explorer role missing");
   const model = await modelForRole(deps.models, "explorer");
@@ -144,16 +153,23 @@ export async function runCliExplorer(
     role: "explorer",
     model,
     system: CLI_EXPLORER_SYSTEM,
-    // REQ-EXEC-24/AC8: the act-before-summarising rule of every explorer.
-    validate: actBeforeSummarising(input.actions, "run the commands of the goal with cli_run (or cli_start)"),
+    // REQ-EXEC-24/AC8 + REQ-EXEC-25: also no flag in the answer that no command ran.
+    validate: journaled(
+      deps,
+      explorerReportCheck(
+        { ...input.session, flags: true },
+        "run the commands of the goal with cli_run (or cli_start)",
+      ),
+    ),
     retryWithTools: true,
     prompt: [
       `## Session goal (from the person who started the session)\n${input.goal}`,
+      checklistPrompt(input.session.checks),
       `## Tool\n${input.tool.name}: \`${input.tool.command}\` is what every command starts with; you give only the arguments after it.${input.tool.description ? `\n${input.tool.description}` : ""}`,
       renderChangeContext(input.context, { ui: false }),
-      "Explore now. Finish with the JSON summary.",
+      "Explore now. Finish with the JSON answer.",
     ].join("\n\n"),
-    schema: ExplorerSummarySchema,
+    schema: ExplorerReportSchema,
     tools: input.tools,
     guard: stageGuard(deps, "explore", role),
     usage: deps.usage,

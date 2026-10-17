@@ -20,3 +20,4 @@ export * from "./explorer.js";
 export * from "./knowledge-tools.js";
 export * from "./triage.js";
 export * from "./blocked.js";
+export * from "./explorer-report.js";

@@ -94,4 +94,25 @@ describe("exploratory session report (REQ-EXEC-15/AC6)", () => {
     expect(html).toContain("&lt;script&gt;");
     expect(html).not.toMatch(/\b(PASSED|FAILED|BLOCKED|NEEDS_REVIEW)\b/);
   });
+
+  it("REQ-EXEC-25/AC5: the checklist, findings and comment come in that order; not done is shown, agent text escaped", () => {
+    const withClaims = ExploreSessionSchema.parse({
+      ...session,
+      checklist: [
+        { item: "open checkout", source: "explorer", actions: ["A01"] },
+        { item: "<b>pay</b>", source: "explorer", actions: [], notDone: "no test card" },
+      ],
+      findings: [{ text: "Place order stays disabled", actions: ["A01"] }],
+    });
+    const md = renderExploreMarkdown(withClaims, []);
+    expect(md).toContain("Items written by the explorer from the goal: compare it with the goal.");
+    expect(md).toContain("| 1 | open checkout | A01 goto /app/checkout |");
+    expect(md).toContain("| 2 | <b>pay</b> | **not done**: no test card |");
+    expect(md).toContain("- Place order stays disabled (A01 goto /app/checkout)");
+    expect(md.indexOf("## Findings")).toBeLessThan(md.indexOf("## Explorer's comment"));
+    const html = renderExploreHtml(withClaims, []);
+    expect(html).toContain("&lt;b&gt;pay&lt;/b&gt;");
+    expect(html).not.toContain("<b>pay</b>");
+    expect(html).toContain('<tr class="bad"><td>2</td>');
+  });
 });

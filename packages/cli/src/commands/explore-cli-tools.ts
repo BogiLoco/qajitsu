@@ -85,7 +85,8 @@ export function createCliExploreTools(ctx: {
     }
     return `A${String(actions.length + 1).padStart(2, "0")}`;
   };
-  const BUDGET = "STEP BUDGET USED: stop exploring now and answer with the JSON summary.";
+  const BUDGET =
+    "STEP BUDGET USED: stop exploring now and answer with the JSON answer: the checklist, findings and summary.";
 
   /** Records an action with its output as evidence and the files it changed; returns the line the agent reads. */
   const record = async (

@@ -33,6 +33,23 @@ export const ObservationSchema = z.strictObject({
   actual: z.string().max(1000).default(""),
 });
 
+/**
+ * One item of a session's goal checklist (REQ-EXEC-25): from the person (`--check`) or written by the explorer from
+ * the goal; done with the actions that did it, or not done with the reason. Never a status.
+ */
+export const ChecklistItemSchema = z.strictObject({
+  item: z.string().min(1).max(300),
+  source: z.enum(["person", "explorer"]),
+  actions: z.array(ActionIdSchema).max(40),
+  notDone: z.string().max(500).optional(),
+});
+
+/** One thing the explorer reports having seen, with the actions that show it (REQ-EXEC-25/AC2). */
+export const FindingSchema = z.strictObject({
+  text: z.string().min(1).max(600),
+  actions: z.array(ActionIdSchema).min(1).max(40),
+});
+
 /** `explore/<session>/session.json`: what an exploratory session did and noticed (REQ-EXEC-15). */
 export const ExploreSessionSchema = z.strictObject({
   schema: z.literal(1),
@@ -48,7 +65,10 @@ export const ExploreSessionSchema = z.strictObject({
   endReason: z.enum(["finished", "time-box", "step-budget", "error"]),
   error: z.string().max(2000).optional(),
   budget: z.strictObject({ minutes: z.number().positive(), steps: z.number().int().positive() }),
+  /** The explorer's comment, checked against the actions; the checklist and findings carry the claims. */
   summary: z.string().max(4000).default(""),
+  checklist: z.array(ChecklistItemSchema).max(30).default([]),
+  findings: z.array(FindingSchema).max(30).default([]),
   actions: z.array(ExploreActionSchema),
   observations: z.array(ObservationSchema),
   /** Session-wide recordings in the evidence manifest: video, trace, network, console. */
@@ -59,5 +79,9 @@ export const ExploreSessionSchema = z.strictObject({
 export type ExploreAction = z.infer<typeof ExploreActionSchema>;
 /** An observation of an exploratory session. */
 export type Observation = z.infer<typeof ObservationSchema>;
+/** An item of a session's goal checklist. */
+export type ChecklistItem = z.infer<typeof ChecklistItemSchema>;
+/** A finding of an explorer, citing actions. */
+export type Finding = z.infer<typeof FindingSchema>;
 /** A whole exploratory session. */
 export type ExploreSession = z.infer<typeof ExploreSessionSchema>;

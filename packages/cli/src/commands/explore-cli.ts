@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
-import { buildChangeContext, createUsageTracker, runCliExplorer } from "@qajitsu/agents";
+import { buildChangeContext, createUsageTracker, runCliExplorer, type ExplorerReport } from "@qajitsu/agents";
 import {
   CliExploreSessionSchema,
   ConfigError,
@@ -16,6 +16,7 @@ import { renderCliExploreHtml, renderCliExploreMarkdown } from "@qajitsu/report"
 import { createMasker } from "@qajitsu/steps";
 import type { RuntimePorts } from "../adapters.js";
 import { codeIndexCache, openSession, type ModelPorts } from "../session.js";
+import { checkOption, checklistLine, sessionClaims } from "./explore-checklist.js";
 import {
   cleanUpLeftovers,
   createSandbox,
@@ -42,6 +43,8 @@ export interface CliExploreOptions {
   readonly cli: string;
   readonly timeBox?: string | undefined;
   readonly maxSteps?: string | undefined;
+  /** The goal's checklist, item by item (REQ-EXEC-25/AC1). */
+  readonly check?: readonly string[] | undefined;
 }
 
 /** Ports of a command-line session: the probe for processes and containers can be replaced in tests. */
@@ -113,6 +116,7 @@ export async function runCliExplore(
         '--goal is required: say what to explore, e.g. --goal "env up and Ctrl+C".',
         {},
       );
+    const checks = checkOption(options.check);
     const minutes = numberOption(options.timeBox, 10, "--time-box", 240);
     const maxSteps = Math.floor(numberOption(options.maxSteps, 40, "--max-steps", 1000));
     const session = await openSession(rawKey, options.run, io.cwd, ports, masker);
@@ -163,6 +167,7 @@ export async function runCliExplore(
       events.emit("explore", SYSTEM, "explore.start", {
         session: id,
         goal,
+        ...(checks.length > 0 ? { checks } : {}),
         cli: options.cli,
         sandbox: sandbox.root,
         minutes,
@@ -174,6 +179,7 @@ export async function runCliExplore(
       const shared = { qaDir, sandbox, env, timeoutMs, store, mask };
       let endReason: CliExploreSession["endReason"] = "finished";
       let summary = "";
+      let report: ExplorerReport | undefined;
       let error = await runCommands(tool.setup, "setup", shared);
       if (error !== undefined) endReason = "error";
       let modelId = "";
@@ -218,11 +224,16 @@ export async function runCliExplore(
               tool: { name: options.cli, command: tool.command.join(" "), description: tool.description },
               context: await buildChangeContext(ws, [], { indexCache: codeIndexCache(project) }),
               tools: recorder.tools,
-              actions: () => recorder?.actions.length ?? 0,
+              session: {
+                actions: () => recorder?.actions ?? [],
+                budgetLeft: () => recorder?.exhausted() !== true,
+                checks,
+              },
               maxSteps: maxSteps * 2 + 10,
               signal: timeBox.signal,
             },
           );
+          report = result;
           summary = mask(result.summary);
           if (recorder.exhausted()) endReason = "step-budget";
           await ws.update({ data: { ...ws.record.data, tokens: usage.total } });
@@ -266,6 +277,7 @@ export async function runCliExplore(
           : {}),
         budget: { minutes, steps: maxSteps },
         summary,
+        ...sessionClaims(checks, report, endReason, mask),
         actions: recorder.actions,
         observations: recorder.observations,
         leftovers,
@@ -288,6 +300,7 @@ export async function runCliExplore(
       io.write(
         [
           `Session ${id} ended: ${endReason}${record.error ? ` (${record.error})` : ""}; ${String(record.actions.length)} actions, ${String(record.observations.length)} observation(s).`,
+          ...[checklistLine(record.checklist)].filter((l) => l !== undefined),
           ...record.observations.map((o) => `  ${o.id} [${o.severity}] ${o.title}`),
           ...(record.leftovers.processes.length + record.leftovers.containers.length > 0
             ? [

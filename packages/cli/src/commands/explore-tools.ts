@@ -93,7 +93,7 @@ export function createExploreTools(ctx: {
   ): Promise<string> => {
     if (actions.length >= ctx.maxSteps) {
       exhausted = true;
-      return "STEP BUDGET USED: stop exploring now and answer with the JSON summary.";
+      return "STEP BUDGET USED: stop exploring now and answer with the JSON answer: the checklist, findings and summary.";
     }
     const id = `A${String(actions.length + 1).padStart(2, "0")}`;
     let error: string | undefined;

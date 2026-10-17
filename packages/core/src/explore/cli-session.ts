@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ActionIdSchema, ObservationSchema } from "./session.js";
+import { ActionIdSchema, ChecklistItemSchema, FindingSchema, ObservationSchema } from "./session.js";
 
 /** One command-line action the trusted parent performed for the explorer (REQ-EXEC-24/AC3). */
 export const CliActionSchema = z.strictObject({
@@ -62,6 +62,8 @@ export const CliExploreSessionSchema = z.strictObject({
   error: z.string().max(2000).optional(),
   budget: z.strictObject({ minutes: z.number().positive(), steps: z.number().int().positive() }),
   summary: z.string().max(4000).default(""),
+  checklist: z.array(ChecklistItemSchema).max(30).default([]),
+  findings: z.array(FindingSchema).max(30).default([]),
   actions: z.array(CliActionSchema),
   observations: z.array(ObservationSchema),
   /** Left running when the agent finished, before the teardown. */

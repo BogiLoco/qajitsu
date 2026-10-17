@@ -21,6 +21,7 @@ const sessionOf = async (runDir: string, id = "S01") =>
     actions: { id: string; action: string; ok: boolean; screenshot?: string; url: string }[];
     observations: { id: string; steps: string[] }[];
     recordings: string[];
+    checklist: { item: string; source: string; actions: string[]; notDone?: string }[];
   };
 
 /** The explorer of these tests: logs in, opens checkout, accepts the terms, tries to order, records what it saw. */
@@ -53,7 +54,13 @@ const CHECKOUT: Turn[] = [
       },
     ],
   },
-  { text: JSON.stringify({ summary: "Checkout cannot be completed." }) },
+  {
+    text: JSON.stringify({
+      checklist: [{ item: "order after accepting the terms", actions: ["A02", "A03", "A04"] }],
+      findings: [{ text: "Place order stays disabled after accepting the terms", actions: ["A03", "A04"] }],
+      summary: "Checkout cannot be completed.",
+    }),
+  },
 ];
 
 describe("qajitsu explore (REQ-EXEC-15)", () => {
@@ -100,6 +107,12 @@ describe("qajitsu explore (REQ-EXEC-15)", () => {
     expect(report).toContain("Place order stays disabled after accepting the terms");
     expect(report).toContain('<img src="evidence/A04.png"');
     expect(result.out).toContain("O1 [high] Place order stays disabled after accepting the terms");
+    // REQ-EXEC-25: the checklist and findings cite the recorded actions.
+    expect(session.checklist).toEqual([
+      { item: "order after accepting the terms", source: "explorer", actions: ["A02", "A03", "A04"] },
+    ]);
+    expect(result.out).toContain("Checklist: 1 of 1 item(s) done.");
+    expect(report).toContain("<h2>Checklist</h2>");
     expect(result.out).toContain(join(runDir, "explore", "S01", "report.html"));
     const journal = await readFile(join(runDir, "journal", "events.jsonl"), "utf8");
     expect(journal).toContain('"explore.action"');
@@ -158,7 +171,10 @@ describe("qajitsu explore (REQ-EXEC-15)", () => {
 
   it("REQ-EXEC-15/AC8: a summary before any action is rejected and the explorer acts; one that only looks ends the session with an error", async () => {
     const claim: Turn = {
-      text: JSON.stringify({ summary: "Checked checkout end to end; everything works." }),
+      text: JSON.stringify({
+        checklist: [{ item: "checkout end to end", actions: ["A01"] }],
+        summary: "Checked checkout end to end; everything works.",
+      }),
     };
     const look: Turn = { tools: [{ name: "explore_look", input: {} }] };
     const first = await pipeline();
@@ -181,15 +197,25 @@ describe("qajitsu explore (REQ-EXEC-15)", () => {
     expect(failed.summary).toBe("");
   }, 120_000);
 
-  it("REQ-EXEC-15/AC5: the step budget is enforced by code and the session keeps what it recorded", async () => {
+  it("REQ-EXEC-15/AC5 + REQ-EXEC-25/AC5: the step budget is enforced by code and the session keeps what it recorded", async () => {
     const { run, runDir } = await pipeline();
     const looping: Turn[] = [{ tools: [{ name: "explore_goto", input: { path: "/app/products" } }] }];
-    const result = await run(["explore", "DEMO-4", "--goal", "Wander", "--max-steps", "3"], {
-      script: looping,
-    });
+    const result = await run(
+      ["explore", "DEMO-4", "--goal", "Wander", "--max-steps", "3", "--check", "the product list"],
+      { script: looping },
+    );
     expect(result.exitCode).toBe(0);
     const session = await sessionOf(runDir);
     expect(session.endReason).toBe("step-budget");
+    // REQ-EXEC-25/AC5: without an accepted answer a --check item is not reached, never done.
+    expect(session.checklist).toEqual([
+      {
+        item: "the product list",
+        source: "person",
+        actions: [],
+        notDone: "not reached: the step budget was used",
+      },
+    ]);
     expect(session.actions).toHaveLength(3);
     expect(await readFile(join(runDir, "explore", "S01", "report.md"), "utf8")).toContain(
       "the step budget was used",

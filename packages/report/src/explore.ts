@@ -1,4 +1,5 @@
 import type { EvidenceEntry, ExploreSession } from "@qajitsu/core";
+import { renderClaimsHtml, renderClaimsMarkdown } from "./explore-claims.js";
 
 const esc = (s: string): string =>
   s
@@ -46,10 +47,10 @@ export function renderExploreMarkdown(session: ExploreSession, manifest: readonl
     "> Observations are proposals from an agent for a person to assess. They are not test results; turn one into a",
     "> plan case with `qajitsu explore promote`, and it runs only after the plan is approved.",
     "",
-    "## Summary",
-    "",
-    session.summary || "_(no summary)_",
-    "",
+    ...renderClaimsMarkdown(session, (id) => {
+      const a = byId.get(id);
+      return a ? `${id} ${describeAction(a)}${a.ok ? "" : " (error)"}` : id;
+    }),
     `## Observations (${String(session.observations.length)})`,
     "",
   ];
@@ -142,7 +143,7 @@ table{border-collapse:collapse;width:100%;margin:8px 0}td,th{border:1px solid #d
 <p class="muted">Run ${esc(session.run)} · environment ${esc(session.environment.name)} (${esc(session.environment.baseUrl)}) · model ${esc(session.model)}<br>
 ${esc(session.startedAt)} – ${esc(session.endedAt)} · ended because ${esc(END_REASON[session.endReason])}${session.error ? `: ${esc(session.error)}` : ""} · ${String(session.actions.length)} of ${String(session.budget.steps)} actions, ${String(session.budget.minutes)} min time box</p>
 <p class="note">Observations are proposals from an agent for a person to assess. They are not test results.</p>
-<h2>Summary</h2><p>${esc(session.summary || "(no summary)").replace(/\n/g, "<br>")}</p>
+${renderClaimsHtml(session)}
 <h2>Observations (${String(session.observations.length)})</h2>
 ${observations || '<p class="muted">(none)</p>'}
 <h2>Actions</h2>

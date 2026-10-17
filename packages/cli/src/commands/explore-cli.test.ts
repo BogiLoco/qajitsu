@@ -87,7 +87,16 @@ const SESSION: Turn[] = [
       },
     ],
   },
-  { text: JSON.stringify({ summary: "Explored the tool; one process leaked." }) },
+  {
+    text: JSON.stringify({
+      checklist: [
+        { item: "every subcommand", actions: ["A01", "A02", "A03", "A05", "A06", "A07", "A09"] },
+        { item: "what is left running", actions: ["A10"] },
+      ],
+      findings: [{ text: "orphan leaves a process running", actions: ["A05", "A10"] }],
+      summary: "Explored the tool; one process leaked.",
+    }),
+  },
 ];
 
 describe("qajitsu explore --cli (REQ-EXEC-24)", () => {
@@ -194,7 +203,12 @@ describe("qajitsu explore --cli (REQ-EXEC-24)", () => {
   }, 120_000);
 
   it("REQ-EXEC-24/AC8: a summary before any command is rejected and the explorer acts; one that never acts ends the session with an error", async () => {
-    const claim = { text: JSON.stringify({ summary: "Tested every command; all exit codes fit." }) };
+    const claim = {
+      text: JSON.stringify({
+        checklist: [{ item: "every command", actions: ["A01"] }],
+        summary: "Tested every command; all exit codes fit.",
+      }),
+    };
     const p = await project();
     const r = await p.run(["explore", "DEMO-4", "--cli", "tool", "--goal", "Test everything"], {
       script: [claim, { tools: [{ name: "cli_run", input: { args: ["hello"] } }] }, claim],
@@ -219,18 +233,158 @@ describe("qajitsu explore --cli (REQ-EXEC-24)", () => {
     expect(failed.summary).toBe("");
   }, 120_000);
 
-  it("REQ-EXEC-15/AC5 + REQ-EXEC-24/AC1: the step budget is enforced by code", async () => {
+  it("REQ-EXEC-15/AC5 + REQ-EXEC-24/AC1 + REQ-EXEC-25/AC5: the step budget is enforced by code; unanswered checks are not reached", async () => {
     const p = await project();
     const looping: Turn[] = [{ tools: [{ name: "cli_run", input: { args: ["hello"] } }] }];
-    const r = await p.run(["explore", "DEMO-4", "--cli", "tool", "--goal", "Loop", "--max-steps", "2"], {
-      script: looping,
-    });
+    const r = await p.run(
+      [
+        "explore",
+        "DEMO-4",
+        "--cli",
+        "tool",
+        "--goal",
+        "Loop",
+        "--max-steps",
+        "2",
+        "--check",
+        "hello",
+        "--check",
+        "fail",
+      ],
+      { script: looping },
+    );
     expect(r.exitCode).toBe(0);
-    const session = JSON.parse(await readFile(join(p.runDir, "explore", "S01", "session.json"), "utf8")) as {
-      endReason: string;
-      actions: unknown[];
-    };
+    const session = CliExploreSessionSchema.parse(
+      JSON.parse(await readFile(join(p.runDir, "explore", "S01", "session.json"), "utf8")),
+    );
     expect(session.endReason).toBe("step-budget");
     expect(session.actions).toHaveLength(2);
+    // Two hello commands ran, but no answer said which item they did: nothing counts as done.
+    expect(session.checklist).toEqual([
+      { item: "hello", source: "person", actions: [], notDone: "not reached: the step budget was used" },
+      { item: "fail", source: "person", actions: [], notDone: "not reached: the step budget was used" },
+    ]);
+    expect(r.out).toContain("Checklist: 0 of 2 item(s) done");
+  }, 120_000);
+
+  it("REQ-EXEC-25/AC1-AC3+AC5+AC6: the --check checklist comes back complete; undone items are sent back once, then kept with the reason", async () => {
+    const p = await project();
+    const answer = (checklist: unknown[]) => ({
+      text: JSON.stringify({
+        checklist,
+        findings: [{ text: "fail exits 2 with boom", actions: ["A02"] }],
+        summary: "hello and fail behave as written.",
+      }),
+    });
+    const r = await p.run(
+      [
+        "explore",
+        "DEMO-4",
+        "--cli",
+        "tool",
+        "--goal",
+        "Basics",
+        "--check",
+        "hello",
+        "--check",
+        "fail",
+        "--check",
+        "the network",
+      ],
+      {
+        script: [
+          { tools: [{ name: "cli_run", input: { args: ["hello"] } }] },
+          { tools: [{ name: "cli_run", input: { args: ["fail"] } }] },
+          // Drops an item: rejected.
+          answer([
+            { item: "hello", actions: ["A01"] },
+            { item: "fail", actions: ["A02"] },
+          ]),
+          // Leaves one undone while the budget lasts: sent back once.
+          answer([
+            { item: "hello", actions: ["A01"] },
+            { item: "fail", actions: ["A02"] },
+            { item: "network", not_done: "the sandbox allows no host" },
+          ]),
+          answer([
+            { item: "hello", actions: ["A01"] },
+            { item: "fail", actions: ["A02"] },
+            { item: "network", not_done: "the sandbox allows no host" },
+          ]),
+        ],
+      },
+    );
+    expect(r.err).toBe("");
+    const dir = join(p.runDir, "explore", "S01");
+    const session = CliExploreSessionSchema.parse(
+      JSON.parse(await readFile(join(dir, "session.json"), "utf8")),
+    );
+    expect(session.endReason).toBe("finished");
+    expect(session.checklist).toEqual([
+      { item: "hello", source: "person", actions: ["A01"] },
+      { item: "fail", source: "person", actions: ["A02"] },
+      // The person's text is kept, not the explorer's rewording.
+      { item: "the network", source: "person", actions: [], notDone: "the sandbox allows no host" },
+    ]);
+    expect(session.findings).toEqual([{ text: "fail exits 2 with boom", actions: ["A02"] }]);
+    expect(r.out).toContain(
+      'Checklist: 2 of 3 item(s) done; not done: "the network" (the sandbox allows no host).',
+    );
+    const md = await readFile(join(dir, "report.md"), "utf8");
+    expect(md).toContain("Items from the person (--check).");
+    expect(md).toContain("| 3 | the network | **not done**: the sandbox allows no host |");
+    expect(md).toContain("- fail exits 2 with boom (A02 `");
+    expect(md.indexOf("## Checklist")).toBeLessThan(md.indexOf("## Explorer's comment"));
+    const html = await readFile(join(dir, "report.html"), "utf8");
+    expect(html).toContain('<a href="#A02">A02</a>');
+  }, 120_000);
+
+  it("REQ-EXEC-25/AC4: an item naming a flag its actions never ran is rejected until the flag is run", async () => {
+    const p = await project();
+    const done = (id: string) => ({
+      text: JSON.stringify({ checklist: [{ item: "hello --loud", actions: [id] }], findings: [] }),
+    });
+    const r = await p.run(
+      ["explore", "DEMO-4", "--cli", "tool", "--goal", "Flags", "--check", "hello --loud"],
+      {
+        script: [
+          { tools: [{ name: "cli_run", input: { args: ["hello"] } }] },
+          done("A01"),
+          { tools: [{ name: "cli_run", input: { args: ["hello", "--loud"] } }] },
+          done("A02"),
+        ],
+      },
+    );
+    expect(r.err).toBe("");
+    const session = CliExploreSessionSchema.parse(
+      JSON.parse(await readFile(join(p.runDir, "explore", "S01", "session.json"), "utf8")),
+    );
+    expect(session.checklist).toEqual([{ item: "hello --loud", source: "person", actions: ["A02"] }]);
+    const journal = await readFile(join(p.runDir, "journal", "events.jsonl"), "utf8");
+    // The refused claim is journaled for the audit.
+    expect(journal).toContain('"event":"explore.answer_rejected"');
+    expect(journal).toContain("names --loud, which none of its actions (A01) ran");
+  }, 120_000);
+
+  it("REQ-EXEC-25/AC1: without --check the explorer's own checklist is kept and marked as written by it", async () => {
+    const p = await project();
+    const r = await p.run(["explore", "DEMO-4", "--cli", "tool", "--goal", "Say hello"], {
+      script: [
+        { tools: [{ name: "cli_run", input: { args: ["hello"] } }] },
+        { text: JSON.stringify({ checklist: [{ item: "say hello", actions: ["A01"] }], findings: [] }) },
+      ],
+    });
+    expect(r.err).toBe("");
+    const dir = join(p.runDir, "explore", "S01");
+    const session = CliExploreSessionSchema.parse(
+      JSON.parse(await readFile(join(dir, "session.json"), "utf8")),
+    );
+    expect(session.checklist).toEqual([{ item: "say hello", source: "explorer", actions: ["A01"] }]);
+    expect(await readFile(join(dir, "report.md"), "utf8")).toContain(
+      "Items written by the explorer from the goal: compare it with the goal.",
+    );
+    expect(
+      (await p.run(["explore", "DEMO-4", "--cli", "tool", "--goal", "x", "--check", " "])).exitCode,
+    ).toBe(3);
   }, 120_000);
 });

@@ -384,3 +384,23 @@ wrong. The trusted parent runs every command; the agent only asks for them and p
 - [x] AC6: `qj explore promote` turns a CLI observation into a draft case for a later CLI runner, or into a regression test proposal for the tool's own test suite; nothing runs without approval.
 - [x] AC7: Any command-line tool can be explored, not only `qj`: `explore.cli.<name>` in `.qa/qa.project.yaml` names its program, the fixture folder copied into every sandbox, setup commands (argument arrays), environment variables and secrets by `secret://` reference, the hosts it may reach and the timeout per command; a tool without such an entry is refused.
 - [x] AC8: The act-before-summarising rule of REQ-EXEC-15/AC8 applies: a summary before any command (`cli_run` or `cli_start`) is rejected and the agent is asked to run the commands of the goal; one that never does ends the session with `error`.
+
+### REQ-EXEC-25 · Grounded reports of exploratory sessions
+
+- Status: implemented
+- Priority: should
+- Stage: later
+- Related: REQ-EXEC-15, REQ-EXEC-24, INV-1, INV-6
+
+An explorer's final answer is a claim, not a fact. Every sentence in it must point at actions the trusted parent
+recorded, and every item of the goal is either done with its actions or listed as not done with the reason, so a
+session can never describe testing that did not happen or silently skip part of its goal.
+
+**Acceptance criteria**
+
+- [x] AC1: `--check "<item>"` (repeatable) gives the session an explicit checklist next to the goal; without it the explorer writes the checklist from the goal itself and the report marks it as written by the explorer, for a person to compare with the goal.
+- [x] AC2: The explorer's answer lists every checklist item, in order, either with the actions that did it or with `not_done` and a reason, plus findings that each cite actions; code rejects an answer that drops, adds or reorders an item of `--check`, an item with neither actions nor a reason, a finding without actions, and any action id that is not an action of the session.
+- [x] AC3: While the step budget is not used up, the first answer that leaves items not done is rejected and the explorer is told to do them now; a second answer may keep them not done with the reason, which the report shows.
+- [x] AC4: In command-line sessions a flag such as `--qa-dir` named in an item or a finding must be in the arguments of the actions it cites, and a flag named in the free comment must be in some action of the session; otherwise the answer is rejected and the explorer is told which flag it never ran.
+- [x] AC5: The report shows the checklist (item, who wrote it, the actions that did it or "not done" with the reason), the findings with links to their actions, and the explorer's comment last; a session that ends by the time box, the step budget or an error before an accepted answer lists every `--check` item as not reached with that reason, never as done.
+- [x] AC6: The terminal output after a session says how many checklist items were done and names those not done.

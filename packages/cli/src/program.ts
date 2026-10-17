@@ -733,11 +733,18 @@ export function createProgram(version: string, io: ProgramIO): Command {
       "explore this command-line tool of explore.cli in a sandbox instead of the application",
     )
     .option("--slow-mo <ms>", "wait this many ms before every browser action, to follow it")
+    .option(
+      "--check <item>",
+      "one item of the goal's checklist; every item ends up done with its actions or not done with the reason (repeatable)",
+      collect,
+      [],
+    )
     .action(
       (
         ticket: string,
         options: {
           goal: string;
+          check: string[];
           run?: string;
           env?: string;
           timeBox?: string;

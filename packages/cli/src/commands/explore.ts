@@ -3,7 +3,7 @@ import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
 import { createRemoteEnvProvider, loginAccounts } from "@qajitsu/adapter-env-remote";
 import type { BrowserFactory } from "@qajitsu/adapter-runner-api";
 import { createPlaywrightBrowserFactory } from "@qajitsu/adapter-runner-web";
-import { buildChangeContext, createUsageTracker, runExplorer } from "@qajitsu/agents";
+import { buildChangeContext, createUsageTracker, runExplorer, type ExplorerReport } from "@qajitsu/agents";
 import {
   CliExploreSessionSchema,
   ConfigError,
@@ -23,6 +23,7 @@ import { renderExploreHtml, renderExploreMarkdown } from "@qajitsu/report";
 import { createMasker } from "@qajitsu/steps";
 import type { RuntimePorts } from "../adapters.js";
 import { codeIndexCache, openSession, type ModelPorts, type RunSession } from "../session.js";
+import { checkOption, checklistLine, sessionClaims } from "./explore-checklist.js";
 import { createExploreTools } from "./explore-tools.js";
 import type { CommandIO } from "./fetch.js";
 import { writeCliPromotion, type CliExplorePorts } from "./explore-cli.js";
@@ -47,6 +48,8 @@ export interface ExploreOptions {
   readonly slowMo?: string | undefined;
   /** Explore this command-line tool of `explore.cli` instead of the application in a browser (REQ-EXEC-24). */
   readonly cli?: string | undefined;
+  /** The goal's checklist, item by item (REQ-EXEC-25/AC1). */
+  readonly check?: readonly string[] | undefined;
 }
 
 /** Ports of `qajitsu explore`: the browser can be replaced in tests. */
@@ -139,6 +142,7 @@ export async function runExplore(
         '--goal is required: say what to explore, e.g. --goal "checkout".',
         {},
       );
+    const checks = checkOption(options.check);
     const minutes = numberOption(options.timeBox, 10, "--time-box", 240);
     const maxSteps = Math.floor(numberOption(options.maxSteps, 40, "--max-steps", 1000));
     const session = await openSession(rawKey, options.run, io.cwd, ports, masker);
@@ -188,6 +192,7 @@ export async function runExplore(
     events.emit("explore", SYSTEM, "explore.start", {
       session: id,
       goal,
+      ...(checks.length > 0 ? { checks } : {}),
       env: env.name,
       minutes,
       maxSteps,
@@ -248,6 +253,7 @@ export async function runExplore(
     }, minutes * 60_000);
     let endReason: ExploreSession["endReason"] = "finished";
     let summary = "";
+    let report: ExplorerReport | undefined;
     let error: string | undefined;
     let modelId = "";
     try {
@@ -275,12 +281,17 @@ export async function runExplore(
           }),
           tools: recorder.tools,
           accounts,
-          actions: () => recorder.actions.length,
+          session: {
+            actions: () => recorder.actions,
+            budgetLeft: () => !recorder.exhausted(),
+            checks,
+          },
           // Looks do not count as actions; the loop gets room for them on top of the action budget.
           maxSteps: maxSteps * 2 + 10,
           signal: timeBox.signal,
         },
       );
+      report = result;
       summary = masker.maskText(result.summary);
       if (recorder.exhausted()) endReason = "step-budget";
       await ws.update({ data: { ...ws.record.data, tokens: usage.total } });
@@ -319,6 +330,7 @@ export async function runExplore(
       ...(error !== undefined ? { error } : {}),
       budget: { minutes, steps: maxSteps },
       summary,
+      ...sessionClaims(checks, report, endReason, (t) => masker.maskText(t)),
       actions: recorder.actions,
       observations: recorder.observations,
       recordings,
@@ -338,6 +350,7 @@ export async function runExplore(
     io.write(
       [
         `Session ${id} ended: ${endReason}${error ? ` (${error})` : ""}; ${String(record.actions.length)} actions, ${String(record.observations.length)} observation(s).`,
+        ...[checklistLine(record.checklist)].filter((l) => l !== undefined),
         ...record.observations.map((o) => `  ${o.id} [${o.severity}] ${o.title}`),
         `Report: ${ws.path("explore", id, "report.html")}`,
         record.observations.length > 0

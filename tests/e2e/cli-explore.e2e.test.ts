@@ -71,7 +71,16 @@ explore:
               },
             ],
           },
-          { text: JSON.stringify({ summary: "qj basics in a fresh project." }) },
+          {
+            text: JSON.stringify({
+              checklist: [
+                { item: "qj --version and status", actions: ["A01", "A02"] },
+                { item: "fetch, runs and approve on a fresh run", actions: ["A03", "A04", "A05"] },
+              ],
+              findings: [{ text: "approve before plan stops with an error code", actions: ["A05"] }],
+              summary: "qj basics in a fresh project.",
+            }),
+          },
         ],
       },
     );
