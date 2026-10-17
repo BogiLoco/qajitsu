@@ -28,6 +28,8 @@ const plan = (steps: Record<string, unknown>[], type = "api") =>
         type,
         priority: "high",
         source: [{ kind: "ac", id: "AC1" }],
+        // A test account, so these cases test what they are about, not REQ-PLAN-09/AC9.
+        data: { user: "user:standard" },
         evidence: ["response"],
         steps: steps.map((s, i) => ({ id: `S${String(i + 1)}`, action: "x", ...s })),
       },
@@ -387,5 +389,51 @@ describe("concrete expected values (REQ-PLAN-09)", () => {
       components: { schemas: { A: { $ref: "#/components/schemas/A" } } },
     };
     expect(checkPlanExpectations(plan([step("GET /a", { id: "x" })]), { openapi: loop })).toEqual([]);
+  });
+
+  it("REQ-PLAN-09/AC9: a call to an endpoint that answers 401 without login needs a test account in the case", () => {
+    const withData = (data: Record<string, unknown>, steps: Record<string, unknown>[]) =>
+      PlanSchema.parse({
+        schema: 1,
+        ticket: "DEMO-1",
+        version: 1,
+        summary: "s",
+        cases: [
+          {
+            id: "TC-01",
+            title: "A case",
+            type: "api",
+            priority: "high",
+            source: [{ kind: "ac", id: "AC1" }],
+            data,
+            evidence: ["response"],
+            steps: steps.map((s, i) => ({
+              id: `S${String(i + 1)}`,
+              ...s,
+              expect: { description: "d", ...(s["expect"] as object) },
+            })),
+          },
+        ],
+      });
+    const cart = { action: "GET /cart", expect: { status: 200, fields: { total: 1.01 } } };
+    // Exploratory testing F18: gemma4 planned the cart without an account; every call got 401 and looked FAILED.
+    expect(checkPlanExpectations(withData({}, [cart, cart]), { openapi })).toEqual([
+      {
+        caseId: "TC-01",
+        stepId: "S1",
+        kind: "account",
+        reason:
+          "GET /cart answers 401 without login, but the case names no test account: add one to data, e.g. user: user:standard",
+      },
+    ]);
+    expect(checkPlanExpectations(withData({ user: "user:standard" }, [cart]), { openapi })).toEqual([]);
+    // A case about the 401 itself, or an endpoint without 401, needs no account; without OpenAPI nothing is known.
+    expect(
+      checkPlanExpectations(withData({}, [{ action: "GET /cart", expect: { status: 401 } }]), { openapi }),
+    ).toEqual([]);
+    expect(
+      checkPlanExpectations(withData({}, [{ action: "GET /health", expect: { status: 200 } }]), { openapi }),
+    ).toEqual([]);
+    expect(checkPlanExpectations(withData({}, [cart]))).toEqual([]);
   });
 });
