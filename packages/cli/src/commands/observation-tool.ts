@@ -58,6 +58,7 @@ export function createObservationTool(ctx: {
       ctx.observations.push(parsed.data);
       ctx.events.emit("explore", ORCHESTRATOR, "explore.observation", {
         id: parsed.data.id,
+        title: parsed.data.title,
         kind: parsed.data.kind,
         severity: parsed.data.severity,
         steps,

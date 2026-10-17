@@ -493,6 +493,19 @@ explore:
       timeout_s: 120
 ```
 
+**Watching a session live (REQ-EXEC-24/AC9-AC11).** Every session prints one line per action as it ends (command,
+exit code or state, duration), each answer of the explorer that code rejected and each observation. `--headed` turns
+the terminal of `qj explore` into a live view of the tool: every command as `$ <tool> <args>`, its output as it arrives,
+typed answers, Ctrl+C, and the output of background commands prefixed with their id (`[B1]`). `--slow-mo <ms>` waits
+before every command, typed line and signal. Everything shown is masked like the evidence. The terminal is always
+recorded as `evidence/recordings/terminal.cast` (asciicast v2: `asciinema play evidence/recordings/terminal.cast`) and
+`terminal.txt`, both in the manifest with SHA-256, and `report.html` shows the transcript. From a second terminal,
+`qj logs <ticket> --follow --stage explore` follows the journal while the session holds the run.
+
+```bash
+qj explore DEMO-1 --cli qj --goal "doctor and init" --check "qj doctor" --headed --slow-mo 1000
+```
+
 The demo shop configures `qj` itself: `qj explore DEMO-1 --cli qj --goal "qj env up and qj explore on the same run,
 with Ctrl+C in the middle"`.
 
@@ -549,7 +562,8 @@ Exit codes: `0` stopped with Ctrl+C, `3` errors.
 Shows the structured event log of a run.
 
 - `--run <id>`: run id (default: latest run of the ticket)
-- `--follow`: keep printing new events while the run is running
+- `--follow`: keep printing new events while the run is running, or while another `qj` process holds it (an
+  exploratory session, `env up`); stops when it ends
 - `--stage <stage>`: only this stage, e.g. `run` or `plan`
 - `--agent <role>`: only this agent, e.g. `planner`
 - `--case <id>`: only events of this case

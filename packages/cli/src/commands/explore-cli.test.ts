@@ -165,6 +165,24 @@ describe("qajitsu explore --cli (REQ-EXEC-24)", () => {
     expect(html).not.toContain("<script");
     const md = await readFile(join(dir, "report.md"), "utf8");
     expect(md).toContain("## Stopped by the clean-up");
+    // REQ-EXEC-24/AC9: one line per action as it ends and each observation, live in the terminal.
+    expect(result.out).toContain("A01  tool hello $(whoami) → exit code 0 (");
+    expect(result.out).toContain("A03  tool serve &  (B1) → still running (B1) (");
+    expect(result.out).toContain("● O1 [medium] orphan leaves a process running after the command ended");
+    expect(result.out).not.toContain(DEMO_PASSWORD);
+    // REQ-EXEC-24/AC11: the terminal is recorded, in the manifest, and shown in the report.
+    expect(session.recordings).toEqual(["recordings/terminal.cast", "recordings/terminal.txt"]);
+    expect(manifest.map((m) => m.path)).toEqual(expect.arrayContaining(session.recordings));
+    const transcript = await readFile(join(dir, "evidence", "recordings", "terminal.txt"), "utf8");
+    expect(transcript).toContain("$ tool hello $(whoami)\nhello $(whoami)\n→ exit code 0");
+    expect(transcript).toContain("[B1] listening; press Ctrl+C to stop\n");
+    expect(transcript).toContain("(Ctrl+C → B1)\n[B1] stopped\n");
+    expect(transcript).not.toContain(DEMO_PASSWORD);
+    const cast = (await readFile(join(dir, "evidence", "recordings", "terminal.cast"), "utf8")).split("\n");
+    expect(JSON.parse(cast[0] ?? "")).toMatchObject({ version: 2 });
+    expect(html).toContain('<pre class="term">');
+    expect(html).toContain("asciinema play evidence/recordings/terminal.cast");
+    expect(md).toContain("## Terminal");
     const journal = await readFile(join(p.runDir, "journal", "events.jsonl"), "utf8");
     expect(journal).toContain('"event":"explore.refused"');
     expect(journal.match(/"event":"explore\.action"/g)?.length).toBe(10);
@@ -409,6 +427,37 @@ describe("qajitsu explore --cli (REQ-EXEC-24)", () => {
     const journal = await readFile(join(p.runDir, "journal", "events.jsonl"), "utf8");
     expect(journal).toContain("names hello, which none of its actions (A01) ran");
     expect(journal).toContain("is not_done, but A01 ran it");
+  }, 120_000);
+
+  it("REQ-EXEC-24/AC9+AC10: --headed shows every command and its output live; --slow-mo paces it and is journaled", async () => {
+    const p = await project();
+    const r = await p.run(
+      ["explore", "DEMO-4", "--cli", "tool", "--goal", "Watch", "--headed", "--slow-mo", "30"],
+      {
+        script: [
+          { tools: [{ name: "cli_run", input: { args: ["ask"], input: ["yes"] } }] },
+          { tools: [{ name: "cli_run", input: { args: ["fail"] } }] },
+          {
+            text: JSON.stringify({
+              checklist: [{ item: "tool ask and tool fail", actions: ["A01", "A02"] }],
+              findings: [],
+            }),
+          },
+        ],
+      },
+    );
+    expect(r.err).toBe("");
+    expect(r.out).toContain("── A01 ");
+    expect(r.out).toContain("$ tool ask\n> yes\n");
+    expect(r.out).toContain("confirmed");
+    expect(r.out).toContain("$ tool fail\n");
+    expect(r.out).toContain("boom");
+    expect(r.out).toContain("→ exit code 2 (");
+    const journal = await readFile(join(p.runDir, "journal", "events.jsonl"), "utf8");
+    expect(journal).toMatch(/"explore\.start".*"headed":true,"slowMoMs":30/);
+    const bad = await p.run(["explore", "DEMO-4", "--cli", "tool", "--goal", "x", "--slow-mo", "fast"]);
+    expect(bad.exitCode).toBe(3);
+    expect(bad.err).toContain("SLOW_MO_INVALID");
   }, 120_000);
 
   it("REQ-EXEC-25/AC1: without --check the explorer's own checklist is kept and marked as written by it", async () => {

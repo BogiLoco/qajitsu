@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { QajitsuError, parseEventLines, type RunEvent } from "@qajitsu/core";
+import { QajitsuError, parseEventLines, processAlive, type RunEvent } from "@qajitsu/core";
 import { createMasker } from "@qajitsu/steps";
 import type { RuntimePorts } from "../adapters.js";
 import { openSession, type ModelPorts } from "../session.js";
@@ -70,7 +70,11 @@ export async function runLogs(
         io.writeError(`${String(invalidLines.length)} unreadable line(s) in events.jsonl\n`);
       if (!options.follow) break;
       const status = JSON.parse(await readFile(session.ws.path("run.json"), "utf8")) as { status?: string };
-      if (status.status !== "running" || poll + 1 >= (follow.maxPolls ?? Number.POSITIVE_INFINITY)) break;
+      // REQ-OBS-02/AC3: also while another live process holds the run (an exploratory session, env up).
+      const holder = Number((await readFile(session.ws.path("run.lock"), "utf8").catch(() => "")).trim());
+      const held = Number.isInteger(holder) && holder > 0 && holder !== process.pid && processAlive(holder);
+      if ((status.status !== "running" && !held) || poll + 1 >= (follow.maxPolls ?? Number.POSITIVE_INFINITY))
+        break;
       await sleep(500);
     }
     return 0;

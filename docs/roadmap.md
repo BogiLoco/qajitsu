@@ -137,7 +137,7 @@ without touching assertions, `qj logs` and the report timeline show what happene
 - [REQ-EVD-02](requirements/evidence.md#req-evd-02--web-evidence) Web evidence (must, implemented, AC 3/3)
 - [REQ-EVD-06](requirements/evidence.md#req-evd-06--media-policy) Media policy (should, implemented, AC 2/2)
 - [REQ-PUB-06](requirements/publishing.md#req-pub-06--failure-videos-and-evidence-for-the-user) Failure videos and evidence for the user (must, implemented, AC 3/3)
-- [REQ-OBS-02](requirements/observability.md#req-obs-02--viewing-logs) Viewing logs (must, implemented, AC 2/2)
+- [REQ-OBS-02](requirements/observability.md#req-obs-02--viewing-logs) Viewing logs (must, implemented, AC 3/3)
 - [REQ-OBS-06](requirements/observability.md#req-obs-06--transition-graph-per-run) Transition graph per run (should, implemented, AC 3/3)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
@@ -259,7 +259,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-EXEC-21](requirements/execution.md#req-exec-21--selectors-for-any-web-or-mobile-application) Selectors for any web or mobile application (must, implemented, AC 7/7)
 - [REQ-EXEC-22](requirements/execution.md#req-exec-22--snapshot-of-the-running-application-for-the-author-and-the-healer) Snapshot of the running application for the author and the healer (must, implemented, AC 9/9)
 - [REQ-EXEC-23](requirements/execution.md#req-exec-23--mobile-app-without-access-to-its-code) Mobile app without access to its code (should, implemented, AC 3/3)
-- [REQ-EXEC-24](requirements/execution.md#req-exec-24--exploratory-sessions-of-command-line-tools) Exploratory sessions of command-line tools (should, implemented, AC 8/8)
+- [REQ-EXEC-24](requirements/execution.md#req-exec-24--exploratory-sessions-of-command-line-tools) Exploratory sessions of command-line tools (should, implemented, AC 11/11)
 - [REQ-EXEC-25](requirements/execution.md#req-exec-25--grounded-reports-of-exploratory-sessions) Grounded reports of exploratory sessions (should, implemented, AC 8/8)
 - [REQ-VER-11](requirements/verification.md#req-ver-11--bug-fix-verification-fails-before-passes-after) Bug fix verification: fails before, passes after (should, implemented, AC 4/4)
 - [REQ-VER-12](requirements/verification.md#req-ver-12--failure-triage-hints) Failure triage hints (should, implemented, AC 4/4)

@@ -10,13 +10,16 @@ import {
   acquireRunLock,
   type CliExploreSession,
   type CliLeftovers,
+  type EventLog,
   type EvidenceStore,
 } from "@qajitsu/core";
 import { renderCliExploreHtml, renderCliExploreMarkdown } from "@qajitsu/report";
 import { createMasker } from "@qajitsu/steps";
 import type { RuntimePorts } from "../adapters.js";
 import { codeIndexCache, openSession, type ModelPorts } from "../session.js";
+import { createCliTerminal } from "./cli-terminal.js";
 import { checkOption, checklistLine, sessionClaims } from "./explore-checklist.js";
+import { slowMoOption } from "./live.js";
 import {
   cleanUpLeftovers,
   createSandbox,
@@ -45,6 +48,10 @@ export interface CliExploreOptions {
   readonly maxSteps?: string | undefined;
   /** The goal's checklist, item by item (REQ-EXEC-25/AC1). */
   readonly check?: readonly string[] | undefined;
+  /** Show every command and its output live (REQ-EXEC-24/AC9). */
+  readonly headed?: boolean | undefined;
+  /** Wait before every command, typed line and signal, in ms (REQ-EXEC-24/AC10). */
+  readonly slowMo?: string | undefined;
 }
 
 /** Ports of a command-line session: the probe for processes and containers can be replaced in tests. */
@@ -117,6 +124,8 @@ export async function runCliExplore(
         {},
       );
     const checks = checkOption(options.check);
+    const slowMoMs = slowMoOption(options.slowMo);
+    const headed = options.headed === true;
     const minutes = numberOption(options.timeBox, 10, "--time-box", 240);
     const maxSteps = Math.floor(numberOption(options.maxSteps, 40, "--max-steps", 1000));
     const session = await openSession(rawKey, options.run, io.cwd, ports, masker);
@@ -172,7 +181,29 @@ export async function runCliExplore(
         sandbox: sandbox.root,
         minutes,
         maxSteps,
+        headed,
+        ...(slowMoMs ? { slowMoMs } : {}),
       });
+      // REQ-EXEC-24/AC9+AC11: the person watches the session's terminal; it is also recorded.
+      const terminal = createCliTerminal({
+        write: (t) => {
+          io.write(t);
+        },
+        headed,
+        now: () => ports.now().getTime(),
+        mask,
+        title: `qj explore ${ws.ticket} ${id} --cli ${options.cli}`,
+      });
+      const watched: EventLog = {
+        emit(stage, actor, event, details) {
+          events.emit(stage, actor, event, details);
+          const d = (details ?? {}) as { errors?: string[]; id?: string; severity?: string; title?: string };
+          if (event === "explore.answer_rejected")
+            terminal.note(`✘ answer rejected: ${(d.errors ?? []).join("; ")}`);
+          if (event === "explore.observation")
+            terminal.note(`● ${d.id ?? ""} [${d.severity ?? ""}] ${d.title ?? ""}`);
+        },
+      };
       io.write(
         `Exploratory session ${id} of ${options.cli} in a sandbox: ${String(minutes)} min, ${String(maxSteps)} actions\n`,
       );
@@ -191,9 +222,12 @@ export async function runCliExplore(
         timeoutMs,
         store,
         mask,
-        events,
+        events: watched,
         maxSteps,
         now: ports.now,
+        terminal,
+        display: options.cli,
+        ...(slowMoMs ? { slowMoMs } : {}),
         ...(ports.cliProbe ? { probe: ports.cliProbe } : {}),
       });
       // REQ-EXEC-15/AC5: the time box is a timer in code, not a request to the model.
@@ -213,7 +247,7 @@ export async function runCliExplore(
             {
               ws,
               models: session.models,
-              events,
+              events: watched,
               usage,
               now: ports.now,
               maskJson: (v: unknown) => masker.maskJson(v),
@@ -260,6 +294,20 @@ export async function runCliExplore(
         processes: stopped.processes.map(mask),
         containers: stopped.containers.map(mask),
       };
+      const recorded = terminal.finish();
+      const recordings: string[] = [];
+      for (const [name, text] of [
+        ["recordings/terminal.cast", recorded.cast],
+        ["recordings/terminal.txt", recorded.transcript],
+      ] as const)
+        recordings.push(
+          (
+            await store.put(
+              { path: name, caseId: "explore", stepId: "session", kind: "log" },
+              new TextEncoder().encode(text),
+            )
+          ).path,
+        );
       const record = CliExploreSessionSchema.parse({
         schema: 1,
         kind: "cli",
@@ -283,13 +331,17 @@ export async function runCliExplore(
         leftovers,
         cleaned,
         refusedHosts,
+        recordings,
       });
       const manifest = await store.manifest();
       await writeFile(ws.path("explore", id, "session.json"), `${JSON.stringify(record, null, 2)}\n`, {
         flag: "wx",
       });
       await writeFile(ws.path("explore", id, "report.md"), renderCliExploreMarkdown(record, manifest));
-      await writeFile(ws.path("explore", id, "report.html"), renderCliExploreHtml(record, manifest));
+      await writeFile(
+        ws.path("explore", id, "report.html"),
+        renderCliExploreHtml(record, manifest, recorded.transcript),
+      );
       events.emit("explore", SYSTEM, "explore.end", {
         session: id,
         endReason,

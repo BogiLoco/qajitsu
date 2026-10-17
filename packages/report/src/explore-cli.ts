@@ -131,6 +131,16 @@ export function renderCliExploreMarkdown(
       ? ["## Network refused by the allowlist", "", ...session.refusedHosts.map((h) => `- ${h}`), ""]
       : []),
   );
+  // REQ-EXEC-24/AC11: the session's terminal, recorded by code.
+  if (session.recordings.length > 0)
+    out.push(
+      "## Terminal",
+      "",
+      ...session.recordings.map((r) => `- ${ref(r)}`),
+      "",
+      "Replay it as it happened: `asciinema play evidence/recordings/terminal.cast`.",
+      "",
+    );
   return `${out.join("\n")}\n`;
 }
 
@@ -140,8 +150,13 @@ export function renderCliExploreMarkdown(
  *
  * @param session - The validated session.
  * @param manifest - The session's evidence manifest.
+ * @param terminal - The recorded transcript of the session's terminal, shown in the page (REQ-EXEC-24/AC11).
  */
-export function renderCliExploreHtml(session: CliExploreSession, manifest: readonly EvidenceEntry[]): string {
+export function renderCliExploreHtml(
+  session: CliExploreSession,
+  manifest: readonly EvidenceEntry[],
+  terminal?: string,
+): string {
   const hash = new Map(manifest.map((e) => [e.path, e.sha256]));
   const sha = (path: string): string => esc((hash.get(path) ?? "missing").slice(0, 12));
   const tool = session.tool.name;
@@ -183,6 +198,7 @@ table{border-collapse:collapse;width:100%;margin:8px 0}td,th{border:1px solid #d
 .muted{color:#57606a}tr.bad td{background:#ffebe9}.note{background:#fff8c5;border:1px solid #d4a72c;padding:8px 12px}
 .tag{background:#eaeef2;border-radius:10px;padding:1px 8px;font-size:12px}.obs{border-top:1px solid #d0d7de;margin-top:16px}
 .obs.high .sev{background:#ffebe9}.obs.medium .sev{background:#fff8c5}:target{outline:3px solid #0969da}
+pre.term{background:#0d1117;color:#e6edf3;padding:12px;overflow-x:auto;font-size:12px;line-height:1.4;max-height:600px}
 </style></head><body>
 <h1>${esc(session.ticket)} · exploratory session ${esc(session.id)} of <code>${esc(tool)}</code></h1>
 <p><b>Goal:</b> ${esc(session.goal)}</p>
@@ -201,6 +217,13 @@ ${list(session.leftovers)}
 <h2>Stopped by the clean-up</h2>
 ${list(session.cleaned)}
 ${session.refusedHosts.length > 0 ? `<h2>Network refused by the allowlist</h2><ul>${session.refusedHosts.map((h) => `<li>${esc(h)}</li>`).join("")}</ul>` : ""}
+${
+  session.recordings.length > 0
+    ? `<h2>Terminal</h2>
+<p class="muted">${session.recordings.map((r) => `<a href="${esc(link(r))}">${esc(r)}</a> · sha256 <code>${sha(r)}</code>`).join(" · ")}<br>Replay it as it happened: <code>asciinema play evidence/recordings/terminal.cast</code></p>
+${terminal !== undefined ? `<details open><summary>Transcript</summary><pre class="term">${esc(terminal)}</pre></details>` : ""}`
+    : ""
+}
 </body></html>
 `;
 }

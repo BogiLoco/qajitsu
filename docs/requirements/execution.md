@@ -384,6 +384,9 @@ wrong. The trusted parent runs every command; the agent only asks for them and p
 - [x] AC6: `qj explore promote` turns a CLI observation into a draft case for a later CLI runner, or into a regression test proposal for the tool's own test suite; nothing runs without approval.
 - [x] AC7: Any command-line tool can be explored, not only `qj`: `explore.cli.<name>` in `.qa/qa.project.yaml` names its program, the fixture folder copied into every sandbox, setup commands (argument arrays), environment variables and secrets by `secret://` reference, the hosts it may reach and the timeout per command; a tool without such an entry is refused.
 - [x] AC8: The act-before-summarising rule of REQ-EXEC-15/AC8 applies: a summary before any command (`cli_run` or `cli_start`) is rejected and the agent is asked to run the commands of the goal; one that never does ends the session with `error`.
+- [x] AC9: Live view of every explored tool: by default the terminal of `qj explore --cli` prints one line per action as it ends (the command, its exit code or state, the duration), each rejected answer of the explorer and each observation; `--headed` also shows every command as `$ <tool> <args>` with its output as it arrives, typed answers, signals, and the output of background commands prefixed with their id. Everything shown is masked like the evidence and changes no result.
+- [x] AC10: `--slow-mo <ms>` waits that long before every command, typed line and signal, to follow the session; it is journaled with the session.
+- [x] AC11: The session's terminal is recorded with its timings as `recordings/terminal.cast` (asciicast v2, replayable with `asciinema play`) and as a plain transcript `recordings/terminal.txt`, both in the evidence manifest with SHA-256; the report shows the transcript and how to replay the recording.
 
 ### REQ-EXEC-25 · Grounded reports of exploratory sessions
 

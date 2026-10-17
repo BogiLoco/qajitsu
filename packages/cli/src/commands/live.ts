@@ -34,6 +34,21 @@ export function headlessFor(configured: boolean, live: Pick<LiveRun, "headed"> |
 }
 
 /**
+ * `--slow-mo <ms>`: a delay before every action, between 0 and 10000 ms.
+ *
+ * @param raw - The option's value.
+ * @returns The delay, or nothing for none.
+ * @throws {ConfigError} `SLOW_MO_INVALID`.
+ */
+export function slowMoOption(raw: string | number | undefined): number | undefined {
+  if (raw === undefined) return undefined;
+  const ms = Number(raw);
+  if (!Number.isInteger(ms) || ms < 0 || ms > 10_000)
+    throw new ConfigError("SLOW_MO_INVALID", "--slow-mo takes milliseconds between 0 and 10000.", {});
+  return ms > 0 ? ms : undefined;
+}
+
+/**
  * A visible browser or emulator and a delay before every action (REQ-EXEC-16/AC2, REQ-EXEC-15/AC7), checked before
  * anything starts.
  *
@@ -51,12 +66,7 @@ export function liveView(
       "--headed needs a display (DISPLAY or WAYLAND_DISPLAY); run it on a desktop or without --headed.",
       {},
     );
-  let slowMoMs: number | undefined;
-  if (options.slowMo !== undefined) {
-    slowMoMs = Number(options.slowMo);
-    if (!Number.isInteger(slowMoMs) || slowMoMs < 0 || slowMoMs > 10_000)
-      throw new ConfigError("SLOW_MO_INVALID", "--slow-mo takes milliseconds between 0 and 10000.", {});
-  }
+  const slowMoMs = slowMoOption(options.slowMo);
   return { headed, ...(slowMoMs ? { slowMoMs } : {}) };
 }
 

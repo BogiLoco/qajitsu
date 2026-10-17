@@ -774,7 +774,7 @@ Every option and exit code of every command: [docs/cli/commands.md](docs/cli/com
 | Command                                                                                           | What it does                                                                                                                                                                                                  |
 | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `qj evidence <TICKET> [--failed] [--case <TC>] [--trace <TC>] [--no-open] [--serve [--port <n>]]` | Statuses, failed assertions (expected vs actual), evidence files, cURL commands; opens `report.html`, videos or a Playwright trace unless `--no-open`; `--serve` serves the report and evidence on 127.0.0.1. |
-| `qj logs <TICKET> [--follow] [--stage <s>] [--agent <role>] [--case <TC>]`                        | The structured event journal: stages, agent tool calls (allowed and denied), model usage, attempts. `--follow` while a run is running.                                                                        |
+| `qj logs <TICKET> [--follow] [--stage <s>] [--agent <role>] [--case <TC>]`                        | The structured event journal: stages, agent tool calls (allowed and denied), model usage, attempts. `--follow` while a run is running or an exploratory session holds it.                                     |
 | `qj watch <TICKET> [--port <n>]`                                                                  | A page on 127.0.0.1 with the progress of a run while it runs: cases, current step, latest screenshot, preliminary outcomes, then the computed statuses.                                                       |
 | `qj map [--out <dir>] [--openapi <file>]`                                                         | Application map over all runs: tested screens, endpoints and transitions, and the ones never tested (`qa-map/map.html`, `map.json`).                                                                          |
 | `qj export <TICKET> [--out <dir>]`                                                                | Pipeline artifacts: `report.html`, `junit.xml`, `matrix.md/.csv`, `gates.json` and the evidence zip. Exit code = the run's.                                                                                   |
@@ -1078,7 +1078,9 @@ verification: { auditor: optional, canary: true, triage: on }
   presses Ctrl+C, runs commands side by side and checks what was left running. Every session runs in a throwaway
   sandbox with its own HOME, only the configured variables and an allowlist proxy; QAJitsu runs only that program,
   with argument arrays, records every command's exit code, output and changed files, and stops everything the session
-  started. `qj explore promote` turns an observation into a regression test proposal.
+  started. You watch it live: one line per command by default, `--headed` for the whole terminal as it happens
+  (`--slow-mo` to follow it); the terminal is recorded (`terminal.cast` for `asciinema play`, a transcript in
+  `report.html`). `qj explore promote` turns an observation into a regression test proposal.
 - **Exploration through MCP.** The author can look at the running app through MCP servers (e.g. Playwright MCP) to
   find selectors: `mcp.servers` in the project config, only the listed tools, every call through the guard and the
   journal, URLs checked against the environment allowlist, nothing stored as results or evidence.

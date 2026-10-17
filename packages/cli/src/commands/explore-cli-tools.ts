@@ -15,6 +15,7 @@ import {
   type RunningCommand,
   type ToolProbe,
 } from "./cli-sandbox.js";
+import type { CliTerminal } from "./cli-terminal.js";
 import { createObservationTool } from "./observation-tool.js";
 
 const ORCHESTRATOR = { kind: "system", name: "orchestrator" } as const;
@@ -44,7 +45,7 @@ const tail = (text: string): string =>
  * are read only inside the sandbox; the step budget is counted here, in code.
  *
  * @param ctx - The tool's program and fixed arguments, sandbox, environment, timeout, evidence, masking, journal,
- *   budget, clock and the probe for left processes and containers.
+ *   budget, clock, the probe for left processes and containers, and the live terminal with its pace.
  */
 export function createCliExploreTools(ctx: {
   readonly program: string;
@@ -58,6 +59,13 @@ export function createCliExploreTools(ctx: {
   readonly maxSteps: number;
   readonly now: () => Date;
   readonly probe?: ToolProbe;
+  /** Live view and recording of the session's terminal (REQ-EXEC-24/AC9+AC11). */
+  readonly terminal?: CliTerminal;
+  /** Name the tool is shown with, e.g. `qj`. */
+  readonly display?: string;
+  /** Wait before every command, typed line and signal (REQ-EXEC-24/AC10). */
+  readonly slowMoMs?: number;
+  readonly pause?: (ms: number) => Promise<void>;
 }): CliExploreRecorder {
   const actions: CliAction[] = [];
   const observations: Observation[] = [];
@@ -85,6 +93,13 @@ export function createCliExploreTools(ctx: {
     }
     return `A${String(actions.length + 1).padStart(2, "0")}`;
   };
+  const pause = ctx.pause ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const shown = ctx.display ?? "tool";
+  /** Shows an action starting; commands, typed lines and signals wait for `--slow-mo` first. */
+  const begin = async (id: string, label: string, paced: boolean): Promise<void> => {
+    if (paced && ctx.slowMoMs) await pause(ctx.slowMoMs);
+    ctx.terminal?.begin(id, label);
+  };
   const BUDGET =
     "STEP BUDGET USED: stop exploring now and answer with the JSON answer: the checklist, findings and summary.";
 
@@ -98,6 +113,8 @@ export function createCliExploreTools(ctx: {
     started: number,
   ): Promise<string> => {
     const masked = ctx.mask(output);
+    // Commands stream their output live; what an inspection found is shown when it ends.
+    if (["read", "list", "leftovers"].includes(action) && masked !== "") ctx.terminal?.output(`${masked}\n`);
     let path: string | undefined;
     if (masked !== "") {
       const stored = await ctx.store.put(
@@ -140,6 +157,7 @@ export function createCliExploreTools(ctx: {
             : entry.ok
               ? "done"
               : `failed: ${entry.error ?? ""}`;
+    ctx.terminal?.end(id, `${status}${entry.background ? ` (${entry.background})` : ""}`);
     return [
       `${id} ${status}${entry.background ? ` (${entry.background})` : ""}.`,
       changed.length > 0 ? `Changed files: ${changed.slice(0, 30).join(", ")}` : "",
@@ -149,8 +167,14 @@ export function createCliExploreTools(ctx: {
       .join("\n");
   };
 
-  const command = (args: readonly string[], input: readonly string[] | undefined, interactive: boolean) =>
+  const command = (
+    args: readonly string[],
+    input: readonly string[] | undefined,
+    interactive: boolean,
+    from?: string,
+  ) =>
     startCommand({
+      onOutput: (text) => ctx.terminal?.output(text, from),
       program: ctx.program,
       baseArgs: ctx.baseArgs,
       args,
@@ -160,6 +184,7 @@ export function createCliExploreTools(ctx: {
       input,
       interactive,
     });
+  const line = (args: readonly string[]): string => [shown, ...args].join(" ");
   const findBackground = (id: string) => background.find((b) => b.id === id);
   const endFields = (end: {
     exitCode?: number | undefined;
@@ -186,6 +211,8 @@ export function createCliExploreTools(ctx: {
         if (refused) return refused;
         const lines = Array.isArray(input["input"]) ? (input["input"] as unknown[]).map(String) : undefined;
         const before = await snapshotFiles(ctx.sandbox.root);
+        await begin(id, line(args), true);
+        for (const l of lines ?? []) ctx.terminal?.echo(`> ${l}`);
         const started = ctx.now().getTime();
         const c = command(args, lines, false);
         const end = (await c.wait(ctx.timeoutMs + 6000)) ?? { timedOut: true };
@@ -215,9 +242,10 @@ export function createCliExploreTools(ctx: {
         const refused = escaping("cli_start", args);
         if (refused) return refused;
         const before = await snapshotFiles(ctx.sandbox.root);
-        const started = ctx.now().getTime();
-        const c = command(args, undefined, true);
         const bid = `B${String(background.length + 1)}`;
+        await begin(id, `${line(args)} &  (${bid})`, true);
+        const started = ctx.now().getTime();
+        const c = command(args, undefined, true, bid);
         background.push({ id: bid, command: c });
         const end = await c.wait(3000);
         return record(
@@ -243,16 +271,18 @@ export function createCliExploreTools(ctx: {
         if (!b) return refuse("cli_send", "unknown background command; use the id cli_start returned");
         const id = nextId();
         if (!id) return BUDGET;
-        const line = String(input["line"]);
+        const typed = String(input["line"]);
+        await begin(id, `(type into ${b.id})`, true);
+        ctx.terminal?.echo(`> ${typed}`);
         const started = ctx.now().getTime();
-        b.command.send(line);
+        b.command.send(typed);
         const end = await b.command.wait(1500);
         return record(
           id,
           "send",
           {
             background: b.id,
-            input: [ctx.mask(line)],
+            input: [ctx.mask(typed)],
             ...(end ? endFields(end) : { running: true, ok: true }),
           },
           b.command.takeOutput(),
@@ -278,6 +308,7 @@ export function createCliExploreTools(ctx: {
         const signal = input["signal"] === "SIGTERM" ? "SIGTERM" : "SIGINT";
         const seconds = typeof input["seconds"] === "number" ? input["seconds"] : 20;
         const before = await snapshotFiles(ctx.sandbox.root);
+        await begin(id, `(${signal === "SIGINT" ? "Ctrl+C" : "SIGTERM"} → ${b.id})`, true);
         const started = ctx.now().getTime();
         b.command.signal(signal);
         const end = await b.command.wait(seconds * 1000);
@@ -307,6 +338,7 @@ export function createCliExploreTools(ctx: {
         if (!id) return BUDGET;
         const seconds = typeof input["seconds"] === "number" ? input["seconds"] : 10;
         const before = await snapshotFiles(ctx.sandbox.root);
+        await begin(id, `(wait for ${b.id}, up to ${String(seconds)} s)`, false);
         const started = ctx.now().getTime();
         const end = await b.command.wait(Math.min(seconds * 1000, ctx.timeoutMs));
         return record(
@@ -329,6 +361,7 @@ export function createCliExploreTools(ctx: {
         if (!real) return refuse("cli_read", "only existing files inside the sandbox can be read");
         const id = nextId();
         if (!id) return BUDGET;
+        await begin(id, `(read ${path})`, false);
         const started = ctx.now().getTime();
         const text = await readSandboxFile(real).catch((e: unknown) => `cannot read: ${String(e)}`);
         return record(id, "read", { path: ctx.mask(path) }, text, undefined, started);
@@ -345,6 +378,7 @@ export function createCliExploreTools(ctx: {
         if (!real) return refuse("cli_list", "only existing folders inside the sandbox can be listed");
         const id = nextId();
         if (!id) return BUDGET;
+        await begin(id, `(list ${path})`, false);
         const started = ctx.now().getTime();
         const entries = await readdir(real, { withFileTypes: true }).catch(() => []);
         const text = entries
@@ -369,6 +403,7 @@ export function createCliExploreTools(ctx: {
       async execute() {
         const id = nextId();
         if (!id) return BUDGET;
+        await begin(id, "(what is left running)", false);
         const started = ctx.now().getTime();
         const found = await findLeftovers(ctx.sandbox, background, ctx.probe);
         const text = [

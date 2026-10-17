@@ -234,6 +234,8 @@ export function startCommand(spec: {
   readonly input?: readonly string[] | undefined;
   /** Keep standard input open for `send` (background commands). */
   readonly interactive?: boolean;
+  /** Output as it arrives, for the live view of the session (REQ-EXEC-24/AC9). */
+  readonly onOutput?: ((text: string) => void) | undefined;
 }): RunningCommand {
   let output = "";
   let read = 0;
@@ -241,7 +243,9 @@ export function startCommand(spec: {
   let timedOut = false;
   let child: ChildProcess;
   const append = (chunk: Buffer | string): void => {
-    if (output.length < MAX_OUTPUT) output += chunk.toString();
+    if (output.length >= MAX_OUTPUT) return;
+    output += chunk.toString();
+    spec.onOutput?.(chunk.toString());
   };
   try {
     child = spawn(spec.program, [...spec.baseArgs, ...spec.args], {

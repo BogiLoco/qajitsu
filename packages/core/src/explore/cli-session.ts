@@ -72,6 +72,8 @@ export const CliExploreSessionSchema = z.strictObject({
   cleaned: CliLeftoversSchema,
   /** Network requests the proxy refused (host:port), the tool's attempts outside its allowlist. */
   refusedHosts: z.array(z.string().max(300)).max(200).default([]),
+  /** The session's terminal in the evidence manifest: `terminal.cast` (asciicast v2) and `terminal.txt`. */
+  recordings: z.array(z.string()).max(10).default([]),
 });
 
 /** A recorded command-line action. */

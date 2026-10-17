@@ -1153,7 +1153,10 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .description("Show the structured event log of a run")
     .argument("<ticket>", "Jira key, e.g. SHOP-482")
     .option("--run <id>", "run id (default: latest run of the ticket)")
-    .option("--follow", "keep printing new events while the run is running")
+    .option(
+      "--follow",
+      "keep printing new events while the run is running or another qj command (explore, env up) holds it",
+    )
     .option("--stage <stage>", "only this stage, e.g. run or plan")
     .option("--agent <role>", "only this agent, e.g. planner")
     .option("--case <id>", "only events of this case")

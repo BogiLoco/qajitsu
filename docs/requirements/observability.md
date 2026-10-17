@@ -25,6 +25,7 @@ Users can see what the tester did and when, and teams can monitor QAJitsu over t
 
 - [x] AC1: `qajitsu logs <TICKET> [--run] [--follow] [--stage] [--agent] [--case]`.
 - [x] AC2: `report.html` has a timeline tab; selecting an event shows the screenshot or request/response from that moment.
+- [x] AC3: `--follow` keeps following while another live process holds the run's lock (an exploratory session, `env up`), not only while the run's status is running, and stops when the lock is released.
 
 ### REQ-OBS-03 · OpenTelemetry export
 

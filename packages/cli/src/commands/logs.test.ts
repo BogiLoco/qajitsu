@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createDemoPipeline, DEMO_PASSWORD } from "../../../../tests/support/cli-pipeline.js";
@@ -63,5 +63,36 @@ describe("qajitsu logs (REQ-OBS-02/AC1)", () => {
     expect(code).toBe(0);
     expect(polls).toBe(2);
     expect(out).toBe("");
+  });
+
+  it("REQ-OBS-02/AC3: --follow keeps following while another live process holds the run's lock, e.g. an exploratory session", async () => {
+    const p = await createDemoPipeline();
+    cleanups.push(p.cleanup);
+    await p.executed();
+    const lock = join(p.runDir, "run.lock");
+    // The parent of this test process is alive: it stands for a running `qj explore`.
+    await writeFile(lock, `${String(process.ppid)}\n`);
+    let polls = 0;
+    const code = await runLogs(
+      "DEMO-1",
+      { follow: true, stage: "explore" },
+      { write: () => undefined, writeError: () => undefined, cwd: p.project },
+      {
+        env: {},
+        home: p.home,
+        now: () => new Date(),
+        random: Math.random,
+        fetch: globalThis.fetch,
+        gitExec: () => Promise.resolve({ stdout: "", stderr: "" }),
+      },
+      {
+        sleep: async () => {
+          polls += 1;
+          if (polls === 3) await rm(lock);
+        },
+      },
+    );
+    expect(code).toBe(0);
+    expect(polls).toBe(3);
   });
 });
