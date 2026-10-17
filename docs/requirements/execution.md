@@ -218,6 +218,7 @@ session. It reports observations for a human to assess, never statuses.
 - [x] AC7: `--headed` shows the browser while the agent explores and `--slow-mo <ms>` slows every action down, checked like `qj run` (a display is needed); both are journaled with the session.
 - [x] AC8: Act before summarising, for every explorer (browser, command line and any later kind): code rejects the final summary while the session has no recorded action and asks the agent to act, with its tools still available; a session whose agent never acts ends with `error` and an empty summary, never with a summary of testing that did not happen. Looking at the page is not an action.
 - [x] AC9: Actions the agent asks for at once (several tool calls in one turn) are performed one at a time, in the order asked, for every explorer: each gets its own id, its own evidence and its own place in the live view, and none of them is lost.
+- [x] AC10: The terminal of a browser session shows each action (what, on what, ok or the error), each rejected answer of the explorer and each observation as it happens, masked and stripped of control characters, as command-line sessions do (REQ-EXEC-24/AC9).
 
 ### REQ-EXEC-16 · Run one case with a live view
 

@@ -13,6 +13,7 @@ import {
   listPlanVersions,
   readPlan,
   writePlanVersion,
+  type EventLog,
   type ExploreSession,
   type Plan,
   type TestCase,
@@ -211,11 +212,37 @@ export async function runExplore(
       ...(login ? { sessions: login.sessions } : {}),
     });
     const accounts = login ? Object.keys(login.sessions) : [];
+    // Exploratory testing F23: each action, rejected answer and observation shows as it happens, as in --cli sessions.
+    const watched: EventLog = {
+      emit(stage, actor, event, details) {
+        events.emit(stage, actor, event, details);
+        const d = (details ?? {}) as {
+          id?: string;
+          action?: string;
+          target?: string;
+          ok?: boolean;
+          error?: string;
+          url?: string;
+          errors?: string[];
+          severity?: string;
+          title?: string;
+        };
+        const line =
+          event === "explore.action"
+            ? `${d.id ?? ""}  ${d.action ?? ""} ${d.target ?? ""} → ${d.ok === true ? "ok" : `failed: ${d.error ?? ""}`}`
+            : event === "explore.answer_rejected"
+              ? `✘ answer rejected: ${(d.errors ?? []).join("; ")}`
+              : event === "explore.observation"
+                ? `● ${d.id ?? ""} [${d.severity ?? ""}] ${d.title ?? ""}`
+                : undefined;
+        if (line !== undefined) io.write(`${printable(masker.maskText(line))}\n`);
+      },
+    };
     const recorder = createExploreTools({
       driver: await browser.driver(),
       store,
       mask: (t) => masker.maskText(t),
-      events,
+      events: watched,
       maxSteps,
       accounts,
       now: ports.now,
@@ -241,7 +268,7 @@ export async function runExplore(
         {
           ws,
           models: session.models,
-          events,
+          events: watched,
           usage,
           now: ports.now,
           maskJson: (v: unknown) => masker.maskJson(v),

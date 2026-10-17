@@ -431,7 +431,8 @@ Exit codes: `0` every ticket ready, `1` not ready (or no tickets), `2` publishin
 An exploratory session (REQ-EXEC-15): the explorer agent explores the application towards a goal through browser
 actions that QAJitsu performs and records (a screenshot after each action, video, trace, network and console, all in
 the evidence manifest). It reports observations with steps to reproduce for a person to assess, never statuses, and
-writes `explore/<session>/report.html` and `report.md` for review. Needs a fetched run (`qajitsu fetch`).
+writes `explore/<session>/report.html` and `report.md` for review. Needs a fetched run (`qajitsu fetch`). The terminal
+shows each action, rejected answer and observation as it happens.
 
 - `--goal <text>`: what to explore (required), e.g. "checkout around the terms change"
 - `--run <id>`: run id (default: latest run of the ticket)
