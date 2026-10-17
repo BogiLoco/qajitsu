@@ -129,6 +129,11 @@ export interface StructuredRun<T extends z.ZodType> {
   readonly usage: UsageTracker;
   readonly maxSteps?: number;
   readonly signal?: AbortSignal;
+  /**
+   * Agents that act through their tools (explorers) keep them in repair rounds instead of switching to constrained
+   * decoding, so an answer rejected for doing nothing can be fixed by acting.
+   */
+  readonly retryWithTools?: boolean;
   /** Images shown with the prompt (screenshots for the auditor); dropped for models without vision. */
   readonly images?: readonly {
     readonly name: string;
@@ -173,7 +178,7 @@ export async function runStructuredAgent<T extends z.ZodType>(
   let lastErrors: readonly string[] = [];
   let constrainedAvailable = run.model.profile.structuredOutput;
   for (let attempt = 1; attempt <= MAX_OUTPUT_ATTEMPTS; attempt += 1) {
-    const constrained = attempt > 1 && constrainedAvailable;
+    const constrained = attempt > 1 && constrainedAvailable && run.retryWithTools !== true;
     let result;
     try {
       result = await generateText({
@@ -225,7 +230,7 @@ export async function runStructuredAgent<T extends z.ZodType>(
       ...result.responseMessages,
       {
         role: "user",
-        content: `Your answer was rejected (attempt ${String(attempt)} of ${String(MAX_OUTPUT_ATTEMPTS)}). Fix exactly these problems and answer again with the complete JSON object only:\n${errors.map((e) => `- ${e}`).join("\n")}`,
+        content: `Your answer was rejected (attempt ${String(attempt)} of ${String(MAX_OUTPUT_ATTEMPTS)}). ${run.retryWithTools === true ? "Fix exactly these problems, using your tools where they say so, then answer with the complete JSON object" : "Fix exactly these problems and answer again with the complete JSON object only"}:\n${errors.map((e) => `- ${e}`).join("\n")}`,
       },
     ];
   }

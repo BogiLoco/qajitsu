@@ -193,6 +193,32 @@ describe("qajitsu explore --cli (REQ-EXEC-24)", () => {
     expect(r.out).toContain("ended with exit code 4)");
   }, 120_000);
 
+  it("REQ-EXEC-24/AC8: a summary before any command is rejected and the explorer acts; one that never acts ends the session with an error", async () => {
+    const claim = { text: JSON.stringify({ summary: "Tested every command; all exit codes fit." }) };
+    const p = await project();
+    const r = await p.run(["explore", "DEMO-4", "--cli", "tool", "--goal", "Test everything"], {
+      script: [claim, { tools: [{ name: "cli_run", input: { args: ["hello"] } }] }, claim],
+    });
+    expect(r.exitCode).toBe(0);
+    const session = JSON.parse(await readFile(join(p.runDir, "explore", "S01", "session.json"), "utf8")) as {
+      endReason: string;
+      actions: { args: string[] }[];
+    };
+    expect(session.endReason).toBe("finished");
+    expect(session.actions.map((a) => a.args)).toEqual([["hello"]]);
+    const q = await project();
+    const never = await q.run(["explore", "DEMO-4", "--cli", "tool", "--goal", "Test everything"], {
+      script: [claim, claim, claim],
+    });
+    expect(never.out).toContain("ended: error (explorer did not produce valid output in 3 attempts.)");
+    const failed = JSON.parse(await readFile(join(q.runDir, "explore", "S01", "session.json"), "utf8")) as {
+      summary: string;
+      actions: unknown[];
+    };
+    expect(failed.actions).toEqual([]);
+    expect(failed.summary).toBe("");
+  }, 120_000);
+
   it("REQ-EXEC-15/AC5 + REQ-EXEC-24/AC1: the step budget is enforced by code", async () => {
     const p = await project();
     const looping: Turn[] = [{ tools: [{ name: "cli_run", input: { args: ["hello"] } }] }];

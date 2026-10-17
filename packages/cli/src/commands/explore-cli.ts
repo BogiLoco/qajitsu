@@ -218,6 +218,7 @@ export async function runCliExplore(
               tool: { name: options.cli, command: tool.command.join(" "), description: tool.description },
               context: await buildChangeContext(ws, [], { indexCache: codeIndexCache(project) }),
               tools: recorder.tools,
+              actions: () => recorder?.actions.length ?? 0,
               maxSteps: maxSteps * 2 + 10,
               signal: timeBox.signal,
             },

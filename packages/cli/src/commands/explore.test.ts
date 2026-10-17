@@ -156,6 +156,31 @@ describe("qajitsu explore (REQ-EXEC-15)", () => {
     expect(headed.err).toContain("HEADED_NO_DISPLAY");
   }, 120_000);
 
+  it("REQ-EXEC-15/AC8: a summary before any action is rejected and the explorer acts; one that only looks ends the session with an error", async () => {
+    const claim: Turn = {
+      text: JSON.stringify({ summary: "Checked checkout end to end; everything works." }),
+    };
+    const look: Turn = { tools: [{ name: "explore_look", input: {} }] };
+    const first = await pipeline();
+    const acted = await first.run(["explore", "DEMO-4", "--goal", "Check checkout"], {
+      script: [look, claim, { tools: [{ name: "explore_goto", input: { path: "/app/products" } }] }, claim],
+    });
+    expect(acted.exitCode).toBe(0);
+    const session = await sessionOf(first.runDir);
+    expect(session.endReason).toBe("finished");
+    expect(session.actions.map((a) => a.action)).toHaveLength(1);
+    const second = await pipeline();
+    const never = await second.run(["explore", "DEMO-4", "--goal", "Check checkout"], {
+      script: [look, claim, claim, claim],
+    });
+    expect(never.out).toContain("ended: error (explorer did not produce valid output in 3 attempts.)");
+    const failed = (await sessionOf(second.runDir)) as Awaited<ReturnType<typeof sessionOf>> & {
+      summary: string;
+    };
+    expect(failed.actions).toEqual([]);
+    expect(failed.summary).toBe("");
+  }, 120_000);
+
   it("REQ-EXEC-15/AC5: the step budget is enforced by code and the session keeps what it recorded", async () => {
     const { run, runDir } = await pipeline();
     const looping: Turn[] = [{ tools: [{ name: "explore_goto", input: { path: "/app/products" } }] }];

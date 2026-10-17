@@ -275,6 +275,7 @@ export async function runExplore(
           }),
           tools: recorder.tools,
           accounts,
+          actions: () => recorder.actions.length,
           // Looks do not count as actions; the loop gets room for them on top of the action budget.
           maxSteps: maxSteps * 2 + 10,
           signal: timeBox.signal,

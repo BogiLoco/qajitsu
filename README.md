@@ -1069,7 +1069,8 @@ verification: { auditor: optional, canary: true, triage: on }
 - **Exploratory sessions.** `qj explore <TICKET> --goal "..."`: an agent explores the app towards a goal; QAJitsu
   performs and records every action (screenshots, video, trace, network), enforces the time box and step budget, and
   writes a review report with observations and steps to reproduce. Observations are proposals, never statuses;
-  `qj explore promote` turns one into a draft plan case.
+  a summary before any action is rejected, so a model cannot describe testing it never did. `qj explore promote`
+  turns one into a draft plan case.
 - **Exploring command-line tools.** `qj explore <TICKET> --cli <tool> --goal "..."` lets the agent use any CLI
   described in `explore.cli` (QAJitsu's own `qj` in the demo) like a tester in a terminal: it answers prompts,
   presses Ctrl+C, runs commands side by side and checks what was left running. Every session runs in a throwaway
@@ -1242,7 +1243,8 @@ qj evidence DEMO-1 --failed
 
 - Models: `models.roles` per role (`analyst`, `planner`, `author`, `healer`, `auditor`, `summary`, `default`). A strong
   model for `planner` and `author`, a cheap or local one for `summary` and `auditor` is a good start. Measure with
-  `qj bench`. Declare capabilities (`tools`, `structured_output`, `vision`, `context_window`) and `cost_per_mtok`.
+  `qj bench`. Declare capabilities (`tools`, `structured_output`, `vision`, `context_window`) and `cost_per_mtok`;
+  for Ollama thinking models (Qwen3, DeepSeek-R1) set `think: true` or `false` explicitly.
 - Cost and time: `models.token_budget`, `environments.retries`, `execution.workers` (`environments.workers` is the default), `execution.web_combinations`, `web.action_timeout_ms`.
 - Strictness: `verification.auditor` (`optional`, `required`, `off`), `verification.canary: true`, `verification.triage` (`on`, `off`) for hints on FAILED and BLOCKED cases.
 - Better plans: domain notes in `.qa/knowledge/`, clear acceptance criteria in tickets, test ids in the UI
