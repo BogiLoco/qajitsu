@@ -83,7 +83,8 @@ const formatError = (error: unknown, mask: (t: string) => string): string => {
     Array.isArray(ctx["issues"]) ? ctx["issues"] : Array.isArray(ctx["errors"]) ? ctx["errors"] : []
   ) as unknown[];
   return mask(
-    `Error${code}: ${error instanceof Error ? error.message : String(error)}\n${list.map((i) => `  - ${String(i)}\n`).join("")}`,
+    // Issues may come with their own marker ("  ! TC-01 ..."); each gets exactly one.
+    `Error${code}: ${error instanceof Error ? error.message : String(error)}\n${list.map((i) => `  - ${String(i).replace(/^\s*[!✘•-]?\s*/, "")}\n`).join("")}`,
   );
 };
 
