@@ -44,7 +44,7 @@ The author agent writes test files for approved cases only. Exploring the app th
 - [x] AC2: Plan coverage: every plan step has a `step()` and at least one `verify()`.
 - [x] AC3: Assertion lock: `verify()` calls must use `plan.expect(...)`; literals and missing calls are rejected.
 - [x] AC4: A spec failing checks returns to the author with the errors; after 2 failed attempts the case is BLOCKED.
-- [x] AC5: A case whose plan runs it as a test account (`data.user`) has a spec that logs in as that account (`api.as(...)` or `ui.as(...)`); a spec that never does is refused like a missing `verify()`, so a test that forgot to log in ends BLOCKED, not FAILED as if the product were broken.
+- [x] AC5: A case whose plan runs it as a test account (`data.user`) has a spec that logs in as that account (`api.as(...)` or `ui.as(...)`) and, for api cases, makes its calls with the client `api.as(...)` returns (a dropped client or a call on the anonymous `api` outside a step that expects the 401 is refused); a spec that does not is refused like a missing `verify()`, so a test that forgot to log in ends BLOCKED, not FAILED as if the product were broken.
 
 ### REQ-EXEC-04 · API testing
 

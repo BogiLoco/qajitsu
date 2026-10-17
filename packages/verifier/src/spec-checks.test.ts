@@ -459,7 +459,16 @@ describe("manual steps in specs (REQ-EXEC-11)", () => {
           'TC-01 runs as user:standard (data.user in the plan) but the spec never logs in as it: use api.as("user:standard") for its calls',
       },
     ]);
-    // Another account than the plan's is no login as it either.
+    // Retest of F21: gemma4 then called api.as(...) but threw its client away and kept calling api.get.
+    const discarded = tc01
+      .replace('const shopper = api.as("user:standard");', 'api.as("user:standard");')
+      .replaceAll("shopper.", "api.");
+    expect(checkSpecSource(discarded, "TC-01", plan).map((p) => p.message)).toEqual([
+      'TC-01 runs as user:standard (data.user in the plan) but api.as("user:standard") is called and its client thrown away: keep it, e.g. const user = api.as("user:standard"), and make the calls with it',
+      'TC-01 runs as user:standard (data.user in the plan) but step S1 calls api.post without logging in: use the client api.as("user:standard") returns',
+      'TC-01 runs as user:standard (data.user in the plan) but step S1 calls api.get without logging in: use the client api.as("user:standard") returns',
+    ]);
+
     expect(
       checkSpecSource(tc01.replace('api.as("user:standard")', 'api.as("user:admin")'), "TC-01", plan),
     ).toHaveLength(1);
