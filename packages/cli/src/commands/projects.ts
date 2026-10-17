@@ -317,11 +317,15 @@ export async function runProjectArchive(
   ports: RuntimePorts,
 ): Promise<number> {
   try {
-    await setProjectArchived(qajitsuHome(ports.env, ports.home), slug, archived);
+    const home = qajitsuHome(ports.env, ports.home);
+    const wasActive = (await readActiveProject(home)) === slug;
+    await setProjectArchived(home, slug, archived);
+    // Archiving the active project leaves none active; say so, and how to choose it again (exploratory testing F24).
+    const active = await readActiveProject(home);
     io.write(
       archived
-        ? `Project ${slug} archived: hidden from lists and ticket prefixes; its home stays.\n`
-        : `Project ${slug} restored.\n`,
+        ? `Project ${slug} archived: hidden from lists and ticket prefixes; its home stays.${wasActive && active === undefined ? " It was the active project; none is active now." : ""}\n`
+        : `Project ${slug} restored.${active === undefined ? ` No project is active: make it active with 'qajitsu use ${slug}'.` : ""}\n`,
     );
     return 0;
   } catch (error) {
