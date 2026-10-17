@@ -3,6 +3,7 @@ import { type EventLog, type EvidenceStore, type ExploreAction, type Observation
 import { assertSelector, type UiDriver } from "@qajitsu/steps";
 import { z } from "zod";
 import { createObservationTool } from "./observation-tool.js";
+import { oneAtATime } from "./one-at-a-time.js";
 
 const ORCHESTRATOR = { kind: "system", name: "orchestrator" } as const;
 const MAX_TEXT = 3000;
@@ -233,5 +234,5 @@ export function createExploreTools(ctx: {
       events: ctx.events,
     }),
   ];
-  return { tools, actions, observations, exhausted: () => exhausted };
+  return { tools: oneAtATime(tools), actions, observations, exhausted: () => exhausted };
 }

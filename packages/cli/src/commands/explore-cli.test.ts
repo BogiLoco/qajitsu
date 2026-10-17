@@ -460,6 +460,46 @@ describe("qajitsu explore --cli (REQ-EXEC-24)", () => {
     expect(bad.err).toContain("SLOW_MO_INVALID");
   }, 120_000);
 
+  it("REQ-EXEC-15/AC9: commands asked for in one turn run one at a time, in order, each with its own id and output", async () => {
+    const p = await project();
+    const r = await p.run(["explore", "DEMO-4", "--cli", "tool", "--goal", "S06", "--headed"], {
+      script: [
+        // Session S06 of qwen3: three commands in one turn.
+        {
+          tools: [
+            { name: "cli_run", input: { args: ["hello", "first"] } },
+            { name: "cli_run", input: { args: ["fail"] } },
+            { name: "cli_run", input: { args: ["hello", "third"] } },
+          ],
+        },
+        {
+          text: JSON.stringify({
+            checklist: [{ item: "three commands", actions: ["A01", "A02", "A03"] }],
+            findings: [],
+          }),
+        },
+      ],
+    });
+    expect(r.err).toBe("");
+    const dir = join(p.runDir, "explore", "S01");
+    const session = CliExploreSessionSchema.parse(
+      JSON.parse(await readFile(join(dir, "session.json"), "utf8")),
+    );
+    expect(session.endReason).toBe("finished");
+    expect(session.actions.map((a) => [a.id, a.args.join(" "), a.exitCode])).toEqual([
+      ["A01", "hello first", 0],
+      ["A02", "fail", 2],
+      ["A03", "hello third", 0],
+    ]);
+    expect(await readFile(join(dir, "evidence", "A03-output.txt"), "utf8")).toBe("hello third\n");
+    const transcript = await readFile(join(dir, "evidence", "recordings", "terminal.txt"), "utf8");
+    const at = (text: string) => transcript.indexOf(text);
+    expect(at("$ tool hello first\nhello first\n→ exit code 0")).toBeGreaterThanOrEqual(0);
+    expect(at("── A02")).toBeGreaterThan(at("→ exit code 0"));
+    expect(at("$ tool fail\n")).toBeGreaterThan(at("── A02"));
+    expect(at("── A03")).toBeGreaterThan(at("→ exit code 2"));
+  }, 120_000);
+
   it("REQ-EXEC-25/AC1: without --check the explorer's own checklist is kept and marked as written by it", async () => {
     const p = await project();
     const r = await p.run(["explore", "DEMO-4", "--cli", "tool", "--goal", "Say hello"], {

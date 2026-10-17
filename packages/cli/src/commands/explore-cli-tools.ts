@@ -17,6 +17,7 @@ import {
 } from "./cli-sandbox.js";
 import type { CliTerminal } from "./cli-terminal.js";
 import { createObservationTool } from "./observation-tool.js";
+import { oneAtATime } from "./one-at-a-time.js";
 
 const ORCHESTRATOR = { kind: "system", name: "orchestrator" } as const;
 /** Output the agent sees per action; the evidence keeps all of it. */
@@ -422,5 +423,5 @@ export function createCliExploreTools(ctx: {
       events: ctx.events,
     }),
   ];
-  return { tools, actions, observations, background, exhausted: () => exhausted };
+  return { tools: oneAtATime(tools), actions, observations, background, exhausted: () => exhausted };
 }

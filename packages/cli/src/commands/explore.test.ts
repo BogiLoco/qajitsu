@@ -18,7 +18,7 @@ const pipeline = async (flag?: string) => {
 const sessionOf = async (runDir: string, id = "S01") =>
   JSON.parse(await readFile(join(runDir, "explore", id, "session.json"), "utf8")) as {
     endReason: string;
-    actions: { id: string; action: string; ok: boolean; screenshot?: string; url: string }[];
+    actions: { id: string; action: string; target: string; ok: boolean; screenshot?: string; url: string }[];
     observations: { id: string; steps: string[] }[];
     recordings: string[];
     checklist: { item: string; source: string; actions: string[]; notDone?: string }[];
@@ -195,6 +195,32 @@ describe("qajitsu explore (REQ-EXEC-15)", () => {
     };
     expect(failed.actions).toEqual([]);
     expect(failed.summary).toBe("");
+  }, 120_000);
+
+  it("REQ-EXEC-15/AC9: browser actions asked for in one turn are performed one at a time, each with its own id and screenshot", async () => {
+    const { run, runDir } = await pipeline();
+    const result = await run(["explore", "DEMO-4", "--goal", "Two pages"], {
+      script: [
+        {
+          tools: [
+            { name: "explore_goto", input: { path: "/app/products" } },
+            { name: "explore_goto", input: { path: "/app/checkout" } },
+          ],
+        },
+        {
+          text: JSON.stringify({
+            checklist: [{ item: "products and checkout", actions: ["A01", "A02"] }],
+            findings: [],
+          }),
+        },
+      ],
+    });
+    expect(result.err).toBe("");
+    const session = await sessionOf(runDir);
+    expect(session.actions.map((a) => [a.id, a.target, a.screenshot])).toEqual([
+      ["A01", "/app/products", "A01.png"],
+      ["A02", "/app/checkout", "A02.png"],
+    ]);
   }, 120_000);
 
   it("REQ-EXEC-15/AC5 + REQ-EXEC-25/AC5: the step budget is enforced by code and the session keeps what it recorded", async () => {
