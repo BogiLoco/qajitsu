@@ -32,6 +32,7 @@ export * from "./env/account-pool.js";
 export * from "./config/mobile.js";
 export * from "./telemetry/otlp.js";
 export * from "./explore/session.js";
+export * from "./explore/cli-session.js";
 export * from "./observations.js";
 export * from "./projects/registry.js";
 export * from "./knowledge/extract.js";

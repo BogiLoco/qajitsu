@@ -1,13 +1,9 @@
 import { untrusted, type AgentTool } from "@qajitsu/agents";
-import {
-  ObservationSchema,
-  type EventLog,
-  type EvidenceStore,
-  type ExploreAction,
-  type Observation,
-} from "@qajitsu/core";
+import { type EventLog, type EvidenceStore, type ExploreAction, type Observation } from "@qajitsu/core";
 import { assertSelector, type UiDriver } from "@qajitsu/steps";
 import { z } from "zod";
+import { createObservationTool } from "./observation-tool.js";
+import { oneAtATime } from "./one-at-a-time.js";
 
 const ORCHESTRATOR = { kind: "system", name: "orchestrator" } as const;
 const MAX_TEXT = 3000;
@@ -98,7 +94,7 @@ export function createExploreTools(ctx: {
   ): Promise<string> => {
     if (actions.length >= ctx.maxSteps) {
       exhausted = true;
-      return "STEP BUDGET USED: stop exploring now and answer with the JSON summary.";
+      return "STEP BUDGET USED: stop exploring now and answer with the JSON answer: the checklist, findings and summary.";
     }
     const id = `A${String(actions.length + 1).padStart(2, "0")}`;
     let error: string | undefined;
@@ -231,57 +227,12 @@ export function createExploreTools(ctx: {
         });
       },
     },
-    {
-      name: "record_observation",
-      description:
-        "Record something a person should look at: title, kind, severity, description, expected, actual and the action ids that reproduce it.",
-      inputSchema: z.object({
-        title: z.string(),
-        kind: z.enum(["possible-bug", "ux", "question", "risk"]),
-        severity: z.enum(["low", "medium", "high"]),
-        description: z.string(),
-        steps: z.array(z.string()),
-        expected: z.string().optional(),
-        actual: z.string().optional(),
-      }),
-      execute(input) {
-        const steps = (input["steps"] as unknown[]).map(String);
-        const known = new Set(actions.map((a) => a.id));
-        const unknown = steps.filter((s) => !known.has(s));
-        if (steps.length === 0 || unknown.length > 0)
-          return Promise.resolve(
-            refuse(
-              "record_observation",
-              `steps must be action ids of this session (unknown: ${unknown.join(", ") || "none given"})`,
-            ),
-          );
-        const parsed = ObservationSchema.safeParse({
-          id: `O${String(observations.length + 1)}`,
-          title: ctx.mask(String(input["title"])),
-          kind: input["kind"],
-          severity: input["severity"],
-          description: ctx.mask(String(input["description"])),
-          steps,
-          expected: ctx.mask(typeof input["expected"] === "string" ? input["expected"] : ""),
-          actual: ctx.mask(typeof input["actual"] === "string" ? input["actual"] : ""),
-        });
-        if (!parsed.success)
-          return Promise.resolve(
-            refuse(
-              "record_observation",
-              parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
-            ),
-          );
-        observations.push(parsed.data);
-        ctx.events.emit("explore", ORCHESTRATOR, "explore.observation", {
-          id: parsed.data.id,
-          kind: parsed.data.kind,
-          severity: parsed.data.severity,
-          steps,
-        });
-        return Promise.resolve(`${parsed.data.id} recorded.`);
-      },
-    },
+    createObservationTool({
+      knownIds: () => new Set(actions.map((a) => a.id)),
+      observations,
+      mask: ctx.mask,
+      events: ctx.events,
+    }),
   ];
-  return { tools, actions, observations, exhausted: () => exhausted };
+  return { tools: oneAtATime(tools), actions, observations, exhausted: () => exhausted };
 }

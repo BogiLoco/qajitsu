@@ -167,6 +167,9 @@ test_types: [api, web]
 # mobile: { recording: retain-on-failure, android: { app: { source: build, repo: app, command: [./gradlew, assembleDebug], output: app/build/outputs/apk/debug/app-debug.apk }, app_id: com.example.app } }
 # Without the app's code (REQ-EXEC-23): app: { source: file, path: app.apk } | { source: url, url: https://..., sha256: <hex> } | { source: installed }
 #
+# Command-line tools an agent may explore in a sandbox (REQ-EXEC-24): qj explore <TICKET> --cli mytool --goal "..."
+# explore: { cli: { mytool: { command: [./bin/mytool], fixture: fixtures/mytool, env: { TOKEN: { secret: secret://env/MYTOOL_TOKEN } }, allowlist: [https://staging.example.com] } } }
+#
 # Browser options (REQ-EXEC-05)
 # web: { browser: chromium, video: retain-on-failure, headless: true, action_timeout_ms: 5000, test_id_attribute: data-testid }
 #

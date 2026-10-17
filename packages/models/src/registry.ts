@@ -48,6 +48,7 @@ export function createModelRegistry(options: {
 
   const build = async (alias: string, provider: ProviderConfig, model: string): Promise<LanguageModel> => {
     const contextWindow = provider.models[model]?.context_window;
+    const think = provider.models[model]?.think;
     const apiKey = provider.api_key === undefined ? undefined : await resolveSecret(provider.api_key);
     const common = {
       ...(provider.base_url ? { baseURL: provider.base_url } : {}),
@@ -66,11 +67,12 @@ export function createModelRegistry(options: {
         return createOllama({
           ...common,
           ...(provider.base_url ? { baseURL: provider.base_url.replace(/\/api\/?$/, "") } : {}),
-        }).languageModel(
-          model,
+        }).languageModel(model, {
           // Ollama's default context is small; a declared context window is what the role checks rely on.
-          contextWindow === undefined ? {} : { options: { num_ctx: contextWindow } },
-        );
+          ...(contextWindow === undefined ? {} : { options: { num_ctx: contextWindow } }),
+          // Reasoning models such as Qwen3 call tools only with an explicit thinking mode.
+          ...(think === undefined ? {} : { think }),
+        });
       case "openai-compatible":
         return createOpenAICompatible({
           name: alias,

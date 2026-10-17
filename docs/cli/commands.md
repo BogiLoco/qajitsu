@@ -439,15 +439,86 @@ writes `explore/<session>/report.html` and `report.md` for review. Needs a fetch
   needs no allowlist entry for its random port
 - `--time-box <minutes>`: stop after this many minutes (default 10), enforced by code
 - `--max-steps <n>`: stop after this many browser actions (default 40), enforced by code
+- `--cli <tool>`: explore a command-line tool instead of the application (REQ-EXEC-24, see below)
 - `--headed`: show the browser, to watch the agent explore live (needs a display)
 - `--slow-mo <ms>`: wait this many milliseconds before every browser action, to follow it
+- `--check <item>`: one item of the goal's checklist (repeatable, up to 30); without it the explorer splits the goal
+  into its own checklist, which the report marks as written by the explorer
 
 Exit codes: `0` the session ran (whatever it observed), `2` the environment is not healthy, `3` errors.
+
+The explorer's answer is checked by code, not trusted (REQ-EXEC-15/AC8, REQ-EXEC-25). It must act before it answers;
+it reports every checklist item, in order, as done with the actions that did it or as not done with the reason;
+each finding cites actions; an action id that was not recorded is refused. While the step budget lasts, items left
+undone are sent back once to be done. In command-line sessions every flag named in an item, a finding or the comment
+must be in the arguments of an action that ran. Refused answers are journaled (`explore.answer_rejected`). A session
+that ends by the time box, the step budget or an error before an accepted answer lists every `--check` item as not
+reached. The report shows the checklist, the findings and the explorer's comment last; the terminal says how many
+items were done and names those that were not:
+
+```bash
+qj explore DEMO-1 --cli qj --goal "doctor and init" \
+  --check "qj doctor" --check "qj init without a slug" --check "qj init --qa-dir does-not-exist"
+# Session S05 ended: finished; 4 actions, 1 observation(s).
+# Checklist: 3 of 3 item(s) done.
+```
+
+#### Command-line tools (`--cli`, REQ-EXEC-24)
+
+`qajitsu explore <ticket> --cli <tool> --goal "<text>"` explores any command-line tool described under `explore.cli`
+in `.qa/qa.project.yaml`, QAJitsu's own `qj` included. Each session runs in a throwaway sandbox: a copy of the tool's
+fixture folder with its own HOME and TMPDIR, only PATH, LANG, TERM and the configured variables (secrets by
+`secret://`, `{{sandbox}}` and `{{home}}` templates), and an HTTP proxy that lets the tool reach loopback and its
+allowlist only. The agent asks for commands (`cli_run` with prompt answers, `cli_start`, `cli_send`, `cli_signal` for
+Ctrl+C, `cli_wait`, `cli_read`, `cli_list`, `cli_leftovers`); QAJitsu runs only the configured program, with
+argument arrays and never a shell, refuses arguments that name paths outside the sandbox, and records each action's
+exit code, changed files and masked output with SHA-256. When the session ends, also after a time-out or an error,
+the teardown commands run and every process or container the session left is stopped; the report lists what was left
+running, what was stopped and the hosts the proxy refused. A tool that ignores proxy variables is not stopped by the
+proxy. The check of arguments that name paths (`/abs`, `~`, `..`, `file:`, `-o/x`, `--out:/x`, `@/x`, links out of
+the sandbox) is a guardrail against the agent, not an operating-system boundary: the tool runs with your rights.
+`.env`, `.env.*` (except `.env.example`) and `.qa-runs` of the fixture are never copied into the sandbox and cannot be
+read. Ctrl+C or SIGTERM stop the session the same way as the time box: what it started is stopped and the sandbox
+removed. Output shown live, recorded or put in the report is masked and stripped of terminal escape sequences.
+
+```yaml
+explore:
+  cli:
+    mytool:
+      command: [./bin/mytool] # program and fixed arguments; ./ and ../ are from .qa/
+      description: Deploys the shop to a test cluster.
+      fixture: fixtures/mytool-sandbox # copied into every sandbox
+      setup: [[git, init]] # or { command: [...], ok_exit_codes: [0, 2] }
+      teardown: [[./bin/mytool, down]]
+      env:
+        MYTOOL_TOKEN: { secret: secret://env/MYTOOL_TEST_TOKEN }
+        DOCKER_CONFIG: { value: "{{home}}/.docker" }
+      allowlist: [https://staging.example.com]
+      timeout_s: 120
+```
+
+**Watching a session live (REQ-EXEC-24/AC9-AC11).** Every session prints one line per action as it ends (command,
+exit code or state, duration), each answer of the explorer that code rejected and each observation. `--headed` turns
+the terminal of `qj explore` into a live view of the tool: every command as `$ <tool> <args>`, its output as it arrives,
+typed answers, Ctrl+C, and the output of background commands prefixed with their id (`[B1]`). `--slow-mo <ms>` waits
+before every command, typed line and signal. Everything shown is masked like the evidence. The terminal is always
+recorded as `evidence/recordings/terminal.cast` (asciicast v2: `asciinema play evidence/recordings/terminal.cast`) and
+`terminal.txt`, both in the manifest with SHA-256, and `report.html` shows the transcript. From a second terminal,
+`qj logs <ticket> --follow --stage explore` follows the journal while the session holds the run.
+
+```bash
+qj explore DEMO-1 --cli qj --goal "doctor and init" --check "qj doctor" --headed --slow-mo 1000
+```
+
+The demo shop configures `qj` itself: `qj explore DEMO-1 --cli qj --goal "qj env up and qj explore on the same run,
+with Ctrl+C in the middle"`.
 
 ### `qajitsu explore promote <ticket>`
 
 Turns an observation into a draft web case in a new plan version, with the observation as its source and the recorded
-actions as steps. It runs only after the plan is approved.
+actions as steps. It runs only after the plan is approved. For a command-line session it writes a regression test
+proposal instead, `explore/<session>/promotions/<observation>.md`: the commands that reproduce it, what happened, what
+was expected and the steps as JSON; nothing runs until someone adds it to a test suite.
 
 - `--session <id>`: exploratory session, e.g. `S01` (required)
 - `--observation <id>`: observation, e.g. `O1` (required)
@@ -495,7 +566,8 @@ Exit codes: `0` stopped with Ctrl+C, `3` errors.
 Shows the structured event log of a run.
 
 - `--run <id>`: run id (default: latest run of the ticket)
-- `--follow`: keep printing new events while the run is running
+- `--follow`: keep printing new events while the run is running, or while another `qj` process holds it (an
+  exploratory session, `env up`); stops when it ends
 - `--stage <stage>`: only this stage, e.g. `run` or `plan`
 - `--agent <role>`: only this agent, e.g. `planner`
 - `--case <id>`: only events of this case

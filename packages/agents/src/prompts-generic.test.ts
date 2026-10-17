@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { AUDITOR_SYSTEM } from "./auditor.js";
 import { AUTHOR_SYSTEM } from "./author.js";
 import { BLOCKED_SYSTEM } from "./blocked.js";
-import { EXPLORER_SYSTEM } from "./explorer.js";
+import { CLI_EXPLORER_SYSTEM, EXPLORER_SYSTEM } from "./explorer.js";
 import { HEALER_SYSTEM } from "./healer.js";
 import { ANALYST_SYSTEM, PLANNER_SYSTEM } from "./prompts.js";
 import { TRIAGE_SYSTEM } from "./triage.js";
@@ -24,6 +24,7 @@ describe("prompts work for any application (REQ-EXEC-21/AC5)", () => {
     AUTHOR_SYSTEM,
     HEALER_SYSTEM,
     EXPLORER_SYSTEM,
+    CLI_EXPLORER_SYSTEM,
     AUDITOR_SYSTEM,
     TRIAGE_SYSTEM,
     BLOCKED_SYSTEM,

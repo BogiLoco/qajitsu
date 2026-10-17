@@ -118,6 +118,9 @@ export function createProgram(version: string, io: ProgramIO): Command {
       "project to work in (default: QAJITSU_PROJECT, the ticket prefix, the active project)",
     )
     .configureOutput({ writeOut: io.write, writeErr: io.writeError })
+    // REQ-CI-04: usage problems are thrown, so the entry point exits 3 instead of Commander's 1 ("a test FAILED");
+    // set before the commands are added, so every command inherits it.
+    .exitOverride()
     // Global options go before the command (`qj --project bank fetch BANK-1`), so `clean --project` is its own.
     .enablePositionalOptions()
     .showHelpAfterError();
@@ -725,18 +728,30 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--time-box <minutes>", "stop after this many minutes (default 10)")
     .option("--max-steps <n>", "stop after this many browser actions (default 40)")
     .option("--headed", "show the browser while the agent explores")
+    .option(
+      "--cli <tool>",
+      "explore this command-line tool of explore.cli in a sandbox instead of the application",
+    )
     .option("--slow-mo <ms>", "wait this many ms before every browser action, to follow it")
+    .option(
+      "--check <item>",
+      "one item of the goal's checklist; every item ends up done with its actions or not done with the reason (repeatable)",
+      collect,
+      [],
+    )
     .action(
       (
         ticket: string,
         options: {
           goal: string;
+          check: string[];
           run?: string;
           env?: string;
           timeBox?: string;
           maxSteps?: string;
           headed?: boolean;
           slowMo?: string;
+          cli?: string;
         },
       ) => withPorts((ports) => runExplore(ticket, options, commandIO, ports))(),
     );
@@ -1138,7 +1153,10 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .description("Show the structured event log of a run")
     .argument("<ticket>", "Jira key, e.g. SHOP-482")
     .option("--run <id>", "run id (default: latest run of the ticket)")
-    .option("--follow", "keep printing new events while the run is running")
+    .option(
+      "--follow",
+      "keep printing new events while the run is running or another qj command (explore, env up) holds it",
+    )
     .option("--stage <stage>", "only this stage, e.g. run or plan")
     .option("--agent <role>", "only this agent, e.g. planner")
     .option("--case <id>", "only events of this case")

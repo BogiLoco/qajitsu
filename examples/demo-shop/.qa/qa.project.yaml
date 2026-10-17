@@ -90,3 +90,25 @@ mobile:
     intent_args: "--es api_url {{base_url}}"
     emulator:
       { avd: qajitsu-demo, system_image: "system-images;android-34;google_apis;arm64-v8a", headless: true }
+
+# Exploratory sessions of QAJitsu's own command line (REQ-EXEC-24): qj explore DEMO-1 --cli qj --goal "...".
+# Every session starts from a copy of this demo project, with the demo git repository and a registered project, in a
+# throwaway HOME; Docker contexts and Playwright browsers come from your home only because these variables name it.
+explore:
+  cli:
+    qj:
+      command: [node, ../../../packages/cli/dist/bin.js]
+      description: QAJitsu's own CLI (qj), run in a copy of the demo shop project that is already registered (qj init).
+      fixture: ..
+      setup:
+        - [node, ../scripts/setup-demo-repo.mjs]
+        # Registered even when the sandbox lacks mobile tooling (exit code 2: NOT READY).
+        - {
+            command: [node, ../../../packages/cli/dist/bin.js, init, demo-shop, --qa-dir, .qa, --yes],
+            ok_exit_codes: [0, 2],
+          }
+      env:
+        DEMO_USER_PASSWORD: { secret: secret://env/DEMO_USER_PASSWORD }
+        DOCKER_CONFIG: { value: "{{home}}/.docker" }
+        PLAYWRIGHT_BROWSERS_PATH: { value: "{{home}}/Library/Caches/ms-playwright" }
+      timeout_s: 300

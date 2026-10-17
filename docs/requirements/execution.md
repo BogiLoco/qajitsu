@@ -215,6 +215,8 @@ session. It reports observations for a human to assess, never statuses.
 - [x] AC5: The time box and step budget are enforced by code; when reached the session stops and keeps what it recorded.
 - [x] AC6: Each session ends with a report for human review (`report.md`, `report.html`): goal, how it ended, the observations with the screenshots of their steps, the action timeline, and the video, trace, network and console files; observations are proposals for a person, never statuses.
 - [x] AC7: `--headed` shows the browser while the agent explores and `--slow-mo <ms>` slows every action down, checked like `qj run` (a display is needed); both are journaled with the session.
+- [x] AC8: Act before summarising, for every explorer (browser, command line and any later kind): code rejects the final summary while the session has no recorded action and asks the agent to act, with its tools still available; a session whose agent never acts ends with `error` and an empty summary, never with a summary of testing that did not happen. Looking at the page is not an action.
+- [x] AC9: Actions the agent asks for at once (several tool calls in one turn) are performed one at a time, in the order asked, for every explorer: each gets its own id, its own evidence and its own place in the live view, and none of them is lost.
 
 ### REQ-EXEC-16 · Run one case with a live view
 
@@ -361,3 +363,50 @@ Mobile cases can run when the team has only a test build of the app, not its rep
 - [x] AC1: `mobile.android.app` and `mobile.ios.app` also accept a file (`source: file`, a local `.apk`/`.ipa`/`.app`), a download (`source: url`, checked against the allowlist, with a SHA-256 to compare), an app already installed on the device or emulator (`source: installed`, by app id), and an app already uploaded to the device farm.
 - [x] AC2: The run records the app's version and SHA-256 when known, and the report shows them in place of the commit.
 - [x] AC3: An app that cannot be obtained or whose SHA-256 differs makes the mobile cases BLOCKED with the reason.
+
+### REQ-EXEC-24 · Exploratory sessions of command-line tools
+
+- Status: implemented
+- Priority: should
+- Stage: later
+- Related: REQ-EXEC-15, REQ-GEN-05, REQ-GEN-03, REQ-OBS-01, INV-1, INV-2, INV-8, INV-10, ADR-0004
+
+Exploratory sessions (REQ-EXEC-15) also for any command-line tool, QAJitsu's own `qj` first: an agent gets a goal such
+as "try qj env up and qj explore on the same run", runs commands like a tester in a terminal, and records what looks
+wrong. The trusted parent runs every command; the agent only asks for them and proposes observations.
+
+**Acceptance criteria**
+
+- [x] AC1: `qj explore <TICKET> --cli <tool> --goal "<text>"` starts a session in a throwaway sandbox folder (a copy of a fixture project, e.g. the demo shop) with the same time box and step budget as browser sessions.
+- [x] AC2: The agent's tools run only the named tool, with an argument array and never a shell, in the sandbox folder, with a scrubbed environment (no secrets of the person, fictional ones from the fixture), a timeout per command, and the environment allowlist for any network the tool uses.
+- [x] AC3: The agent can answer a command's prompts, run a command in the background, send it Ctrl+C, read files inside the sandbox and list processes, ports and containers the tool left behind; every action, its exit code, output, and changed files are recorded as evidence with SHA-256 by the trusted parent.
+- [x] AC4: Observations (possible bug, usability, question, risk) cite the actions that reproduce them; code drops an observation whose steps are not actions of the session; the session produces no test statuses.
+- [x] AC5: The report (`report.md`, `report.html`) lists the goal, every command with its output and exit code, the observations with their steps, and what was left running at the end; everything the session started is stopped and removed when it ends, also on a time-out.
+- [x] AC6: `qj explore promote` turns a CLI observation into a draft case for a later CLI runner, or into a regression test proposal for the tool's own test suite; nothing runs without approval.
+- [x] AC7: Any command-line tool can be explored, not only `qj`: `explore.cli.<name>` in `.qa/qa.project.yaml` names its program, the fixture folder copied into every sandbox, setup commands (argument arrays), environment variables and secrets by `secret://` reference, the hosts it may reach and the timeout per command; a tool without such an entry is refused.
+- [x] AC8: The act-before-summarising rule of REQ-EXEC-15/AC8 applies: a summary before any command (`cli_run` or `cli_start`) is rejected and the agent is asked to run the commands of the goal; one that never does ends the session with `error`.
+- [x] AC9: Live view of every explored tool: by default the terminal of `qj explore --cli` prints one line per action as it ends (the command, its exit code or state, the duration), each rejected answer of the explorer and each observation; `--headed` also shows every command as `$ <tool> <args>` with its output as it arrives, typed answers, signals, and the output of background commands prefixed with their id. Everything shown is masked like the evidence and changes no result.
+- [x] AC10: `--slow-mo <ms>` waits that long before every command, typed line and signal, to follow the session; it is journaled with the session.
+- [x] AC11: The session's terminal is recorded with its timings as `recordings/terminal.cast` (asciicast v2, replayable with `asciinema play`) and as a plain transcript `recordings/terminal.txt`, both in the evidence manifest with SHA-256; the report shows the transcript and how to replay the recording.
+
+### REQ-EXEC-25 · Grounded reports of exploratory sessions
+
+- Status: implemented
+- Priority: should
+- Stage: later
+- Related: REQ-EXEC-15, REQ-EXEC-24, INV-1, INV-6
+
+An explorer's final answer is a claim, not a fact. Every sentence in it must point at actions the trusted parent
+recorded, and every item of the goal is either done with its actions or listed as not done with the reason, so a
+session can never describe testing that did not happen or silently skip part of its goal.
+
+**Acceptance criteria**
+
+- [x] AC1: `--check "<item>"` (repeatable) gives the session an explicit checklist next to the goal; without it the explorer writes the checklist from the goal itself and the report marks it as written by the explorer, for a person to compare with the goal.
+- [x] AC2: The explorer's answer lists every checklist item, in order, either with the actions that did it or with `not_done` and a reason, plus findings that each cite actions; code rejects an answer that drops, adds or reorders an item of `--check`, an item with neither actions nor a reason, a finding without actions, and any action id that is not an action of the session.
+- [x] AC3: While the step budget is not used up, the first answer that leaves items not done is rejected and the explorer is told to do them now; a second answer may keep them not done with the reason, which the report shows.
+- [x] AC4: In command-line sessions a flag such as `--qa-dir` named in an item or a finding must be in the arguments of the actions it cites, and a flag named in the free comment must be in some action of the session; otherwise the answer is rejected and the explorer is told which flag it never ran.
+- [x] AC5: The report shows the checklist (item, who wrote it, the actions that did it or "not done" with the reason), the findings with links to their actions, and the explorer's comment last; a session that ends by the time box, the step budget or an error before an accepted answer lists every `--check` item as not reached with that reason, never as done.
+- [x] AC6: The terminal output after a session says how many checklist items were done and names those not done.
+- [x] AC7: In command-line sessions an item or finding that names a subcommand after the tool's name ("qj doctor") must cite an action that ran that subcommand; citing an action that ran something else is rejected.
+- [x] AC8: An item claimed not done although an action of the session ran everything it names (its subcommand and flags) is rejected: a command that ran is done whatever its exit code or error, and that error is the result to report.

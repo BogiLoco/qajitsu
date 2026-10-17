@@ -11,6 +11,8 @@ export interface CapabilityOverride {
   readonly structured_output?: boolean | undefined;
   readonly vision?: boolean | undefined;
   readonly context_window?: number | undefined;
+  /** Thinking mode sent to Ollama for reasoning models. */
+  readonly think?: boolean | undefined;
   readonly cost_per_mtok?: { readonly input: number; readonly output: number } | undefined;
 }
 

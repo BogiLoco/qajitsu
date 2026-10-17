@@ -80,7 +80,12 @@ export const processAlive = (pid: number): boolean => {
   }
 };
 
-const readHolder = async (lockFile: string): Promise<number | undefined> => {
+/**
+ * The pid written in a lock file, if it holds a valid one.
+ *
+ * @param lockFile - E.g. `<run>/run.lock`.
+ */
+export const readHolder = async (lockFile: string): Promise<number | undefined> => {
   const text = (await readFile(lockFile, "utf8").catch(() => "")).trim();
   const pid = Number(text);
   return /^\d+$/.test(text) && pid > 0 ? pid : undefined;
