@@ -12,3 +12,6 @@ ran are refused, items left undone are sent back once while the step budget last
 (`explore.answer_rejected`). `session.json` gains `checklist` and `findings`; the report shows them before the
 explorer's comment, and the terminal says how many items were done. The explorer's answer is now
 `{checklist, findings, summary}` instead of `{summary}`.
+
+In command-line sessions an item naming a subcommand ("qj doctor") must cite an action that ran it, and an item whose
+command ran cannot be reported as not done because the command failed: its error is the result.

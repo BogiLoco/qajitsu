@@ -37,12 +37,26 @@ export interface ExplorerSessionView {
   readonly checks: readonly string[];
   /** Check that flags named in the answer were run (command-line sessions). */
   readonly flags: boolean;
+  /** Name of the explored tool (`qj`): "qj doctor" in an item names the subcommand `doctor`. */
+  readonly tool?: string | undefined;
 }
 
 const FLAG = /(?<![\w-])--[a-z][a-z0-9-]*/gi;
 const flagsIn = (text: string): string[] => [...new Set(text.match(FLAG) ?? [])];
 const ran = (flag: string, args: readonly string[]): boolean =>
   args.some((a) => a === flag || a.startsWith(`${flag}=`));
+const escape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** Subcommands a text names after the tool's name: "qj doctor" and "run qj init" name `doctor` and `init`. */
+const subcommandsIn = (text: string, tool: string | undefined): string[] =>
+  tool === undefined
+    ? []
+    : [
+        ...new Set(
+          [...text.matchAll(new RegExp(`(?<![\\w-])${escape(tool)}\\s+([^\\s-][^\\s,.;:)]*)`, "g"))].map(
+            (m) => m[1] ?? "",
+          ),
+        ),
+      ].filter((s) => s !== "");
 
 /**
  * Builds the code check of an explorer's answer (REQ-EXEC-15/AC8, REQ-EXEC-25/AC1-AC4): no answer before any action,
@@ -74,8 +88,22 @@ export function explorerReportCheck(
       for (const id of unknown) errors.push(`${what} cites ${id}, which is not an action of this session`);
       if (!view.flags || unknown.length > 0) return;
       const used = ids.flatMap((id) => args.get(id) ?? []);
+      // REQ-EXEC-25/AC7: "qj doctor" is done only by an action that ran doctor.
+      for (const sub of subcommandsIn(text, view.tool).filter(
+        (c) => !ids.some((id) => args.get(id)?.[0] === c),
+      ))
+        errors.push(`${what} names ${sub}, which none of its actions (${ids.join(", ")}) ran`);
       for (const flag of flagsIn(text).filter((f) => !ran(f, used)))
         errors.push(`${what} names ${flag}, which none of its actions (${ids.join(", ")}) ran`);
+    };
+    /** Actions that ran everything an item names (its subcommand and flags), for items claimed not done. */
+    const ranIt = (item: string): string[] => {
+      const subs = subcommandsIn(item, view.tool);
+      const flags = flagsIn(item);
+      if (!view.flags || (subs.length === 0 && flags.length === 0)) return [];
+      return [...args.entries()]
+        .filter(([, a]) => subs.every((c) => a[0] === c) && flags.every((f) => ran(f, a)))
+        .map(([id]) => id);
     };
     report.checklist.forEach((entry, i) => {
       const item = view.checks[i] ?? entry.item;
@@ -83,6 +111,14 @@ export function explorerReportCheck(
       if (entry.actions.length > 0) cited(what, entry.actions, item);
       else if (entry.not_done === undefined)
         errors.push(`${what} has neither actions nor not_done: do it, or say why it was not done`);
+      else {
+        // REQ-EXEC-25/AC8: a command that failed still ran; its error is the result, not a reason to skip it.
+        const by = ranIt(item);
+        if (by.length > 0)
+          errors.push(
+            `${what} is not_done, but ${by.join(", ")} ran it: a command that ran is done whatever its exit code or error, which is what you report; cite ${by.join(", ")}`,
+          );
+      }
     });
     for (const f of report.findings) cited(`finding "${f.text}"`, f.actions, f.text);
     if (view.flags) {

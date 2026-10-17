@@ -113,4 +113,58 @@ describe("explorer report check (REQ-EXEC-25)", () => {
       )(report({ checklist: [done("open --menu", "A01")], findings: [], summary: "--x" })),
     ).toEqual([]);
   });
+
+  it("REQ-EXEC-25/AC7: an item naming a subcommand of the tool cites an action that ran that subcommand", () => {
+    const session = view({
+      tool: "qj",
+      checks: ["qj doctor", "qj init bez nazwy", "qj init --qa-dir does-not-exist"],
+      actions: () => [
+        { id: "A01", args: ["init", "bez", "nazwy"] },
+        { id: "A02", args: ["init", "--qa-dir", "does-not-exist"] },
+      ],
+    });
+    // Session S05 of qwen3: doctor never ran, yet it cited A01 (init) for it.
+    expect(
+      explorerReportCheck(
+        session,
+        "run commands",
+      )(
+        report({
+          checklist: [done("qj doctor", "A01"), done("init bez nazwy", "A01"), done("qa-dir", "A02")],
+          findings: [{ text: "qj doctor exits 3", actions: ["A02"] }],
+        }),
+      ),
+    ).toEqual([
+      'checklist item 1 "qj doctor" names doctor, which none of its actions (A01) ran',
+      'finding "qj doctor exits 3" names doctor, which none of its actions (A02) ran',
+    ]);
+  });
+
+  it("REQ-EXEC-25/AC8: an item left not done although an action ran it is refused: a failing command is a result", () => {
+    const session = view({
+      tool: "qj",
+      budgetLeft: () => false,
+      checks: ["qj doctor", "qj init --qa-dir does-not-exist", "qj init --force"],
+      actions: () => [
+        { id: "A01", args: ["doctor"] },
+        { id: "A02", args: ["init", "--qa-dir", "does-not-exist"] },
+      ],
+    });
+    expect(
+      explorerReportCheck(
+        session,
+        "run commands",
+      )(
+        report({
+          checklist: [
+            done("doctor", "A01"),
+            { item: "qa-dir", not_done: "command failed with missing slug argument" },
+            { item: "force", not_done: "no time" },
+          ],
+        }),
+      ),
+    ).toEqual([
+      'checklist item 2 "qj init --qa-dir does-not-exist" is not_done, but A02 ran it: a command that ran is done whatever its exit code or error, which is what you report; cite A02',
+    ]);
+  });
 });

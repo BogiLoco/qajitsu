@@ -366,6 +366,51 @@ describe("qajitsu explore --cli (REQ-EXEC-24)", () => {
     expect(journal).toContain("names --loud, which none of its actions (A01) ran");
   }, 120_000);
 
+  it("REQ-EXEC-25/AC7+AC8: an item cited with another subcommand, or skipped after its command failed, is sent back", async () => {
+    const p = await project();
+    const answer = (checklist: unknown[]) => ({ text: JSON.stringify({ checklist, findings: [] }) });
+    const r = await p.run(
+      [
+        "explore",
+        "DEMO-4",
+        "--cli",
+        "tool",
+        "--goal",
+        "S05",
+        "--check",
+        "tool hello",
+        "--check",
+        "tool fail",
+      ],
+      {
+        script: [
+          { tools: [{ name: "cli_run", input: { args: ["fail"] } }] },
+          // hello never ran; fail ran and exited 2, which is its result.
+          answer([
+            { item: "hello", actions: ["A01"] },
+            { item: "fail", not_done: "the command failed" },
+          ]),
+          { tools: [{ name: "cli_run", input: { args: ["hello"] } }] },
+          answer([
+            { item: "hello", actions: ["A02"] },
+            { item: "fail", actions: ["A01"] },
+          ]),
+        ],
+      },
+    );
+    expect(r.err).toBe("");
+    const session = CliExploreSessionSchema.parse(
+      JSON.parse(await readFile(join(p.runDir, "explore", "S01", "session.json"), "utf8")),
+    );
+    expect(session.checklist.map((c) => [c.item, c.actions])).toEqual([
+      ["tool hello", ["A02"]],
+      ["tool fail", ["A01"]],
+    ]);
+    const journal = await readFile(join(p.runDir, "journal", "events.jsonl"), "utf8");
+    expect(journal).toContain("names hello, which none of its actions (A01) ran");
+    expect(journal).toContain("is not_done, but A01 ran it");
+  }, 120_000);
+
   it("REQ-EXEC-25/AC1: without --check the explorer's own checklist is kept and marked as written by it", async () => {
     const p = await project();
     const r = await p.run(["explore", "DEMO-4", "--cli", "tool", "--goal", "Say hello"], {
