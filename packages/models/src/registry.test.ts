@@ -1,3 +1,4 @@
+import http from "node:http";
 import { parseProjectConfig } from "@qajitsu/core";
 import { generateText } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
@@ -153,4 +154,51 @@ describe("capability profiles (REQ-LLM-03)", () => {
       contextWindow: 200_000,
     });
   });
+
+  it("REQ-LLM-01/AC7: Ollama answers slower than the HTTP client's default still arrive; timeout_s bounds the wait", async () => {
+    // A local Ollama stand-in that sends nothing until the answer is ready, like a long thinking model.
+    const server = http.createServer((_req, res) => {
+      setTimeout(() => {
+        res.setHeader("content-type", "application/json");
+        res.end(
+          JSON.stringify({
+            model: "slow",
+            created_at: "2026-10-17T00:00:00Z",
+            message: { role: "assistant", content: "late" },
+            done: true,
+            done_reason: "stop",
+            prompt_eval_count: 1,
+            eval_count: 1,
+          }),
+        );
+      }, 2500);
+    });
+    await new Promise<void>((d) => server.listen(0, "127.0.0.1", d));
+    const port = (server.address() as { port: number }).port;
+    const local = (timeout_s: number) =>
+      createModelRegistry({
+        config: parseProjectConfig({
+          project: "demo",
+          jira: { type: "file", tickets_dir: "t", project_key: "DEMO" },
+          models: {
+            providers: { local: { type: "ollama", base_url: `http://127.0.0.1:${String(port)}`, timeout_s } },
+            roles: { default: "local/slow" },
+          },
+        }).models,
+        resolveSecret,
+      });
+    try {
+      const patient = await local(30).forRole("summary");
+      expect((await generateText({ model: patient.model, prompt: "ping", maxRetries: 0 })).text).toBe("late");
+      const hasty = await local(1).forRole("summary");
+      await expect(generateText({ model: hasty.model, prompt: "ping", maxRetries: 0 })).rejects.toThrow();
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((d) => {
+        server.close(() => {
+          d();
+        });
+      });
+    }
+  }, 30_000);
 });

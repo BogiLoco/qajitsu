@@ -45,6 +45,9 @@ catalogs:
     typescript:
       specifier: ~6.0.3
       version: 6.0.3
+    undici:
+      specifier: ^7.30.0
+      version: 7.30.0
     vitest:
       specifier: ^5.0.3
       version: 5.0.3
@@ -559,6 +562,9 @@ importers:
       ai-sdk-ollama:
         specifier: 'catalog:'
         version: 4.4.0(ai@7.0.127(zod@4.6.5))(zod@4.6.5)
+      undici:
+        specifier: 'catalog:'
+        version: 7.30.0
       zod:
         specifier: 'catalog:'
         version: 4.6.5

@@ -1248,7 +1248,8 @@ qj evidence DEMO-1 --failed
 - Models: `models.roles` per role (`analyst`, `planner`, `author`, `healer`, `auditor`, `summary`, `default`). A strong
   model for `planner` and `author`, a cheap or local one for `summary` and `auditor` is a good start. Measure with
   `qj bench`. Declare capabilities (`tools`, `structured_output`, `vision`, `context_window`) and `cost_per_mtok`;
-  for Ollama thinking models (Qwen3, DeepSeek-R1) set `think: true` or `false` explicitly.
+  for Ollama thinking models (Qwen3, DeepSeek-R1) set `think: true` or `false` explicitly. Local providers wait up to
+  `timeout_s` (default 1800) per request.
 - Cost and time: `models.token_budget`, `environments.retries`, `execution.workers` (`environments.workers` is the default), `execution.web_combinations`, `web.action_timeout_ms`.
 - Strictness: `verification.auditor` (`optional`, `required`, `off`), `verification.canary: true`, `verification.triage` (`on`, `off`) for hints on FAILED and BLOCKED cases.
 - Better plans: domain notes in `.qa/knowledge/`, clear acceptance criteria in tickets, test ids in the UI

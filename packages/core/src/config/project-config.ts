@@ -44,6 +44,11 @@ const ModelProviderSchema = z
     api_key: SecretRef.optional(),
     /** Overrides keyed by model id, e.g. `qwen3:32b`. */
     models: z.record(z.string(), CapabilityOverrideSchema).default({}),
+    /**
+     * Longest wait for one model request of an `ollama` or `openai-compatible` provider, in seconds (default 1800):
+     * local models answer only when done, which can take longer than the HTTP client's usual 5 minutes.
+     */
+    timeout_s: z.number().int().min(1).max(7200).optional(),
   })
   .superRefine((p, ctx) => {
     if (p.type === "openai-compatible" && p.base_url === undefined) {

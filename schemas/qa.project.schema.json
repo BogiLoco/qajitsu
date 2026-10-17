@@ -1503,6 +1503,11 @@
                   },
                   "additionalProperties": false
                 }
+              },
+              "timeout_s": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 7200
               }
             },
             "required": [

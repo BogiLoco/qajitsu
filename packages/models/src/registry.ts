@@ -5,6 +5,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { ConfigError, type ModelProvider, type ProjectConfig } from "@qajitsu/core";
 import type { LanguageModel } from "ai";
 import { createOllama } from "ai-sdk-ollama";
+import { patientFetch } from "./patient-fetch.js";
 import { modelProfile, type ModelProfile } from "./capabilities.js";
 import { parseModelRef, resolveRoleModel, type ModelRef, type ModelRole } from "./model-ref.js";
 
@@ -55,6 +56,8 @@ export function createModelRegistry(options: {
       ...(apiKey === undefined ? {} : { apiKey }),
       ...fetchOption,
     };
+    // REQ-LLM-01/AC7: local and self-hosted models wait as long as `timeout_s`, not the HTTP client's 5 minutes.
+    const local = options.fetch ? {} : { fetch: patientFetch((provider.timeout_s ?? 1800) * 1000) };
     switch (provider.type) {
       case "anthropic":
         return createAnthropic(common).languageModel(model);
@@ -66,6 +69,7 @@ export function createModelRegistry(options: {
         // ai-sdk-ollama wants the host URL; accept the common `.../api` form too.
         return createOllama({
           ...common,
+          ...local,
           ...(provider.base_url ? { baseURL: provider.base_url.replace(/\/api\/?$/, "") } : {}),
         }).languageModel(model, {
           // Ollama's default context is small; a declared context window is what the role checks rely on.
@@ -78,6 +82,7 @@ export function createModelRegistry(options: {
           name: alias,
           baseURL: provider.base_url ?? "",
           ...common,
+          ...local,
         }).languageModel(model);
     }
   };

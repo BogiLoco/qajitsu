@@ -19,6 +19,7 @@ Deferred: AC4 (a verified run with a cloud provider) is parked until a cloud key
 - [ ] AC4: At least one cloud provider and Ollama work in stage 2.
 - [x] AC5: Only `packages/models` imports provider SDKs.
 - [x] AC6: The Anthropic path is verified against the documented Claude Messages API without a key or network: documented headers and fields, no assistant prefill or forced tool use, structured outputs through `output_config.format`, the `tool_use` / `tool_result` round trip, usage of every step, documented 429 and 529 retried and 401 failing at once without the key, and the whole fetch, plan, approve and run flow on the demo shop.
+- [x] AC7: A model may take as long as it needs to answer: requests to Ollama and OpenAI-compatible providers wait up to `timeout_s` of the provider (default 1800) instead of the HTTP client's 5-minute limit for the first byte; a slower answer fails with an error naming the timeout, and the time box or a stage stop still cancels a request at once.
 
 ### REQ-LLM-02 · Model per role
 
