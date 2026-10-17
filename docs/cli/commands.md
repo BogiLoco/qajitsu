@@ -452,7 +452,12 @@ The explorer's answer is checked by code, not trusted (REQ-EXEC-15/AC8, REQ-EXEC
 it reports every checklist item, in order, as done with the actions that did it or as not done with the reason;
 each finding cites actions; an action id that was not recorded is refused. While the step budget lasts, items left
 undone are sent back once to be done. In command-line sessions every flag named in an item, a finding or the comment
-must be in the arguments of an action that ran. Refused answers are journaled (`explore.answer_rejected`). A session
+must be in the arguments of an action that ran; text the explorer quotes ('…', "…") is a quote of output, not a
+claim. Refused answers are journaled (`explore.answer_rejected`). A finding or comment code cannot confirm is sent back
+once; if the explorer insists, it is dropped and journaled (`explore.claim_dropped`). An explorer that keeps making
+checklist claims code refuses gets its last answer corrected by code instead of losing the session: refused claims
+become "not done", items an action ran get that action, each marked "corrected by code" in the report and journaled
+(`explore.claim_corrected`). A session
 that ends by the time box, the step budget or an error before an accepted answer lists every `--check` item as not
 reached. The report shows the checklist, the findings and the explorer's comment last; the terminal says how many
 items were done and names those that were not:

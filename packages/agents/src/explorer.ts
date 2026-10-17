@@ -64,8 +64,26 @@ const withoutDropped = (
       deps.maskJson(d),
     );
   const gone = new Set(dropped.map((d) => d.text));
+  // REQ-EXEC-25/AC10: the checklist code corrected on the last attempt replaces the explorer's, each change journaled.
+  const corrected = check.corrected();
+  for (const c of corrected ?? [])
+    if (c.corrected !== undefined)
+      deps.events.emit(
+        "explore",
+        { kind: "agent", name: "explorer" },
+        "explore.claim_corrected",
+        deps.maskJson({ item: c.item, actions: c.actions, corrected: c.corrected }),
+      );
   return {
     ...report,
+    // Only code says what it corrected: a model cannot mark its own items as checked by code.
+    checklist: corrected
+      ? corrected.map((c) => ({ ...c, actions: [...c.actions] }))
+      : report.checklist.map((entry) => {
+          const kept = { ...entry };
+          delete kept.corrected;
+          return kept;
+        }),
     findings: report.findings.filter((f) => !gone.has(f.text)),
     summary: gone.has(report.summary) ? "" : report.summary,
   };

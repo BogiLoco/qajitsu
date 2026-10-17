@@ -48,7 +48,7 @@ export function renderClaimsMarkdown(session: SessionClaims, describe: (id: stri
     );
     session.checklist.forEach((c, i) => {
       out.push(
-        `| ${String(i + 1)} | ${cell(c.item)} | ${c.actions.length > 0 ? cell(c.actions.map(describe).join("; ")) : `**not done**: ${cell(c.notDone ?? "")}`} |`,
+        `| ${String(i + 1)} | ${cell(c.item)} | ${c.actions.length > 0 ? cell(c.actions.map(describe).join("; ")) : `**not done**: ${cell(c.notDone ?? "")}`}${c.corrected ? ` _(corrected by code: ${cell(c.corrected)})_` : ""} |`,
       );
     });
     out.push("");
@@ -72,7 +72,7 @@ export function renderClaimsHtml(session: SessionClaims): string {
   const rows = session.checklist
     .map(
       (c, i) =>
-        `<tr class="${c.actions.length > 0 ? "" : "bad"}"><td>${String(i + 1)}</td><td>${esc(c.item)}</td><td>${c.actions.length > 0 ? refs(c.actions) : `<b>not done</b>: ${esc(c.notDone ?? "")}`}</td></tr>`,
+        `<tr class="${c.actions.length > 0 ? "" : "bad"}"><td>${String(i + 1)}</td><td>${esc(c.item)}</td><td>${c.actions.length > 0 ? refs(c.actions) : `<b>not done</b>: ${esc(c.notDone ?? "")}`}${c.corrected ? ` <i class="muted">(corrected by code: ${esc(c.corrected)})</i>` : ""}</td></tr>`,
     )
     .join("\n");
   const checklist =

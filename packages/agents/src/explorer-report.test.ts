@@ -320,4 +320,44 @@ describe("explorer report check (REQ-EXEC-25)", () => {
     expect(strict(bad)).toHaveLength(1);
     expect(strict(bad)).toHaveLength(1);
   });
+
+  it("REQ-EXEC-25/AC10: on the last attempt code corrects the checklist instead of losing it: refused claims become not done, items an action ran get it", () => {
+    // Session S10 of qwen3: 10 commands, then three answers claiming clean ran (it did not) and export not done (it ran).
+    const session = view({
+      tool: "qj",
+      budgetLeft: () => false,
+      checks: ["qj fetch DEMO-1", "qj export DEMO-1", "qj clean DEMO-1", "qj status"],
+      actions: () => [
+        { id: "A01", args: ["fetch", "DEMO-1"] },
+        { id: "A10", args: ["export", "DEMO-1"] },
+      ],
+    });
+    const check = explorerReportCheck(session, "x");
+    const answer = report({
+      checklist: [done("fetch", "A01"), { item: "export", not_done: "it failed" }, done("clean", "A10")],
+      findings: [{ text: "qj clean DEMO-1 failed", actions: ["A10"] }],
+      summary: "",
+    });
+    expect(check(answer).length).toBeGreaterThan(0);
+    expect(check(answer).length).toBeGreaterThan(0);
+    expect(check(answer)).toEqual([]);
+    expect(check.corrected()).toEqual([
+      { item: "qj fetch DEMO-1", actions: ["A01"] },
+      { item: "qj export DEMO-1", actions: ["A10"], corrected: "the explorer said not done, but A10 ran it" },
+      {
+        item: "qj clean DEMO-1",
+        actions: [],
+        not_done:
+          'claim refused by code: checklist item 3 "qj clean DEMO-1" names clean, which none of its actions (A10) ran',
+        corrected: "claim refused by code",
+      },
+      {
+        item: "qj status",
+        actions: [],
+        not_done: "not reported by the explorer",
+        corrected: "not reported by the explorer",
+      },
+    ]);
+    expect(check.dropped().map((d) => d.text)).toEqual(["qj clean DEMO-1 failed"]);
+  });
 });

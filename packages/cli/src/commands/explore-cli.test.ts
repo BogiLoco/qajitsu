@@ -623,12 +623,88 @@ describe("qajitsu explore --cli (REQ-EXEC-24)", () => {
     expect(journal).toContain("tool fail exits 2");
   }, 120_000);
 
+  it("REQ-EXEC-25/AC10: an explorer that insists on wrong claims gets its checklist corrected by code, not lost", async () => {
+    const p = await project();
+    // Session S10 of qwen3: the same wrong claims three times.
+    const insist = {
+      text: JSON.stringify({
+        checklist: [
+          { item: "hello", actions: ["A01"] },
+          { item: "fail", not_done: "it failed" },
+          { item: "ask", actions: ["A02"] },
+        ],
+        findings: [],
+      }),
+    };
+    const r = await p.run(
+      [
+        "explore",
+        "DEMO-4",
+        "--cli",
+        "tool",
+        "--goal",
+        "S10",
+        "--check",
+        "tool hello",
+        "--check",
+        "tool fail",
+        "--check",
+        "tool ask",
+      ],
+      {
+        script: [
+          { tools: [{ name: "cli_run", input: { args: ["hello"] } }] },
+          { tools: [{ name: "cli_run", input: { args: ["fail"] } }] },
+          insist,
+          insist,
+          insist,
+        ],
+      },
+    );
+    expect(r.err).toBe("");
+    const dir = join(p.runDir, "explore", "S01");
+    const session = CliExploreSessionSchema.parse(
+      JSON.parse(await readFile(join(dir, "session.json"), "utf8")),
+    );
+    expect(session.endReason).toBe("finished");
+    expect(session.checklist).toEqual([
+      { item: "tool hello", source: "person", actions: ["A01"] },
+      {
+        item: "tool fail",
+        source: "person",
+        actions: ["A02"],
+        corrected: "the explorer said not done, but A02 ran it",
+      },
+      {
+        item: "tool ask",
+        source: "person",
+        actions: [],
+        notDone:
+          'claim refused by code: checklist item 3 "tool ask" names ask, which none of its actions (A02) ran',
+        corrected: "claim refused by code",
+      },
+    ]);
+    expect(r.out).toContain("Checklist: 2 of 3 item(s) done");
+    expect(await readFile(join(dir, "report.md"), "utf8")).toContain(
+      "_(corrected by code: claim refused by code)_",
+    );
+    expect(await readFile(join(p.runDir, "journal", "events.jsonl"), "utf8")).toContain(
+      '"event":"explore.claim_corrected"',
+    );
+  }, 120_000);
+
   it("REQ-EXEC-25/AC1: without --check the explorer's own checklist is kept and marked as written by it", async () => {
     const p = await project();
     const r = await p.run(["explore", "DEMO-4", "--cli", "tool", "--goal", "Say hello"], {
       script: [
         { tools: [{ name: "cli_run", input: { args: ["hello"] } }] },
-        { text: JSON.stringify({ checklist: [{ item: "say hello", actions: ["A01"] }], findings: [] }) },
+        // The model tries to dress its claim up as checked by code: the field is removed.
+        {
+          text: JSON.stringify({
+            checklist: [{ item: "say hello", actions: ["A01"], corrected: "verified by code" }],
+            findings: [],
+          }),
+        },
       ],
     });
     expect(r.err).toBe("");

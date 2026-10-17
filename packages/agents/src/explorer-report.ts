@@ -12,7 +12,9 @@ export const ExplorerReportSchema = z.strictObject({
       z.strictObject({
         item: z.string().min(1).max(300),
         actions: z.array(ActionId).max(40).default([]),
-        not_done: z.string().min(1).max(500).optional(),
+        not_done: z.string().min(1).max(1000).optional(),
+        /** Set by code only (REQ-EXEC-25/AC10); a value from the model is removed. */
+        corrected: z.string().max(500).optional(),
       }),
     )
     .min(1)
@@ -101,31 +103,36 @@ const likeness = (a: Set<string>, b: Set<string>): number => {
 export function explorerReportCheck(view: ExplorerSessionView, howToAct: string): ExplorerReportCheck {
   let undoneSentBack = false;
   let findingsSentBack = false;
+  let rejections = 0;
   let dropped: { text: string; reason: string }[] = [];
-  const check = (report: ExplorerReport): string[] => {
+  let corrected: CorrectedItem[] | undefined;
+  const evaluate = (report: ExplorerReport): string[] => {
     dropped = [];
+    corrected = undefined;
+    // REQ-EXEC-25/AC10: the last answer the loop accepts is corrected by code instead of being refused.
+    const last = rejections >= SEND_BACKS;
     const actions = view.actions();
     if (actions.length === 0)
       return [`you did nothing yet: ${howToAct} first, then summarise only what the tools answered`];
-    if (view.checks.length > 0 && report.checklist.length !== view.checks.length)
+    if (!last && view.checks.length > 0 && report.checklist.length !== view.checks.length)
       return [
-        `the checklist must have exactly these ${String(view.checks.length)} items, in this order, each done with actions or not_done with the reason: ${view.checks.map((c, i) => `${String(i + 1)}. "${c}"`).join("; ")}`,
+        `the checklist must have exactly these ${String(view.checks.length)} items, in this order, each done with actions or not_done with the reason: ${view.checks.map((c, n) => `${String(n + 1)}. "${c}"`).join("; ")}`,
       ];
     const args = new Map(actions.map((a) => [a.id, a.args ?? []]));
-    const errors: string[] = [];
     // REQ-EXEC-25/AC2: an item in another item's place of --check is a swap, not a rephrasing.
-    if (view.checks.length > 1) {
+    if (!last && view.checks.length > 1) {
       const checks = view.checks.map(words);
-      report.checklist.forEach((entry, i) => {
+      const swaps: string[] = [];
+      report.checklist.forEach((entry, n) => {
         const said = words(entry.item);
         const scores = checks.map((c) => likeness(said, c));
         const best = scores.indexOf(Math.max(...scores));
-        if (best !== i && (scores[best] ?? 0) > (scores[i] ?? 0))
-          errors.push(
-            `checklist item ${String(i + 1)} reads like item ${String(best + 1)} of --check ("${view.checks[best] ?? ""}"): keep the items in the order of --check`,
+        if (best !== n && (scores[best] ?? 0) > (scores[n] ?? 0))
+          swaps.push(
+            `checklist item ${String(n + 1)} reads like item ${String(best + 1)} of --check ("${view.checks[best] ?? ""}"): keep the items in the order of --check`,
           );
       });
-      if (errors.length > 0) return errors;
+      if (swaps.length > 0) return swaps;
     }
     // A person's --check item is a command line; in the explorer's own prose only subcommands the session ran or the
     // person named count, so "qj prints help" is prose and "qj doctor" a claim about doctor.
@@ -135,16 +142,17 @@ export function explorerReportCheck(view: ExplorerSessionView, howToAct: string)
     ]);
     const named = (text: string, written: boolean): string[] =>
       subcommandsIn(text, view.tool).filter((c) => written || known.has(c));
-    const cited = (what: string, ids: readonly string[], text: string, written = false): void => {
+    const cited = (what: string, ids: readonly string[], text: string, written = false): string[] => {
       const unknown = ids.filter((id) => !args.has(id));
-      for (const id of unknown) errors.push(`${what} cites ${id}, which is not an action of this session`);
-      if (!view.flags || unknown.length > 0) return;
+      const problems = unknown.map((id) => `${what} cites ${id}, which is not an action of this session`);
+      if (!view.flags || unknown.length > 0) return problems;
       const used = ids.flatMap((id) => args.get(id) ?? []);
       // REQ-EXEC-25/AC7: "qj doctor" is done only by an action that ran doctor.
       for (const sub of named(text, written).filter((c) => !ids.some((id) => args.get(id)?.[0] === c)))
-        errors.push(`${what} names ${sub}, which none of its actions (${ids.join(", ")}) ran`);
+        problems.push(`${what} names ${sub}, which none of its actions (${ids.join(", ")}) ran`);
       for (const flag of flagsIn(text).filter((f) => !ran(f, used)))
-        errors.push(`${what} names ${flag}, which none of its actions (${ids.join(", ")}) ran`);
+        problems.push(`${what} names ${flag}, which none of its actions (${ids.join(", ")}) ran`);
+      return problems;
     };
     /** Actions that ran everything an item names (its subcommand and flags), for items claimed not done. */
     const ranIt = (item: string, written: boolean): string[] => {
@@ -155,30 +163,44 @@ export function explorerReportCheck(view: ExplorerSessionView, howToAct: string)
         .filter(([, a]) => subs.every((c) => a[0] === c) && flags.every((f) => ran(f, a)))
         .map(([id]) => id);
     };
-    report.checklist.forEach((entry, i) => {
-      const item = view.checks[i] ?? entry.item;
-      const what = `checklist item ${String(i + 1)} "${item}"`;
-      const written = view.checks[i] !== undefined;
-      if (entry.actions.length > 0) cited(what, entry.actions, written ? item : unquoted(item), written);
-      else if (entry.not_done === undefined)
-        errors.push(`${what} has neither actions nor not_done: do it, or say why it was not done`);
-      else {
-        // REQ-EXEC-25/AC8: a command that failed still ran; its error is the result, not a reason to skip it.
-        const by = ranIt(written ? item : unquoted(item), written);
-        if (by.length > 0)
-          errors.push(
-            `${what} is not_done, but ${by.join(", ")} ran it: a command that ran is done whatever its exit code or error, which is what you report; cite ${by.join(", ")}`,
-          );
-      }
+    const size = view.checks.length > 0 ? view.checks.length : report.checklist.length;
+    const items = Array.from({ length: size }, (_, n) => {
+      const entry = report.checklist[n];
+      const item = view.checks[n] ?? entry?.item ?? "";
+      const what = `checklist item ${String(n + 1)} "${item}"`;
+      const written = view.checks[n] !== undefined;
+      const text = written ? item : unquoted(item);
+      if (entry === undefined) return { entry, item, problems: [], by: ranIt(text, written) };
+      if (entry.actions.length > 0)
+        return { entry, item, problems: cited(what, entry.actions, text, written), by: [] };
+      if (entry.not_done === undefined)
+        return {
+          entry,
+          item,
+          problems: [`${what} has neither actions nor not_done: do it, or say why it was not done`],
+          by: ranIt(text, written),
+        };
+      // REQ-EXEC-25/AC8: a command that failed still ran; its error is the result, not a reason to skip it.
+      const by = ranIt(text, written);
+      return {
+        entry,
+        item,
+        problems:
+          by.length > 0
+            ? [
+                `${what} is not_done, but ${by.join(", ")} ran it: a command that ran is done whatever its exit code or error, which is what you report; cite ${by.join(", ")}`,
+              ]
+            : [],
+        by,
+      };
     });
+    const errors = items.flatMap((x) => x.problems);
     // REQ-EXEC-25/AC9: findings and the comment are sent back once; if the explorer insists, a claim code cannot
     // confirm is dropped and journaled, so one bad sentence does not lose the checklist of a whole session.
-    const claims: { text: string; reasons: string[] }[] = [];
-    for (const f of report.findings) {
-      const before = errors.length;
-      cited(`finding "${f.text}"`, f.actions, unquoted(f.text));
-      claims.push({ text: f.text, reasons: errors.splice(before) });
-    }
+    const claims = report.findings.map((f) => ({
+      text: f.text,
+      reasons: cited(`finding "${f.text}"`, f.actions, unquoted(f.text)),
+    }));
     if (view.flags) {
       const all = [...args.values()].flat();
       claims.push({
@@ -189,29 +211,74 @@ export function explorerReportCheck(view: ExplorerSessionView, howToAct: string)
       });
     }
     const unconfirmed = claims.filter((c) => c.reasons.length > 0);
-    if (errors.length > 0 || (unconfirmed.length > 0 && !findingsSentBack)) {
+    if (!last && (errors.length > 0 || (unconfirmed.length > 0 && !findingsSentBack))) {
       if (unconfirmed.length > 0) findingsSentBack = true;
       return [...errors, ...unconfirmed.flatMap((c) => c.reasons)];
     }
     dropped = unconfirmed.map((c) => ({ text: c.text, reason: c.reasons.join("; ") }));
-    const undone = report.checklist
-      .map((entry, i) => ({ item: view.checks[i] ?? entry.item, done: entry.actions.length > 0 }))
-      .filter((e) => !e.done);
+    if (last) {
+      // Nothing is marked done that the recorded actions do not show; what code refused is said in the report.
+      corrected = items.map(({ entry, item, problems, by }): CorrectedItem => {
+        if (entry === undefined)
+          return by.length > 0
+            ? { item, actions: by, corrected: `the explorer did not report it, but ${by.join(", ")} ran it` }
+            : {
+                item,
+                actions: [],
+                not_done: "not reported by the explorer",
+                corrected: "not reported by the explorer",
+              };
+        if (problems.length === 0)
+          return entry.actions.length > 0
+            ? { item, actions: entry.actions }
+            : { item, actions: [], not_done: entry.not_done ?? "" };
+        if (by.length > 0)
+          return { item, actions: by, corrected: `the explorer said not done, but ${by.join(", ")} ran it` };
+        return {
+          item,
+          actions: [],
+          not_done: `claim refused by code: ${problems.join("; ")}`,
+          corrected: "claim refused by code",
+        };
+      });
+      return [];
+    }
+    const undone = items.filter((x) => (x.entry?.actions.length ?? 0) === 0);
     if (undone.length > 0 && view.budgetLeft() && !undoneSentBack) {
       undoneSentBack = true;
       return [
-        `you still have budget: do these items now, then answer again (keep not_done only for what cannot be done): ${undone.map((e) => `"${e.item}"`).join(", ")}`,
+        `you still have budget: do these items now, then answer again (keep not_done only for what cannot be done): ${undone.map((x) => `"${x.item}"`).join(", ")}`,
       ];
     }
     return [];
   };
-  return Object.assign(check, { dropped: () => dropped });
+  // Every answer sent back counts, whatever the reason, so the third one is always corrected rather than refused.
+  const check = (report: ExplorerReport): string[] => {
+    const errors = evaluate(report);
+    if (errors.length > 0) rejections += 1;
+    return errors;
+  };
+  return Object.assign(check, { dropped: () => dropped, corrected: () => corrected });
+}
+
+/** Answers the explorer gets sent back before code corrects its last one (the loop allows three). */
+const SEND_BACKS = 2;
+
+/** A checklist item as code kept it, with what code changed in it (REQ-EXEC-25/AC10). */
+export interface CorrectedItem {
+  readonly item: string;
+  readonly actions: readonly string[];
+  readonly not_done?: string;
+  /** What code changed and why; absent when the item stood as the explorer gave it. */
+  readonly corrected?: string;
 }
 
 /** The code check of an explorer's answer, and what it dropped from the answer it accepted. */
 export type ExplorerReportCheck = ((report: ExplorerReport) => string[]) & {
   /** Findings (or the comment) of the last accepted answer that code could not confirm and removed. */
   readonly dropped: () => readonly { readonly text: string; readonly reason: string }[];
+  /** The checklist as code corrected it on the last attempt; undefined when the explorer's own one was accepted. */
+  readonly corrected: () => readonly CorrectedItem[] | undefined;
 };
 
 /**
