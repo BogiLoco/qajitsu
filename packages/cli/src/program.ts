@@ -1168,5 +1168,16 @@ export function createProgram(version: string, io: ProgramIO): Command {
       ) => withPorts((ports) => runLogs(ticket, options, commandIO, ports))(),
     );
 
+  // A group command alone says which subcommands exist (exploratory testing F4); before, it printed help and exited 3
+  // without saying what was missing. `projects` lists by default and `explore` runs its own session.
+  for (const group of program.commands)
+    if (group.commands.length > 0 && !["projects", "explore"].includes(group.name()))
+      group.action(() => {
+        const names = group.commands.map((c) => c.name()).filter((n) => n !== "help");
+        io.writeError(
+          `error: '${group.name()}' needs a command: ${names.join(", ")}\n\n${group.helpInformation()}`,
+        );
+        io.setExitCode(3);
+      });
   return program;
 }

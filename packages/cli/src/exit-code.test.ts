@@ -31,4 +31,31 @@ describe("exit codes of command-line usage problems (REQ-CI-04, REQ-GEN-05)", ()
     expect(usageExitCode(await thrown(["init", "--help"]))).toBe(0);
     expect(usageExitCode(new Error("boom"))).toBeUndefined();
   });
+
+  it("REQ-CI-04: a group command without its subcommand says which ones exist and exits 3", async () => {
+    for (const [group, sub] of [
+      ["work", "reset"],
+      ["env", "check"],
+      ["knowledge", "add"],
+      ["audit", "verify"],
+      ["telemetry", "export"],
+      ["ci", "detect"],
+      ["baseline", "accept"],
+    ] as const) {
+      let err = "";
+      let code: number | undefined;
+      await createProgram("1.0.0", {
+        write: () => undefined,
+        writeError: (t) => (err += t),
+        cwd: process.cwd(),
+        nodeVersion: process.version,
+        setExitCode: (c) => (code = c),
+      })
+        .exitOverride()
+        .parseAsync(["node", "qj", group]);
+      expect(code, group).toBe(3);
+      // Exploratory testing F4: it said nothing about what was missing.
+      expect(err, group).toMatch(new RegExp(`^error: '${group}' needs a command: .*\\b${sub}\\b`));
+    }
+  });
 });
