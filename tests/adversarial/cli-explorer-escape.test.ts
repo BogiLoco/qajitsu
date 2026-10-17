@@ -1,4 +1,5 @@
-import { readFile, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createEventLog, type EvidenceStore } from "@qajitsu/core";
@@ -70,6 +71,40 @@ describe("REQ-EXEC-24: an explorer cannot use the tool to reach outside its sand
     expect(await run(["hello", "https://example.test/a/../b", "a..b"])).toContain("A02 exit code 0");
     expect(argOutsideSandbox(s, join(s.work, "sub", "f.txt"))).toBe(false);
     expect(argOutsideSandbox(s, "C:\\Windows\\x")).toBe(true);
+    // Security review M4: forms that used to slip through.
+    for (const arg of [
+      "-o/etc/x",
+      "-C../../..",
+      "file:///etc/passwd",
+      "@/etc/passwd",
+      "--out:/x",
+      "--config=~/.aws/credentials",
+      "-c~/.aws/credentials",
+    ])
+      expect(argOutsideSandbox(s, arg), arg).toBe(true);
+    // A link inside the working folder that points out of the sandbox.
+    await symlink("/etc", join(s.work, "etc-link"));
+    expect(argOutsideSandbox(s, "etc-link/hosts")).toBe(true);
+    expect(argOutsideSandbox(s, "-v")).toBe(false);
+    expect(argOutsideSandbox(s, "--name=shop-web")).toBe(false);
+    expect(argOutsideSandbox(s, "https://example.test/x")).toBe(false);
+  });
+
+  it("security review M5: secrets files of the fixture are not copied into the sandbox, and cannot be read", async () => {
+    const fixture = await mkdtemp(join(tmpdir(), "qj-fixture-"));
+    await writeFile(join(fixture, ".env"), "SECRET=1");
+    await writeFile(join(fixture, ".env.local"), "SECRET=2");
+    await writeFile(join(fixture, ".env.example"), "SECRET=");
+    await mkdir(join(fixture, ".qa-runs", "r1", "env"), { recursive: true });
+    await writeFile(join(fixture, ".qa-runs", "r1", "env", "x"), "SECRET=3");
+    await writeFile(join(fixture, "app.txt"), "app");
+    const s = await createSandbox(fixture);
+    try {
+      expect((await readdir(s.work)).sort()).toEqual([".env.example", "app.txt"]);
+    } finally {
+      await removeSandbox(s);
+      await rm(fixture, { recursive: true, force: true });
+    }
   });
 
   it("the explorer has no tool that writes results, evidence or statuses: only commands in the sandbox and observations", async () => {

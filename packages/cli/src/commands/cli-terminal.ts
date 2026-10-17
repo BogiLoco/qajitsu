@@ -1,3 +1,22 @@
+/**
+ * Text safe to print in a person's terminal (security review M3): escape sequences (CSI, OSC such as clipboard
+ * writes, C1) and control characters other than newline and tab are removed, so neither the tool nor the agent can
+ * move the cursor, erase lines, rewrite the title or the clipboard, or forge lines.
+ *
+ * @param text - Text from the tool, the agent or the session.
+ */
+export function printable(text: string): string {
+  /* eslint-disable no-control-regex -- matching control characters is the point: they are removed. */
+  return text
+    .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)?/g, "")
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/\u009b[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/\u001b[@-_]?/g, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, "");
+  /* eslint-enable no-control-regex */
+}
+
 /** The terminal of a command-line exploratory session: what a person watches live and what is recorded. */
 export interface CliTerminal {
   /** An action starts: its header and the command line, e.g. `qj doctor`. */
@@ -38,7 +57,8 @@ export function createCliTerminal(options: {
   const commands = new Map<string, { command: string; startedAt: number }>();
 
   /** Recorded always; shown live with `--headed`. */
-  const record = (text: string, live = options.headed): void => {
+  const record = (raw: string, live = options.headed): void => {
+    const text = printable(raw);
     if (text === "") return;
     transcript += text;
     const at = Math.round(options.now() - start) / 1000;
@@ -54,7 +74,8 @@ export function createCliTerminal(options: {
 
   return {
     begin(id, command) {
-      for (const from of [...pending.keys()]) flush(from);
+      // Only the previous command's own partial line; a background line stays whole until it ends (review M2).
+      flush("");
       commands.set(id, { command: options.mask(command), startedAt: options.now() });
       record(
         `── ${id} ${"─".repeat(Math.max(4, Math.min(width, 60) - id.length - 4))}\n$ ${options.mask(command)}\n`,
@@ -73,11 +94,11 @@ export function createCliTerminal(options: {
       const c = commands.get(id);
       const took = `(${((options.now() - (c?.startedAt ?? options.now())) / 1000).toFixed(1)} s)`;
       record(`→ ${state} ${took}\n`);
-      if (!options.headed) options.write(`${id}  ${c?.command ?? ""} → ${state} ${took}\n`);
+      if (!options.headed) options.write(printable(`${id}  ${c?.command ?? ""} → ${state} ${took}\n`));
     },
     note(line) {
       record(`${options.mask(line)}\n`, false);
-      options.write(`${options.mask(line)}\n`);
+      options.write(printable(`${options.mask(line)}\n`));
     },
     finish() {
       for (const from of [...pending.keys()]) flush(from);

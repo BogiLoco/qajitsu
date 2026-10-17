@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { readFile, writeFile, mkdtemp, rm, mkdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -498,6 +499,65 @@ describe("qajitsu explore --cli (REQ-EXEC-24)", () => {
     expect(at("── A02")).toBeGreaterThan(at("→ exit code 0"));
     expect(at("$ tool fail\n")).toBeGreaterThan(at("── A02"));
     expect(at("── A03")).toBeGreaterThan(at("→ exit code 2"));
+  }, 120_000);
+
+  it("REQ-EXEC-15/AC5+AC9: the time box stops a running command and the commands queued after it never start", async () => {
+    const p = await project();
+    const started = Date.now();
+    const r = await p.run(["explore", "DEMO-4", "--cli", "tool", "--goal", "Hang", "--time-box", "0.05"], {
+      script: [
+        {
+          tools: [
+            { name: "cli_run", input: { args: ["serve"] } },
+            { name: "cli_run", input: { args: ["serve"] } },
+            { name: "cli_run", input: { args: ["serve"] } },
+          ],
+        },
+      ],
+    });
+    expect(r.exitCode).toBe(0);
+    // Each serve would hang for the 20 s per-command timeout; the 3 s time box ends all of it.
+    expect(Date.now() - started).toBeLessThan(15_000);
+    const session = CliExploreSessionSchema.parse(
+      JSON.parse(await readFile(join(p.runDir, "explore", "S01", "session.json"), "utf8")),
+    );
+    expect(session.endReason).toBe("time-box");
+    expect(session.actions.map((a) => a.id)).toEqual(["A01"]);
+  }, 120_000);
+
+  it("REQ-EXEC-24/AC5: Ctrl+C stops the session, and what it started and its sandbox are gone afterwards", async () => {
+    const p = await project();
+    const signals = new EventEmitter();
+    const journal = join(p.runDir, "journal", "events.jsonl");
+    const press = setInterval(() => {
+      void readFile(journal, "utf8")
+        .catch(() => "")
+        .then((text) => {
+          if (text.includes('"event":"explore.action"')) {
+            clearInterval(press);
+            signals.emit("SIGINT");
+          }
+        });
+    }, 100);
+    const started = Date.now();
+    const r = await p.run(["explore", "DEMO-4", "--cli", "tool", "--goal", "Stop"], {
+      script: [
+        { tools: [{ name: "cli_start", input: { args: ["serve"] } }] },
+        { tools: [{ name: "cli_run", input: { args: ["serve"] } }] },
+      ],
+      signals,
+    });
+    clearInterval(press);
+    expect(r.out).toContain("ended: error (stopped by Ctrl+C (SIGINT))");
+    expect(Date.now() - started).toBeLessThan(15_000);
+    expect(signals.listenerCount("SIGINT")).toBe(0);
+    const session = CliExploreSessionSchema.parse(
+      JSON.parse(await readFile(join(p.runDir, "explore", "S01", "session.json"), "utf8")),
+    );
+    expect(session.cleaned.processes.some((c) => c.startsWith("B1 "))).toBe(true);
+    const sandbox = /"sandbox":"([^"]+)"/.exec(await readFile(journal, "utf8"))?.[1] ?? "";
+    expect(sandbox).toContain("qj-sandbox-");
+    await expect(stat(sandbox)).rejects.toThrow();
   }, 120_000);
 
   it("REQ-EXEC-25/AC1: without --check the explorer's own checklist is kept and marked as written by it", async () => {

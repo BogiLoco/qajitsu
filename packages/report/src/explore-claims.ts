@@ -8,6 +8,14 @@ const esc = (s: string): string =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
+/**
+ * Agent or tool text made inert in Markdown (security review L6): no image, link, autolink or HTML can come out of it,
+ * so a rendered `report.md` loads nothing and links nowhere the text did not say in plain words.
+ *
+ * @param text - Text from the explorer, the tool or the application.
+ */
+export const mdText = (text: string): string => text.replace(/[\\[\]!<>]/g, (c) => `\\${c}`);
+
 /** What a report section needs from a session: its claims and the explorer's comment. */
 export interface SessionClaims {
   readonly checklist: readonly ChecklistItem[];
@@ -28,7 +36,7 @@ const SOURCE = {
  * @param describe - One line for an action id (what it did and its result).
  */
 export function renderClaimsMarkdown(session: SessionClaims, describe: (id: string) => string): string[] {
-  const cell = (s: string): string => s.replace(/\|/g, "\\|").replace(/\n/g, " ");
+  const cell = (s: string): string => mdText(s).replace(/\|/g, "\\|").replace(/\n/g, " ");
   const out = ["## Checklist", ""];
   if (session.checklist.length === 0) out.push("_(no checklist: the explorer gave no accepted answer)_", "");
   else {
@@ -47,8 +55,8 @@ export function renderClaimsMarkdown(session: SessionClaims, describe: (id: stri
   }
   out.push(`## Findings (${String(session.findings.length)})`, "");
   if (session.findings.length === 0) out.push("_(none)_");
-  for (const f of session.findings) out.push(`- ${f.text} (${f.actions.map(describe).join("; ")})`);
-  out.push("", "## Explorer's comment", "", session.summary || "_(none)_", "");
+  for (const f of session.findings) out.push(`- ${mdText(f.text)} (${f.actions.map(describe).join("; ")})`);
+  out.push("", "## Explorer's comment", "", session.summary ? mdText(session.summary) : "_(none)_", "");
   return out;
 }
 

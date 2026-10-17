@@ -1,7 +1,7 @@
 import { untrusted, type AgentTool } from "@qajitsu/agents";
 import type { CliAction, EventLog, EvidenceStore, Observation } from "@qajitsu/core";
 import { readdir } from "node:fs/promises";
-import { relative } from "node:path";
+import { relative, sep } from "node:path";
 import { z } from "zod";
 import {
   argOutsideSandbox,
@@ -9,6 +9,7 @@ import {
   findLeftovers,
   insideSandbox,
   readSandboxFile,
+  secretFile,
   snapshotFiles,
   startCommand,
   type CliSandbox,
@@ -29,8 +30,10 @@ export interface CliExploreRecorder {
   readonly tools: readonly AgentTool[];
   readonly actions: readonly CliAction[];
   readonly observations: readonly Observation[];
-  /** Background commands of the session, for the clean-up. */
+  /** Background commands of the session (`B1`, ...), the ids the agent uses. */
   readonly background: readonly { readonly id: string; readonly command: RunningCommand }[];
+  /** Every command the session started, background or not, for the clean-up (REQ-EXEC-24/AC5). */
+  readonly commands: () => readonly { readonly id: string; readonly command: RunningCommand }[];
   /** True once the agent asked for an action beyond the step budget (REQ-EXEC-15/AC5). */
   readonly exhausted: () => boolean;
 }
@@ -71,6 +74,39 @@ export function createCliExploreTools(ctx: {
   const actions: CliAction[] = [];
   const observations: Observation[] = [];
   const background: { id: string; command: RunningCommand }[] = [];
+  const foreground: { id: string; command: RunningCommand }[] = [];
+  /**
+   * New output of a background command for the agent and the evidence (security review M1): the whole output is
+   * masked and only the new part handed out, up to its last complete line while the command runs, so a secret
+   * printed across two reads is still masked.
+   */
+  const handedOut = new Map<RunningCommand, number>();
+  const newOutput = (c: RunningCommand): string => {
+    const masked = ctx.mask(c.allOutput());
+    const from = handedOut.get(c) ?? 0;
+    const to = c.ended() ? masked.length : masked.lastIndexOf("\n") + 1;
+    if (to <= from) return "";
+    handedOut.set(c, to);
+    return masked.slice(from, to);
+  };
+  /** Resolves with `undefined` as soon as the session is aborted (time box, Ctrl+C). */
+  const untilAborted = <T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T | undefined> =>
+    signal === undefined
+      ? work
+      : signal.aborted
+        ? Promise.resolve(undefined)
+        : Promise.race([
+            work,
+            new Promise<undefined>((done) => {
+              signal.addEventListener(
+                "abort",
+                () => {
+                  done(undefined);
+                },
+                { once: true },
+              );
+            }),
+          ]);
   let exhausted = false;
 
   const refuse = (tool: string, reason: string): string => {
@@ -161,7 +197,7 @@ export function createCliExploreTools(ctx: {
     ctx.terminal?.end(id, `${status}${entry.background ? ` (${entry.background})` : ""}`);
     return [
       `${id} ${status}${entry.background ? ` (${entry.background})` : ""}.`,
-      changed.length > 0 ? `Changed files: ${changed.slice(0, 30).join(", ")}` : "",
+      changed.length > 0 ? untrusted(`${id} changed files`, changed.slice(0, 30).join("\n")) : "",
       masked !== "" ? untrusted(`${id} output`, tail(masked)) : "(no output)",
     ]
       .filter(Boolean)
@@ -204,7 +240,7 @@ export function createCliExploreTools(ctx: {
       description:
         'Run the tool with these arguments (no shell) and wait until it ends. `input` lines are typed into its prompts, e.g. ["yes"].',
       inputSchema: z.object({ args: Args, input: z.array(z.string().max(1000)).max(50).optional() }),
-      async execute(input) {
+      async execute(input, signal) {
         const id = nextId();
         if (!id) return BUDGET;
         const args = (input["args"] as unknown[]).map(String);
@@ -216,7 +252,15 @@ export function createCliExploreTools(ctx: {
         for (const l of lines ?? []) ctx.terminal?.echo(`> ${l}`);
         const started = ctx.now().getTime();
         const c = command(args, lines, false);
-        const end = (await c.wait(ctx.timeoutMs + 6000)) ?? { timedOut: true };
+        foreground.push({ id, command: c });
+        // The time box or Ctrl+C stops the command at once, not after its own timeout.
+        const stop = (): void => {
+          void c.kill();
+        };
+        signal?.addEventListener("abort", stop, { once: true });
+        const end = (await c.wait(ctx.timeoutMs + 6000).finally(() => {
+          signal?.removeEventListener("abort", stop);
+        })) ?? { timedOut: true };
         return record(
           id,
           "run",
@@ -257,7 +301,7 @@ export function createCliExploreTools(ctx: {
             background: bid,
             ...(end ? endFields(end) : { running: true, ok: true }),
           },
-          c.takeOutput(),
+          newOutput(c),
           before,
           started,
         );
@@ -286,7 +330,7 @@ export function createCliExploreTools(ctx: {
             input: [ctx.mask(typed)],
             ...(end ? endFields(end) : { running: true, ok: true }),
           },
-          b.command.takeOutput(),
+          newOutput(b.command),
           undefined,
           started,
         );
@@ -301,27 +345,27 @@ export function createCliExploreTools(ctx: {
         signal: z.enum(["SIGINT", "SIGTERM"]).default("SIGINT"),
         seconds: z.number().min(0).max(120).default(20),
       }),
-      async execute(input) {
+      async execute(input, aborted) {
         const b = findBackground(String(input["background"]));
         if (!b) return refuse("cli_signal", "unknown background command; use the id cli_start returned");
         const id = nextId();
         if (!id) return BUDGET;
-        const signal = input["signal"] === "SIGTERM" ? "SIGTERM" : "SIGINT";
+        const sig = input["signal"] === "SIGTERM" ? "SIGTERM" : "SIGINT";
         const seconds = typeof input["seconds"] === "number" ? input["seconds"] : 20;
         const before = await snapshotFiles(ctx.sandbox.root);
-        await begin(id, `(${signal === "SIGINT" ? "Ctrl+C" : "SIGTERM"} → ${b.id})`, true);
+        await begin(id, `(${sig === "SIGINT" ? "Ctrl+C" : "SIGTERM"} → ${b.id})`, true);
         const started = ctx.now().getTime();
-        b.command.signal(signal);
-        const end = await b.command.wait(seconds * 1000);
+        b.command.signal(sig);
+        const end = await untilAborted(b.command.wait(seconds * 1000), aborted);
         return record(
           id,
           "signal",
           {
             background: b.id,
-            signal,
+            signal: sig,
             ...(end ? endFields(end) : { running: true, ok: false, error: "still running" }),
           },
-          b.command.takeOutput(),
+          newOutput(b.command),
           before,
           started,
         );
@@ -332,7 +376,7 @@ export function createCliExploreTools(ctx: {
       description:
         "Wait up to `seconds` for a background command, then show its new output and whether it ended.",
       inputSchema: z.object({ background: z.string(), seconds: z.number().min(0).max(300).default(10) }),
-      async execute(input) {
+      async execute(input, signal) {
         const b = findBackground(String(input["background"]));
         if (!b) return refuse("cli_wait", "unknown background command; use the id cli_start returned");
         const id = nextId();
@@ -341,12 +385,12 @@ export function createCliExploreTools(ctx: {
         const before = await snapshotFiles(ctx.sandbox.root);
         await begin(id, `(wait for ${b.id}, up to ${String(seconds)} s)`, false);
         const started = ctx.now().getTime();
-        const end = await b.command.wait(Math.min(seconds * 1000, ctx.timeoutMs));
+        const end = await untilAborted(b.command.wait(Math.min(seconds * 1000, ctx.timeoutMs)), signal);
         return record(
           id,
           "wait",
           { background: b.id, ...(end ? endFields(end) : { running: true, ok: true }) },
-          b.command.takeOutput(),
+          newOutput(b.command),
           before,
           started,
         );
@@ -360,11 +404,13 @@ export function createCliExploreTools(ctx: {
         const path = String(input["path"]);
         const real = await insideSandbox(ctx.sandbox, path);
         if (!real) return refuse("cli_read", "only existing files inside the sandbox can be read");
+        if (real.split(sep).some(secretFile))
+          return refuse("cli_read", "secrets files (.env, .env.*, .qa-runs) are never read");
         const id = nextId();
         if (!id) return BUDGET;
         await begin(id, `(read ${path})`, false);
         const started = ctx.now().getTime();
-        const text = await readSandboxFile(real).catch((e: unknown) => `cannot read: ${String(e)}`);
+        const text = await readSandboxFile(real, ctx.mask).catch((e: unknown) => `cannot read: ${String(e)}`);
         return record(id, "read", { path: ctx.mask(path) }, text, undefined, started);
       },
     },
@@ -423,5 +469,12 @@ export function createCliExploreTools(ctx: {
       events: ctx.events,
     }),
   ];
-  return { tools: oneAtATime(tools), actions, observations, background, exhausted: () => exhausted };
+  return {
+    tools: oneAtATime(tools),
+    actions,
+    observations,
+    background,
+    commands: () => [...background, ...foreground],
+    exhausted: () => exhausted,
+  };
 }

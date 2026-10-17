@@ -3,6 +3,7 @@ import { cp, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm } from "node
 import http from "node:http";
 import net from "node:net";
 import { tmpdir } from "node:os";
+import { realpathSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { CliLeftovers } from "@qajitsu/core";
 
@@ -10,7 +11,23 @@ import type { CliLeftovers } from "@qajitsu/core";
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 
 /** Folders a file snapshot does not descend into: large and never what a session changes on purpose. */
+/** Headers meant for the proxy itself, never forwarded upstream. */
+const HOP_BY_HOP = new Set([
+  "proxy-authorization",
+  "proxy-connection",
+  "connection",
+  "keep-alive",
+  "te",
+  "trailer",
+  "upgrade",
+]);
 const SNAPSHOT_SKIP = new Set(["node_modules", ".git"]);
+/**
+ * Files of a fixture that may hold someone's secrets and never reach a sandbox, where the agent could read them:
+ * `.env` and `.env.*` (but `.env.example`) and run folders (`.qa-runs`).
+ */
+export const secretFile = (name: string): boolean =>
+  name === ".qa-runs" || (/^\.env(\..+)?$/.test(name) && name !== ".env.example");
 const SNAPSHOT_LIMIT = 20_000;
 
 /**
@@ -51,7 +68,7 @@ export async function startAllowlistProxy(
         port,
         method: req.method,
         path: `${target.pathname}${target.search}`,
-        headers: req.headers,
+        headers: Object.fromEntries(Object.entries(req.headers).filter(([h]) => !HOP_BY_HOP.has(h))),
       },
       (up) => {
         res.writeHead(up.statusCode ?? 502, up.headers);
@@ -134,7 +151,10 @@ export async function createSandbox(fixture: string | undefined): Promise<CliSan
   if (fixture)
     await cp(fixture, work, {
       recursive: true,
-      filter: (source) => !source.split(sep).some((p) => SNAPSHOT_SKIP.has(p)),
+      filter: (source) =>
+        !relative(fixture, source)
+          .split(sep)
+          .some((p) => SNAPSHOT_SKIP.has(p) || secretFile(p)),
     });
   else await mkdir(work, { recursive: true });
   await mkdir(home, { recursive: true });
@@ -241,7 +261,7 @@ export function startCommand(spec: {
   let read = 0;
   let end: CommandEnd | undefined;
   let timedOut = false;
-  let child: ChildProcess;
+  let child: ChildProcess | undefined;
   const append = (chunk: Buffer | string): void => {
     if (output.length >= MAX_OUTPUT) return;
     output += chunk.toString();
@@ -257,19 +277,20 @@ export function startCommand(spec: {
   } catch (error) {
     append(`${error instanceof Error ? error.message : String(error)}\n`);
     end = { exitCode: 127, timedOut: false };
-    child = undefined as unknown as ChildProcess;
+    child = undefined;
   }
+  const proc = child;
   const ended = new Promise<CommandEnd>((done) => {
-    if (end) {
-      done(end);
+    if (end || !proc) {
+      done(end ?? { exitCode: 127, timedOut: false });
       return;
     }
-    child.stdout?.on("data", append);
-    child.stderr?.on("data", append);
-    child.on("error", (e) => {
+    proc.stdout?.on("data", append);
+    proc.stderr?.on("data", append);
+    proc.on("error", (e) => {
       append(`${e.message}\n`);
     });
-    child.on("close", (code, sig) => {
+    proc.on("close", (code, sig) => {
       end = {
         ...(code !== null ? { exitCode: code } : {}),
         ...(sig ? { endedBy: sig } : {}),
@@ -281,9 +302,9 @@ export function startCommand(spec: {
   const timer = setTimeout(() => {
     if (end) return;
     timedOut = true;
-    signalGroup(child.pid, "SIGTERM");
+    signalGroup(proc?.pid, "SIGTERM");
     setTimeout(() => {
-      signalGroup(child.pid, "SIGKILL");
+      signalGroup(proc?.pid, "SIGKILL");
     }, 3000).unref();
   }, spec.timeoutMs);
   timer.unref();
@@ -291,12 +312,12 @@ export function startCommand(spec: {
     clearTimeout(timer);
   });
   if (!end) {
-    for (const line of spec.input ?? []) child.stdin?.write(`${line}\n`);
-    if (spec.interactive !== true) child.stdin?.end();
-    child.stdin?.on("error", () => undefined);
+    for (const line of spec.input ?? []) proc?.stdin?.write(`${line}\n`);
+    if (spec.interactive !== true) proc?.stdin?.end();
+    proc?.stdin?.on("error", () => undefined);
   }
   return {
-    pid: end ? undefined : child.pid,
+    pid: end ? undefined : proc?.pid,
     args: spec.args,
     takeOutput: () => {
       const next = output.slice(read);
@@ -305,10 +326,10 @@ export function startCommand(spec: {
     },
     allOutput: () => output,
     send: (line) => {
-      if (!end) child.stdin?.write(`${line}\n`);
+      if (!end) proc?.stdin?.write(`${line}\n`);
     },
     signal: (name) => {
-      if (!end) signalGroup(child.pid, name);
+      if (!end) signalGroup(proc?.pid, name);
     },
     wait: (waitMs) =>
       Promise.race([
@@ -322,9 +343,9 @@ export function startCommand(spec: {
     ended: () => end,
     kill: async () => {
       if (end) return;
-      signalGroup(child.pid, "SIGTERM");
+      signalGroup(proc?.pid, "SIGTERM");
       if (await Promise.race([ended, new Promise((d) => setTimeout(d, 3000))])) return;
-      signalGroup(child.pid, "SIGKILL");
+      signalGroup(proc?.pid, "SIGKILL");
       await Promise.race([ended, new Promise((d) => setTimeout(d, 2000))]);
     },
   };
@@ -357,7 +378,11 @@ export function changedFiles(before: Map<string, string>, after: Map<string, str
     if (!before.has(path)) out.push(`+ ${path}`);
     else if (before.get(path) !== stamp) out.push(`~ ${path}`);
   for (const path of before.keys()) if (!after.has(path)) out.push(`- ${path}`);
-  return out.sort((a, b) => a.slice(2).localeCompare(b.slice(2))).slice(0, 200);
+  // A deeply nested path still fits the session record.
+  return out
+    .sort((a, b) => a.slice(2).localeCompare(b.slice(2)))
+    .slice(0, 200)
+    .map((c) => (c.length > 500 ? `${c.slice(0, 499)}…` : c));
 }
 
 /**
@@ -402,7 +427,7 @@ export async function findLeftovers(
 ): Promise<CliLeftovers & { readonly pids: readonly number[]; readonly containerIds: readonly string[] }> {
   const processes: string[] = running
     .filter((r) => r.command.ended() === undefined)
-    .map((r) => `${r.id} (pid ${String(r.command.pid)}): ${r.command.args.join(" ")}`);
+    .map((r) => `${r.id} (pid ${String(r.command.pid)}): ${r.command.args.join(" ")}`.slice(0, 500));
   const pids: number[] = [];
   const own = process.pid;
   const ps = (await run("ps", ["-axo", "pid=,command="])) ?? "";
@@ -435,7 +460,12 @@ export async function findLeftovers(
   }
   const containers: string[] = [];
   const containerIds: string[] = [];
-  const docker = await run("docker", ["ps", "--format", "{{.ID}}\t{{.Names}}\t{{.Labels}}\t{{.Mounts}}"]);
+  const docker = await run("docker", [
+    "ps",
+    "--no-trunc",
+    "--format",
+    "{{.ID}}\t{{.Names}}\t{{.Labels}}\t{{.Mounts}}",
+  ]);
   for (const line of (docker ?? "").split("\n")) {
     const [id = "", name = "", ...rest] = line.split("\t");
     if (id === "" || !sandbox.markers.some((s) => rest.join("\t").includes(s))) continue;
@@ -463,9 +493,16 @@ export async function cleanUpLeftovers(
   return { processes: found.processes, containers: found.containers };
 }
 
-/** Reads a file of the sandbox for the agent, at most `limit` characters. */
-export async function readSandboxFile(path: string, limit = 20_000): Promise<string> {
-  const text = await readFile(path, "utf8");
+/**
+ * Reads a file of the sandbox for the agent, masked first and then cut to `limit` characters, so a secret across the
+ * cut is still masked.
+ */
+export async function readSandboxFile(
+  path: string,
+  mask: (text: string) => string,
+  limit = 20_000,
+): Promise<string> {
+  const text = mask(await readFile(path, "utf8"));
   return text.length > limit
     ? `${text.slice(0, limit)}\n… (${String(text.length - limit)} more characters)`
     : text;
@@ -477,22 +514,37 @@ export async function removeSandbox(sandbox: CliSandbox): Promise<void> {
 }
 
 /**
- * Whether an argument names a path outside the sandbox (REQ-EXEC-24/AC2): absolute paths, `~`, Windows drives and
- * `..` that leads out of the working folder, also as the value of `--option=value`. URLs are not paths. The tool's
- * own behaviour is not limited by this; its HOME, TMPDIR and working folder are the sandbox.
+ * Whether an argument names a path outside the sandbox (REQ-EXEC-24/AC2): absolute paths, `~`, Windows drives,
+ * `file:` URLs and `..` that leads out of the working folder, also as the value of `--option=value`, `--option:value`,
+ * `-o<value>` and `@<file>`, and relative paths through a link that points out of the sandbox. Other URLs are not
+ * paths. This is a guardrail against the agent naming files, not a boundary: the tool itself runs with the person's
+ * rights, its HOME, TMPDIR and working folder being the sandbox.
  *
  * @param sandbox - The session's sandbox.
  * @param arg - One argument the agent asked for.
  */
 export function argOutsideSandbox(sandbox: CliSandbox, arg: string): boolean {
-  const values = [arg, ...(arg.includes("=") ? [arg.slice(arg.indexOf("=") + 1)] : [])];
+  if (/^@?file:/i.test(arg)) return true;
+  const values = new Set([arg]);
+  const option = /^--?[A-Za-z][\w-]*[=:](.*)$/.exec(arg);
+  if (option) values.add(option[1] ?? "");
+  const short = /^-[A-Za-z](.+)$/.exec(arg);
+  if (short && !arg.startsWith("--")) values.add(short[1] ?? "");
+  for (const v of [...values]) if (v.startsWith("@")) values.add(v.slice(1));
   const inside = (path: string): boolean =>
     sandbox.markers.some((m) => path === m || path.startsWith(`${m}${sep}`));
-  return values.some((value) => {
+  return [...values].some((value) => {
+    if (/^file:/i.test(value)) return true;
     if (value.includes("://")) return false;
     if (/^~(?:[/\\]|$)/.test(value) || /^[A-Za-z]:[\\/]/.test(value)) return true;
     if (isAbsolute(value)) return !inside(resolve(value));
-    if (!/(^|[/\\])\.\.([/\\]|$)/.test(value)) return false;
-    return !inside(resolve(sandbox.work, value));
+    const target = resolve(sandbox.work, value);
+    if (/(^|[/\\])\.\.([/\\]|$)/.test(value) && !inside(target)) return true;
+    // A relative path that exists may go out through a link inside the sandbox.
+    try {
+      return !inside(realpathSync(target));
+    } catch {
+      return false;
+    }
   });
 }

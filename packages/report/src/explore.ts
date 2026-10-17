@@ -1,5 +1,5 @@
 import type { EvidenceEntry, ExploreSession } from "@qajitsu/core";
-import { renderClaimsHtml, renderClaimsMarkdown } from "./explore-claims.js";
+import { mdText, renderClaimsHtml, renderClaimsMarkdown } from "./explore-claims.js";
 
 const esc = (s: string): string =>
   s
@@ -38,7 +38,7 @@ export function renderExploreMarkdown(session: ExploreSession, manifest: readonl
   const out = [
     `# Exploratory session ${session.id} for ${session.ticket}`,
     "",
-    `Goal: ${session.goal}`,
+    `Goal: ${mdText(session.goal)}`,
     "",
     `Run ${session.run} · environment ${session.environment.name} (${session.environment.baseUrl}) · model ${session.model}`,
     `${session.startedAt} – ${session.endedAt} · ended because ${END_REASON[session.endReason]}${session.error ? `: ${session.error}` : ""}`,
@@ -56,9 +56,16 @@ export function renderExploreMarkdown(session: ExploreSession, manifest: readonl
   ];
   if (session.observations.length === 0) out.push("_(none)_", "");
   for (const o of session.observations) {
-    out.push(`### ${o.id} · ${o.title}`, "", `${o.kind}, severity ${o.severity}`, "", o.description, "");
-    if (o.expected) out.push(`- Expected: ${o.expected}`);
-    if (o.actual) out.push(`- Actual: ${o.actual}`);
+    out.push(
+      `### ${o.id} · ${mdText(o.title)}`,
+      "",
+      `${o.kind}, severity ${o.severity}`,
+      "",
+      mdText(o.description),
+      "",
+    );
+    if (o.expected) out.push(`- Expected: ${mdText(o.expected)}`);
+    if (o.actual) out.push(`- Actual: ${mdText(o.actual)}`);
     out.push("", "Steps to reproduce:", "");
     o.steps.forEach((id, i) => {
       const a = byId.get(id);

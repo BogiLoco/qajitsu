@@ -167,4 +167,78 @@ describe("explorer report check (REQ-EXEC-25)", () => {
       'checklist item 2 "qj init --qa-dir does-not-exist" is not_done, but A02 ran it: a command that ran is done whatever its exit code or error, which is what you report; cite A02',
     ]);
   });
+
+  it("REQ-EXEC-25/AC7: backticks and quotes are not part of a subcommand; prose written by the explorer names only subcommands the session ran", () => {
+    const session = view({
+      tool: "qj",
+      checks: ["run `qj doctor`", 'try "qj init"'],
+      actions: () => [
+        { id: "A01", args: ["doctor"] },
+        { id: "A02", args: ["init"] },
+      ],
+    });
+    expect(
+      explorerReportCheck(
+        session,
+        "run commands",
+      )(
+        report({
+          checklist: [done("doctor", "A01"), done("init", "A02")],
+          findings: [{ text: "qj prints help when run without arguments", actions: ["A02"] }],
+        }),
+      ),
+    ).toEqual([]);
+    // Without --check the items are the explorer's prose too: only subcommands of the session count.
+    expect(
+      explorerReportCheck(
+        view({ tool: "qj", actions: () => [{ id: "A01", args: ["doctor"] }] }),
+        "x",
+      )(report({ checklist: [done("qj shows versions", "A01")], findings: [] })),
+    ).toEqual([]);
+    // A subcommand the session did run still has to be cited by the right action.
+    expect(
+      explorerReportCheck(
+        session,
+        "x",
+      )(
+        report({
+          checklist: [done("doctor", "A01"), done("init", "A02")],
+          findings: [{ text: "`qj init` is slow", actions: ["A01"] }],
+        }),
+      ),
+    ).toEqual(['finding "`qj init` is slow" names init, which none of its actions (A01) ran']);
+  });
+
+  it("REQ-EXEC-25/AC2: items of --check swapped in the answer are refused; a rephrased item in its place is accepted", () => {
+    const session = view({
+      checks: ["open the cart", "pay with a saved card"],
+      flags: false,
+      actions: () => [{ id: "A01" }, { id: "A02" }],
+    });
+    expect(
+      explorerReportCheck(
+        session,
+        "x",
+      )(
+        report({
+          checklist: [done("pay with the saved card", "A02"), done("cart opened", "A01")],
+          findings: [],
+        }),
+      ),
+    ).toEqual([
+      'checklist item 1 reads like item 2 of --check ("pay with a saved card"): keep the items in the order of --check',
+      'checklist item 2 reads like item 1 of --check ("open the cart"): keep the items in the order of --check',
+    ]);
+    expect(
+      explorerReportCheck(
+        session,
+        "x",
+      )(
+        report({
+          checklist: [done("cart is opened", "A01"), done("paying with a saved card", "A02")],
+          findings: [],
+        }),
+      ),
+    ).toEqual([]);
+  });
 });

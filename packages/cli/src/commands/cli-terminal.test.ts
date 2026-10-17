@@ -73,4 +73,34 @@ describe("terminal of a command-line session (REQ-EXEC-24)", () => {
     expect(data).not.toMatch(/[^\r]\n/);
     expect(data).not.toContain("token123");
   });
+
+  it("security review M2: a background line half printed when the next action starts stays whole, so its secret is masked", () => {
+    const s = setup(true);
+    s.terminal.begin("A01", "qj serve");
+    s.terminal.output("token=tok", "B1");
+    s.terminal.end("A01", "still running (B1)");
+    s.terminal.begin("A02", "qj status");
+    s.terminal.output("en123\n", "B1");
+    s.terminal.end("A02", "exit 0");
+    const { transcript } = s.terminal.finish();
+    expect(transcript).toContain("[B1] token=***\n");
+    expect(transcript).not.toContain("tok\n");
+    expect(s.shown()).not.toContain("token123");
+  });
+
+  it("security review M3: control and escape sequences from the tool or the agent never reach the person's terminal or the recording", () => {
+    const s = setup(true);
+    s.terminal.begin("A01", "qj \u001b]52;c;cGFzdGU=\u0007doctor");
+    s.terminal.output("\u001b[2J\u001b[1;1Hall good\u001b[0m\r\n\u009b31m\n");
+    s.terminal.end("A01", "exit 0");
+    s.terminal.note("● O1 [low] \u001b]52;c;eA==\u0007title");
+    const { transcript, cast } = s.terminal.finish();
+    for (const text of [s.shown(), transcript, cast]) {
+      // eslint-disable-next-line no-control-regex -- the test looks for control characters.
+      expect(text).not.toMatch(/\u001b|\u0007|\u009b/);
+      expect(text).not.toContain("\\u001b");
+    }
+    expect(s.shown()).toContain("$ qj doctor\nall good\n");
+    expect(s.shown()).toContain("● O1 [low] title");
+  });
 });

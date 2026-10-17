@@ -405,8 +405,11 @@ export const ProjectConfigSchema = z.strictObject({
                 ]),
               )
               .default({}),
-            /** Origins the tool may reach through the session's proxy; loopback is always allowed. */
-            allowlist: z.array(z.url()).default([]),
+            /**
+             * Origins the tool may reach through the session's proxy (http or https only); loopback is always allowed.
+             * Only tools that honour HTTP(S)_PROXY are held to it.
+             */
+            allowlist: z.array(z.url({ protocol: /^https?$/ })).default([]),
             timeout_s: z.number().int().min(1).max(3600).default(120),
           }),
         )

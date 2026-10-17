@@ -1,3 +1,4 @@
+import { ConfigError } from "@qajitsu/core";
 import { renderChangeContext, UNTRUSTED_DATA_RULES, type ChangeContext } from "./context.js";
 import {
   checklistPrompt,
@@ -68,7 +69,7 @@ export async function runExplorer(
   },
 ): Promise<ExplorerReport> {
   const role = AGENT_ROLES.find((r) => r.role === "explorer");
-  if (!role) throw new Error("explorer role missing");
+  if (!role) throw new ConfigError("ROLE_MISSING", "The explorer role is not defined.", { role: "explorer" });
   const model = await modelForRole(deps.models, "explorer");
   const { value } = await runStructuredAgent({
     stage: "explore",
@@ -148,7 +149,7 @@ export async function runCliExplorer(
   },
 ): Promise<ExplorerReport> {
   const role = AGENT_ROLES.find((r) => r.role === "explorer");
-  if (!role) throw new Error("explorer role missing");
+  if (!role) throw new ConfigError("ROLE_MISSING", "The explorer role is not defined.", { role: "explorer" });
   const model = await modelForRole(deps.models, "explorer");
   const { value } = await runStructuredAgent({
     stage: "explore",

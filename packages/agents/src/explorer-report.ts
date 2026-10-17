@@ -46,17 +46,40 @@ const flagsIn = (text: string): string[] => [...new Set(text.match(FLAG) ?? [])]
 const ran = (flag: string, args: readonly string[]): boolean =>
   args.some((a) => a === flag || a.startsWith(`${flag}=`));
 const escape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-/** Subcommands a text names after the tool's name: "qj doctor" and "run qj init" name `doctor` and `init`. */
+/** Subcommands a text names after the tool's name: "qj doctor" and "run `qj init`" name `doctor` and `init`. */
 const subcommandsIn = (text: string, tool: string | undefined): string[] =>
   tool === undefined
     ? []
     : [
         ...new Set(
           [...text.matchAll(new RegExp(`(?<![\\w-])${escape(tool)}\\s+([^\\s-][^\\s,.;:)]*)`, "g"))].map(
-            (m) => m[1] ?? "",
+            (m) => (m[1] ?? "").replace(/^[`'"]+|[`'"]+$/g, ""),
           ),
         ),
       ].filter((s) => s !== "");
+
+/** Words of a checklist item, roughly stemmed, to tell a rephrased item from a swapped one. */
+const words = (text: string): Set<string> =>
+  new Set(
+    text
+      .toLowerCase()
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter((w) => w.length >= 3)
+      .map((w) =>
+        w.length > 5 && w.endsWith("ing")
+          ? w.slice(0, -3)
+          : w.length > 4 && w.endsWith("ed")
+            ? w.slice(0, -2)
+            : w.length > 3 && w.endsWith("s")
+              ? w.slice(0, -1)
+              : w,
+      ),
+  );
+const likeness = (a: Set<string>, b: Set<string>): number => {
+  const shared = [...a].filter((w) => b.has(w)).length;
+  const all = new Set([...a, ...b]).size;
+  return all === 0 ? 0 : shared / all;
+};
 
 /**
  * Builds the code check of an explorer's answer (REQ-EXEC-15/AC8, REQ-EXEC-25/AC1-AC4): no answer before any action,
@@ -83,22 +106,42 @@ export function explorerReportCheck(
       ];
     const args = new Map(actions.map((a) => [a.id, a.args ?? []]));
     const errors: string[] = [];
-    const cited = (what: string, ids: readonly string[], text: string): void => {
+    // REQ-EXEC-25/AC2: an item in another item's place of --check is a swap, not a rephrasing.
+    if (view.checks.length > 1) {
+      const checks = view.checks.map(words);
+      report.checklist.forEach((entry, i) => {
+        const said = words(entry.item);
+        const scores = checks.map((c) => likeness(said, c));
+        const best = scores.indexOf(Math.max(...scores));
+        if (best !== i && (scores[best] ?? 0) > (scores[i] ?? 0))
+          errors.push(
+            `checklist item ${String(i + 1)} reads like item ${String(best + 1)} of --check ("${view.checks[best] ?? ""}"): keep the items in the order of --check`,
+          );
+      });
+      if (errors.length > 0) return errors;
+    }
+    // A person's --check item is a command line; in the explorer's own prose only subcommands the session ran or the
+    // person named count, so "qj prints help" is prose and "qj doctor" a claim about doctor.
+    const known = new Set([
+      ...[...args.values()].map((a) => a[0]).filter((a): a is string => a !== undefined),
+      ...view.checks.flatMap((c) => subcommandsIn(c, view.tool)),
+    ]);
+    const named = (text: string, written: boolean): string[] =>
+      subcommandsIn(text, view.tool).filter((c) => written || known.has(c));
+    const cited = (what: string, ids: readonly string[], text: string, written = false): void => {
       const unknown = ids.filter((id) => !args.has(id));
       for (const id of unknown) errors.push(`${what} cites ${id}, which is not an action of this session`);
       if (!view.flags || unknown.length > 0) return;
       const used = ids.flatMap((id) => args.get(id) ?? []);
       // REQ-EXEC-25/AC7: "qj doctor" is done only by an action that ran doctor.
-      for (const sub of subcommandsIn(text, view.tool).filter(
-        (c) => !ids.some((id) => args.get(id)?.[0] === c),
-      ))
+      for (const sub of named(text, written).filter((c) => !ids.some((id) => args.get(id)?.[0] === c)))
         errors.push(`${what} names ${sub}, which none of its actions (${ids.join(", ")}) ran`);
       for (const flag of flagsIn(text).filter((f) => !ran(f, used)))
         errors.push(`${what} names ${flag}, which none of its actions (${ids.join(", ")}) ran`);
     };
     /** Actions that ran everything an item names (its subcommand and flags), for items claimed not done. */
-    const ranIt = (item: string): string[] => {
-      const subs = subcommandsIn(item, view.tool);
+    const ranIt = (item: string, written: boolean): string[] => {
+      const subs = named(item, written);
       const flags = flagsIn(item);
       if (!view.flags || (subs.length === 0 && flags.length === 0)) return [];
       return [...args.entries()]
@@ -108,12 +151,13 @@ export function explorerReportCheck(
     report.checklist.forEach((entry, i) => {
       const item = view.checks[i] ?? entry.item;
       const what = `checklist item ${String(i + 1)} "${item}"`;
-      if (entry.actions.length > 0) cited(what, entry.actions, item);
+      const written = view.checks[i] !== undefined;
+      if (entry.actions.length > 0) cited(what, entry.actions, item, written);
       else if (entry.not_done === undefined)
         errors.push(`${what} has neither actions nor not_done: do it, or say why it was not done`);
       else {
         // REQ-EXEC-25/AC8: a command that failed still ran; its error is the result, not a reason to skip it.
-        const by = ranIt(item);
+        const by = ranIt(item, written);
         if (by.length > 0)
           errors.push(
             `${what} is not_done, but ${by.join(", ")} ran it: a command that ran is done whatever its exit code or error, which is what you report; cite ${by.join(", ")}`,

@@ -17,7 +17,7 @@ import { renderCliExploreHtml, renderCliExploreMarkdown } from "@qajitsu/report"
 import { createMasker } from "@qajitsu/steps";
 import type { RuntimePorts } from "../adapters.js";
 import { codeIndexCache, openSession, type ModelPorts } from "../session.js";
-import { createCliTerminal } from "./cli-terminal.js";
+import { createCliTerminal, printable } from "./cli-terminal.js";
 import { checkOption, checklistLine, sessionClaims } from "./explore-checklist.js";
 import { slowMoOption } from "./live.js";
 import {
@@ -57,6 +57,11 @@ export interface CliExploreOptions {
 /** Ports of a command-line session: the probe for processes and containers can be replaced in tests. */
 export interface CliExplorePorts {
   readonly cliProbe?: ToolProbe;
+  /** Source of SIGINT/SIGTERM (default: the process; replaced in tests). */
+  readonly signals?: {
+    on(event: "SIGINT" | "SIGTERM", listener: () => void): unknown;
+    off(event: "SIGINT" | "SIGTERM", listener: () => void): unknown;
+  };
 }
 
 /** Runs setup or teardown commands in the sandbox; their output is kept as evidence. */
@@ -154,17 +159,39 @@ export async function runCliExplore(
     const refusedHosts: string[] = [];
     let proxy: Awaited<ReturnType<typeof startAllowlistProxy>> | undefined;
     let recorder: CliExploreRecorder | undefined;
+    // REQ-EXEC-15/AC5: the time box is a timer in code, not a request to the model. Ctrl+C and SIGTERM stop the
+    // session the same way, so the clean-up below still runs and nothing the session started stays (REQ-EXEC-24/AC5).
+    const timeBox = new AbortController();
+    // Set from the signal handlers; an object, so the checks below are not narrowed away.
+    const stop: { by?: "SIGINT" | "SIGTERM" } = {};
+    const stoppedBy = (): "SIGINT" | "SIGTERM" | undefined => stop.by;
+    const signals = ports.signals ?? process;
+    const onSigint = (): void => {
+      stop.by ??= "SIGINT";
+      timeBox.abort();
+    };
+    const onSigterm = (): void => {
+      stop.by ??= "SIGTERM";
+      timeBox.abort();
+    };
+    signals.on("SIGINT", onSigint);
+    signals.on("SIGTERM", onSigterm);
     try {
       for (const [name, entry] of Object.entries(tool.env)) {
         const value =
           "secret" in entry
             ? await session.resolveSecret(entry.secret)
             : entry.value.replaceAll("{{sandbox}}", sandbox.root).replaceAll("{{home}}", homedir());
-        if ("secret" in entry) masker.register(value);
+        if ("secret" in entry) {
+          masker.register(value);
+          // A multi-line secret (a key, a JSON credential) is masked line by line in the live view too (review M2).
+          for (const line of value.split(/\r?\n/)) if (line.trim().length >= 8) masker.register(line.trim());
+        }
         configured[name] = value;
       }
       proxy = await startAllowlistProxy(tool.allowlist, (h) => {
-        if (!refusedHosts.includes(h) && refusedHosts.length < 200) refusedHosts.push(h);
+        const host = h.slice(0, 300);
+        if (!refusedHosts.includes(host) && refusedHosts.length < 200) refusedHosts.push(host);
       });
       const env = sandboxEnv(sandbox, proxy.url, configured);
       const id = await nextSessionId(session);
@@ -230,12 +257,12 @@ export async function runCliExplore(
         ...(slowMoMs ? { slowMoMs } : {}),
         ...(ports.cliProbe ? { probe: ports.cliProbe } : {}),
       });
-      // REQ-EXEC-15/AC5: the time box is a timer in code, not a request to the model.
-      const timeBox = new AbortController();
       const timer = setTimeout(() => {
         timeBox.abort();
       }, minutes * 60_000);
-      if (error === undefined)
+      // A stop during the setup skips the agent (a function, so the check below is not narrowed away).
+      const aborted = (): boolean => timeBox.signal.aborted;
+      if (error === undefined && !aborted())
         try {
           modelId = (await session.models.forRole("explorer")).id;
           const usage = createUsageTracker({
@@ -272,7 +299,8 @@ export async function runCliExplore(
           if (recorder.exhausted()) endReason = "step-budget";
           await ws.update({ data: { ...ws.record.data, tokens: usage.total } });
         } catch (e) {
-          if (timeBox.signal.aborted) endReason = "time-box";
+          if (stoppedBy()) endReason = "error";
+          else if (timeBox.signal.aborted) endReason = "time-box";
           else if (recorder.exhausted()) endReason = "step-budget";
           else {
             endReason = "error";
@@ -282,14 +310,19 @@ export async function runCliExplore(
           clearTimeout(timer);
         }
       else clearTimeout(timer);
+      const by = stoppedBy();
+      if (by) {
+        endReason = "error";
+        error = `stopped by ${by === "SIGINT" ? "Ctrl+C (SIGINT)" : "SIGTERM"}`;
+      }
       // REQ-EXEC-24/AC5: what was left running, then the teardown, then everything still left is stopped.
-      const found = await findLeftovers(sandbox, recorder.background, ports.cliProbe);
+      const found = await findLeftovers(sandbox, recorder.commands(), ports.cliProbe);
       const leftovers: CliLeftovers = {
         processes: found.processes.map(mask),
         containers: found.containers.map(mask),
       };
       const teardownError = await runCommands(tool.teardown, "teardown", shared);
-      const stopped = await cleanUpLeftovers(sandbox, recorder.background, ports.cliProbe);
+      const stopped = await cleanUpLeftovers(sandbox, recorder.commands(), ports.cliProbe);
       const cleaned: CliLeftovers = {
         processes: stopped.processes.map(mask),
         containers: stopped.containers.map(mask),
@@ -321,7 +354,7 @@ export async function runCliExplore(
         endedAt: ports.now().toISOString(),
         endReason,
         ...(error !== undefined || teardownError !== undefined
-          ? { error: [error, teardownError].filter(Boolean).join("; ") }
+          ? { error: [error, teardownError].filter(Boolean).join("; ").slice(0, 2000) }
           : {}),
         budget: { minutes, steps: maxSteps },
         summary,
@@ -366,13 +399,16 @@ export async function runCliExplore(
           "",
         ]
           .filter((l, i, all) => l !== "" || i === all.length - 1)
+          .map(printable)
           .join("\n"),
       );
       return 0;
     } finally {
+      signals.off("SIGINT", onSigint);
+      signals.off("SIGTERM", onSigterm);
       // Whatever happened above, nothing of the session stays running or on disk (REQ-EXEC-24/AC5).
       if (recorder)
-        await cleanUpLeftovers(sandbox, recorder.background, ports.cliProbe).catch(() => undefined);
+        await cleanUpLeftovers(sandbox, recorder.commands(), ports.cliProbe).catch(() => undefined);
       await proxy?.close().catch(() => undefined);
       await removeSandbox(sandbox).catch(() => undefined);
     }

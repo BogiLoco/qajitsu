@@ -23,6 +23,7 @@ import { renderExploreHtml, renderExploreMarkdown } from "@qajitsu/report";
 import { createMasker } from "@qajitsu/steps";
 import type { RuntimePorts } from "../adapters.js";
 import { codeIndexCache, openSession, type ModelPorts, type RunSession } from "../session.js";
+import { printable } from "./cli-terminal.js";
 import { checkOption, checklistLine, sessionClaims } from "./explore-checklist.js";
 import { createExploreTools } from "./explore-tools.js";
 import type { CommandIO } from "./fetch.js";
@@ -359,6 +360,7 @@ export async function runExplore(
         "",
       ]
         .filter((l, i, all) => l !== "" || i === all.length - 1)
+        .map(printable)
         .join("\n"),
     );
     return 0;
