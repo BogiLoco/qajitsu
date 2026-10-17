@@ -403,7 +403,7 @@ export async function runRun(
       throw new ConfigError(
         "RUN_ALREADY_EXECUTED",
         options.cases === undefined
-          ? "This run already has results; start a new run to test again."
+          ? `This run already has results; to test again start a new run: qajitsu fetch ${ws.ticket}, qajitsu approve ${ws.ticket} --reuse-from ${ws.runId} (or plan it again), then qajitsu run ${ws.ticket}.`
           : `This run already has results; to watch cases again start a new run: qajitsu fetch ${ws.ticket}, qajitsu approve ${ws.ticket} --reuse-from ${ws.runId}, then qajitsu run ${ws.ticket} --cases ${options.cases}.`,
         {},
       );
@@ -617,7 +617,7 @@ export async function runRun(
     }
 
     // Statuses, gates and reports: computed by code only, from the files on disk (invariants 1, 6, 7).
-    const verdict = await computeVerdict(session, ports.now);
+    let verdict = await computeVerdict(session, ports.now);
     await writeReports(session, verdict);
     // Teardown runs after the verdict and the reports exist, so it cannot influence them; a failure is a warning.
     if (teardownDue) {
@@ -648,7 +648,11 @@ export async function runRun(
     ) {
       const triage = await triageRun(session, ports.now);
       if (triage?.status === "failed") io.writeError(`Failure hints not available: ${triage.error}\n`);
-      if (triage) await writeReports(session, await computeVerdict(session, ports.now));
+      // The table printed below shows the hints too (exploratory testing F17).
+      if (triage) {
+        verdict = await computeVerdict(session, ports.now);
+        await writeReports(session, verdict);
+      }
     }
     // REQ-VER-13: why each BLOCKED case could not be judged and what to do next; suggestions, never statuses.
     let blockedHints: BlockedRecord | undefined;
@@ -660,7 +664,10 @@ export async function runRun(
       blockedHints = await blockedRun(session, ports.now);
       if (blockedHints?.status === "failed")
         io.writeError(`Hints for BLOCKED cases not available: ${blockedHints.error}\n`);
-      if (blockedHints) await writeReports(session, await computeVerdict(session, ports.now));
+      if (blockedHints) {
+        verdict = await computeVerdict(session, ports.now);
+        await writeReports(session, verdict);
+      }
     }
     await ws.update({
       status: "completed",

@@ -65,6 +65,8 @@ describe("failure triage hints (REQ-VER-12)", () => {
       /\| TC-01 \|.*\| FAILED \|.*\| product-bug: The total differs from the plan in S1/,
     );
     expect(matrix).toContain("2 cases: 1 PASSED, 1 FAILED");
+    // Exploratory testing F17: the table in the terminal shows the hint too, as it does for BLOCKED cases.
+    expect(r.out).toMatch(/\| TC-01 \|.*\| FAILED \|.*\| product-bug: The total differs from the plan in S1/);
     expect(await readFile(join(p.dir, "report", "matrix.csv"), "utf8")).toContain("Hint (suggestion)");
     const html = await readFile(join(p.dir, "report", "report.html"), "utf8");
     expect(html).toContain("Hint (suggestion): product-bug: The total differs");
