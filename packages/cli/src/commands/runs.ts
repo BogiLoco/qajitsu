@@ -76,7 +76,8 @@ export async function runRuns(
       io.write(`No runs for ${ticket}.\n`);
       return 0;
     }
-    io.write("| Run | Created | Status | Stage | Results | Retention |\n|---|---|---|---|---|---|\n");
+    // The last stage and how it ended ("fetch (completed)", "run (running)"): status alone read like the whole run.
+    io.write("| Run | Created | Last stage | Results | Retention |\n|---|---|---|---|---|\n");
     const tools: string[] = [];
     for (const entry of index.runs) {
       const ws = await openRunWorkspace(root, ticket, entry.runId).catch(() => undefined);
@@ -93,7 +94,7 @@ export async function runRuns(
         : "–";
       const latest = entry.runId === index.latest ? " (latest)" : "";
       io.write(
-        `| ${entry.runId}${latest} | ${entry.createdAt} | ${entry.status} | ${ws?.record.stage ?? "?"} | ${counts} | ${entry.retention} |\n`,
+        `| ${entry.runId}${latest} | ${entry.createdAt} | ${ws?.record.stage ?? "?"} (${entry.status}) | ${counts} | ${entry.retention} |\n`,
       );
       // REQ-OBS-10/AC2: the tools and models each run used.
       const versions = ws?.record.data["versions"] as Record<string, string> | undefined;

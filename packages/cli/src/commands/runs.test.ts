@@ -73,6 +73,9 @@ describe("run management (REQ-WS-04, REQ-WS-03)", () => {
     const listed = await run(["runs", "DEMO-1"]);
     expect(listed.out).toContain(`| ${runId} (latest) |`);
     expect(listed.out).toContain("2 PASSED");
+    // Exploratory testing F5: one column with the last stage and how it ended, not "completed | fetch".
+    expect(listed.out).toContain("| Run | Created | Last stage | Results | Retention |");
+    expect(listed.out).toMatch(/\| run \(completed\) \| 2 PASSED \|/);
     expect((await run(["runs", "DEMO-2"])).out).toContain("No runs for DEMO-2");
     expect((await run(["runs", "bad"])).exitCode).toBe(3);
     expect((await run(["resume", "DEMO-2"])).err).toContain("RUN_NOT_FOUND");
