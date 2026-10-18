@@ -155,6 +155,30 @@ describe("analyst and planner (REQ-PLAN-01..05, REQ-LLM-03)", () => {
     ]);
   });
 
+  it("REQ-CTX-06/AC5: without a tests repository a claim of existing coverage becomes an open question, not a lost plan", async () => {
+    // Claude Haiku on DEMO-1 cited the application's own tests as existing coverage in all three attempts
+    // (exploratory testing F26); nothing can be checked, so the person decides.
+    const claimed = {
+      ...draft,
+      existing_coverage: [
+        { repo: "shop", file: "api/server.test.ts", title: "rounds the total", covers: ["AC1"] },
+      ],
+    };
+    const planner = scriptedModel([{ text: JSON.stringify(claimed) }]);
+    const value = await runPlanner(
+      deps({ planner, analyst: planner }),
+      await buildChangeContext(ws),
+      analysis as never,
+    );
+    expect(value.existing_coverage).toEqual([]);
+    expect(value.open_questions.at(-1)).toEqual({
+      id: `Q${String(value.open_questions.length)}`,
+      question:
+        'The planner considered AC1 covered by an existing test (shop:api/server.test.ts "rounds the total") and wrote no case for it, but this run has no tests repository, so code cannot check that test. Add a case, or confirm the coverage.',
+      why: "existing coverage claimed without a tests repository",
+    });
+  });
+
   it("REQ-PLAN-02 + REQ-PLAN-03: the planner returns a validated, grounded draft that is stored as a version", async () => {
     const planner = scriptedModel([{ text: JSON.stringify(draft) }]);
     const value = await runPlanner(

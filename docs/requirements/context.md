@@ -101,6 +101,7 @@ QAJitsu reads the project's existing test repository to follow its conventions a
 - [x] AC2: The planner lists existing cases that already cover parts of the ticket.
 - [x] AC3: The author reuses existing helpers and page objects when present: their selectors and flows, since specs run sandboxed and cannot import them (ADR-0004).
 - [x] AC4: Optionally (opt-in), new approved cases are proposed as a PR/MR to the tests repository (see REQ-PUB-08).
+- [x] AC5: Without any tests repository in the run, a claim of existing coverage cannot be checked: code turns it into an open question for the person (which test, which criteria, that no case was written) instead of refusing the plan, so the plan is kept and no criterion goes untested without a decision.
 
 ### REQ-CTX-07 · Project knowledge for agents
 
