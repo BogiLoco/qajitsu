@@ -1,8 +1,13 @@
+import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  CliExploreSessionSchema,
   ConfigError,
   ExploreSessionSchema,
+  ReviewRecordSchema,
+  acceptedItems,
+  reviewItems,
   readRunDocs,
   readImportedCases,
   readMapAround,
@@ -11,6 +16,7 @@ import {
   type ImportedCase,
   type MapAround,
   type KnowledgeChunk,
+  type ReviewItem,
   type ReviewComment,
   type RunWorkspace,
   type Ticket,
@@ -117,8 +123,17 @@ export interface ChangeContext {
    * against them (REQ-KNOW-06/AC3). Agent stages add the chunks they retrieve.
    */
   readonly docs: Map<string, KnowledgeChunk>;
-  /** Observation ids of the run's exploratory sessions; plan cases may cite them (REQ-EXEC-15/AC4). */
-  readonly explorations: readonly { readonly session: string; readonly observations: readonly string[] }[];
+  /**
+   * The run's exploratory sessions: observation ids plan cases may cite (REQ-EXEC-15/AC4), every item a person can
+   * review, and the items a person accepted with what they showed (REQ-PLAN-11/AC3); rejected and unreviewed items are
+   * not offered to the planner.
+   */
+  readonly explorations: readonly {
+    readonly session: string;
+    readonly observations: readonly string[];
+    readonly items?: readonly string[];
+    readonly accepted?: readonly (ReviewItem & { readonly steps: readonly string[] })[];
+  }[];
   /** Manual test cases imported for the run by `qj fetch` (REQ-CTX-08); untrusted, cited by id. */
   readonly imported: readonly ImportedCase[];
   /** The application map around the change, computed by code before planning (REQ-OBS-08). */
@@ -228,13 +243,38 @@ export async function buildChangeContext(
       diffInlined: kept.length <= DIFF_INLINE_LIMIT,
     });
   }
-  const explorations: { session: string; observations: string[] }[] = [];
+  const explorations: ChangeContext["explorations"][number][] = [];
   for (const session of (await readdir(ws.path("explore")).catch(() => [] as string[])).sort()) {
-    const parsed = ExploreSessionSchema.safeParse(
-      JSON.parse(await readFile(ws.path("explore", session, "session.json"), "utf8").catch(() => "null")),
+    const text = await readFile(ws.path("explore", session, "session.json"), "utf8").catch(() => "null");
+    const raw = JSON.parse(text) as { kind?: unknown } | null;
+    const parsed =
+      raw?.kind === "cli" ? CliExploreSessionSchema.safeParse(raw) : ExploreSessionSchema.safeParse(raw);
+    if (!parsed.success) continue;
+    // REQ-PLAN-11/AC2+AC3: only what a person accepted on this very session file reaches the planner.
+    const reviewText = await readFile(ws.path("explore", session, "review.json"), "utf8").catch(
+      () => undefined,
     );
-    if (parsed.success)
-      explorations.push({ session: parsed.data.id, observations: parsed.data.observations.map((o) => o.id) });
+    const review =
+      reviewText === undefined ? undefined : ReviewRecordSchema.safeParse(JSON.parse(reviewText));
+    const accepted = acceptedItems(
+      review?.success === true ? review.data : undefined,
+      createHash("sha256").update(text).digest("hex"),
+    );
+    const items = reviewItems(parsed.data);
+    const steps = (ids: readonly string[]): string[] =>
+      ids.map((id) => {
+        const a = parsed.data.actions.find((x) => x.id === id);
+        if (!a) return id;
+        return "args" in a
+          ? `${id} ${a.action} ${a.args.join(" ")}${a.exitCode !== undefined ? ` → exit ${String(a.exitCode)}` : ""}`
+          : `${id} ${a.action} ${a.target}`;
+      });
+    explorations.push({
+      session: parsed.data.id,
+      observations: parsed.data.observations.map((o) => o.id),
+      items: items.map((i) => i.id),
+      accepted: items.filter((i) => accepted.includes(i.id)).map((i) => ({ ...i, steps: steps(i.actions) })),
+    });
   }
   const docs = await readRunDocs(ws.path("knowledge", "chunks.json"));
   const imported = await readImportedCases(ws.path("imported", "cases.json"));
@@ -384,6 +424,27 @@ export function renderChangeContext(
         ),
       ),
     );
+  // REQ-PLAN-11/AC3: what a person accepted from exploratory sessions; it says what is worth testing, not the result.
+  const accepted = context.explorations.flatMap((e) =>
+    (e.accepted ?? []).map((i) => ({ session: e.session, ...i })),
+  );
+  if (accepted.length > 0)
+    parts.push(
+      "## Exploration accepted by a person (cite as {kind: explore, session, item})",
+      ...[...new Set(accepted.map((a) => a.session))].map((session) =>
+        untrusted(
+          `explore/${session}`,
+          accepted
+            .filter((a) => a.session === session)
+            .map(
+              (a) =>
+                `${a.session}/${a.id} ${a.kind}: ${a.title}${a.detail ? ` — ${a.detail}` : ""}${a.steps.length > 0 ? `\n  steps: ${a.steps.join("; ")}` : ""}`,
+            )
+            .join("\n"),
+        ),
+      ),
+    );
+  else parts.push("## Exploration accepted by a person\nNone: do not cite {kind: explore} sources.");
   const around = context.mapAround;
   if (around && (around.changed.length > 0 || around.untested.length > 0)) {
     // REQ-OBS-08: computed by code from past runs; labels come from routes, OpenAPI and visited URLs, so wrapped.

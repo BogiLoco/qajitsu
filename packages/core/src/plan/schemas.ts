@@ -52,6 +52,15 @@ export const SourceRefSchema = z.discriminatedUnion("kind", [
     session: z.string().regex(/^S\d{2,3}$/),
     id: z.string().regex(/^O\d{1,3}$/),
   }),
+  /**
+   * An item of an exploratory session a person accepted before planning (REQ-PLAN-11/AC4): an observation `O1`, a
+   * finding `F1` or a not-done checklist item `C2`. It says what is worth testing, never what the result must be.
+   */
+  z.strictObject({
+    kind: z.literal("explore"),
+    session: z.string().regex(/^S\d{2,3}$/),
+    item: z.string().regex(/^[OFC][1-9]\d{0,2}$/),
+  }),
 ]);
 
 /** A grounded source reference. */

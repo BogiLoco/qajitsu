@@ -93,6 +93,9 @@ const formatSource = (s: SourceRef): string => {
       return `${s.repo} review comment #${String(s.index)}`;
     case "observation":
       return `exploratory session ${s.session} ${s.id}`;
+    // REQ-PLAN-11/AC7: a case from exploration says so, with the session report to look at.
+    case "explore":
+      return `from exploration ${s.session}/${s.item} (accepted; report: explore/${s.session}/report.html)`;
     case "imported":
       return `imported case ${s.id}`;
     case "map":

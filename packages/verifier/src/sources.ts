@@ -55,6 +55,10 @@ export interface SourceContext {
   readonly imported?: ReadonlySet<string>;
   /** Observation ids per exploratory session of the run (REQ-EXEC-15/AC4). */
   readonly observations?: Readonly<Record<string, readonly string[]>>;
+  /** Items of the run's exploratory sessions and those a person accepted (REQ-PLAN-11/AC4), by session. */
+  readonly explored?: Readonly<
+    Record<string, { readonly items: readonly string[]; readonly accepted: readonly string[] }>
+  >;
   /** Tests per tests-repository alias, from the code index of its worktree (REQ-CTX-06). */
   readonly tests?: Readonly<
     Record<string, readonly { readonly file: string; readonly titles: readonly string[] }[]>
@@ -142,6 +146,14 @@ export function checkSource(source: SourceRef, context: SourceContext): string |
       return context.observations?.[source.session]?.includes(source.id) === true
         ? undefined
         : `observation ${source.id} does not exist in exploratory session ${source.session}`;
+    case "explore": {
+      const session = context.explored?.[source.session];
+      if (!session?.items.includes(source.item))
+        return `explore:${source.session}/${source.item} is not an item of exploratory session ${source.session} of this run`;
+      return session.accepted.includes(source.item)
+        ? undefined
+        : `explore:${source.session}/${source.item} was not accepted by a person: cite only accepted items (they are listed in the context)`;
+    }
     case "map":
       return context.map?.has(source.id) === true
         ? undefined

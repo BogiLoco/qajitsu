@@ -50,6 +50,7 @@ interface KnowledgeAddOptions {
   yes?: boolean;
 }
 import { runExplore, runExplorePromote } from "./commands/explore.js";
+import { runExploreReview } from "./commands/explore-review.js";
 import { runBench } from "./commands/bench.js";
 import { runAuditVerify } from "./commands/audit.js";
 import { runTelemetryExport } from "./commands/telemetry.js";
@@ -755,6 +756,31 @@ export function createProgram(version: string, io: ProgramIO): Command {
           cli?: string;
         },
       ) => withPorts((ports) => runExplore(ticket, options, commandIO, ports))(),
+    );
+  explore
+    .command("review")
+    .description(
+      "Accept or reject what exploratory sessions found, before the plan is written (the planner sees only accepted items)",
+    )
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .option("--session <id>", "one session, e.g. S01 (needed with --accept and --reject)")
+    .option("--accept <items>", "items to accept, e.g. O1,C2")
+    .option("--reject <items>", "items to reject, e.g. F1")
+    .option("--note <text>", "why, kept with the decisions")
+    .option("--keep <items>", "accepted observations or findings to keep in the knowledge base, e.g. O1")
+    .action(
+      (
+        ticket: string,
+        options: {
+          run?: string;
+          session?: string;
+          accept?: string;
+          reject?: string;
+          note?: string;
+          keep?: string;
+        },
+      ) => withPorts((ports) => runExploreReview(ticket, { ...options, user: io.user }, commandIO, ports))(),
     );
   explore
     .command("promote")

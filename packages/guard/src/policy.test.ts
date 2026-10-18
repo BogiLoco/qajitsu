@@ -33,6 +33,8 @@ describe("evaluateToolCall (REQ-VER-03)", () => {
     // REQ-EXEC-15/AC2: exploratory sessions are recorded by the trusted parent only.
     "explore/S01/session.json",
     "explore/S01/evidence/A01.png",
+    // REQ-PLAN-11/AC1: a person's decisions on what exploration found; an agent cannot accept anything.
+    "explore/S01/review.json",
     "run.json",
     "results",
   ])("denies writing protected path %s", (path) => {

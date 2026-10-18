@@ -35,6 +35,7 @@ import {
   type Plan,
 } from "@qajitsu/core";
 import { mapAroundChange } from "@qajitsu/report";
+import { explorationLines } from "./explore-review.js";
 import { createMasker } from "@qajitsu/steps";
 import { exportRunTelemetry } from "./telemetry.js";
 import { anchorJournal } from "./verdict.js";
@@ -344,6 +345,8 @@ export async function runPlan(
         `Plan v${String(current.version)}: ${String(current.cases.length)} case(s), ${String(current.open_questions.length)} open question(s)\n${mdFile}\n`,
       );
       for (const q of current.open_questions) io.write(`  ? ${q.id}: ${q.question}\n`);
+      // REQ-PLAN-11/AC3+AC6: what a person accepted from exploration, and what of it no case covers.
+      for (const line of await explorationLines(current, session)) io.write(`${line}\n`);
       // REQ-PLAN-09/AC3: what code cannot check, next to the plan.
       const flags = flagsOf(current);
       if (flags.length > 0)

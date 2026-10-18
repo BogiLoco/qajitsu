@@ -217,6 +217,29 @@
                     "id"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "explore"
+                    },
+                    "session": {
+                      "type": "string",
+                      "pattern": "^S\\d{2,3}$"
+                    },
+                    "item": {
+                      "type": "string",
+                      "pattern": "^[OFC][1-9]\\d{0,2}$"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "session",
+                    "item"
+                  ],
+                  "additionalProperties": false
                 }
               ]
             }
@@ -424,6 +447,29 @@
                     "id"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "explore"
+                    },
+                    "session": {
+                      "type": "string",
+                      "pattern": "^S\\d{2,3}$"
+                    },
+                    "item": {
+                      "type": "string",
+                      "pattern": "^[OFC][1-9]\\d{0,2}$"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "session",
+                    "item"
+                  ],
+                  "additionalProperties": false
                 }
               ]
             }
@@ -629,6 +675,29 @@
                     "kind",
                     "session",
                     "id"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "explore"
+                    },
+                    "session": {
+                      "type": "string",
+                      "pattern": "^S\\d{2,3}$"
+                    },
+                    "item": {
+                      "type": "string",
+                      "pattern": "^[OFC][1-9]\\d{0,2}$"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "session",
+                    "item"
                   ],
                   "additionalProperties": false
                 }
