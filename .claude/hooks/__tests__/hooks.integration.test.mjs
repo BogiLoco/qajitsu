@@ -1,13 +1,24 @@
 // End-to-end checks of the hook scripts exactly as Claude Code runs them: JSON on stdin, exit code and stdout out.
-import { test, describe } from "node:test";
+import { after, test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const hooksDir = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+// Temporary project folders of these tests, removed at the end (they were left in the temp folder on every run).
+const roots = [];
+after(() => {
+  for (const r of roots) rmSync(r, { recursive: true, force: true });
+});
+const tempRoot = (prefix) => {
+  const r = mkdtempSync(join(tmpdir(), prefix));
+  roots.push(r);
+  return r;
+};
 
 function runHook(script, input, env = {}) {
   return spawnSync(process.execPath, [join(hooksDir, script)], {
@@ -69,7 +80,7 @@ describe("readonly-bash.mjs", () => {
 
 describe("post-edit.mjs", () => {
   test("reports console.log in library source with exit 2", () => {
-    const root = mkdtempSync(join(tmpdir(), "qj-hooks-"));
+    const root = tempRoot("qj-hooks-");
     const file = join(root, "packages", "core", "src", "run.ts");
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, "export const x = 1;\nconsole.log(x);\n");
@@ -82,7 +93,7 @@ describe("post-edit.mjs", () => {
     assert.match(r.stderr, /run\.ts:2 console/);
   });
   test("exit 0 for clean files", () => {
-    const root = mkdtempSync(join(tmpdir(), "qj-hooks-"));
+    const root = tempRoot("qj-hooks-");
     const file = join(root, "packages", "core", "src", "ok.ts");
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, "export const x = 1;\n");
@@ -97,7 +108,7 @@ describe("post-edit.mjs", () => {
 
 describe("stop-check-tests.mjs", () => {
   function repoWith(files) {
-    const root = mkdtempSync(join(tmpdir(), "qj-stop-"));
+    const root = tempRoot("qj-stop-");
     spawnSync("git", ["init", "-q"], { cwd: root });
     for (const [p, c] of Object.entries(files)) {
       mkdirSync(dirname(join(root, p)), { recursive: true });
@@ -142,7 +153,7 @@ describe("stop-check-tests.mjs", () => {
 
 describe("stop-check-tests.mjs with the requirements catalogue", () => {
   function repoWithChecker(exitCode) {
-    const root = mkdtempSync(join(tmpdir(), "qj-stop-req-"));
+    const root = tempRoot("qj-stop-req-");
     spawnSync("git", ["init", "-q"], { cwd: root });
     mkdirSync(join(root, "scripts"), { recursive: true });
     mkdirSync(join(root, "docs", "requirements"), { recursive: true });
@@ -175,7 +186,7 @@ describe("stop-check-tests.mjs with the requirements catalogue", () => {
 
 describe("session-start.mjs", () => {
   test("mentions the missing skeleton in an empty project", () => {
-    const root = mkdtempSync(join(tmpdir(), "qj-start-"));
+    const root = tempRoot("qj-start-");
     const r = runHook(
       "session-start.mjs",
       { hook_event_name: "SessionStart", source: "startup" },

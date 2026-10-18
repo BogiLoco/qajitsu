@@ -1,12 +1,16 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RunIdSchema, TicketKeySchema, type PublishInput, type Publisher } from "@qajitsu/core";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+
+/** Folders of the attachments, removed after each test (they were left in the temp folder on every run). */
+const dirs: string[] = [];
 
 /** Two small attachments on disk and a comment, as `qj publish` hands them over. */
 const publishInput = async (previous?: PublishInput["previous"]): Promise<PublishInput> => {
   const dir = await mkdtemp(join(tmpdir(), "qj-pub-contract-"));
+  dirs.push(dir);
   await writeFile(join(dir, "evidence.zip"), "zip-bytes");
   await writeFile(join(dir, "failure.png"), "png-bytes");
   return {
@@ -35,6 +39,9 @@ const publishInput = async (previous?: PublishInput["previous"]): Promise<Publis
  */
 export function publisherContract(name: string, create: () => Publisher): void {
   describe(`Publisher contract: ${name}`, () => {
+    afterEach(async () => {
+      for (const d of dirs.splice(0)) await rm(d, { recursive: true, force: true });
+    });
     it("REQ-GEN-02/AC3 + REQ-PUB-02/AC1: a first publish creates a comment and accounts for every attachment once", async () => {
       const input = await publishInput();
       const result = await create().publish(input);
