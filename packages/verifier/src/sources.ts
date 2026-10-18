@@ -213,7 +213,14 @@ export function checkExistingCoverage(plan: Plan, context: SourceContext): strin
   return plan.existing_coverage.flatMap((claim, i) => {
     const where = `existing_coverage.${String(i)}`;
     const files = context.tests?.[claim.repo];
-    if (!files) return [`${where}: ${claim.repo} is not a tests repository of this run`];
+    if (!files) {
+      const repos = Object.keys(context.tests ?? {});
+      return [
+        repos.length === 0
+          ? `${where}: this run has no tests repository, so nothing counts as existing coverage: leave existing_coverage empty and write a case for it`
+          : `${where}: ${claim.repo} is not a tests repository of this run (tests repositories: ${repos.join(", ")})`,
+      ];
+    }
     const file = files.find((f) => f.file === claim.file);
     if (!file) return [`${where}: ${claim.repo} has no test file ${claim.file}`];
     if (!file.titles.includes(claim.title))

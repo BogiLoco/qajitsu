@@ -122,6 +122,7 @@ Besides the terminal, plans can be approved where the team already works.
 - [x] AC1: `qj plan --depth smoke|standard|full` selects cases by risk; the plan records the depth and why each case is in or out.
 - [x] AC2: Before a run QAJitsu shows an estimate of time and model cost based on case count, types and past runs.
 - [x] AC3: A configured budget (time or cost) stops further cases when reached; cases not run are NOT_RUN with the reason.
+- [x] AC4: The estimate before a run counts only the cases that will run: with `--cases`, the others are left out of the executions, time and tokens it shows.
 
 ### REQ-PLAN-09 · Concrete expected values
 

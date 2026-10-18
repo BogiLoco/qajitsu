@@ -158,8 +158,18 @@ describe("existing coverage claims (REQ-CTX-06/AC2)", () => {
     expect(checkExistingCoverage(invented, { ...context, tests })).toEqual([
       "existing_coverage.0: no test 'codes stack forever' in e2e:tests/cart.spec.ts",
       "existing_coverage.1: e2e has no test file tests/none.spec.ts",
-      "existing_coverage.2: web is not a tests repository of this run",
+      "existing_coverage.2: web is not a tests repository of this run (tests repositories: e2e)",
       "existing_coverage.3: AC9 is not an acceptance criterion of the ticket",
+    ]);
+    // Claude Haiku on DEMO-1 listed the application's own tests three times and lost the plan (exploratory testing
+    // F26): without any tests repository the message says what to do instead.
+    expect(
+      checkExistingCoverage(
+        plan([{ repo: "shop", file: "api/server.test.ts", title: "t", covers: ["AC1"] }]),
+        context,
+      ),
+    ).toEqual([
+      "existing_coverage.0: this run has no tests repository, so nothing counts as existing coverage: leave existing_coverage empty and write a case for it",
     ]);
   });
 });

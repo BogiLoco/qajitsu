@@ -59,7 +59,7 @@ Analyst and planner agents on several model providers; plan review loop and free
 - [REQ-PLAN-05](requirements/plan.md#req-plan-05--open-questions-instead-of-guessing) Open questions instead of guessing (must, implemented, AC 2/2)
 - [REQ-PLAN-06](requirements/plan.md#req-plan-06--plan-freeze) Plan freeze (must, implemented, AC 4/4)
 - [REQ-PLAN-09](requirements/plan.md#req-plan-09--concrete-expected-values) Concrete expected values (must, implemented, AC 9/9)
-- [REQ-LLM-01](requirements/models.md#req-llm-01--multiple-providers) Multiple providers (must, deferred, AC 6/7)
+- [REQ-LLM-01](requirements/models.md#req-llm-01--multiple-providers) Multiple providers (must, implemented, AC 7/7)
 - [REQ-LLM-02](requirements/models.md#req-llm-02--model-per-role) Model per role (must, implemented, AC 2/2)
 - [REQ-LLM-03](requirements/models.md#req-llm-03--capability-profiles) Capability profiles (must, implemented, AC 3/3)
 - [REQ-LLM-04](requirements/models.md#req-llm-04--structured-output-with-repair) Structured output with repair (must, implemented, AC 3/3)
@@ -82,7 +82,7 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 
 <!-- prettier-ignore-start -->
 <!-- req-stage:3 -->
-- [REQ-CTX-06](requirements/context.md#req-ctx-06--test-repository-awareness) Test repository awareness (should, implemented, AC 4/4)
+- [REQ-CTX-06](requirements/context.md#req-ctx-06--test-repository-awareness) Test repository awareness (should, implemented, AC 5/5)
 - [REQ-ENV-01](requirements/environment.md#req-env-01--provided-environment) Provided environment (must, implemented, AC 3/3)
 - [REQ-ENV-02](requirements/environment.md#req-env-02--deployed-version-check) Deployed version check (should, implemented, AC 3/3)
 - [REQ-ENV-07](requirements/environment.md#req-env-07--default-environment-selection) Default environment selection (should, implemented, AC 3/3)
@@ -242,7 +242,7 @@ the evidence bundle as pipeline artifacts.
 <!-- prettier-ignore-start -->
 <!-- req-stage:later -->
 - [REQ-CTX-08](requirements/context.md#req-ctx-08--import-existing-manual-test-cases) Import existing manual test cases (could, implemented, AC 4/4)
-- [REQ-PLAN-08](requirements/plan.md#req-plan-08--test-depth-and-budget) Test depth and budget (should, implemented, AC 3/3)
+- [REQ-PLAN-08](requirements/plan.md#req-plan-08--test-depth-and-budget) Test depth and budget (should, implemented, AC 4/4)
 - [REQ-PLAN-10](requirements/plan.md#req-plan-10--approval-by-a-person-or-by-models-auditable) Approval by a person or by models, auditable (could, proposed, AC 0/6)
 - [REQ-PLAN-11](requirements/plan.md#req-plan-11--exploration-before-planning-accepted-by-a-person) Exploration before planning, accepted by a person (should, proposed, AC 0/8)
 - [REQ-ENV-08](requirements/environment.md#req-env-08--message-capture-email-sms-and-webhooks) Message capture: email, SMS and webhooks (should, implemented, AC 5/5)
