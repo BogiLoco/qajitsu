@@ -772,9 +772,14 @@ async function executeCases(
   const blocked = new Map<string, string>();
   // REQ-PLAN-08/AC2: what this run will take, from the cases and the project's past runs.
   io.write(
-    `${formatEstimate(plan, await readRunHistory(rootOf(project, ports), ws.runId), {
-      web: Math.max(0, webCombinations(project.config.web).length - 1),
-    })}\n`,
+    // Only the cases that will run count (--cases); the estimate said 20 for 3 chosen (exploratory testing F27).
+    `${formatEstimate(
+      { ...plan, cases: plan.cases.filter((c) => !notRun.has(c.id)) },
+      await readRunHistory(rootOf(project, ports), ws.runId),
+      {
+        web: Math.max(0, webCombinations(project.config.web).length - 1),
+      },
+    )}\n`,
   );
   // REQ-PLAN-08/AC3: the run's budget; remaining cases are NOT_RUN with the reason once a limit is reached.
   const budget = project.config.budget;

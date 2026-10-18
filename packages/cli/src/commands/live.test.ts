@@ -30,6 +30,8 @@ describe("run one case with a live view (REQ-EXEC-16)", () => {
     expect(r.exitCode).toBe(2);
     expect(r.out).toMatch(/\| TC-01 \| .* \| NOT_RUN \|/);
     expect(r.out).toMatch(/\| TC-02 \| .* \| PASSED \|/);
+    // REQ-PLAN-08/AC4 (exploratory testing F27): the estimate counts the chosen cases only (it said 20 for 3 chosen).
+    expect(r.out).toMatch(/^Estimate: 1 api execution\(s\)/m);
     expect(await p.status("TC-01")).toEqual([
       expect.objectContaining({ outcome: "skipped", error: "not selected (--cases)" }),
     ]);
