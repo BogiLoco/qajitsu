@@ -1,15 +1,26 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { registerProject, setActiveProject } from "@qajitsu/core";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { formatDoctor, runDoctor } from "./doctor.js";
 import { createProgram } from "./program.js";
 import { readVersion } from "./version.js";
 
+/** Temporary folders of this file, removed after each test (they were left behind on every run). */
+const dirs: string[] = [];
+afterEach(() => {
+  for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
+});
+const tempDir = (): string => {
+  const d = mkdtempSync(join(tmpdir(), "qj-cli-"));
+  dirs.push(d);
+  return d;
+};
+
 function run(
   args: string[],
-  cwd = mkdtempSync(join(tmpdir(), "qj-cli-")),
+  cwd = tempDir(),
   nodeVersion = "v22.22.0",
   ports?: Parameters<typeof createProgram>[1]["ports"],
 ) {
@@ -43,7 +54,7 @@ describe("qajitsu CLI (REQ-GEN-05)", () => {
   });
 
   it("doctor passes with project config and a supported Node.js", async () => {
-    const cwd = mkdtempSync(join(tmpdir(), "qj-cli-"));
+    const cwd = tempDir();
     mkdirSync(join(cwd, ".qa"));
     writeFileSync(
       join(cwd, ".qa", "qa.project.yaml"),

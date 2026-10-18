@@ -1,9 +1,9 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TicketKeySchema, xlsxRows } from "@qajitsu/core";
 import { zip } from "@qajitsu/report";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { createFakeFetch, jsonReply, testDeps } from "../../../../tests/support/fake-fetch.js";
 import {
   createFileCaseSource,
@@ -239,7 +239,16 @@ describe("TestRail test cases (REQ-CTX-08/AC1)", () => {
 });
 
 describe("CSV and Excel test cases (REQ-CTX-08/AC1)", () => {
-  const dir = () => mkdtemp(join(tmpdir(), "qj-cases-"));
+  // Removed after each test; they were left in the temp folder on every run.
+  const made: string[] = [];
+  afterEach(async () => {
+    for (const d of made.splice(0)) await rm(d, { recursive: true, force: true });
+  });
+  const dir = async () => {
+    const d = await mkdtemp(join(tmpdir(), "qj-cases-"));
+    made.push(d);
+    return d;
+  };
 
   it("parses quoted, semicolon-separated CSV with CRLF line ends", () => {
     expect(parseCsv('﻿id;title\r\n1;"a; ""b"""\r\n\r\n2;"multi\nline"')).toEqual([

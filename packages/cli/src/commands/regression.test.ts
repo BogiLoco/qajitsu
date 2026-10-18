@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseEventLines, PlanSchema, sha256 } from "@qajitsu/core";
@@ -26,6 +26,7 @@ const writePack = async (
   edit: (pack: Record<string, unknown>) => void = () => undefined,
 ): Promise<{ root: string; dir: string }> => {
   const root = await mkdtemp(join(tmpdir(), "qj-packs-"));
+  cleanups.push(() => rm(root, { recursive: true, force: true }));
   const dir = join(root, "tests", "qajitsu", "DEMO-1");
   await mkdir(dir, { recursive: true });
   const specs: Record<string, string> = {};
@@ -153,6 +154,7 @@ describe("qj regression (REQ-EXEC-17)", () => {
     expect(none.exitCode).toBe(2);
     expect(none.err).toContain("No regression packs found in");
     const empty = await mkdtemp(join(tmpdir(), "qj-empty-"));
+    cleanups.push(() => rm(empty, { recursive: true, force: true }));
     expect((await p.run(["regression", "--from", empty])).exitCode).toBe(2);
   }, 240_000);
 

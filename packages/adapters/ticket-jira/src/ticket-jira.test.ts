@@ -1,9 +1,9 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { TicketKeySchema } from "@qajitsu/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 import { ticketSourceContract } from "../../../../tests/contract/ticket-source.contract.js";
 import {
   createFakeFetch,
@@ -278,6 +278,7 @@ describe("release queries (REQ-PUB-09)", () => {
 
   it("REQ-PUB-09/AC1: the file source matches fixVersions and sprint fields", async () => {
     const dir = await mkdtemp(join(tmpdir(), "qj-release-"));
+    onTestFinished(() => rm(dir, { recursive: true, force: true }));
     const ticket = (key: string, extra: object) =>
       writeFile(
         join(dir, `${key}.json`),
