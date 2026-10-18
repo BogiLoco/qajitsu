@@ -9,7 +9,7 @@ const CASE_PLATFORMS: Record<string, { readonly platforms: readonly UiPlatform[]
 };
 
 /** Why an expectation of a plan cannot be checked as it is (REQ-PLAN-09). */
-export type PlanFlagKind = "placeholder" | "schema" | "description-only" | "selector";
+export type PlanFlagKind = "placeholder" | "schema" | "description-only" | "selector" | "account";
 
 /** One expectation a test could not compare with anything meaningful. */
 export interface PlanFlag {
@@ -101,12 +101,11 @@ const typeMatches = (schemaType: unknown, v: unknown): boolean => {
   return types.some((t) => t === actual || (t === "integer" && actual === "number" && Number.isInteger(v)));
 };
 
-/** The response schema of the call a step names (`POST /cart/discount`) for a status. */
-function responseSchema(
+/** The OpenAPI operation of the call a step names (`POST /cart/discount`). */
+function operationOf(
   doc: Schema,
   action: string,
-  status: number | undefined,
-): { schema: Schema; where: string } | undefined {
+): { operation: Schema; verb: string; path: string } | undefined {
   const m = /\b(GET|POST|PUT|PATCH|DELETE)\s+(\/[^\s?]*)/i.exec(action) as [string, string, string] | null;
   if (!m) return undefined;
   const [, verb, path] = m;
@@ -118,7 +117,32 @@ function responseSchema(
     ).test(path),
   );
   const operation = entry && isObject(entry[1]) ? entry[1][method] : undefined;
-  if (!isObject(operation) || !isObject(operation["responses"])) return undefined;
+  return isObject(operation) ? { operation, verb: verb.toUpperCase(), path } : undefined;
+}
+
+/**
+ * Whether the documented operation needs a logged-in caller: it answers 401, or it is under `security` (its own, else
+ * the document's); `security: []` on an operation opts it out.
+ */
+function needsLogin(doc: Schema, action: string): string | undefined {
+  const op = operationOf(doc, action);
+  if (!op) return undefined;
+  const responses = isObject(op.operation["responses"]) ? op.operation["responses"] : {};
+  const security = "security" in op.operation ? op.operation["security"] : doc["security"];
+  const secured = Array.isArray(security) && security.length > 0;
+  return "401" in responses || secured ? `${op.verb} ${op.path}` : undefined;
+}
+
+/** The response schema of the call a step names (`POST /cart/discount`) for a status. */
+function responseSchema(
+  doc: Schema,
+  action: string,
+  status: number | undefined,
+): { schema: Schema; where: string } | undefined {
+  const op = operationOf(doc, action);
+  if (!op) return undefined;
+  const { operation, verb, path } = op;
+  if (!isObject(operation["responses"])) return undefined;
   const responses = operation["responses"];
   const code = status !== undefined ? String(status) : Object.keys(responses).find((k) => /^2\d\d$/.test(k));
   if (code === undefined) return undefined;
@@ -126,7 +150,7 @@ function responseSchema(
   const content = isObject(response) && isObject(response["content"]) ? response["content"] : undefined;
   const json = content && isObject(content["application/json"]) ? content["application/json"] : undefined;
   const schema = json ? resolve(doc, json["schema"]) : undefined;
-  return schema ? { schema, where: `${verb.toUpperCase()} ${path} ${code}` } : undefined;
+  return schema ? { schema, where: `${verb} ${path} ${code}` } : undefined;
 }
 
 /** Checks one expected field against a response schema; returns why it does not fit, if it does not. */
@@ -174,7 +198,19 @@ export function checkPlanExpectations(
   const doc = isObject(options.openapi) ? options.openapi : undefined;
   const inventory =
     options.inventory && options.inventory.selectors.length > 0 ? options.inventory : undefined;
-  for (const c of plan.cases)
+  for (const c of plan.cases) {
+    // REQ-PLAN-09/AC9: calls that answer 401 without login need a test account (once per case).
+    const account = Object.values(c.data).some((v) => typeof v === "string" && /^user:[\w.-]+$/.test(v));
+    if (doc && !account && c.type === "api") {
+      const step = c.steps.find((s) => s.expect.status !== 401 && needsLogin(doc, s.action) !== undefined);
+      if (step)
+        flags.push({
+          caseId: c.id,
+          stepId: step.id,
+          kind: "account",
+          reason: `${needsLogin(doc, step.action) ?? ""} needs a login (401 without one), but the case names no test account: add one to data, e.g. user: user:standard`,
+        });
+    }
     for (const s of c.steps) {
       const e = s.expect;
       const flag = (kind: PlanFlagKind, reason: string, field?: string, value?: unknown): void => {
@@ -277,6 +313,7 @@ export function checkPlanExpectations(
             );
         }
     }
+  }
   return flags;
 }
 

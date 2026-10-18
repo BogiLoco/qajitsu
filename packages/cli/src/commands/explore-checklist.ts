@@ -56,6 +56,7 @@ export function sessionClaims(
       source: checks.length > 0 ? "person" : "explorer",
       actions: e.actions,
       ...(e.actions.length === 0 ? { notDone: mask(e.not_done ?? "not done") } : {}),
+      ...(e.corrected !== undefined ? { corrected: mask(e.corrected) } : {}),
     })),
     findings: report.findings.map((f) => ({ text: mask(f.text), actions: f.actions })),
   };

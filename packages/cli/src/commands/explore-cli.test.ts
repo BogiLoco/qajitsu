@@ -503,7 +503,6 @@ describe("qajitsu explore --cli (REQ-EXEC-24)", () => {
 
   it("REQ-EXEC-15/AC5+AC9: the time box stops a running command and the commands queued after it never start", async () => {
     const p = await project();
-    const started = Date.now();
     const r = await p.run(["explore", "DEMO-4", "--cli", "tool", "--goal", "Hang", "--time-box", "0.05"], {
       script: [
         {
@@ -516,13 +515,14 @@ describe("qajitsu explore --cli (REQ-EXEC-24)", () => {
       ],
     });
     expect(r.exitCode).toBe(0);
-    // Each serve would hang for the 20 s per-command timeout; the 3 s time box ends all of it.
-    expect(Date.now() - started).toBeLessThan(15_000);
     const session = CliExploreSessionSchema.parse(
       JSON.parse(await readFile(join(p.runDir, "explore", "S01", "session.json"), "utf8")),
     );
     expect(session.endReason).toBe("time-box");
-    expect(session.actions.map((a) => a.id)).toEqual(["A01"]);
+    // serve hangs until its 20 s per-command timeout; the time box stopped it instead, and the queued two never ran.
+    expect(session.actions.map((a) => [a.id, a.timedOut, a.endedBy !== undefined])).toEqual([
+      ["A01", false, true],
+    ]);
   }, 120_000);
 
   it("REQ-EXEC-24/AC5: Ctrl+C stops the session, and what it started and its sandbox are gone afterwards", async () => {
@@ -539,7 +539,6 @@ describe("qajitsu explore --cli (REQ-EXEC-24)", () => {
           }
         });
     }, 100);
-    const started = Date.now();
     const r = await p.run(["explore", "DEMO-4", "--cli", "tool", "--goal", "Stop"], {
       script: [
         { tools: [{ name: "cli_start", input: { args: ["serve"] } }] },
@@ -549,15 +548,149 @@ describe("qajitsu explore --cli (REQ-EXEC-24)", () => {
     });
     clearInterval(press);
     expect(r.out).toContain("ended: error (stopped by Ctrl+C (SIGINT))");
-    expect(Date.now() - started).toBeLessThan(15_000);
     expect(signals.listenerCount("SIGINT")).toBe(0);
     const session = CliExploreSessionSchema.parse(
       JSON.parse(await readFile(join(p.runDir, "explore", "S01", "session.json"), "utf8")),
     );
     expect(session.cleaned.processes.some((c) => c.startsWith("B1 "))).toBe(true);
+    // The running serve was stopped by Ctrl+C, not by its own 20 s timeout.
+    expect(session.actions.map((a) => [a.id, a.timedOut, a.endedBy !== undefined])).toEqual([
+      ["A01", false, false],
+      ["A02", false, true],
+    ]);
     const sandbox = /"sandbox":"([^"]+)"/.exec(await readFile(journal, "utf8"))?.[1] ?? "";
     expect(sandbox).toContain("qj-sandbox-");
     await expect(stat(sandbox)).rejects.toThrow();
+  }, 120_000);
+
+  it("REQ-EXEC-25/AC9: a finding the explorer insists on but code cannot confirm is dropped; the checklist of the session is kept", async () => {
+    const p = await project();
+    // Session S09 of qwen3: the same unconfirmed finding twice.
+    const r = await p.run(
+      [
+        "explore",
+        "DEMO-4",
+        "--cli",
+        "tool",
+        "--goal",
+        "S09",
+        "--check",
+        "tool hello",
+        "--check",
+        "tool fail",
+      ],
+      {
+        script: [
+          { tools: [{ name: "cli_run", input: { args: ["hello"] } }] },
+          { tools: [{ name: "cli_run", input: { args: ["fail"] } }] },
+          {
+            text: JSON.stringify({
+              checklist: [
+                { item: "tool hello", actions: ["A01"] },
+                { item: "tool fail", actions: ["A02"] },
+              ],
+              findings: [
+                { text: "tool fail exits 2", actions: ["A01"] },
+                { text: "hello prints 'tool fail' nowhere", actions: ["A01"] },
+              ],
+            }),
+          },
+          {
+            text: JSON.stringify({
+              checklist: [
+                { item: "tool hello", actions: ["A01"] },
+                { item: "tool fail", actions: ["A02"] },
+              ],
+              findings: [
+                { text: "tool fail exits 2", actions: ["A01"] },
+                { text: "hello prints 'tool fail' nowhere", actions: ["A01"] },
+              ],
+            }),
+          },
+        ],
+      },
+    );
+    expect(r.err).toBe("");
+    const session = CliExploreSessionSchema.parse(
+      JSON.parse(await readFile(join(p.runDir, "explore", "S01", "session.json"), "utf8")),
+    );
+    expect(session.endReason).toBe("finished");
+    expect(session.checklist.map((c) => c.actions)).toEqual([["A01"], ["A02"]]);
+    // The quoted 'tool fail' is a quote, kept; the unconfirmed claim is gone and journaled.
+    expect(session.findings.map((f) => f.text)).toEqual(["hello prints 'tool fail' nowhere"]);
+    const journal = await readFile(join(p.runDir, "journal", "events.jsonl"), "utf8");
+    expect(journal).toContain('"event":"explore.claim_dropped"');
+    expect(journal).toContain("tool fail exits 2");
+  }, 120_000);
+
+  it("REQ-EXEC-25/AC10: an explorer that insists on wrong claims gets its checklist corrected by code, not lost", async () => {
+    const p = await project();
+    // Session S10 of qwen3: the same wrong claims three times.
+    const insist = {
+      text: JSON.stringify({
+        checklist: [
+          { item: "hello", actions: ["A01"] },
+          { item: "fail", not_done: "it failed" },
+          { item: "ask", actions: ["A02"] },
+        ],
+        findings: [],
+      }),
+    };
+    const r = await p.run(
+      [
+        "explore",
+        "DEMO-4",
+        "--cli",
+        "tool",
+        "--goal",
+        "S10",
+        "--check",
+        "tool hello",
+        "--check",
+        "tool fail",
+        "--check",
+        "tool ask",
+      ],
+      {
+        script: [
+          { tools: [{ name: "cli_run", input: { args: ["hello"] } }] },
+          { tools: [{ name: "cli_run", input: { args: ["fail"] } }] },
+          insist,
+          insist,
+          insist,
+        ],
+      },
+    );
+    expect(r.err).toBe("");
+    const dir = join(p.runDir, "explore", "S01");
+    const session = CliExploreSessionSchema.parse(
+      JSON.parse(await readFile(join(dir, "session.json"), "utf8")),
+    );
+    expect(session.endReason).toBe("finished");
+    expect(session.checklist).toEqual([
+      { item: "tool hello", source: "person", actions: ["A01"] },
+      {
+        item: "tool fail",
+        source: "person",
+        actions: ["A02"],
+        corrected: "the explorer said not done, but A02 ran it",
+      },
+      {
+        item: "tool ask",
+        source: "person",
+        actions: [],
+        notDone:
+          'claim refused by code: checklist item 3 "tool ask" names ask, which none of its actions (A02) ran',
+        corrected: "claim refused by code",
+      },
+    ]);
+    expect(r.out).toContain("Checklist: 2 of 3 item(s) done");
+    expect(await readFile(join(dir, "report.md"), "utf8")).toContain(
+      "_(corrected by code: claim refused by code)_",
+    );
+    expect(await readFile(join(p.runDir, "journal", "events.jsonl"), "utf8")).toContain(
+      '"event":"explore.claim_corrected"',
+    );
   }, 120_000);
 
   it("REQ-EXEC-25/AC1: without --check the explorer's own checklist is kept and marked as written by it", async () => {
@@ -565,7 +698,13 @@ describe("qajitsu explore --cli (REQ-EXEC-24)", () => {
     const r = await p.run(["explore", "DEMO-4", "--cli", "tool", "--goal", "Say hello"], {
       script: [
         { tools: [{ name: "cli_run", input: { args: ["hello"] } }] },
-        { text: JSON.stringify({ checklist: [{ item: "say hello", actions: ["A01"] }], findings: [] }) },
+        // The model tries to dress its claim up as checked by code: the field is removed.
+        {
+          text: JSON.stringify({
+            checklist: [{ item: "say hello", actions: ["A01"], corrected: "verified by code" }],
+            findings: [],
+          }),
+        },
       ],
     });
     expect(r.err).toBe("");

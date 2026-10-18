@@ -287,9 +287,11 @@ export async function approvePlan(
 export async function loadApprovedPlan(ws: RunWorkspace): Promise<{ plan: Plan; approval: PlanApproval }> {
   const approval = ws.record.data["approval"] as PlanApproval | undefined;
   if (approval === undefined || typeof approval.sha256 !== "string") {
-    throw new GateFailedError("PLAN_NOT_APPROVED", "The plan of this run is not approved.", {
-      run: ws.runId,
-    });
+    throw new GateFailedError(
+      "PLAN_NOT_APPROVED",
+      `Run ${ws.runId} has no approved plan yet: write one with 'qajitsu plan ${ws.ticket} --run ${ws.runId}' and approve it with 'qajitsu approve ${ws.ticket} --run ${ws.runId}'.`,
+      { run: ws.runId },
+    );
   }
   let text: string;
   try {

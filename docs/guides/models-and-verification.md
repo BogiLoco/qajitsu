@@ -29,6 +29,14 @@ Ollama; without it Ollama's default applies:
 qwen3:14b: { tools: true, structured_output: true, vision: false, context_window: 65536, think: true }
 ```
 
+A local model answers only when its whole reply is ready. QAJitsu waits up to `timeout_s` per request for `ollama`
+and `openai-compatible` providers (default 1800 seconds) instead of the HTTP client's usual 5 minutes, so a thinking
+model that first loads into memory is not cut off; set it lower to fail faster:
+
+```yaml
+local: { type: ollama, base_url: http://localhost:11434, timeout_s: 900 }
+```
+
 `qajitsu doctor --models` probes every role and lists missing capabilities. A role refuses a model without a
 capability it needs (tools, structured output, vision for the auditor, context window).
 

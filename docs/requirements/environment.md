@@ -94,8 +94,9 @@ QAJitsu warns when the environment does not run the code being tested.
 
 **Acceptance criteria**
 
-- [x] AC1: Without `--env` or `--build`, `environments.default` from project config is used.
+- [x] AC1: Without `--env` or `--build`, `environments.default` from project config is used (after the `qj env up` environment of AC3).
 - [x] AC2: Without a default, interactive runs ask and CI runs fail with a configuration error.
+- [x] AC3: Without `--env` or `--build`, a run whose environment `qj env up` started, and which still answers, uses it before `environments.default`; the run says so and journals it (`env.selected`). `--env` always wins.
 
 ### REQ-ENV-08 · Message capture: email, SMS and webhooks
 

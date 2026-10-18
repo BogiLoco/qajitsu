@@ -109,11 +109,16 @@ describe("start fresh and clean up (REQ-PRJ-07)", () => {
 
   it("REQ-PRJ-07/AC5: archive hides a project from the list and its ticket prefix; unarchive brings it back", async () => {
     const p = await setup();
-    expect((await p.run(["projects", "archive", "demo"])).out).toContain("Project demo archived");
+    const archived = (await p.run(["projects", "archive", "demo"])).out;
+    expect(archived).toContain("Project demo archived");
+    // Exploratory testing F24: the active project is no longer active, and the messages say so.
+    expect(archived).toContain("It was the active project; none is active now.");
     expect((await p.run(["projects", "list"])).out).toContain("No projects yet");
     expect((await p.run(["projects", "list", "--archived"])).out).toMatch(/demo {2}archived/);
     expect((await p.run(["fetch", "DEMO-1"])).err).toContain("[PROJECT_NOT_SELECTED]");
-    await p.run(["projects", "unarchive", "demo"]);
+    expect((await p.run(["projects", "unarchive", "demo"])).out).toContain(
+      "Project demo restored. No project is active: make it active with 'qajitsu use demo'.",
+    );
     expect((await p.run(["fetch", "DEMO-1"])).out.split("\n")[0]).toBe("Project: demo (ticket prefix DEMO)");
   }, 120_000);
 

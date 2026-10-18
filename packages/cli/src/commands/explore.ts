@@ -12,11 +12,10 @@ import {
   acquireRunLock,
   listPlanVersions,
   readPlan,
-  resolveEnvironment,
   writePlanVersion,
+  type EventLog,
   type ExploreSession,
   type Plan,
-  type ResolvedEnvironment,
   type TestCase,
 } from "@qajitsu/core";
 import { renderExploreHtml, renderExploreMarkdown } from "@qajitsu/report";
@@ -28,6 +27,7 @@ import { checkOption, checklistLine, sessionClaims } from "./explore-checklist.j
 import { createExploreTools } from "./explore-tools.js";
 import type { CommandIO } from "./fetch.js";
 import { writeCliPromotion, type CliExplorePorts } from "./explore-cli.js";
+import { runningBuild } from "./env-up-reuse.js";
 import { headlessFor, liveView } from "./live.js";
 import { chooseEnvironment, type RunPorts } from "./run.js";
 
@@ -86,32 +86,6 @@ export const nextSessionId = async (session: RunSession): Promise<string> => {
     .map(Number);
   return `S${String(Math.max(0, ...used) + 1).padStart(2, "0")}`;
 };
-
-/**
- * The environment `qj env up` started from this run's worktree, when it still answers (REQ-EXEC-15/AC1). It listens on
- * 127.0.0.1 only, like a `qj run --build` environment, so no allowlist entry is needed for its random port.
- */
-async function runningBuild(
-  session: RunSession,
-  fetchFn: typeof globalThis.fetch,
-): Promise<ResolvedEnvironment | undefined> {
-  const recorded = session.ws.record.data["build"] as
-    { readonly services?: Record<string, { readonly url?: string }> } | undefined;
-  const services = Object.entries(recorded?.services ?? {});
-  const base = session.project.config.build?.base_service;
-  const url = (services.find(([name]) => name === base) ?? services[0])?.[1].url;
-  if (url === undefined || !/^http:\/\/127\.0\.0\.1:\d+$/.test(url)) return undefined;
-  const env = await resolveEnvironment({
-    config: session.project.config,
-    qaDir: session.project.qaDir,
-    buildBaseUrl: url,
-  }).catch(() => undefined);
-  if (!env) return undefined;
-  const reached = await createRemoteEnvProvider(env, fetchFn, { readVersion: false })
-    .start()
-    .catch(() => undefined);
-  return reached?.health.ok ? env : undefined;
-}
 
 /**
  * `qajitsu explore <TICKET> --goal <text> [--time-box <min>] [--max-steps <n>] [--env <profile|url>]`: an
@@ -238,11 +212,37 @@ export async function runExplore(
       ...(login ? { sessions: login.sessions } : {}),
     });
     const accounts = login ? Object.keys(login.sessions) : [];
+    // Exploratory testing F23: each action, rejected answer and observation shows as it happens, as in --cli sessions.
+    const watched: EventLog = {
+      emit(stage, actor, event, details) {
+        events.emit(stage, actor, event, details);
+        const d = (details ?? {}) as {
+          id?: string;
+          action?: string;
+          target?: string;
+          ok?: boolean;
+          error?: string;
+          url?: string;
+          errors?: string[];
+          severity?: string;
+          title?: string;
+        };
+        const line =
+          event === "explore.action"
+            ? `${d.id ?? ""}  ${d.action ?? ""} ${d.target ?? ""} → ${d.ok === true ? "ok" : `failed: ${d.error ?? ""}`}`
+            : event === "explore.answer_rejected"
+              ? `✘ answer rejected: ${(d.errors ?? []).join("; ")}`
+              : event === "explore.observation"
+                ? `● ${d.id ?? ""} [${d.severity ?? ""}] ${d.title ?? ""}`
+                : undefined;
+        if (line !== undefined) io.write(`${printable(masker.maskText(line))}\n`);
+      },
+    };
     const recorder = createExploreTools({
       driver: await browser.driver(),
       store,
       mask: (t) => masker.maskText(t),
-      events,
+      events: watched,
       maxSteps,
       accounts,
       now: ports.now,
@@ -268,7 +268,7 @@ export async function runExplore(
         {
           ws,
           models: session.models,
-          events,
+          events: watched,
           usage,
           now: ports.now,
           maskJson: (v: unknown) => masker.maskJson(v),

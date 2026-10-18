@@ -30,4 +30,9 @@ export const ADAPTER = {
   requirements: ["REQ-ENV-03", "REQ-ENV-04", "REQ-ENV-05", "REQ-WS-02"],
   status: "implemented",
 } as const;
-export { removeRunResources, type RemovedResources } from "./cleanup.js";
+export {
+  removeRunResources,
+  runningEnvironments,
+  type RemovedResources,
+  type RunningEnvironment,
+} from "./cleanup.js";

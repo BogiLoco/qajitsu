@@ -46,7 +46,7 @@ Makes a project the active one and shows its open work (REQ-PRJ-03).
 
 Exit codes: `0` switched, `3` unknown project.
 
-### `qajitsu projects list`
+### `qajitsu projects list` (also `qajitsu projects`)
 
 Every registered project with readiness, ticket prefixes, open work and its `.qa/` folder; `*` marks the active one.
 
@@ -276,7 +276,8 @@ back to it once with the closest recorded ones. A failed web or mobile attempt k
 page or screen showed, masked), which the healer gets; mobile cases are healed too and a healed case is never PASSED.
 
 - `--run <id>`: run id (default: latest run of the ticket)
-- `--env <profile|url>`: environment profile from `.qa/envs` or a URL (default: `environments.default`)
+- `--env <profile|url>`: environment profile from `.qa/envs` or a URL (default: the environment `qajitsu env up`
+  started for this run while it answers, else `environments.default`)
 - `--build`: build the application from the fetched worktrees
 - `--keep`: with `--build`, keep containers and worktrees after the run
 - `--set <service.VAR=value>`: with `--build`, override an overridable service variable (repeatable)
@@ -430,7 +431,8 @@ Exit codes: `0` every ticket ready, `1` not ready (or no tickets), `2` publishin
 An exploratory session (REQ-EXEC-15): the explorer agent explores the application towards a goal through browser
 actions that QAJitsu performs and records (a screenshot after each action, video, trace, network and console, all in
 the evidence manifest). It reports observations with steps to reproduce for a person to assess, never statuses, and
-writes `explore/<session>/report.html` and `report.md` for review. Needs a fetched run (`qajitsu fetch`).
+writes `explore/<session>/report.html` and `report.md` for review. Needs a fetched run (`qajitsu fetch`). The terminal
+shows each action, rejected answer and observation as it happens.
 
 - `--goal <text>`: what to explore (required), e.g. "checkout around the terms change"
 - `--run <id>`: run id (default: latest run of the ticket)
@@ -451,7 +453,12 @@ The explorer's answer is checked by code, not trusted (REQ-EXEC-15/AC8, REQ-EXEC
 it reports every checklist item, in order, as done with the actions that did it or as not done with the reason;
 each finding cites actions; an action id that was not recorded is refused. While the step budget lasts, items left
 undone are sent back once to be done. In command-line sessions every flag named in an item, a finding or the comment
-must be in the arguments of an action that ran. Refused answers are journaled (`explore.answer_rejected`). A session
+must be in the arguments of an action that ran; text the explorer quotes ('…', "…") is a quote of output, not a
+claim. Refused answers are journaled (`explore.answer_rejected`). A finding or comment code cannot confirm is sent back
+once; if the explorer insists, it is dropped and journaled (`explore.claim_dropped`). An explorer that keeps making
+checklist claims code refuses gets its last answer corrected by code instead of losing the session: refused claims
+become "not done", items an action ran get that action, each marked "corrected by code" in the report and journaled
+(`explore.claim_corrected`). A session
 that ends by the time box, the step budget or an error before an accepted answer lists every `--check` item as not
 reached. The report shows the checklist, the findings and the explorer's comment last; the terminal says how many
 items were done and names those that were not:
@@ -729,8 +736,9 @@ Exit codes: `0` listed (also when there are none), `3` errors or an unknown run.
 
 The active project at a glance (REQ-PRJ-05): configuration readiness, default environment, knowledge base, and every
 ticket with unfinished work, its state ("plan v2 waiting for approval", "results not published", "interrupted during
-run") and the command that continues it, with the ticket's latest notes. Computed from the run folders;
-`context.json` in the project home is only an index of it.
+run") and the command that continues it, with the ticket's latest notes, then the environments still running for its
+runs (`run --build`, `env up --detach`) with their URLs and `qajitsu clean` to stop them. Computed from the run
+folders; `context.json` in the project home is only an index of it.
 
 - `--all`: every project
 - `--rebuild`: rebuild `context.json` from the run folders

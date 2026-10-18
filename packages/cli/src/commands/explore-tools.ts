@@ -130,6 +130,7 @@ export function createExploreTools(ctx: {
       action,
       target: record.target,
       ok: record.ok,
+      ...(record.error !== undefined ? { error: record.error } : {}),
       url: record.url,
     });
     return `${id} ${error === undefined ? "done" : `failed: ${error}`}. Page: ${path()}`;

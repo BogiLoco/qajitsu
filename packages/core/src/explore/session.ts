@@ -41,7 +41,9 @@ export const ChecklistItemSchema = z.strictObject({
   item: z.string().min(1).max(300),
   source: z.enum(["person", "explorer"]),
   actions: z.array(ActionIdSchema).max(40),
-  notDone: z.string().max(500).optional(),
+  notDone: z.string().max(1000).optional(),
+  /** What code changed in the explorer's claim and why (REQ-EXEC-25/AC10); absent when it stood as given. */
+  corrected: z.string().max(500).optional(),
 });
 
 /** One thing the explorer reports having seen, with the actions that show it (REQ-EXEC-25/AC2). */

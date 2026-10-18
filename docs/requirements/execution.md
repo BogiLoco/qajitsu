@@ -44,6 +44,7 @@ The author agent writes test files for approved cases only. Exploring the app th
 - [x] AC2: Plan coverage: every plan step has a `step()` and at least one `verify()`.
 - [x] AC3: Assertion lock: `verify()` calls must use `plan.expect(...)`; literals and missing calls are rejected.
 - [x] AC4: A spec failing checks returns to the author with the errors; after 2 failed attempts the case is BLOCKED.
+- [x] AC5: A case whose plan runs it as a test account (`data.user`) has a spec that logs in as that account (`api.as(...)` or `ui.as(...)`) and, for api cases, makes its calls with the client `api.as(...)` returns (a dropped client or a call on the anonymous `api` outside a step that expects the 401 is refused); a spec that does not is refused like a missing `verify()`, so a test that forgot to log in ends BLOCKED, not FAILED as if the product were broken.
 
 ### REQ-EXEC-04 · API testing
 
@@ -217,6 +218,7 @@ session. It reports observations for a human to assess, never statuses.
 - [x] AC7: `--headed` shows the browser while the agent explores and `--slow-mo <ms>` slows every action down, checked like `qj run` (a display is needed); both are journaled with the session.
 - [x] AC8: Act before summarising, for every explorer (browser, command line and any later kind): code rejects the final summary while the session has no recorded action and asks the agent to act, with its tools still available; a session whose agent never acts ends with `error` and an empty summary, never with a summary of testing that did not happen. Looking at the page is not an action.
 - [x] AC9: Actions the agent asks for at once (several tool calls in one turn) are performed one at a time, in the order asked, for every explorer: each gets its own id, its own evidence and its own place in the live view, and none of them is lost.
+- [x] AC10: The terminal of a browser session shows each action (what, on what, ok or the error), each rejected answer of the explorer and each observation as it happens, masked and stripped of control characters, as command-line sessions do (REQ-EXEC-24/AC9).
 
 ### REQ-EXEC-16 · Run one case with a live view
 
@@ -410,3 +412,5 @@ session can never describe testing that did not happen or silently skip part of 
 - [x] AC6: The terminal output after a session says how many checklist items were done and names those not done.
 - [x] AC7: In command-line sessions an item or finding that names a subcommand after the tool's name ("qj doctor") must cite an action that ran that subcommand; citing an action that ran something else is rejected.
 - [x] AC8: An item claimed not done although an action of the session ran everything it names (its subcommand and flags) is rejected: a command that ran is done whatever its exit code or error, and that error is the result to report.
+- [x] AC9: Findings and the explorer's comment that code cannot confirm are sent back once; if the explorer insists, they are dropped from the session and journaled (`explore.claim_dropped`) while the checklist and the confirmed findings are kept. Text the explorer quotes ('…' or "…") cites what a tool printed and is not checked as a command it ran.
+- [x] AC10: An explorer that keeps claiming what code refuses does not lose its session: its last answer is corrected by code, never in its favour. An item whose claim is refused becomes not done with the refusal as the reason; an item an action did run (its subcommand and flags) gets that action; an item it did not report is not done. Each change is marked in the session and the report ("corrected by code") and journaled (`explore.claim_corrected`); a model cannot set that mark itself.

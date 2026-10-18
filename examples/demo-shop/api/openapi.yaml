@@ -1,8 +1,11 @@
 openapi: 3.0.3
 info: { title: demo-shop API, version: "1.0.0" }
+# Every operation needs a logged-in user (bearer token from POST /auth/login) except /health and /auth/login.
+security: [{ bearer: [] }]
 paths:
   /health:
     get:
+      security: []
       responses:
         "200":
           {
@@ -12,6 +15,42 @@ paths:
                 application/json:
                   { schema: { type: object, required: [status], properties: { status: { type: string } } } },
               },
+          }
+  /auth/login:
+    post:
+      security: []
+      requestBody:
+        content:
+          application/json:
+            {
+              schema:
+                {
+                  type: object,
+                  required: [username, password],
+                  properties: { username: { type: string }, password: { type: string } },
+                },
+            }
+      responses:
+        "200":
+          {
+            description: logged in,
+            content:
+              {
+                application/json:
+                  {
+                    schema:
+                      {
+                        type: object,
+                        required: [token, expires_at],
+                        properties: { token: { type: string }, expires_at: { type: string } },
+                      },
+                  },
+              },
+          }
+        "401":
+          {
+            description: invalid credentials,
+            content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } },
           }
   /me:
     get:
@@ -36,6 +75,11 @@ paths:
   /admin/seed:
     get:
       responses:
+        "401":
+          {
+            description: unauthorized,
+            content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } },
+          }
         "200":
           {
             description: seed markers,
@@ -48,6 +92,11 @@ paths:
           }
     post:
       responses:
+        "401":
+          {
+            description: unauthorized,
+            content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } },
+          }
         "201":
           {
             description: marker stored,
@@ -79,6 +128,11 @@ paths:
   /cart/lines:
     post:
       responses:
+        "401":
+          {
+            description: unauthorized,
+            content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } },
+          }
         "201":
           {
             description: cart,
@@ -97,6 +151,11 @@ paths:
   /cart/discount:
     post:
       responses:
+        "401":
+          {
+            description: unauthorized,
+            content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } },
+          }
         "200":
           {
             description: cart,
@@ -110,6 +169,11 @@ paths:
   /orders:
     post:
       responses:
+        "401":
+          {
+            description: unauthorized,
+            content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } },
+          }
         "201":
           description: order
           content:
@@ -128,6 +192,8 @@ paths:
             content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } },
           }
 components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer }
   schemas:
     Seeds:
       { type: object, required: [markers], properties: { markers: { type: array, items: { type: string } } } }

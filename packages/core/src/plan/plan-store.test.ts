@@ -137,6 +137,8 @@ describe("plan store (REQ-PLAN-02, REQ-PLAN-04, REQ-PLAN-06)", () => {
 
   it("REQ-PLAN-06/AC3: an unapproved run cannot load an approved plan", async () => {
     await expect(loadApprovedPlan(ws)).rejects.toMatchObject({ code: "PLAN_NOT_APPROVED" });
+    // Exploratory testing F6: the message says what to do, also when there is no plan at all.
+    await expect(loadApprovedPlan(ws)).rejects.toThrow(/has no approved plan yet: .*qajitsu approve/);
   });
 
   it("REQ-PLAN-06/AC4: specs for cases not in the approved plan are not executed and are reported", () => {

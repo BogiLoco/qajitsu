@@ -125,7 +125,8 @@ describe("author (REQ-EXEC-01, REQ-EXEC-03/AC4)", () => {
   });
 
   it("REQ-EXEC-03/AC1: a spec that does not type-check is rejected", async () => {
-    const typo = spec("TC-01").replace("api.as(", "api.ass(");
+    // A typo the checks above do not catch, so only the type check rejects it.
+    const typo = spec("TC-01").replace("res.json(", "res.jsonn(");
     const model = scriptedModel([{ text: "```ts\n" + typo + "```" }]);
     const { d, context } = await deps(model);
     const [first] = await runAuthor(d, { ...plan, cases: plan.cases.slice(0, 1) }, context, analysis, [

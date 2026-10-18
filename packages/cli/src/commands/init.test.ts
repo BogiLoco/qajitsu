@@ -70,6 +70,9 @@ describe("qajitsu init (REQ-GEN-03/AC3)", () => {
     expect(r.out).toContain("Project pet-clinic registered");
     expect(r.out).toContain("ticket prefixes: VET");
     expect(r.out).toMatch(/NOT READY:\n\s+✘ .*JIRA_TOKEN/);
+    // Exploratory testing F2: the project list reports the same readiness, not "ready" because the config loads.
+    const listed = await run(repo, ["projects", "list"]);
+    expect(listed.out).toMatch(/pet-clinic {2}not ready \(.*secrets.*\)/);
     expect(r.out).toContain(
       "Detected: github repository vet-org/pet-clinic; tests: api, web; compose.yaml with 3 service(s); OpenAPI docs/openapi.yaml",
     );
@@ -176,6 +179,10 @@ describe("qajitsu init (REQ-GEN-03/AC3)", () => {
     expect(await readdir(join(root, ".qajitsu-test", "projects", "shop", "knowledge"))).toEqual([]);
     expect((await run(bank, ["projects", "current"])).out).toBe("bank\n");
     const list = (await run(bank, ["projects", "list"])).out;
+    // `qj projects` alone lists them too (exploratory testing F1), with the readiness `qj status` reports (F2).
+    const bare = await run(bank, ["projects"]);
+    expect(bare.exitCode).toBe(0);
+    expect(bare.out).toBe(list);
     expect(list).toMatch(/^\* bank {2}ready {2}prefixes BANK/m);
     expect(list).toMatch(/^ {2}shop {2}ready {2}prefixes SHOP,STORE/m);
     const used = await run(bank, ["use", "shop"]);

@@ -122,4 +122,39 @@ describe("qajitsu status, note and resume (REQ-PRJ-05, REQ-PRJ-06)", () => {
       '"approval.context_reconfirmed"',
     );
   }, 180_000);
+
+  it("REQ-PRJ-05/AC6: status lists the environments still running for the project's runs, with how to stop them", async () => {
+    const calls: string[] = [];
+    let runId = "";
+    const p = await createBuildProject(undefined, {
+      ports: {
+        dockerExec: (cmd, args) => {
+          calls.push(`${cmd} ${args.join(" ")}`);
+          return Promise.resolve({
+            stdout: [
+              `DEMO-1\t${runId}\t127.0.0.1:54939->3000/tcp`,
+              `DEMO-1\t${runId}\t`,
+              // A run of another project (or a deleted run) is not this project's.
+              "OTHER-9\t20260101-0000-zzzz\t127.0.0.1:50000->3000/tcp",
+              "",
+            ].join("\n"),
+            stderr: "",
+          });
+        },
+      },
+    });
+    cleanups.push(p.cleanup);
+    await p.run(["fetch", "DEMO-1"]);
+    const index = JSON.parse(await readFile(join(p.home, "runs", "DEMO-1", "index.json"), "utf8")) as {
+      latest: string;
+    };
+    runId = index.latest;
+    const out = (await p.run(["status"])).out;
+    expect(calls, out).not.toEqual([]);
+    expect(out).toContain("Environments running (1):");
+    expect(out).toContain(
+      `  DEMO-1  run ${runId}  2 container(s)  http://127.0.0.1:54939 · stop: qajitsu clean DEMO-1 --run ${runId}`,
+    );
+    expect(calls[0]).toContain("label=qajitsu.managed=true");
+  });
 });

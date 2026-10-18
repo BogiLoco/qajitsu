@@ -157,6 +157,9 @@ export function stepsWithoutActions(source: string): string[] {
   return out;
 }
 
+/** Requests of the api client; called on `api` itself they go out without any login. */
+const HTTP_VERBS = new Set(["get", "post", "put", "patch", "delete"]);
+
 /**
  * Lint, plan coverage and assertion lock of one spec (REQ-EXEC-03/AC1..AC3, invariant 4). Pure AST
  * checks, no execution:
@@ -404,6 +407,73 @@ export function checkSpecSource(
         "coverage",
         `verify("${step.id}", "${field}", ...) checks something step ${step.id} of the plan does not expect; it expects: ${planned.join(", ") || "a description only, nothing a test can compare"}`,
       );
+  }
+  // A case that runs as a test account logs in as it: without it every call answers 401 and the case would end
+  // FAILED as if the product were broken (exploratory testing F21).
+  const account = Object.values(planCase.data).find(
+    (v): v is string => typeof v === "string" && /^user:[\w.-]+$/.test(v),
+  );
+  if (account !== undefined && (planCase.type === "api" || planCase.type === "web")) {
+    const client = planCase.type === "api" ? "api" : "ui";
+    const runsAs = `${caseId} runs as ${account} (data.user in the plan)`;
+    const loggedIn = new Set<string>();
+    // Set while walking the tree; an object, so the check after the walk is not narrowed away.
+    const login = { thrownAway: false };
+    const anonymous: { step: string; verb: string }[] = [];
+    /** The plan step a node belongs to: the id of its enclosing `step("Sx", ...)`. */
+    const stepOf = (node: ts.Node): string | undefined => {
+      for (let n = node.parent; !ts.isSourceFile(n); n = n.parent)
+        if (
+          ts.isCallExpression(n) &&
+          calleeName(n) === "step" &&
+          n.arguments[0] &&
+          ts.isStringLiteral(n.arguments[0])
+        )
+          return n.arguments[0].text;
+      return undefined;
+    };
+    const findLogins = (node: ts.Node): void => {
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+        const member = node.expression.name.text;
+        const [first] = node.arguments;
+        if (member === "as" && first !== undefined && ts.isStringLiteral(first) && first.text === account) {
+          loggedIn.add(first.text);
+          // api.as() returns the logged-in client; a call whose result is dropped logs nobody in.
+          const parent = ts.isAwaitExpression(node.parent) ? node.parent.parent : node.parent;
+          if (client === "api" && ts.isExpressionStatement(parent)) login.thrownAway = true;
+        }
+        if (
+          client === "api" &&
+          ts.isIdentifier(node.expression.expression) &&
+          node.expression.expression.text === "api" &&
+          HTTP_VERBS.has(member)
+        ) {
+          const step = stepOf(node) ?? "?";
+          // A step about the 401 itself calls without logging in on purpose.
+          const expects401 = planCase.steps.find((x) => x.id === step)?.expect.status === 401;
+          if (!expects401 && !anonymous.some((a) => a.step === step && a.verb === member))
+            anonymous.push({ step, verb: member });
+        }
+      }
+      ts.forEachChild(node, findLogins);
+    };
+    findLogins(sf);
+    if (!loggedIn.has(account))
+      add(
+        "coverage",
+        `${runsAs} but the spec never logs in as it: use ${client}.as("${account}") for its calls`,
+      );
+    else if (login.thrownAway)
+      add(
+        "coverage",
+        `${runsAs} but api.as("${account}") is called and its client thrown away: keep it, e.g. const user = api.as("${account}"), and make the calls with it`,
+      );
+    if (loggedIn.has(account))
+      for (const a of anonymous)
+        add(
+          "coverage",
+          `${runsAs} but step ${a.step} calls api.${a.verb} without logging in: use the client api.as("${account}") returns`,
+        );
   }
   return problems;
 }

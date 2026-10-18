@@ -203,6 +203,8 @@ describe("qajitsu plan / approve (REQ-PLAN-01..06, REQ-GEN-05)", () => {
     expect(refused.exitCode).toBe(3);
     expect(refused.err).toContain("PLAN_UNCHECKABLE");
     expect(refused.err).toContain("TC-01 S1 fields.total");
+    // Exploratory testing F10: one marker per listed problem, not "  -   ! TC-01 ...".
+    expect(refused.err).toMatch(/^ {2}- TC-01 S1 fields\.total/m);
     const confirmed = await run(["approve", "DEMO-1", "--confirm-placeholders", "--approver", "ci"]);
     expect(confirmed.exitCode).toBe(0);
     const record = JSON.parse(await readFile(join(runDir(), "run.json"), "utf8")) as {

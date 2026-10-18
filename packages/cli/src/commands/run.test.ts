@@ -206,7 +206,12 @@ describe("qajitsu run (stage 3: REQ-EXEC-*, REQ-ENV-*, REQ-VER-07, REQ-EVD-05)",
     const { run, runDir, prepare } = await setup();
     await prepare();
     expect((await run(["run", "DEMO-1"])).exitCode).toBe(0);
-    expect((await run(["run", "DEMO-1"])).err).toContain("[RUN_ALREADY_EXECUTED]");
+    const again = (await run(["run", "DEMO-1"])).err;
+    expect(again).toContain("[RUN_ALREADY_EXECUTED]");
+    // Exploratory testing F16: the message names how to start a new run.
+    expect(again).toMatch(
+      /qajitsu fetch DEMO-1, qajitsu approve DEMO-1 --reuse-from \d{8}-\d{4}-[a-z0-9]{4}/,
+    );
     const file = join(runDir, "plan", "plan.approved.yaml");
     const record = join(runDir, "run.json");
     const data = JSON.parse(await readFile(record, "utf8")) as { data: Record<string, unknown> };

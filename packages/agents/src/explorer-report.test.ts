@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { explorerReportCheck, ExplorerReportSchema, type ExplorerSessionView } from "./explorer-report.js";
+import {
+  explorerReportCheck,
+  ExplorerReportSchema,
+  firstCommandHint,
+  type ExplorerSessionView,
+} from "./explorer-report.js";
 
 const view = (over: Partial<ExplorerSessionView> = {}): ExplorerSessionView => ({
   actions: () => [
@@ -240,5 +245,119 @@ describe("explorer report check (REQ-EXEC-25)", () => {
         }),
       ),
     ).toEqual([]);
+  });
+
+  it("REQ-EXEC-15/AC8: an explorer that answers before acting is shown the first command to run, taken from the checklist", () => {
+    expect(firstCommandHint(["qj status", "qj use demo-shop"], "qj")).toBe(
+      'cli_run with {"args": ["status"]}',
+    );
+    expect(firstCommandHint(["run `qj doctor --models`"], "qj")).toBe(
+      'cli_run with {"args": ["doctor", "--models"]}',
+    );
+    expect(firstCommandHint(["check the help"], "qj")).toBe('cli_run with {"args": ["--help"]}');
+    expect(firstCommandHint([], "qj")).toBe('cli_run with {"args": ["--help"]}');
+  });
+
+  it("REQ-EXEC-25/AC7: text the explorer quotes from a tool's output is not a command it claims to have run", () => {
+    const session = view({
+      tool: "qj",
+      checks: ["qj use no-such-project", "qj init"],
+      actions: () => [
+        { id: "A01", args: ["use", "no-such-project"] },
+        { id: "A02", args: ["init"] },
+      ],
+    });
+    expect(
+      explorerReportCheck(
+        session,
+        "x",
+      )(
+        report({
+          checklist: [done("use", "A01"), done("init", "A02")],
+          findings: [
+            {
+              text: "qj use no-such-project says 'create it with qajitsu init' instead of 'qj init --force'",
+              actions: ["A01"],
+            },
+            { text: 'the hint reads "run qj init first"', actions: ["A01"] },
+          ],
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("REQ-EXEC-25/AC9: a finding code cannot confirm is sent back once, then dropped; the rest of the answer is kept", () => {
+    const session = view({
+      tool: "qj",
+      checks: ["qj doctor"],
+      actions: () => [
+        { id: "A01", args: ["doctor"] },
+        { id: "A02", args: ["use", "x"] },
+      ],
+    });
+    const check = explorerReportCheck(session, "x");
+    const answer = report({
+      checklist: [done("doctor", "A01")],
+      findings: [
+        { text: "qj doctor exits 3", actions: ["A02"] },
+        { text: "doctor lists android twice", actions: ["A01"] },
+      ],
+    });
+    expect(check(answer)).toEqual([
+      'finding "qj doctor exits 3" names doctor, which none of its actions (A02) ran',
+    ]);
+    expect(check.dropped()).toEqual([]);
+    expect(check(answer)).toEqual([]);
+    expect(check.dropped()).toEqual([
+      {
+        text: "qj doctor exits 3",
+        reason: 'finding "qj doctor exits 3" names doctor, which none of its actions (A02) ran',
+      },
+    ]);
+    // Checklist problems are never dropped: they keep the answer from being accepted.
+    const strict = explorerReportCheck(session, "x");
+    const bad = report({ checklist: [done("doctor", "A02")], findings: [] });
+    expect(strict(bad)).toHaveLength(1);
+    expect(strict(bad)).toHaveLength(1);
+  });
+
+  it("REQ-EXEC-25/AC10: on the last attempt code corrects the checklist instead of losing it: refused claims become not done, items an action ran get it", () => {
+    // Session S10 of qwen3: 10 commands, then three answers claiming clean ran (it did not) and export not done (it ran).
+    const session = view({
+      tool: "qj",
+      budgetLeft: () => false,
+      checks: ["qj fetch DEMO-1", "qj export DEMO-1", "qj clean DEMO-1", "qj status"],
+      actions: () => [
+        { id: "A01", args: ["fetch", "DEMO-1"] },
+        { id: "A10", args: ["export", "DEMO-1"] },
+      ],
+    });
+    const check = explorerReportCheck(session, "x");
+    const answer = report({
+      checklist: [done("fetch", "A01"), { item: "export", not_done: "it failed" }, done("clean", "A10")],
+      findings: [{ text: "qj clean DEMO-1 failed", actions: ["A10"] }],
+      summary: "",
+    });
+    expect(check(answer).length).toBeGreaterThan(0);
+    expect(check(answer).length).toBeGreaterThan(0);
+    expect(check(answer)).toEqual([]);
+    expect(check.corrected()).toEqual([
+      { item: "qj fetch DEMO-1", actions: ["A01"] },
+      { item: "qj export DEMO-1", actions: ["A10"], corrected: "the explorer said not done, but A10 ran it" },
+      {
+        item: "qj clean DEMO-1",
+        actions: [],
+        not_done:
+          'claim refused by code: checklist item 3 "qj clean DEMO-1" names clean, which none of its actions (A10) ran',
+        corrected: "claim refused by code",
+      },
+      {
+        item: "qj status",
+        actions: [],
+        not_done: "not reported by the explorer",
+        corrected: "not reported by the explorer",
+      },
+    ]);
+    expect(check.dropped().map((d) => d.text)).toEqual(["qj clean DEMO-1 failed"]);
   });
 });

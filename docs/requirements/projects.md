@@ -85,6 +85,7 @@ After a switch the user sees at once what was being done and what to do next.
 - [x] AC3: Status is computed by code from `run.json` files; `context.json` is only an index and can be rebuilt with `qj status --rebuild`.
 - [x] AC4: The user can attach notes to a ticket (`qj note <TICKET> "..."`); notes are shown in status and kept with the ticket's runs.
 - [x] AC5: `qj status --all` shows the same summary for every project.
+- [x] AC6: Status lists the environments still running for the project's runs (`qj run --build`, `qj env up --detach`), found by their labels, with their URLs and the command that stops them; without Docker the list is left out.
 
 ### REQ-PRJ-06 · Continue after switching
 

@@ -233,8 +233,9 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .command("projects")
     .description("List the registered projects or print the active one");
   projects
-    .command("list")
-    .description("Every project with readiness, ticket prefixes and open work")
+    // `qj projects` alone lists them, as its description says.
+    .command("list", { isDefault: true })
+    .description("Every project with readiness, ticket prefixes and open work (the default)")
     .option("--archived", "include archived projects")
     .action(async (options: { archived?: boolean }) => {
       io.setExitCode(
@@ -1167,5 +1168,19 @@ export function createProgram(version: string, io: ProgramIO): Command {
       ) => withPorts((ports) => runLogs(ticket, options, commandIO, ports))(),
     );
 
+  // A group command alone says which subcommands exist (exploratory testing F4); before, it printed help and exited 3
+  // without saying what was missing. `projects` lists by default and `explore` runs its own session.
+  for (const group of program.commands)
+    if (group.commands.length > 0 && !["projects", "explore"].includes(group.name()))
+      group.allowExcessArguments(true).action((_options: unknown, command: Command) => {
+        const names = group.commands.map((c) => c.name()).filter((n) => n !== "help");
+        const [unknown] = command.args;
+        io.writeError(
+          unknown === undefined
+            ? `error: '${group.name()}' needs a command: ${names.join(", ")}\n\n${group.helpInformation()}`
+            : `error: unknown command '${unknown}' for '${group.name()}'; it has: ${names.join(", ")}\n`,
+        );
+        io.setExitCode(3);
+      });
   return program;
 }

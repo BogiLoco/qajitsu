@@ -77,6 +77,8 @@ export async function createDemoPipeline(
     transformPlan?: (draft: string) => string;
     /** Changes a fixture spec before the run. */
     transformSpec?: (caseId: string, code: string) => string;
+    /** Runs after approval and the specs, right before `qj run` (e.g. to record a `qj env up` environment). */
+    beforeRun?: (runDir: string) => Promise<void>;
   } = {},
 ) {
   const ticket = options.ticket ?? "DEMO-1";
@@ -161,6 +163,7 @@ export async function createDemoPipeline(
         await writeFile(target, options.transformSpec(id, await readFile(specFixture(ticket, id), "utf8")));
       else await copyFile(specFixture(ticket, id), target);
     }
+    await options.beforeRun?.(runDir);
     return run(["run", ticket]);
   };
   const cleanup = async () => {

@@ -26,6 +26,7 @@
     "@qajitsu/core": "workspace:*",
     "ai": "catalog:",
     "ai-sdk-ollama": "catalog:",
+    "undici": "catalog:",
     "zod": "catalog:"
   }
 }

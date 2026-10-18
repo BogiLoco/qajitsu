@@ -143,6 +143,7 @@ plan points to an element that exists in the code under test.
 - [x] AC6: A step that is not manual and whose expect has only a description (no status, fields, texts, elements, message or visual) is flagged the same way: the test would have nothing to compare.
 - [x] AC7: The planner and the author get a selector inventory computed by code from the worktree of the run: every `data-testid` (and the mobile equivalents, e.g. Android resource ids) with the file and the page or screen it belongs to, so a model does not have to search for them.
 - [x] AC8: Every `testid:` selector in a plan must exist in that inventory for the run's commit; an unknown one is flagged like a placeholder (one automatic revision, then listed in the review), never silently accepted.
+- [x] AC9: When the OpenAPI document says an endpoint answers 401 to a caller who is not logged in, an api case that calls it names a test account (`data.user`, e.g. `user:standard`) or expects the 401 itself; otherwise the step is flagged like an unknown field, before anyone approves a plan whose every call would fail for want of a login.
 
 ### REQ-PLAN-10 · Approval by a person or by models, auditable
 

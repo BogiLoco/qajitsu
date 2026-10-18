@@ -107,6 +107,10 @@ describe("qajitsu explore (REQ-EXEC-15)", () => {
     expect(report).toContain("Place order stays disabled after accepting the terms");
     expect(report).toContain('<img src="evidence/A04.png"');
     expect(result.out).toContain("O1 [high] Place order stays disabled after accepting the terms");
+    // Exploratory testing F23: each action and observation shows in the terminal as it happens, as in --cli sessions.
+    expect(result.out).toMatch(/A01 {2}login_as user:standard → ok/);
+    expect(result.out).toMatch(/A04 {2}click testid:place-order → failed: /);
+    expect(result.out).toContain("● O1 [high] Place order stays disabled after accepting the terms");
     // REQ-EXEC-25: the checklist and findings cite the recorded actions.
     expect(session.checklist).toEqual([
       { item: "order after accepting the terms", source: "explorer", actions: ["A02", "A03", "A04"] },
@@ -190,6 +194,11 @@ describe("qajitsu explore (REQ-EXEC-15)", () => {
       script: [look, claim, claim, claim],
     });
     expect(never.out).toContain("ended: error (explorer did not produce valid output in 3 attempts.)");
+    // Exploratory testing F22: qwen3 answered three times without acting; the rejection names the first call.
+    const journal = await readFile(join(second.runDir, "journal", "events.jsonl"), "utf8");
+    expect(journal).toContain(
+      "your next reply must be a tool call, not the JSON answer. Start with explore_look with {}",
+    );
     const failed = (await sessionOf(second.runDir)) as Awaited<ReturnType<typeof sessionOf>> & {
       summary: string;
     };
