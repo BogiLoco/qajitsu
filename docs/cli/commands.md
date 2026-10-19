@@ -481,7 +481,7 @@ accepted, rejected or has not reviewed them yet. In a terminal it asks for each 
 accepted by default and an agent cannot accept.
 
 - `--run <id>`: run id (default: latest run of the ticket)
-- `--session <id>`: one session (needed with the options below)
+- `--session <id>`: one session (needed with the options below when the run has several sessions)
 - `--accept <items>` / `--reject <items>`: decide without prompts, e.g. `--accept O1,C2 --reject F1` (CI, scripts)
 - `--note <text>`: why, kept with the decisions
 - `--keep <items>`: keep accepted observations or findings in the project's knowledge base (a note per item in the

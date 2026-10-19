@@ -624,7 +624,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--run <id>", "run id (default: latest run of the ticket)")
     .option(
       "--env <profile|url>",
-      "environment profile from .qa/envs or a URL (default: environments.default)",
+      "environment profile from .qa/envs or a URL (default: the one qj env up started for this run, else environments.default)",
     )
     .option(
       "--build",
@@ -727,7 +727,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--run <id>", "run id (default: latest run of the ticket)")
     .option(
       "--env <profile|url>",
-      "environment profile from .qa/envs or a URL (default: environments.default)",
+      "environment profile from .qa/envs or a URL (default: the one qj env up started for this run, else environments.default)",
     )
     .option("--time-box <minutes>", "stop after this many minutes (default 10)")
     .option("--max-steps <n>", "stop after this many browser actions (default 40)")

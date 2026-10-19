@@ -136,17 +136,18 @@ export async function runExploreReview(
     const accept = ids(options.accept);
     const keep = ids(options.keep);
     const reject = ids(options.reject);
-    if ((accept.length > 0 || reject.length > 0 || keep.length > 0) && options.session === undefined)
-      throw new ConfigError(
-        "OPTION_INVALID",
-        "--accept, --reject and --keep need --session: item ids are per session (e.g. --session S01 --accept O1).",
-        {},
-      );
     const both = accept.filter((a) => reject.includes(a));
     if (both.length > 0)
       throw new ConfigError("OPTION_INVALID", `${both.join(", ")} cannot be both accepted and rejected.`, {});
     const session = await openSession(rawKey, options.run, io.cwd, ports, masker);
     const sessions = await reviewedSessions(session, options.session);
+    // Item ids are per session: with several sessions a decision must name its session.
+    if ((accept.length > 0 || reject.length > 0 || keep.length > 0) && sessions.length > 1)
+      throw new ConfigError(
+        "OPTION_INVALID",
+        `--accept, --reject and --keep need --session when the run has several sessions (${sessions.map((x) => x.id).join(", ")}): item ids are per session (e.g. --session S01 --accept O1).`,
+        {},
+      );
     if (sessions.length === 0) {
       io.write(
         `No exploratory session in run ${session.ws.runId}; start one with 'qajitsu explore ${rawKey}'.\n`,

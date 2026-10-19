@@ -111,7 +111,7 @@ describe("qajitsu explore review (REQ-PLAN-11)", () => {
     expect(stale.out).toContain("S01: 3 item(s): 0 accepted, 0 rejected, 3 not reviewed");
   });
 
-  it("REQ-PLAN-11/AC1: unknown items, an unknown session and a missing --session are refused; nothing is accepted by default", async () => {
+  it("REQ-PLAN-11/AC1: unknown items, an unknown session and a missing --session with several sessions are refused; nothing is accepted by default", async () => {
     const p = await setup();
     const unknown = await p.run(["explore", "review", "DEMO-1", "--session", "S01", "--accept", "O9"]);
     expect(unknown.exitCode).toBe(3);
@@ -119,12 +119,27 @@ describe("qajitsu explore review (REQ-PLAN-11)", () => {
     expect((await p.run(["explore", "review", "DEMO-1", "--session", "S07"])).err).toContain(
       "EXPLORE_SESSION_NOT_FOUND",
     );
+    await mkdir(join(p.runDir, "explore", "S02"), { recursive: true });
+    await writeFile(
+      join(p.runDir, "explore", "S02", "session.json"),
+      JSON.stringify({ ...SESSION, id: "S02" }),
+    );
     expect((await p.run(["explore", "review", "DEMO-1", "--accept", "O1"])).err).toContain(
-      "--accept, --reject and --keep need --session",
+      "--accept, --reject and --keep need --session when the run has several sessions (S01, S02)",
     );
     // Without a terminal and without flags nothing is decided.
     await p.run(["explore", "review", "DEMO-1"]);
     await expect(readFile(join(p.runDir, "explore", "S01", "review.json"), "utf8")).rejects.toThrow();
+  });
+
+  it("REQ-PLAN-11/AC1: with a single session in the run, decisions apply to it without --session", async () => {
+    const p = await setup();
+    const r = await p.run(["explore", "review", "DEMO-1", "--accept", "O1"]);
+    expect(r.err).toBe("");
+    const review = ReviewRecordSchema.parse(
+      JSON.parse(await readFile(join(p.runDir, "explore", "S01", "review.json"), "utf8")),
+    );
+    expect(review.decisions.map((d) => [d.item, d.decision])).toEqual([["O1", "accepted"]]);
   });
 
   it("REQ-PLAN-11/AC3+AC6+AC7: qj plan offers the accepted items, marks cases from them and shows what no case covers", async () => {
