@@ -30,12 +30,12 @@
 proposes a test plan for you to approve, runs API, web and mobile tests, collects evidence (requests and responses,
 screenshots, videos, logs) and posts a computed test matrix back to the ticket.
 
-|                                | Why it is different                                                                                                                 |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| 🥋 **AI plans, code judges**   | Agents analyse the change and write the tests; a deterministic runner decides PASSED or FAILED. No model can mark a test as passed. |
-| ✅ **You stay in charge**      | Nothing runs before you approve the plan, and nothing reaches the ticket before you see the preview.                                |
-| 🔍 **Evidence for every step** | Requests and responses, screenshots, videos, traces and logs, hashed in a manifest and linked from the report.                      |
-| 🐞 **Proven on seeded bugs**   | A demo shop with eight hidden bugs: each one must end FAILED, and PASSED without it.                                                |
+|                                | Why it is different                                                                                                                                                 |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🥋 **AI plans, code judges**   | Agents analyse the change and write the tests; a deterministic runner decides PASSED or FAILED. No model can mark a test as passed.                                 |
+| ✅ **You stay in charge**      | Nothing runs before the plan is approved (by you, or by a model step your project chose, always marked), and nothing reaches the ticket before you see the preview. |
+| 🔍 **Evidence for every step** | Requests and responses, screenshots, videos, traces and logs, hashed in a manifest and linked from the report.                                                      |
+| 🐞 **Proven on seeded bugs**   | A demo shop with eight hidden bugs: each one must end FAILED, and PASSED without it.                                                                                |
 
 ```sh
 qj fetch SHOP-482          # ticket + the code change, at its exact commit
@@ -86,7 +86,8 @@ checks (auditor, canary) can only make a result worse, never better.
 | `qj init` / `qj setup` / `qj doctor` | **you** once, code checks   | the project, its `.qa/` folder, its tools, a readiness check | `~/.qajitsu/projects/<slug>/`, `.qa/`, `~/.qajitsu/toolchain/` |
 | `qj fetch`                           | code                        | the ticket, the change, worktrees, manual test cases         | `ticket/`, `repos/`, `imported/`                               |
 | `qj plan`                            | AI agents                   | analysis and plan versions with sources                      | `analysis.json`, `plan/`, `map/`                               |
-| review / `qj approve`                | **you**                     | the frozen plan and its SHA-256                              | `plan/plan.approved.yaml`, `run.json`                          |
+| `qj explore` / `qj explore review`   | AI agent, then **you**      | optional: what the app does now; the items you accept        | `explore/<session>/`                                           |
+| review / `qj approve`                | **you** (and model steps)   | the frozen plan, its SHA-256 and every approval decision     | `plan/plan.approved.yaml`, `run.json`, the journal             |
 | `qj run` (author)                    | AI agent                    | one spec per case, checked by code                           | `specs/`                                                       |
 | `qj run` (execution)                 | code                        | assertions, evidence with hashes                             | `results/`, `evidence/`                                        |
 | `qj watch`                           | you                         | live progress and the latest screenshot per case             | `live/` (preview, not evidence)                                |
@@ -253,6 +254,24 @@ change yourself: `--pr <GitHub URL>`, `--mr <GitLab URL>` or `--ref <repo>=<bran
 (`role: tests`) is checked out too, so the planner sees what is already covered. With `test_cases:` configured it
 also imports the **existing manual test cases** linked to the ticket (Xray, Zephyr Scale, TestRail or a CSV/Excel
 file) into `imported/cases.json`; a source that cannot be reached is reported and fetching continues without it.
+
+### Optional: explore before planning
+
+```sh
+qj env up SHOP-482 --detach                 # or an allowlisted environment with --env
+qj explore SHOP-482 --goal "the cart around the discount change" --check "apply a second code"
+qj explore review SHOP-482 --accept O1,C2 --reject F1   # --session S01 when the run has several sessions
+```
+
+**When:** when the ticket leaves you unsure what the application does today, before `qj plan`.
+**What it does:** an agent explores the running application towards the goal (or a command-line tool with `--cli`);
+QAJitsu performs and records every action, and every checklist item ends up done with its actions or not done with
+the reason. You then accept or reject each observation (`O1`), finding (`F1`) and not-done item (`C3`); in a terminal
+`qj explore review` asks for each one. Only accepted items reach the planner, as untrusted data. A case that relies on
+one cites it as `{kind: explore, session: S01, item: O1}`; code refuses items nobody accepted, turns a case with no
+other source for its expected result into an open question, and lists accepted not-done items no case covers as open
+questions too. `--keep O1` also keeps an accepted item in the project's knowledge base (`explore-notes/`), so plans of
+later tickets can use it. Decisions are tied to the session file's SHA-256: a changed session needs a new review.
 
 ### Step 2: plan and review
 
@@ -497,6 +516,7 @@ stays).
 ```sh
 qj status                                  # right project? what is open?
 qj fetch SHOP-482 && qj plan SHOP-482     # review: a   (--depth smoke for a quick check)
+# optional, before the plan: qj explore SHOP-482 --goal "..." && qj explore review SHOP-482
 qj run SHOP-482 --env staging              # API, web and mobile at once (--sequential: one by one)
 qj evidence SHOP-482 --failed              # FAILED cases with their hint (product bug, test bug, environment, data)
 qj publish SHOP-482
@@ -995,6 +1015,7 @@ run folder looks like this:
 | `.qa/bench.yaml`                             | benchmark cases                                                                                                                                                                                                                                                                                   |
 | `web.matrix` in `qa.project.yaml`            | browsers (`chromium`, `firefox`, `webkit`) and viewports (`{ name, width, height }`) for web cases; the first combination is the primary run                                                                                                                                                      |
 | `execution:` in `qa.project.yaml`            | how cases run: `workers: { api, web }` cases at once per lane, `web_combinations` browsers of the matrix at once, `sequential: true` for one case at a time, `account_wait_s` for a free pool account                                                                                             |
+| `approval:` in `qa.project.yaml`             | the plan approval flow: `flow: [person]` (default) or with `model` steps, `model` (the approver, another model than the planner), `model_only: as-computed \| review`, `jira: off \| comment` ([details](docs/cli/plan.md#approval-flow-with-model-approvers-req-plan-10-adr-0010))               |
 | `budget:` in `qa.project.yaml`               | `max_minutes` and `max_cost_usd` per run: once reached, the remaining cases are NOT_RUN with the reason                                                                                                                                                                                           |
 | `.qa/baselines/`                             | approved screenshots for visual checks, written only by `qj baseline accept`; `visual: { threshold, color_threshold }` in `qa.project.yaml`                                                                                                                                                       |
 | `locales:` in `qa.project.yaml`              | locales and time zones cases can run in (`{ name: pl-PL, timezone: Europe/Warsaw }`); a plan case lists its own                                                                                                                                                                                   |
@@ -1083,7 +1104,16 @@ verification: { auditor: optional, canary: true, triage: on }
   a summary before any action is rejected, so a model cannot describe testing it never did. Every item of the goal
   (`--check "..."`, repeatable, or the explorer's own checklist) ends up done with the actions that did it or not done
   with the reason, and every finding cites actions; code refuses invented action ids and, for command-line tools, flags
-  that no command ran. `qj explore promote` turns an observation into a draft plan case.
+  that no command ran. `qj explore promote` turns an observation into a draft plan case. `qj explore review` lets a
+  person accept or reject what a session found before planning; the planner sees only accepted items and cites them as
+  `{kind: explore}`, and accepted not-done items no case covers become open questions.
+- **Approval flow with model approvers.** `approval.flow` in the project config lists person and model steps
+  (`[person]` by default). A model approver, another model than the planner, approves, asks for a revision with
+  reasons or hands over to a person; plans with flagged values or open questions always go to a person. Each decision
+  is kept in `run.json` and the journal with the hashes of the plan, prompt and answer, checked by the
+  `approval-intact` gate and `qj audit verify`, and with `approval.jira: comment` posted to the ticket, one comment per
+  decision. A plan no person approved is marked in every report; `approval.model_only: review` makes its PASSED
+  results NEEDS_REVIEW. Details: [docs/cli/plan.md](docs/cli/plan.md).
 - **Exploring command-line tools.** `qj explore <TICKET> --cli <tool> --goal "..."` lets the agent use any CLI
   described in `explore.cli` (QAJitsu's own `qj` in the demo) like a tester in a terminal: it answers prompts,
   presses Ctrl+C, runs commands side by side and checks what was left running. Every session runs in a throwaway
@@ -1210,6 +1240,8 @@ verification: { auditor: optional, canary: true, triage: on }
 1. The verdict comes from code reading the runner output; no prompt or model answer can set a status.
 2. Agents never write results or evidence; the guard blocks it.
 3. The approved plan is frozen by SHA-256; nothing outside it runs.
+   A model may approve it only when the project configures that, never a plan code flagged, and every report then
+   says no person approved it; each approval is recorded with hashes and audited.
 4. Expected values come from the plan; specs cannot hard-code them, and every planned expectation must be verified.
 5. The auditor and the canary can only downgrade.
 6. Numbers in reports are computed; LLM-written text is checked against them.

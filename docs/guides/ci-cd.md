@@ -14,7 +14,7 @@ labelled PR/MR or /qa comment or manual or Jira
    run step:   qj approve --approver <who> → qj run → qj export → qj ci comment (results, status check)
 ```
 
-New plans are never approved automatically (REQ-PLAN-07/AC4). New commits on the same PR reuse the approved plan
+New plans are never approved automatically unless the project configures a model step in `approval.flow` (REQ-PLAN-07/AC4, REQ-PLAN-10): then `qj approve` in the plan step runs the model approver, and with `flow: [model]` the run step can follow without a person, every report saying so (see [plan.md](../cli/plan.md#approval-flow-with-model-approvers-req-plan-10-adr-0010)). New commits on the same PR reuse the approved plan
 only when the ticket text is unchanged (`qj approve --reuse-from latest`); otherwise a person approves again.
 
 ## Ready-made integrations (REQ-CI-01)
