@@ -7,6 +7,8 @@ import {
   exitCodeFor,
   type ChangeTarget,
   type CodeHost,
+  type Publisher,
+  type PublishResult,
   type TestStatus,
 } from "@qajitsu/core";
 import { createMasker } from "@qajitsu/steps";
@@ -501,7 +503,8 @@ export async function runCiComment(
 /**
  * `qajitsu ci publish-plan <TICKET> [--run <id>]`: posts the latest plan version to the Jira ticket as one
  * updatable comment, so reviewers see it next to the ticket (REQ-CI-03/AC1). It changes nothing about
- * approval: a plan is approved only by a person (REQ-PLAN-07/AC4).
+ * approval: a plan is approved by a person, or by the model steps the project configured (REQ-PLAN-07/AC4,
+ * REQ-PLAN-10).
  */
 export async function runCiPublishPlan(
   rawKey: string,
@@ -512,39 +515,7 @@ export async function runCiPublishPlan(
   const masker = createMasker();
   try {
     const session = await openSession(rawKey, options.run, io.cwd, ports, masker);
-    const plan = await latestPlan(session);
-    if (plan === undefined)
-      throw new ConfigError("PLAN_NOT_FOUND", "This run has no plan yet; run 'qajitsu plan' first.", {});
-    const text = masker.maskText(plan);
-    if (masker.containsSecret(text))
-      throw new ConfigError("PLAN_CONTAINS_SECRET", "The plan contains a secret value.", {});
-    const approved = session.ws.record.data["approval"] !== undefined;
-    const title = `QAJitsu test plan for ${session.ws.ticket} (run ${session.ws.runId})${approved ? ", approved" : ", waiting for approval"}`;
-    const previous = session.ws.record.data["planComment"] as { commentId: string } | undefined;
-    const result = await publisherFor(session, ports).publish({
-      ticket: session.ws.ticket,
-      runId: session.ws.runId,
-      comment: {
-        adf: {
-          type: "doc",
-          version: 1,
-          content: [
-            { type: "paragraph", content: [{ type: "text", text: title, marks: [{ type: "strong" }] }] },
-            { type: "codeBlock", attrs: { language: "markdown" }, content: [{ type: "text", text }] },
-          ],
-        },
-        wiki: `*${title}*\n{noformat}\n${text.replace(/\{noformat\}/gi, "{ noformat }")}\n{noformat}`,
-      },
-      attachments: [],
-      ...(previous ? { previous: { commentId: previous.commentId, attachmentNames: [] } } : {}),
-    });
-    await session.ws.update({
-      data: { ...session.ws.record.data, planComment: { commentId: result.commentId } },
-    });
-    session.events.emit("ci", { kind: "system", name: "ci" }, "plan.published", {
-      commentId: result.commentId,
-      updated: result.updated,
-    });
+    const result = await publishPlanComment(session, publisherFor(session, ports));
     io.write(
       `${result.updated ? "Updated" : "Posted"} the plan on ${session.ws.ticket}${result.url ? `: ${result.url}` : ""}\n`,
     );
@@ -556,4 +527,50 @@ export async function runCiPublishPlan(
     );
     return 3;
   }
+}
+
+/**
+ * Posts the latest plan version to the Jira ticket as one updatable comment and records it (REQ-CI-03/AC1,
+ * REQ-PLAN-10/AC4).
+ *
+ * @throws {ConfigError} `PLAN_NOT_FOUND` or `PLAN_CONTAINS_SECRET`.
+ */
+export async function publishPlanComment(session: RunSession, publisher: Publisher): Promise<PublishResult> {
+  const { masker } = session;
+  const plan = await latestPlan(session);
+  if (plan === undefined)
+    throw new ConfigError("PLAN_NOT_FOUND", "This run has no plan yet; run 'qajitsu plan' first.", {});
+  const text = masker.maskText(plan);
+  if (masker.containsSecret(text))
+    throw new ConfigError("PLAN_CONTAINS_SECRET", "The plan contains a secret value.", {});
+  const approved = session.ws.record.data["approval"] !== undefined;
+  const title = `QAJitsu test plan for ${session.ws.ticket} (run ${session.ws.runId})${approved ? ", approved" : ", waiting for approval"}`;
+  const previous = session.ws.record.data["planComment"] as { commentId: string } | undefined;
+  const result = await publisher.publish({
+    ticket: session.ws.ticket,
+    runId: session.ws.runId,
+    // Its own comment, apart from the results and the approval decisions.
+    name: "plan",
+    comment: {
+      adf: {
+        type: "doc",
+        version: 1,
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: title, marks: [{ type: "strong" }] }] },
+          { type: "codeBlock", attrs: { language: "markdown" }, content: [{ type: "text", text }] },
+        ],
+      },
+      wiki: `*${title}*\n{noformat}\n${text.replace(/\{noformat\}/gi, "{ noformat }")}\n{noformat}`,
+    },
+    attachments: [],
+    ...(previous ? { previous: { commentId: previous.commentId, attachmentNames: [] } } : {}),
+  });
+  await session.ws.update({
+    data: { ...session.ws.record.data, planComment: { commentId: result.commentId } },
+  });
+  session.events.emit("ci", { kind: "system", name: "ci" }, "plan.published", {
+    commentId: result.commentId,
+    updated: result.updated,
+  });
+  return result;
 }

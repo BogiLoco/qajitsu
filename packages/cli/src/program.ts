@@ -50,6 +50,7 @@ interface KnowledgeAddOptions {
   yes?: boolean;
 }
 import { runExplore, runExplorePromote } from "./commands/explore.js";
+import { runExploreReview } from "./commands/explore-review.js";
 import { runBench } from "./commands/bench.js";
 import { runAuditVerify } from "./commands/audit.js";
 import { runTelemetryExport } from "./commands/telemetry.js";
@@ -587,6 +588,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
     )
     .option("--approver <name>", "who approves (CI: the reviewer or the /qa approve author)")
     .option("--reuse-from <run>", "reuse the plan approved in this earlier run if the ticket did not change")
+    .option("--person", "a person approves now, in place of the model steps of the approval flow")
     .action(
       (
         ticket: string,
@@ -597,6 +599,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
           confirmPlaceholders?: boolean;
           approver?: string;
           reuseFrom?: string;
+          person?: boolean;
         },
       ) => withPorts((ports) => runApprove(ticket, options, commandIO, ports, review))(),
     );
@@ -621,7 +624,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--run <id>", "run id (default: latest run of the ticket)")
     .option(
       "--env <profile|url>",
-      "environment profile from .qa/envs or a URL (default: environments.default)",
+      "environment profile from .qa/envs or a URL (default: the one qj env up started for this run, else environments.default)",
     )
     .option(
       "--build",
@@ -724,7 +727,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--run <id>", "run id (default: latest run of the ticket)")
     .option(
       "--env <profile|url>",
-      "environment profile from .qa/envs or a URL (default: environments.default)",
+      "environment profile from .qa/envs or a URL (default: the one qj env up started for this run, else environments.default)",
     )
     .option("--time-box <minutes>", "stop after this many minutes (default 10)")
     .option("--max-steps <n>", "stop after this many browser actions (default 40)")
@@ -755,6 +758,31 @@ export function createProgram(version: string, io: ProgramIO): Command {
           cli?: string;
         },
       ) => withPorts((ports) => runExplore(ticket, options, commandIO, ports))(),
+    );
+  explore
+    .command("review")
+    .description(
+      "Accept or reject what exploratory sessions found, before the plan is written (the planner sees only accepted items)",
+    )
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .option("--session <id>", "one session, e.g. S01 (needed with --accept and --reject)")
+    .option("--accept <items>", "items to accept, e.g. O1,C2")
+    .option("--reject <items>", "items to reject, e.g. F1")
+    .option("--note <text>", "why, kept with the decisions")
+    .option("--keep <items>", "accepted observations or findings to keep in the knowledge base, e.g. O1")
+    .action(
+      (
+        ticket: string,
+        options: {
+          run?: string;
+          session?: string;
+          accept?: string;
+          reject?: string;
+          note?: string;
+          keep?: string;
+        },
+      ) => withPorts((ports) => runExploreReview(ticket, { ...options, user: io.user }, commandIO, ports))(),
     );
   explore
     .command("promote")

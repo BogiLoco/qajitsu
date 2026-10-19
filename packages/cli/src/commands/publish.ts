@@ -127,6 +127,7 @@ function commentModel(
     executor: user,
     planVersion: v.approval.version,
     planSha256: v.approval.sha256,
+    ...(v.approvalNote ? { approvalNote: v.approvalNote } : {}),
     rows: v.rows,
     summary: v.summary,
     failures,

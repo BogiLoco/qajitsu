@@ -187,6 +187,26 @@ describe("observations as sources (REQ-EXEC-15/AC4)", () => {
   });
 });
 
+describe("accepted exploration items as sources (REQ-PLAN-11/AC4)", () => {
+  it("REQ-PLAN-11/AC4: a case may cite an item a person accepted; one that does not exist or was not accepted is refused", () => {
+    const explored: SourceContext = {
+      ...context,
+      explored: { S01: { items: ["O1", "F1", "C2"], accepted: ["O1", "C2"] } },
+    };
+    expect(checkSource({ kind: "explore", session: "S01", item: "O1" }, explored)).toBeUndefined();
+    expect(checkSource({ kind: "explore", session: "S01", item: "C2" }, explored)).toBeUndefined();
+    expect(checkSource({ kind: "explore", session: "S01", item: "F1" }, explored)).toBe(
+      "explore:S01/F1 was not accepted by a person: cite only accepted items (they are listed in the context)",
+    );
+    expect(checkSource({ kind: "explore", session: "S01", item: "O9" }, explored)).toBe(
+      "explore:S01/O9 is not an item of exploratory session S01 of this run",
+    );
+    expect(checkSource({ kind: "explore", session: "S02", item: "O1" }, explored)).toBe(
+      "explore:S02/O1 is not an item of exploratory session S02 of this run",
+    );
+  });
+});
+
 describe("imported test cases as sources (REQ-CTX-08/AC2)", () => {
   it("REQ-CTX-08/AC2: a case may cite a test case imported for the run, and only one that was", () => {
     const withImported: SourceContext = { ...context, imported: new Set(["testrail:C11"]) };

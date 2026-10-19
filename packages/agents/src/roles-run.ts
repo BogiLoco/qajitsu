@@ -84,7 +84,7 @@ const roleDef = (role: AgentRoleDefinition["role"]): AgentRoleDefinition => {
  */
 export async function modelForRole(
   models: ModelRegistry,
-  role: AgentRoleDefinition["role"],
+  role: Exclude<AgentRoleDefinition["role"], "approver">,
 ): Promise<ResolvedModel> {
   const resolved = await models.forRole(role);
   const missing = missingCapabilities(roleDef(role), resolved.profile);
@@ -167,6 +167,51 @@ function coverageAsQuestions(draft: PlanDraft, sources: SourceContext): PlanDraf
   return { ...draft, existing_coverage: [], open_questions: [...draft.open_questions, ...asked] };
 }
 
+/** Sources that say what a result must be; exploration only says what is worth testing (REQ-PLAN-11/AC5). */
+const EXPECTATION_SOURCES = new Set(["ac", "quote", "doc", "imported", "comment"]);
+
+/**
+ * REQ-PLAN-11/AC5+AC6, applied by code to the planner's answer: a case whose only grounds are exploration has no
+ * source for its expected result, so it becomes an open question instead of an expectation copied from what the
+ * application did; an accepted not-done item of exploration that no case covers becomes an open question too, so the
+ * gap stays visible in the review.
+ */
+/** Whether a case's only grounds are exploration (no source for its expected result). */
+const onlyExplored = (c: PlanDraft["cases"][number]): boolean =>
+  c.source.some((s) => s.kind === "explore") && !c.source.some((s) => EXPECTATION_SOURCES.has(s.kind));
+
+function explorationAsQuestions(draft: PlanDraft, context: ChangeContext): PlanDraft {
+  let next = Math.max(0, ...draft.open_questions.map((q) => Number(q.id.slice(1))));
+  const ask = (question: string, why: string) => ({ id: `Q${String((next += 1))}`, question, why });
+  const ungrounded = draft.cases.filter(onlyExplored);
+  const cases = draft.cases.filter((c) => !ungrounded.includes(c));
+  const questions = ungrounded.map((c) =>
+    ask(
+      `${c.id} comes from exploration (${c.source
+        .flatMap((s) => (s.kind === "explore" ? [`${s.session}/${s.item}`] : []))
+        .join(
+          ", ",
+        )}) but no ticket criterion, quote, document or imported case says what its result must be; what the application did is not an expected result. What should it be?`,
+      "a case from exploration without a source for its expected result",
+    ),
+  );
+  const cited = new Set(
+    cases.flatMap((c) => c.source.flatMap((s) => (s.kind === "explore" ? [`${s.session}/${s.item}`] : []))),
+  );
+  for (const e of context.explorations)
+    for (const item of e.accepted ?? [])
+      if (item.kind === "not-done" && !cited.has(`${e.session}/${item.id}`))
+        questions.push(
+          ask(
+            `Exploration ${e.session} left "${item.title}" not done and a person accepted it as worth testing (${e.session}/${item.id}), but no case covers it: add a case, or decide it is out of scope.`,
+            "an accepted not-done item of exploration without a case",
+          ),
+        );
+  if (questions.length === 0) return draft;
+  // The planner's validation keeps at least one grounded case, so `cases` is never empty here.
+  return { ...draft, cases, open_questions: [...draft.open_questions, ...questions] };
+}
+
 /** Builds what sources are checked against from the change context. */
 export function sourceContext(context: ChangeContext): SourceContext {
   return {
@@ -175,6 +220,12 @@ export function sourceContext(context: ChangeContext): SourceContext {
     comments: Object.fromEntries(context.repos.map((r) => [r.alias, r.comments])),
     tests: Object.fromEntries(context.testsRepos.map((t) => [t.alias, t.index.tests])),
     observations: Object.fromEntries(context.explorations.map((e) => [e.session, e.observations])),
+    explored: Object.fromEntries(
+      context.explorations.map((e) => [
+        e.session,
+        { items: e.items ?? [], accepted: (e.accepted ?? []).map((i) => i.id) },
+      ]),
+    ),
     docs: context.docs,
     imported: new Set(context.imported.map((c) => c.id)),
     map: mapAroundIds(context.mapAround),
@@ -294,10 +345,16 @@ export async function runPlanner(
       const plan = PlanSchema.safeParse({ schema: 1, ticket: context.ticket.key, version: 1, ...draft });
       if (!plan.success) return plan.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
       // REQ-CTX-06/AC2: claimed existing coverage must name real tests of the tests repository.
-      return [
+      const errors = [
         ...issuesAsErrors(checkPlanSources(plan.data, sources)),
         ...checkExistingCoverage(plan.data, sources),
       ];
+      // REQ-PLAN-11/AC5: a plan must keep at least one case grounded in the ticket, documents or imported cases.
+      if (errors.length === 0 && plan.data.cases.every(onlyExplored))
+        errors.push(
+          "every case cites only exploration, which says what is worth testing but not what the result must be: ground the cases in the ticket's criteria ({kind: ac}), quotes or documents, and keep the exploration item as an extra source",
+        );
+      return errors;
     },
     tools: [...createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText }), ...docs.tools],
     guard: stageGuard(deps, "plan", role),
@@ -305,7 +362,7 @@ export async function runPlanner(
     ...(deps.signal ? { signal: deps.signal } : {}),
   });
   const value = annotateDocSources(
-    coverageAsQuestions(raw, sources),
+    explorationAsQuestions(coverageAsQuestions(raw, sources), context),
     context.docs,
     deps.knowledge?.maxAgeDays,
     deps.now(),

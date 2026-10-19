@@ -4,7 +4,7 @@ Roadmap stage 2. Turn the fetched context of a run into an approved, frozen test
 
 ```text
 qajitsu plan <TICKET> [--run <id>] [--revise "<instruction>"]
-qajitsu approve <TICKET> [--run <id>] [--version <n>] [--confirm-open-questions]
+qajitsu approve <TICKET> [--run <id>] [--version <n>] [--confirm-open-questions] [--person]
 qajitsu doctor --models
 ```
 
@@ -30,6 +30,44 @@ Freezes a version without the interactive loop (CI). Sources are re-checked, the
 written with its SHA-256, approver and time in `run.json` (REQ-PLAN-06). A run's approved plan cannot change;
 start a new run to plan again. Execution and publishing verify the hash and stop on a mismatch.
 
+### Approval flow with model approvers (REQ-PLAN-10, ADR-0010)
+
+By default a person approves, as above. A project can configure a flow of steps in `.qa/qa.project.yaml`:
+
+```yaml
+approval:
+  flow: [model, person] # steps in order: person or model; default [person]
+  model: local/qwen3:14b # the model approver: required for a model step, another model than the planner
+  model_only: as-computed # a flow without a person: results stay as computed (or `review`: PASSED → NEEDS_REVIEW)
+  jira: off # or `comment`: the plan and every decision are posted to the ticket
+```
+
+`qj approve` runs the steps one after another:
+
+- **Code decides first.** A plan with expectations code flagged (REQ-PLAN-09) or with open questions is handed
+  over to a person; the model is not asked.
+- **A model step** gets the ticket context and the plan (as untrusted data) and answers `approve`, `revise` with
+  reasons (the command stops with exit code `2` and prints the `qj plan --revise` to run) or `handover` (the next
+  person step decides; without one the command stops with `2` and says how a person approves). Its answer is
+  validated like any agent output.
+- **A person step** approves as the current user (`--approver` in CI). `--person` lets a person decide at once in
+  place of the model steps, e.g. after a handover.
+- **Choose a strong approver.** A weak model lets weak plans through. In a trial, gemma4:e2b approved guessed totals
+  that qwen3:14b had sent back for a revision; the run then ended FAILED on those values. Code still refuses plans it
+  flagged, and wrong expectations make tests fail rather than pass, but a strong approver saves the run.
+- The plan is frozen when every step approved the same version. A flow of model steps only (`flow: [model]`) is the
+  project's decision to run without a person in the loop: the run can go on at once.
+
+Every decision is a record: `run.json` (`approvals`) and the journal (`approval.step`) keep the kind, identity,
+decision, reasons, time, the SHA-256 of the plan version decided on, and for a model the SHA-256 of its prompt and of
+its answer. A plan approved by a model only is marked in the matrix, `report.html`, `junit.xml` and the Jira comment.
+The `approval-intact` publish gate and `qj audit verify` check the records against the journal and the approved plan
+file; a record changed afterwards fails both and every PASSED becomes NEEDS_REVIEW.
+
+With `jira: comment` the plan is posted as one comment (updated for a new version) and each decision and the freeze
+are comments of their own, with the hashes. A comment Jira refuses is a warning in the output and the journal; the
+decision stands.
+
 ## `doctor --models`
 
 Makes one small call per role's model: it must call a probe tool. Reports unreachable models and capabilities the
@@ -41,5 +79,6 @@ role needs but the model lacks (REQ-LLM-03). Declare capabilities of local model
 | Code | Meaning                                                                 |
 | ---- | ----------------------------------------------------------------------- |
 | 0    | Plan written, approved or quit without approval                         |
-| 2    | Token budget exceeded; the run is marked blocked                        |
+| 2    | `approve`: a model step asked for a revision, or a person must decide   |
+| 2    | `plan`: token budget exceeded; the run is marked blocked                |
 | 3    | Configuration error, invalid model output, ungrounded sources, no fetch |

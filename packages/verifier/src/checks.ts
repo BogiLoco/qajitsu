@@ -15,22 +15,28 @@ export interface CheckedStatus {
  * - a failed audit in `required` mode downgrades every PASSED;
  * - a canary that passed (the inverted expectation was not caught) or could not run downgrades every PASSED;
  * - a record that is expected but missing, unreadable or changed after it was written downgrades every
- *   PASSED (fail closed: deleting a record must not bring back what it downgraded).
+ *   PASSED (fail closed: deleting a record must not bring back what it downgraded);
+ * - a plan approved by a model only, in a project that reviews such results, or approval records that do not match
+ *   the journal, downgrade every PASSED (REQ-PLAN-10/AC5).
  *
  * @param cases - Statuses computed by code.
  * @param audit - `checks/audit.json`, when an audit ran.
  * @param canary - `checks/canary.json`, when a canary ran.
  * @param integrity - Problems with the records themselves.
+ * @param approval - Why every PASSED needs a person (REQ-PLAN-10/AC5): the plan was approved by a model only and the
+ *   project set `approval.model_only: review`, or its approval records are not trustworthy.
  */
 export function applyVerificationChecks(
   cases: readonly { readonly caseId: string; readonly status: TestStatus }[],
   audit?: AuditRecord,
   canary?: CanaryRecord,
   integrity: readonly string[] = [],
+  approval?: string,
 ): CheckedStatus[] {
   return cases.map(({ caseId, status }) => {
     let reason: string | undefined;
     if (integrity.length > 0) reason = `verification records not trustworthy: ${integrity.join("; ")}`;
+    else if (approval !== undefined) reason = approval;
     else if (canary?.status === "error") reason = `canary could not run: ${canary.detail}`;
     else if (canary?.status === "ran" && !canary.caught)
       reason = `canary not caught: ${canary.caseId} ${canary.stepId} ${canary.field} passed with an inverted expectation`;

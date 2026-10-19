@@ -24,6 +24,7 @@ import {
   type EvidenceEntry,
   type Plan,
   type PlanApproval,
+  type ApprovalStep,
 } from "@qajitsu/core";
 import {
   buildTransitionGraph,
@@ -42,6 +43,7 @@ import {
 } from "@qajitsu/report";
 import {
   applyVerificationChecks,
+  checkApprovalRecords,
   checkManifest,
   combineGates,
   combineStatuses,
@@ -91,6 +93,8 @@ export interface RunVerdict {
   readonly fixCheck: readonly string[];
   /** Versions of the tools and models the run used (REQ-OBS-10); undefined for runs that did not record them. */
   readonly versions?: Readonly<Record<string, string>> | undefined;
+  /** Set when no person approved the plan (REQ-PLAN-10/AC5): every report says so. */
+  readonly approvalNote?: string | undefined;
 }
 
 /** `data.fixCheck` of `run.json`, written by `qj run --fix-check` (REQ-VER-11). */
@@ -302,9 +306,29 @@ export async function computeVerdict(
       (h) => [h.caseId, masker.maskText(`${h.category}: ${h.justification} Next: ${h.next}`)] as const,
     ),
   ]);
-  const checked = applyVerificationChecks(combined, audit, canary, integrity);
+  // REQ-PLAN-10/AC5+AC6: the approval records must match the journal; a plan no person approved is always said so,
+  // and its PASSED results need a person when the project asks for it (approval.model_only: review).
+  const journalText = await readFile(ws.path("journal", "events.jsonl"), "utf8").catch(() => "");
+  const steps = ws.record.data["approvals"];
+  const approvalCheck = checkApprovalRecords(
+    approval,
+    Array.isArray(steps) ? (steps as ApprovalStep[]) : [],
+    parseEventLines(journalText).events,
+  );
+  const approvalNote = approvalCheck.modelOnly
+    ? `Plan v${String(approval.version)} was approved by a model only (${approval.approver.replace(/^model:/, "")}, ${approval.at}): no person approved it; steps and hashes in run.json (approvals) and the journal (approval.step).`
+    : undefined;
+  const approvalReason =
+    approvalCheck.problems.length > 0
+      ? `approval records not trustworthy: ${approvalCheck.problems.join("; ")}`
+      : approvalCheck.modelOnly && session.project.config.approval.model_only === "review"
+        ? `plan approved by a model only (${approval.approver}); the project reviews such results (approval.model_only: review)`
+        : undefined;
+  const checked = applyVerificationChecks(combined, audit, canary, integrity, approvalReason);
   const cases = combined.map((c, i) => ({ ...c, status: checked[i]?.status ?? c.status }));
   const checkNotes = [
+    ...(approvalNote ? [approvalNote] : []),
+    ...approvalCheck.problems.map((p) => `Approval record problem: ${p}`),
     ...(audit?.status === "done"
       ? [
           `Auditor ${audit.model}: ${String(audit.findings.filter((f) => f.weak).length)} of ${String(audit.findings.length)} PASSED case(s) flagged.${audit.sameModelAsAuthor ? " Warning: the auditor used the author's model (configure models.roles.auditor or a second model)." : ""}`,
@@ -420,7 +444,6 @@ export async function computeVerdict(
   const graph = buildTransitionGraph(graphCases, await routeRules(session));
 
   // REQ-OBS-02/AC2: timeline with links to the evidence of the moment.
-  const journalText = await readFile(ws.path("journal", "events.jsonl"), "utf8").catch(() => "");
   // REQ-OBS-05: chain intact, journal present, and not shorter than the anchor recorded in run.json.
   const journalCheck = checkJournal(
     journalText,
@@ -506,7 +529,7 @@ export async function computeVerdict(
         `Evidence before the fix: qajitsu evidence ${ws.ticket} --run ${fixCheck.baseRun}`,
       ]
     : [];
-  const matrixMd = renderMatrixMarkdown(rows);
+  const matrixMd = `${renderMatrixMarkdown(rows)}${approvalNote ? `\n_${approvalNote}_\n` : ""}`;
   const csv = renderMatrixCsv(rows);
   // REQ-EXEC-23/AC2: the tested mobile app, recorded by code when the devices were prepared.
   const testedApp = z
@@ -526,6 +549,7 @@ export async function computeVerdict(
       generatedAt: now().toISOString(),
       plan,
       planSha256: approval.sha256,
+      ...(approvalNote ? { approvalNote } : {}),
       rows,
       attempts,
       environment,
@@ -572,6 +596,11 @@ export async function computeVerdict(
     },
     { gate: "results-valid", ok: malformed.length === 0, problems: malformed },
     { gate: "checks-intact", ok: integrity.length === 0, problems: integrity },
+    {
+      gate: "approval-intact",
+      ok: approvalCheck.problems.length === 0,
+      problems: [...approvalCheck.problems],
+    },
     // REQ-OBS-05: the journal published with the results must be the one that was written.
     {
       gate: "journal-intact",
@@ -600,9 +629,14 @@ export async function computeVerdict(
     observations,
     fixCheck: fixCheckLines,
     ...(versions ? { versions } : {}),
+    ...(approvalNote ? { approvalNote } : {}),
     junit: masker.maskText(
       renderJUnit(
-        { ticket: ws.ticket, runId: ws.runId },
+        {
+          ticket: ws.ticket,
+          runId: ws.runId,
+          ...(approvalNote ? { properties: { "qajitsu.plan.approval": approvalNote } } : {}),
+        },
         cases.map((c) => {
           const p = plan.cases.find((x) => x.id === c.caseId);
           return {

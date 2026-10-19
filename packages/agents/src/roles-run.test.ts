@@ -10,6 +10,7 @@ import {
 import { createModelRegistry, type ResolvedModel } from "@qajitsu/models";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { promptOf, scriptedModel, type Turn } from "../../../tests/support/mock-model.js";
+import { writeReviewedSession } from "../../../tests/support/explore-fixture.js";
 import { createFetchedRun } from "../../../tests/support/run-fixture.js";
 import { buildChangeContext } from "./context.js";
 import { modelForRole, runAnalyst, runPlanner, type AgentStageDeps } from "./roles-run.js";
@@ -177,6 +178,56 @@ describe("analyst and planner (REQ-PLAN-01..05, REQ-LLM-03)", () => {
         'The planner considered AC1 covered by an existing test (shop:api/server.test.ts "rounds the total") and wrote no case for it, but this run has no tests repository, so code cannot check that test. Add a case, or confirm the coverage.',
       why: "existing coverage claimed without a tests repository",
     });
+  });
+
+  it("REQ-PLAN-11/AC4+AC5+AC6: cases from accepted exploration need a source for their expected result; uncovered not-done items become questions", async () => {
+    await writeReviewedSession(ws, ["O1", "C1"]);
+    const [first, second] = draft["cases"] as Record<string, unknown>[];
+    const fromExploration = {
+      ...draft,
+      cases: [
+        // Grounded: the ticket's AC1 says what the total must be; exploration only says it is worth testing.
+        {
+          ...first,
+          source: [
+            { kind: "ac", id: "AC1" },
+            { kind: "explore", session: "S01", item: "O1" },
+          ],
+        },
+        // Only exploration: what the application did is no expected result.
+        { ...second, id: "TC-02", source: [{ kind: "explore", session: "S01", item: "O1" }] },
+      ],
+    };
+    const rejected = {
+      ...draft,
+      cases: [{ ...first, source: [{ kind: "explore", session: "S01", item: "F1" }] }],
+    };
+    const planner = scriptedModel([
+      { text: JSON.stringify(rejected) },
+      { text: JSON.stringify(fromExploration) },
+    ]);
+    const value = await runPlanner(
+      deps({ planner, analyst: planner }),
+      await buildChangeContext(ws),
+      analysis as never,
+    );
+    // REQ-PLAN-11/AC4: a citation of an item the person rejected is sent back.
+    expect(promptOf(planner, 1)).toContain("explore:S01/F1 was not accepted by a person");
+    expect(value.cases.map((c) => c.id)).toEqual(["TC-01"]);
+    expect(value.open_questions.slice(-2)).toEqual([
+      {
+        id: `Q${String(value.open_questions.length - 1)}`,
+        question:
+          "TC-02 comes from exploration (S01/O1) but no ticket criterion, quote, document or imported case says what its result must be; what the application did is not an expected result. What should it be?",
+        why: "a case from exploration without a source for its expected result",
+      },
+      {
+        id: `Q${String(value.open_questions.length)}`,
+        question:
+          'Exploration S01 left "apply a code twice" not done and a person accepted it as worth testing (S01/C1), but no case covers it: add a case, or decide it is out of scope.',
+        why: "an accepted not-done item of exploration without a case",
+      },
+    ]);
   });
 
   it("REQ-PLAN-02 + REQ-PLAN-03: the planner returns a validated, grounded draft that is stored as a version", async () => {

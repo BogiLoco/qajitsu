@@ -96,3 +96,10 @@ Status: `todo` (no test yet) · `covered` (test exists, file name in brackets). 
 - done · No baseline → NEEDS_REVIEW, never PASSED (`packages/verifier/src/compute-status.test.ts`).
 - done · The healer writes a baseline (relative, absolute, or the proposed screenshot) → denied (`tests/adversarial/baseline-tampering.test.ts`).
 - done · A proposed screenshot edited after the run → refused by `qj baseline accept` against the manifest.
+
+## Approval flow with model approvers (REQ-PLAN-10, ADR-0010)
+
+- done · The model approver answers with a status or fields beyond its decision → rejected, nothing approved (`tests/adversarial/lying-approver.test.ts`).
+- done · A plan code flagged or with open questions → handed over to a person; the model is not asked.
+- done · A person step added to `run.json`, or the model-only marker removed → `approval-intact` fails, `qj audit verify` fails, PASSED becomes NEEDS_REVIEW (`packages/cli/src/commands/approval-flow.test.ts`).
+- done · Jira refusing an approval comment → warned and journaled; the decision stands as recorded.

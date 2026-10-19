@@ -35,6 +35,9 @@ import {
   type Plan,
 } from "@qajitsu/core";
 import { mapAroundChange } from "@qajitsu/report";
+import { explorationLines } from "./explore-review.js";
+import { approvalCommenter, recordReviewApproval, runApprovalFlow } from "./approval-flow.js";
+import { publisherFor } from "./publish.js";
 import { createMasker } from "@qajitsu/steps";
 import { exportRunTelemetry } from "./telemetry.js";
 import { anchorJournal } from "./verdict.js";
@@ -344,6 +347,8 @@ export async function runPlan(
         `Plan v${String(current.version)}: ${String(current.cases.length)} case(s), ${String(current.open_questions.length)} open question(s)\n${mdFile}\n`,
       );
       for (const q of current.open_questions) io.write(`  ? ${q.id}: ${q.question}\n`);
+      // REQ-PLAN-11/AC3+AC6: what a person accepted from exploration, and what of it no case covers.
+      for (const line of await explorationLines(current, session)) io.write(`${line}\n`);
       // REQ-PLAN-09/AC3: what code cannot check, next to the plan.
       const flags = flagsOf(current);
       if (flags.length > 0)
@@ -379,6 +384,15 @@ export async function runPlan(
           );
           continue;
         }
+        // REQ-PLAN-10/AC3: the person's decision is a step of the approval record like any other.
+        const comment = await approvalCommenter(session, io, publisherFor(session, ports));
+        await recordReviewApproval(session, io, {
+          plan: current,
+          planText: (await readPlan(ws, current.version)).text,
+          person: review.user,
+          now: ports.now,
+          comment,
+        });
         // Approve exactly the version the user reviewed, never whatever is newest on disk.
         const approval = await approvePlan(ws, {
           approver: review.user,
@@ -389,6 +403,11 @@ export async function runPlan(
         session.events.emit("approve", { kind: "user", name: review.user }, "plan.approved", { ...approval });
         await recordPlanFlags(session, flags, review.user);
         await recordApprovalContext(session);
+        await comment?.(
+          "approval-frozen",
+          `QAJitsu plan v${String(approval.version)} of ${ws.ticket} approved and frozen (run ${ws.runId})`,
+          [`Approved by ${review.user}.`, `Plan sha256 ${approval.sha256}`, `At ${approval.at}`],
+        );
         io.write(`Approved plan v${String(approval.version)} (sha256 ${approval.sha256.slice(0, 16)}…)\n`);
         return 0;
       }
@@ -450,6 +469,8 @@ export interface ApproveOptions {
    * did not change since; otherwise refused (REQ-CI-03/AC4). Never approves a new plan.
    */
   readonly reuseFrom?: string | undefined;
+  /** A person approves now, in place of the model steps of the approval flow (REQ-PLAN-10/AC2). */
+  readonly person?: boolean | undefined;
 }
 
 /**
@@ -476,7 +497,7 @@ export async function runApprove(
       return 0;
     }
     const version = options.version === undefined ? undefined : Number(options.version);
-    const { plan } = await readPlan(session.ws, version);
+    const { plan, text } = await readPlan(session.ws, version);
     const context = await buildChangeContext(session.ws, [], {
       indexCache: codeIndexCache(session.project),
       testIdAttribute: session.project.config.web.test_id_attribute,
@@ -489,23 +510,71 @@ export async function runApprove(
     }
     // REQ-PLAN-09/AC4: expectations code cannot check need an explicit confirmation.
     const flags = (await planFlagsOf(session, context))(plan);
-    if (flags.length > 0 && options.confirmPlaceholders !== true)
-      throw new ConfigError(
-        "PLAN_UNCHECKABLE",
-        `${String(flags.length)} expectation(s) cannot be checked as written; revise the plan, or approve them with --confirm-placeholders.`,
-        { issues: formatPlanFlags(flags).split("\n") },
-      );
+    const checkPerson = (): void => {
+      if (flags.length > 0 && options.confirmPlaceholders !== true)
+        throw new ConfigError(
+          "PLAN_UNCHECKABLE",
+          `${String(flags.length)} expectation(s) cannot be checked as written; revise the plan, or approve them with --confirm-placeholders.`,
+          { issues: formatPlanFlags(flags).split("\n") },
+        );
+      if (plan.open_questions.length > 0 && options.confirmOpenQuestions !== true)
+        throw new ConfigError(
+          "PLAN_OPEN_QUESTIONS",
+          `Plan v${String(plan.version)} has ${String(plan.open_questions.length)} open question(s); confirm explicitly to approve.`,
+          { questions: plan.open_questions.map((q) => q.id) },
+        );
+    };
+    // REQ-PLAN-10: the project's approval flow (person and model steps) decides before the plan is frozen.
+    const comment = await approvalCommenter(session, io, publisherFor(session, ports));
+    const flow = await runApprovalFlow(session, io, {
+      comment,
+      deps: stageDeps(session, ports),
+      plan,
+      planText: text,
+      context,
+      flags: formatPlanFlags(flags)
+        .split("\n")
+        .map((l) => l.replace(/^\s*!\s*/, ""))
+        .filter((l) => l !== ""),
+      person: approver,
+      asPerson: options.person === true,
+      checkPerson,
+      now: ports.now,
+    });
+    if (!flow.approve) {
+      await anchorJournal(session);
+      return flow.exitCode;
+    }
     const approval = await approvePlan(session.ws, {
-      approver,
+      approver: flow.approver,
       now: ports.now,
       ...(version === undefined ? {} : { version }),
       confirmOpenQuestions: options.confirmOpenQuestions === true,
+      modelOnly: flow.modelOnly,
     });
-    session.events.emit("approve", { kind: "user", name: approver }, "plan.approved", { ...approval });
-    await recordPlanFlags(session, flags, approver);
+    session.events.emit(
+      "approve",
+      flow.modelOnly ? { kind: "agent", name: flow.approver } : { kind: "user", name: approver },
+      "plan.approved",
+      { ...approval },
+    );
+    await recordPlanFlags(session, flags, flow.approver);
+    await comment?.(
+      "approval-frozen",
+      `QAJitsu plan v${String(approval.version)} of ${session.ws.ticket} approved and frozen (run ${session.ws.runId})`,
+      [
+        flow.modelOnly
+          ? `Approved by a model only (${flow.approver.replace(/^model:/, "")}): no person approved it.`
+          : `Approved by ${flow.approver}.`,
+        `Plan sha256 ${approval.sha256}`,
+        `At ${approval.at}`,
+      ],
+    );
     await recordApprovalContext(session);
     io.write(
-      `Approved plan v${String(approval.version)} of ${session.ws.ticket} run ${session.ws.runId}\nsha256 ${approval.sha256}\n${join(session.ws.dir, "plan", "plan.approved.yaml")}\n`,
+      `Approved plan v${String(approval.version)} of ${session.ws.ticket} run ${session.ws.runId}${
+        flow.modelOnly ? `, approved by a model only (${flow.approver.replace(/^model:/, "")})` : ""
+      }\nsha256 ${approval.sha256}\n${join(session.ws.dir, "plan", "plan.approved.yaml")}\n`,
     );
     // REQ-OBS-03: export what this command added to the journal; telemetry never changes the result.
     await anchorJournal(session);
@@ -549,7 +618,7 @@ async function reuseApprovedPlan(
   }
   const source = await openRunWorkspace(ws.root, ws.ticket, sourceRunId);
   const original = source.record.data["approval"] as
-    { version: number; sha256: string; approver: string } | undefined;
+    { version: number; sha256: string; approver: string; modelOnly?: boolean } | undefined;
   if (!original) throw new ConfigError("REUSE_NOT_APPROVED", `Run ${sourceRunId} has no approved plan.`, {});
   // The approval must be in the source run's intact journal, not only in its run.json.
   const journal = await readFile(source.path("journal", "events.jsonl"), "utf8").catch(() => "");
@@ -592,6 +661,7 @@ async function reuseApprovedPlan(
     now,
     version: original.version,
     confirmOpenQuestions: true,
+    modelOnly: original.modelOnly === true,
   });
   if (approval.sha256 !== original.sha256)
     throw new ConfigError("REUSE_HASH_MISMATCH", "The copied plan differs from the approved one.", {});

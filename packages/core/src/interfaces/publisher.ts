@@ -17,6 +17,11 @@ export interface PublishInput {
   /** The comment, rendered from computed results only (REQ-VER-08): ADF for Cloud, wiki markup for Data Center. */
   readonly comment: { readonly adf: unknown; readonly wiki: string };
   readonly attachments: readonly PublishAttachment[];
+  /**
+   * A separate comment of the run besides its results, e.g. `approval-1` for one decision of the approval flow
+   * (REQ-PLAN-10/AC4): a ticket gets many comments, one per name.
+   */
+  readonly name?: string | undefined;
   /** What this run published before, for idempotent updates (REQ-PUB-04). */
   readonly previous?: { readonly commentId: string; readonly attachmentNames: readonly string[] } | undefined;
 }

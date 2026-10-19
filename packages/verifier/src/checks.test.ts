@@ -86,4 +86,15 @@ describe("auditor and canary checks (REQ-VER-06, REQ-VER-09, invariant 5)", () =
       "verification records not trustworthy: checks/audit.json is missing",
     );
   });
+
+  it("REQ-PLAN-10/AC5: a model-only approval the project reviews moves PASSED to NEEDS_REVIEW and nothing else", () => {
+    const reason = "plan approved by a model only (model:local/qwen3:14b); the project reviews such results";
+    const checked = applyVerificationChecks(all, undefined, undefined, [], reason);
+    expect(checked.filter((c) => c.downgradedBy).map((c) => [c.status, c.downgradedBy])).toEqual([
+      ["NEEDS_REVIEW", reason],
+    ]);
+    expect(checked.filter((c) => !c.downgradedBy).map((c) => c.status)).toEqual(
+      all.filter((c) => c.status !== "PASSED").map((c) => c.status),
+    );
+  });
 });

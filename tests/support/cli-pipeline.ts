@@ -79,6 +79,10 @@ export async function createDemoPipeline(
     transformSpec?: (caseId: string, code: string) => string;
     /** Runs after approval and the specs, right before `qj run` (e.g. to record a `qj env up` environment). */
     beforeRun?: (runDir: string) => Promise<void>;
+    /** Extra top-level lines of `.qa/qa.project.yaml`, e.g. an approval flow. */
+    config?: readonly string[];
+    /** Answers of the model approver when the approval flow has a model step. */
+    approveScript?: Turn[];
   } = {},
 ) {
   const ticket = options.ticket ?? "DEMO-1";
@@ -86,7 +90,10 @@ export async function createDemoPipeline(
   const shop = await startShop({
     env: { DEMO_USER_PASSWORD: DEMO_PASSWORD, ...(options.flag ? { [options.flag]: "1" } : {}) },
   });
-  const { home, project } = await createCliProject(["models: { roles: { default: mock/scripted } }"]);
+  const { home, project } = await createCliProject([
+    "models: { roles: { default: mock/scripted } }",
+    ...(options.config ?? []),
+  ]);
   if (ticket !== "DEMO-1") {
     await copyFile(
       new URL(`../../examples/demo-shop/tickets/${ticket}.json`, import.meta.url),
@@ -155,7 +162,7 @@ export async function createDemoPipeline(
     await run(["fetch", ticket, ...(ticket === "DEMO-1" ? [] : ["--ref", "shop=main"])]);
     const planDraft = (options.transformPlan ?? ((d: string) => d))(draftOf(ticket));
     await run(["plan", ticket], { script: [{ text: analysis }, { text: planDraft }] });
-    await run(["approve", ticket]);
+    await run(["approve", ticket], options.approveScript ? { script: options.approveScript } : {});
     const ids = (JSON.parse(planDraft) as { cases: { id: string }[] }).cases.map((c) => c.id);
     for (const id of ids) {
       const target = join(runDir, "specs", `${id}.spec.ts`);

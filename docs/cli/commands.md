@@ -259,8 +259,11 @@ Approves and freezes a plan version without the interactive loop (SHA-256 in `ru
   and who confirmed them are recorded in `run.json`
 - `--approver <name>`: who approves (CI: the reviewer or the `/qa approve` author)
 - `--reuse-from <run>`: reuse the plan approved in this earlier run if the ticket did not change
+- `--person`: a person approves now, in place of the model steps of the approval flow (REQ-PLAN-10)
 
-Exit codes: `0` approved, `3` not approvable (ungrounded sources, open questions, expectations that cannot be checked,
+With `approval.flow` in the project config, model steps check the plan first (see [plan.md](plan.md#approval-flow-with-model-approvers-req-plan-10-adr-0010)).
+
+Exit codes: `0` approved, `2` a model step asked for a revision or a person must decide, `3` not approvable (ungrounded sources, open questions, expectations that cannot be checked,
 changed ticket) or errors.
 
 ### `qajitsu run <ticket>`
@@ -469,6 +472,36 @@ qj explore DEMO-1 --cli qj --goal "doctor and init" \
 # Session S05 ended: finished; 4 actions, 1 observation(s).
 # Checklist: 3 of 3 item(s) done.
 ```
+
+### `qajitsu explore review <ticket>`
+
+Exploratory sessions can run before the plan. `qajitsu explore review <ticket>` lists every item of the run's sessions,
+observations (`O1`), findings (`F1`) and not-done checklist items (`C2`), with their actions and whether a person
+accepted, rejected or has not reviewed them yet. In a terminal it asks for each one not reviewed yet; nothing is
+accepted by default and an agent cannot accept.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+- `--session <id>`: one session (needed with the options below when the run has several sessions)
+- `--accept <items>` / `--reject <items>`: decide without prompts, e.g. `--accept O1,C2 --reject F1` (CI, scripts)
+- `--note <text>`: why, kept with the decisions
+- `--keep <items>`: keep accepted observations or findings in the project's knowledge base (a note per item in the
+  project's `explore-notes/`, tagged `exploration`), so planners of later tickets find them like any document
+
+Decisions are kept in `explore/<session>/review.json` with who, when and the SHA-256 of the session file, and
+journaled (`explore.reviewed`); if the session file changes, they no longer count. `qajitsu plan` then gives the
+planner only the accepted items, as untrusted data. A case may cite one as `{"kind": "explore", "session": "S01",
+"item": "O1"}`; code refuses items that do not exist or were not accepted. Exploration says what is worth testing,
+never what the result must be: a case citing only exploration becomes an open question, and so does an accepted
+not-done item no case covers. The plan output and `plan.vN.md` show the accepted items, the cases from them and what
+no case covers.
+
+```bash
+qj explore DEMO-1 --goal "cart around the discount change"
+qj explore review DEMO-1 --session S01 --accept O1,C2 --reject F1 --keep O1
+qj plan DEMO-1     # Exploration: 2 accepted item(s) offered to the planner (S01: O1, C2)
+```
+
+Exit codes: `0` listed or recorded, `3` errors (unknown session or item, `--keep` of an item not accepted).
 
 #### Command-line tools (`--cli`, REQ-EXEC-24)
 

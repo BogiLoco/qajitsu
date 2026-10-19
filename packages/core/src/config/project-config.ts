@@ -219,6 +219,31 @@ export const ProjectConfigSchema = z.strictObject({
       triage: z.enum(["on", "off"]).default("on"),
     })
     .default({ auditor: "optional", auditor_max_images: 12, canary: false, triage: "on" }),
+  /**
+   * Who approves a plan, in order (REQ-PLAN-10, ADR-0010): `person` (as before) and `model` steps. A model step needs
+   * `model`, a model other than the planner's, and never approves a plan with flagged expectations or open questions.
+   * A flow without a person is the project's decision to automate; `model_only: review` keeps such results
+   * NEEDS_REVIEW. `jira: comment` posts the plan and every decision to the ticket with their hashes.
+   */
+  approval: z
+    .strictObject({
+      flow: z
+        .array(z.enum(["person", "model"]))
+        .min(1)
+        .max(5)
+        .default(["person"]),
+      model: z
+        .string()
+        .regex(/^[^/\s]+\/\S+$/)
+        .optional(),
+      model_only: z.enum(["as-computed", "review"]).default("as-computed"),
+      jira: z.enum(["off", "comment"]).default("off"),
+    })
+    .superRefine((a, ctx) => {
+      if (a.flow.includes("model") && a.model === undefined)
+        ctx.addIssue({ code: "custom", path: ["model"], message: "Required for a flow with a model step" });
+    })
+    .default({ flow: ["person"], model_only: "as-computed", jira: "off" }),
   /** Mobile runner, devices and app binaries (REQ-EXEC-06, REQ-ENV-06, REQ-EVD-03). */
   mobile: MobileSchema.optional(),
   /** Web runner (REQ-EXEC-05, REQ-EVD-06). */
