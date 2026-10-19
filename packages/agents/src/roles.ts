@@ -2,7 +2,7 @@ import type { ModelCapabilities } from "@qajitsu/core";
 
 /** Definition of one agent role: what it does, which tools it gets and what its model must support. */
 export interface AgentRoleDefinition {
-  readonly role: "analyst" | "planner" | "author" | "healer" | "auditor" | "explorer" | "triage";
+  readonly role: "analyst" | "planner" | "author" | "healer" | "auditor" | "explorer" | "triage" | "approver";
   readonly purpose: string;
   /** Tool names allowed for this role; everything else is denied by the guard (REQ-VER-03). */
   readonly tools: readonly string[];
@@ -43,6 +43,14 @@ export const AGENT_ROLES: readonly AgentRoleDefinition[] = [
     tools: ["read_file", "write_file", "browser_snapshot"],
     requires: { tools: true, contextWindow: 64_000 },
     requirements: ["REQ-EXEC-09"],
+  },
+  {
+    role: "approver",
+    purpose:
+      "Check a plan against the ticket, its sources and what code found; approve, ask for a revision or hand over to a person. Never approves a plan code flagged.",
+    tools: [],
+    requires: { structuredOutput: true, contextWindow: 64_000 },
+    requirements: ["REQ-PLAN-10"],
   },
   {
     role: "auditor",

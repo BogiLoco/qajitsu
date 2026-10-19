@@ -259,8 +259,11 @@ Approves and freezes a plan version without the interactive loop (SHA-256 in `ru
   and who confirmed them are recorded in `run.json`
 - `--approver <name>`: who approves (CI: the reviewer or the `/qa approve` author)
 - `--reuse-from <run>`: reuse the plan approved in this earlier run if the ticket did not change
+- `--person`: a person approves now, in place of the model steps of the approval flow (REQ-PLAN-10)
 
-Exit codes: `0` approved, `3` not approvable (ungrounded sources, open questions, expectations that cannot be checked,
+With `approval.flow` in the project config, model steps check the plan first (see [plan.md](plan.md#approval-flow-with-model-approvers-req-plan-10-adr-0010)).
+
+Exit codes: `0` approved, `2` a model step asked for a revision or a person must decide, `3` not approvable (ungrounded sources, open questions, expectations that cannot be checked,
 changed ticket) or errors.
 
 ### `qajitsu run <ticket>`

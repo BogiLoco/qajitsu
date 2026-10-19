@@ -34,6 +34,8 @@ export interface CommentModel {
   readonly executor: string;
   readonly planVersion: number;
   readonly planSha256: string;
+  /** Set when no person approved the plan (REQ-PLAN-10/AC5). */
+  readonly approvalNote?: string | undefined;
   readonly rows: readonly MatrixRow[];
   /** Validated summary text (REQ-VER-08/AC2). */
   readonly summary: string;
@@ -123,6 +125,7 @@ const header = (m: CommentModel): string[] => [
       .join(", ") || "–"
   }`,
   `Plan v${String(m.planVersion)} (sha256 ${m.planSha256.slice(0, 12)}) · executed by ${m.executor} with QAJitsu`,
+  ...(m.approvalNote ? [m.approvalNote] : []),
   ...(m.versions ? [`Tools: ${formatVersions(m.versions)}`] : []),
 ];
 

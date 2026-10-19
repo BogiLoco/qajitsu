@@ -588,6 +588,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
     )
     .option("--approver <name>", "who approves (CI: the reviewer or the /qa approve author)")
     .option("--reuse-from <run>", "reuse the plan approved in this earlier run if the ticket did not change")
+    .option("--person", "a person approves now, in place of the model steps of the approval flow")
     .action(
       (
         ticket: string,
@@ -598,6 +599,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
           confirmPlaceholders?: boolean;
           approver?: string;
           reuseFrom?: string;
+          person?: boolean;
         },
       ) => withPorts((ports) => runApprove(ticket, options, commandIO, ports, review))(),
     );

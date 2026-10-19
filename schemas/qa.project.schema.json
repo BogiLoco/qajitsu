@@ -548,6 +548,54 @@
       },
       "additionalProperties": false
     },
+    "approval": {
+      "default": {
+        "flow": [
+          "person"
+        ],
+        "model_only": "as-computed",
+        "jira": "off"
+      },
+      "type": "object",
+      "properties": {
+        "flow": {
+          "default": [
+            "person"
+          ],
+          "minItems": 1,
+          "maxItems": 5,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "person",
+              "model"
+            ]
+          }
+        },
+        "model": {
+          "type": "string",
+          "pattern": "^[^/\\s]+\\/\\S+$"
+        },
+        "model_only": {
+          "default": "as-computed",
+          "type": "string",
+          "enum": [
+            "as-computed",
+            "review"
+          ]
+        },
+        "jira": {
+          "default": "off",
+          "type": "string",
+          "enum": [
+            "off",
+            "comment"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "mobile": {
       "type": "object",
       "properties": {

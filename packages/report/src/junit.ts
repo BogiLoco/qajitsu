@@ -45,7 +45,12 @@ const xml = (s: string): string =>
  * @param cases - Cases with computed statuses.
  */
 export function renderJUnit(
-  suite: { readonly ticket: string; readonly runId: string },
+  suite: {
+    readonly ticket: string;
+    readonly runId: string;
+    /** Suite properties, e.g. that no person approved the plan (REQ-PLAN-10/AC5). */
+    readonly properties?: Readonly<Record<string, string>>;
+  },
   cases: readonly JUnitCase[],
 ): string {
   const failures = cases.filter((c) => c.status === "FAILED").length;
@@ -72,6 +77,13 @@ export function renderJUnit(
     '<?xml version="1.0" encoding="UTF-8"?>',
     `<testsuites name="QAJitsu" tests="${String(cases.length)}" failures="${String(failures)}" skipped="${String(skipped)}" time="${seconds(total)}">`,
     `  <testsuite name="${xml(`${suite.ticket} ${suite.runId}`)}" tests="${String(cases.length)}" failures="${String(failures)}" errors="0" skipped="${String(skipped)}" time="${seconds(total)}">`,
+    ...(suite.properties && Object.keys(suite.properties).length > 0
+      ? [
+          `    <properties>${Object.entries(suite.properties)
+            .map(([k, v]) => `<property name="${xml(k)}" value="${xml(v)}"/>`)
+            .join("")}</properties>`,
+        ]
+      : []),
     ...body,
     "  </testsuite>",
     "</testsuites>",

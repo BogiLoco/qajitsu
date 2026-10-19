@@ -14,17 +14,18 @@ export function createFilePublisher(dir: string): Publisher {
     async publish(input, signal): Promise<PublishResult> {
       signal?.throwIfAborted();
       await mkdir(dir, { recursive: true });
-      const commentId = input.previous?.commentId ?? `local-${input.runId}`;
-      await writeFile(
-        join(dir, "jira-comment.adf.json"),
-        `${JSON.stringify(input.comment.adf, null, 2)}\n`,
-        "utf8",
-      );
-      await writeFile(join(dir, "jira-comment.wiki.txt"), input.comment.wiki, "utf8");
+      // Each named comment has its own files, as each is its own comment in Jira (REQ-PLAN-10/AC4).
+      const suffix = input.name === undefined ? "" : `.${input.name.replace(/[^\w.-]/g, "_")}`;
+      const commentId =
+        input.previous?.commentId ??
+        `local-${input.runId}${input.name === undefined ? "" : `-${input.name}`}`;
+      const adf = join(dir, `jira-comment${suffix}.adf.json`);
+      await writeFile(adf, `${JSON.stringify(input.comment.adf, null, 2)}\n`, "utf8");
+      await writeFile(join(dir, `jira-comment${suffix}.wiki.txt`), input.comment.wiki, "utf8");
       const already = new Set(input.previous?.attachmentNames ?? []);
       return {
         commentId,
-        url: `file://${join(dir, "jira-comment.adf.json")}`,
+        url: `file://${adf}`,
         updated: input.previous !== undefined,
         attachments: input.attachments
           .filter((a) => !already.has(a.name))

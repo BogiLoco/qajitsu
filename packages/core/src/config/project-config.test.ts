@@ -201,4 +201,28 @@ describe("web matrix (REQ-EXEC-13)", () => {
     ]);
     expect(webCombinations(matrix)[1]?.viewport).toEqual({ name: "mobile", width: 390, height: 844 });
   });
+
+  describe("approval flow (REQ-PLAN-10)", () => {
+    it("REQ-PLAN-10/AC1: by default a person approves; a model step needs a model named explicitly", () => {
+      expect(parseProjectConfig(valid).approval).toEqual({
+        flow: ["person"],
+        model_only: "as-computed",
+        jira: "off",
+      });
+      expect(
+        parseProjectConfig({ ...valid, approval: { flow: ["model", "person"], model: "local/qwen3:14b" } })
+          .approval,
+      ).toMatchObject({ flow: ["model", "person"], model: "local/qwen3:14b" });
+      expect(() => parseProjectConfig({ ...valid, approval: { flow: ["model"] } })).toThrow(
+        /Invalid configuration/,
+      );
+      expect(() => parseProjectConfig({ ...valid, approval: { flow: [] } })).toThrow(/Invalid configuration/);
+      expect(
+        parseProjectConfig({
+          ...valid,
+          approval: { flow: ["model"], model: "local/qwen3:14b", model_only: "review" },
+        }).approval.model_only,
+      ).toBe("review");
+    });
+  });
 });

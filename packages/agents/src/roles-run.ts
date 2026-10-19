@@ -84,7 +84,7 @@ const roleDef = (role: AgentRoleDefinition["role"]): AgentRoleDefinition => {
  */
 export async function modelForRole(
   models: ModelRegistry,
-  role: AgentRoleDefinition["role"],
+  role: Exclude<AgentRoleDefinition["role"], "approver">,
 ): Promise<ResolvedModel> {
   const resolved = await models.forRole(role);
   const missing = missingCapabilities(roleDef(role), resolved.profile);

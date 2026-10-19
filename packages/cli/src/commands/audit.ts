@@ -2,7 +2,12 @@ import { readFile, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
   AUDIT_DIR,
+  APPROVED_PLAN_FILE,
   QajitsuError,
+  parseEventLines,
+  sha256,
+  type ApprovalStep,
+  type PlanApproval,
   RunIdSchema,
   TicketKeySchema,
   ConfigError,
@@ -10,6 +15,7 @@ import {
   resolveWorkspaceRoot,
   verifyEventChain,
 } from "@qajitsu/core";
+import { checkApprovalRecords } from "@qajitsu/verifier";
 import type { RuntimePorts } from "../adapters.js";
 import { loadProject } from "../project.js";
 import type { CommandIO } from "./fetch.js";
@@ -31,7 +37,7 @@ export async function runAuditVerify(
   ports: RuntimePorts,
 ): Promise<number> {
   try {
-    const files: { name: string; path: string }[] = [];
+    const files: { name: string; path: string; runDir?: string }[] = [];
     if (options.file !== undefined) {
       files.push({ name: options.file, path: resolve(io.cwd, options.file) });
     } else {
@@ -63,7 +69,11 @@ export async function runAuditVerify(
           () => true,
           () => false,
         );
-        files.push({ name: `${key.data}/${id}`, path: exists ? live : archived });
+        files.push({
+          name: `${key.data}/${id}`,
+          path: exists ? live : archived,
+          ...(exists ? { runDir: join(root, key.data, id) } : {}),
+        });
       }
     }
     let broken = 0;
@@ -83,6 +93,15 @@ export async function runAuditVerify(
           `✘ ${f.name}: chain broken\n${breaks.map((b) => `  line ${String(b.line)}: ${b.reason}`).join("\n")}\n`,
         );
       }
+      if (f.runDir !== undefined) {
+        const approval = await checkRunApproval(f.runDir, text);
+        if (approval === undefined) continue;
+        if (approval.problems.length === 0) io.write(`✔ ${f.name}: approval ${approval.summary}\n`);
+        else {
+          broken += 1;
+          io.write(`✘ ${f.name}: approval records\n${approval.problems.map((p) => `  ${p}`).join("\n")}\n`);
+        }
+      }
     }
     return broken === 0 ? 0 : 1;
   } catch (error) {
@@ -90,4 +109,39 @@ export async function runAuditVerify(
     io.writeError(`Error${code}: ${error instanceof Error ? error.message : String(error)}\n`);
     return 3;
   }
+}
+
+/**
+ * Checks the approval of a live run (REQ-PLAN-10/AC6, ADR-0010): the approved plan file still has the recorded
+ * SHA-256, and the approval steps in `run.json` match the journal.
+ *
+ * @returns Nothing for a run without an approved plan.
+ */
+async function checkRunApproval(
+  runDir: string,
+  journal: string,
+): Promise<{ summary: string; problems: string[] } | undefined> {
+  const record = JSON.parse(await readFile(join(runDir, "run.json"), "utf8").catch(() => "{}")) as {
+    data?: { approval?: PlanApproval; approvals?: unknown };
+  };
+  const approval = record.data?.approval;
+  if (approval === undefined) return undefined;
+  const steps = Array.isArray(record.data?.approvals) ? (record.data.approvals as ApprovalStep[]) : [];
+  const check = checkApprovalRecords(approval, steps, parseEventLines(journal).events);
+  const file = await readFile(join(runDir, "plan", APPROVED_PLAN_FILE), "utf8").catch(() => undefined);
+  const problems = [
+    ...(file === undefined
+      ? [`${APPROVED_PLAN_FILE} is missing`]
+      : sha256(file) === approval.sha256
+        ? []
+        : [`${APPROVED_PLAN_FILE} does not match the approved sha256 ${approval.sha256.slice(0, 12)}`]),
+    ...check.problems,
+  ];
+  const by = check.modelOnly
+    ? `by a model only (${approval.approver.replace(/^model:/, "")})`
+    : `by ${approval.approver}`;
+  return {
+    summary: `of plan v${String(approval.version)} ${by}, ${String(steps.length)} step(s) match the journal`,
+    problems,
+  };
 }

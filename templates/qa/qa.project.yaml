@@ -163,6 +163,9 @@ test_types: [api, web]
 # Auditor and canary (REQ-VER-06, REQ-VER-09)
 # verification: { auditor: optional, auditor_max_images: 12, canary: false, triage: on }
 #
+# Plan approval flow (REQ-PLAN-10, ADR-0010): a person by default; a model step needs a model other than the planner's
+# approval: { flow: [model, person], model: local/qwen3:14b, model_only: as-computed, jira: off }
+#
 # Android and iOS (REQ-ENV-06, docs/guides/mobile.md)
 # mobile: { recording: retain-on-failure, android: { app: { source: build, repo: app, command: [./gradlew, assembleDebug], output: app/build/outputs/apk/debug/app-debug.apk }, app_id: com.example.app } }
 # Without the app's code (REQ-EXEC-23): app: { source: file, path: app.apk } | { source: url, url: https://..., sha256: <hex> } | { source: installed }

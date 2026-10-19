@@ -31,6 +31,8 @@ export interface ReportInput {
   readonly generatedAt: string;
   readonly plan: Plan;
   readonly planSha256: string;
+  /** Set when no person approved the plan (REQ-PLAN-10/AC5). */
+  readonly approvalNote?: string | undefined;
   readonly rows: readonly MatrixRow[];
   readonly attempts: Readonly<Record<string, readonly ReportAttempt[]>>;
   readonly environment: {
@@ -212,7 +214,7 @@ section{border-top:1px solid #d0d7de;margin-top:16px}img,video{max-width:100%}
 :target{outline:3px solid #0969da}figure{margin:8px 0}.timeline td{font-size:12px}
 </style></head><body>
 <h1>${esc(input.ticket)} test report</h1>
-<p class="muted">Run ${esc(input.runId)} · ${esc(input.generatedAt)} · environment ${esc(input.environment.name)} (${esc(input.environment.baseUrl)})${input.environment.deployedSha ? ` · deployed <code>${esc(input.environment.deployedSha)}</code>` : ""}${input.environment.stubs?.length ? ` · <strong>stubbed (not real):</strong> ${esc(input.environment.stubs.join(", "))}` : ""}<br>Code: ${repos || "–"}${app} · plan sha256 <code>${esc(input.planSha256.slice(0, 16))}…</code>${input.versions ? `<br>Tools: ${esc(formatVersions(input.versions))}` : ""}</p>
+<p class="muted">Run ${esc(input.runId)} · ${esc(input.generatedAt)} · environment ${esc(input.environment.name)} (${esc(input.environment.baseUrl)})${input.environment.deployedSha ? ` · deployed <code>${esc(input.environment.deployedSha)}</code>` : ""}${input.environment.stubs?.length ? ` · <strong>stubbed (not real):</strong> ${esc(input.environment.stubs.join(", "))}` : ""}<br>Code: ${repos || "–"}${app} · plan sha256 <code>${esc(input.planSha256.slice(0, 16))}…</code>${input.approvalNote ? `<br><strong>${esc(input.approvalNote)}</strong>` : ""}${input.versions ? `<br>Tools: ${esc(formatVersions(input.versions))}` : ""}</p>
 <div class="tiles">${tiles}</div>
 <h2>Summary</h2><p>${esc(input.summary).replace(/\n/g, "<br>")}</p>
 ${

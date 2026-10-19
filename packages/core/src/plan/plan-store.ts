@@ -17,6 +17,28 @@ export interface PlanApproval {
   readonly at: string;
   readonly openQuestions: number;
   readonly openQuestionsConfirmed: boolean;
+  /** No person approved: the project's approval flow has model steps only (REQ-PLAN-10/AC5, ADR-0010). */
+  readonly modelOnly?: true;
+}
+
+/**
+ * One step of a plan's approval flow, kept in `run.json` (`approvals`) and journaled as `approval.step`
+ * (REQ-PLAN-10/AC3, ADR-0010).
+ */
+export interface ApprovalStep {
+  /** `code` when code decided without asking a model (flagged expectations, open questions). */
+  readonly kind: "person" | "model" | "code";
+  /** A person's name, a model id, or `code`. */
+  readonly identity: string;
+  readonly decision: "approve" | "revise" | "handover";
+  readonly reasons: readonly string[];
+  /** Plan version decided on and the SHA-256 of its file. */
+  readonly version: number;
+  readonly planSha256: string;
+  readonly at: string;
+  /** Model steps: SHA-256 of the exact prompt and of the validated answer. */
+  readonly promptSha256?: string;
+  readonly answerSha256?: string;
 }
 
 /**
@@ -245,6 +267,8 @@ export async function approvePlan(
     readonly now: () => Date;
     readonly version?: number;
     readonly confirmOpenQuestions?: boolean;
+    /** Approved by model steps only (REQ-PLAN-10/AC5). */
+    readonly modelOnly?: boolean;
   },
 ): Promise<PlanApproval> {
   if (ws.record.data["approval"] !== undefined) {
@@ -273,6 +297,7 @@ export async function approvePlan(
     at: options.now().toISOString(),
     openQuestions: plan.open_questions.length,
     openQuestionsConfirmed: confirmed,
+    ...(options.modelOnly === true ? { modelOnly: true as const } : {}),
   };
   await ws.update({
     stage: "approve",
