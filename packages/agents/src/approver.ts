@@ -84,7 +84,7 @@ export async function runPlanApprover(
   if (input.flags.length > 0)
     return {
       decision: "handover",
-      reasons: [`code flagged ${String(input.flags.length)} expectation(s): ${input.flags.join("; ")}`],
+      reasons: [`code flagged ${String(input.flags.length)} expectation(s) it cannot check`, ...input.flags],
       decidedBy: "code",
       model: "code",
     };
@@ -92,9 +92,8 @@ export async function runPlanApprover(
     return {
       decision: "handover",
       reasons: [
-        `the plan has ${String(input.plan.open_questions.length)} open question(s): ${input.plan.open_questions
-          .map((q) => `${q.id} ${q.question}`)
-          .join("; ")}`,
+        `the plan has ${String(input.plan.open_questions.length)} open question(s)`,
+        ...input.plan.open_questions.map((q) => `${q.id} ${q.question}`),
       ],
       decidedBy: "code",
       model: "code",

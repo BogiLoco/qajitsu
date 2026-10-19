@@ -84,11 +84,14 @@ describe("approval flow with person and model steps (REQ-PLAN-10)", () => {
   it("REQ-PLAN-10/AC2: revise stops with the reasons and the command to revise; nothing is approved", async () => {
     const p = await planned("[model, person]");
     const r = await p.run(["approve", "DEMO-1"], {
-      script: [answer("revise", ["TC-02 needs the SAVE10 total"])],
+      script: [answer("revise", ["TC-02 needs the SAVE10 total.", "TC-03 must quote AC3;"])],
     });
     expect(r.exitCode).toBe(2);
-    expect(r.out).toContain("The model approver asks for a revision: TC-02 needs the SAVE10 total");
-    expect(r.out).toContain("qajitsu plan DEMO-1 --revise");
+    expect(r.out).toContain("Step 1 (model mock/approver): revise — TC-02 needs the SAVE10 total.");
+    expect(r.out).toContain("The model approver asks for a revision (reasons above).");
+    expect(r.out).toContain(
+      'qajitsu plan DEMO-1 --revise "TC-02 needs the SAVE10 total; TC-03 must quote AC3" --run',
+    );
     expect((await p.record()).data.approval).toBeUndefined();
   }, 120_000);
 
@@ -102,7 +105,7 @@ describe("approval flow with person and model steps (REQ-PLAN-10)", () => {
     const r = await p.run(["approve", "DEMO-1"]);
     expect(r.exitCode).toBe(2);
     expect(r.out).toContain(
-      "Step 1 (code): handover — the plan has 1 open question(s): Q1 Which rounding mode applies?",
+      "Step 1 (code): handover — the plan has 1 open question(s)\n    - Q1 Which rounding mode applies?",
     );
     expect(r.out).toContain("A person must decide: approve it with --person (and --confirm-open-questions)");
     const person = await p.run(["approve", "DEMO-1", "--person", "--confirm-open-questions"]);
@@ -113,6 +116,56 @@ describe("approval flow with person and model steps (REQ-PLAN-10)", () => {
       ["code", "handover"],
       ["person", "approve"],
     ]);
+  }, 120_000);
+});
+
+describe("approval in the interactive plan review (REQ-PLAN-10/AC3)", () => {
+  it("REQ-PLAN-10/AC3: accepting in the review is a person's step, recorded, commented and intact for the audit", async () => {
+    const p = await createDemoPipeline({
+      config: ["approval: { flow: [model], model: mock/approver, jira: comment }"],
+    });
+    cleanups.push(p.cleanup);
+    await p.run(["fetch", "DEMO-1"]);
+    const [analysis, draft] = flowScript("DEMO-1");
+    const r = await p.run(["plan", "DEMO-1"], { script: [analysis as never, draft as never], ask: ["a"] });
+    expect(r.err).toBe("");
+    expect(r.out).toContain(
+      "A person approved in the review: the model steps of the approval flow (model) were not run.",
+    );
+    const record = JSON.parse(await readFile(join(p.runDir, "run.json"), "utf8")) as {
+      data: {
+        approval: { approver: string; sha256: string };
+        approvals: { kind: string; planSha256: string }[];
+      };
+    };
+    expect(record.data.approvals.map((a) => [a.kind, a.planSha256])).toEqual([
+      ["person", record.data.approval.sha256],
+    ]);
+    const audit = await p.run(["audit", "verify", "DEMO-1"]);
+    expect(audit.exitCode).toBe(0);
+    expect(audit.out).toContain("approval of plan v1 by qa-lead, 1 step(s) match the journal");
+    const files = await readdir(join(p.runDir, "report", "published"));
+    expect(files).toContain("jira-comment.approval-1.wiki.txt");
+    expect(files).toContain("jira-comment.approval-frozen.wiki.txt");
+  }, 120_000);
+});
+
+describe("plans code flagged (REQ-PLAN-10/AC2)", () => {
+  it("REQ-PLAN-10/AC2: flagged expectations go to the person step without asking the model, one per line; the person still confirms them", async () => {
+    const placeholder = (d: string) =>
+      d.replace('"fields": { "total": 1.01 }', '"fields": { "total": "TBD" }');
+    const p = await planned("[model, person]", { transformPlan: placeholder });
+    const r = await p.run(["approve", "DEMO-1"]);
+    expect(r.out).toContain(
+      "Step 1 (code): handover — code flagged 1 expectation(s) it cannot check\n    - TC-01 S1",
+    );
+    expect(r.out).not.toContain("! TC-01");
+    expect(r.exitCode).toBe(3);
+    expect(r.err).toContain("--confirm-placeholders");
+    expect((await p.record()).data.approval).toBeUndefined();
+    const confirmed = await p.run(["approve", "DEMO-1", "--confirm-placeholders"]);
+    expect(confirmed.exitCode).toBe(0);
+    expect((await p.record()).data.approval?.approver).toBe("qa-lead");
   }, 120_000);
 });
 

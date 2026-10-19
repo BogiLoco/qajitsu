@@ -109,10 +109,12 @@ export async function approvalCommenter(
   };
 }
 
-const describe = (step: ApprovalStep): string =>
-  `${step.kind === "code" ? "code" : `${step.kind} ${step.identity}`}): ${step.decision}${
-    step.reasons.length > 0 ? ` — ${step.reasons.join("; ")}` : ""
-  }`;
+const describe = (step: ApprovalStep): string => {
+  const [first, ...more] = step.reasons;
+  return `${step.kind === "code" ? "code" : `${step.kind} ${step.identity}`}): ${step.decision}${
+    first === undefined ? "" : ` — ${first}`
+  }${more.map((r) => `\n    - ${r}`).join("")}`;
+};
 
 /**
  * Runs the model steps of the project's approval flow in order (REQ-PLAN-10, ADR-0010). A model step can approve,
@@ -189,8 +191,12 @@ export async function runApprovalFlow(
     await record(step, `step ${String(i + 1)} of ${String(steps.length)}`);
     io.write(`${label}${describe(step)}\n`);
     if (step.decision === "revise") {
+      const instruction = step.reasons
+        .map((r) => r.trim().replace(/[.;]+$/, ""))
+        .join("; ")
+        .replaceAll('"', "'");
       io.write(
-        `The model approver asks for a revision: ${step.reasons.join("; ")}\nRevise the plan: qajitsu plan ${session.ws.ticket} --revise "${step.reasons.join("; ").replaceAll('"', "'")}" --run ${session.ws.runId}\n`,
+        `The model approver asks for a revision (reasons above). Revise the plan with them:\nqajitsu plan ${session.ws.ticket} --revise "${instruction}" --run ${session.ws.runId}\n`,
       );
       return { approve: false, exitCode: 2 };
     }
@@ -208,4 +214,38 @@ export async function runApprovalFlow(
     models = decided.model;
   }
   return { approve: true, approver: `model:${models ?? "unknown"}`, modelOnly: true };
+}
+
+/**
+ * Records a person's approval made in the interactive review of `qj plan` (REQ-PLAN-10/AC3): a person decides at once,
+ * like `qj approve --person`, and the decision is kept and commented like any step of the flow.
+ */
+export async function recordReviewApproval(
+  session: RunSession,
+  io: CommandIO,
+  input: {
+    readonly plan: Plan;
+    readonly planText: string;
+    readonly person: string;
+    readonly now: () => Date;
+    readonly comment?: ApprovalCommenter | undefined;
+  },
+): Promise<void> {
+  const step: ApprovalStep = {
+    kind: "person",
+    identity: input.person,
+    decision: "approve",
+    reasons: [],
+    version: input.plan.version,
+    planSha256: sha256(input.planText),
+    at: input.now().toISOString(),
+  };
+  const n = await recordApprovalStep(session, step);
+  const { title, lines } = stepComment(session, step, "in the plan review");
+  await input.comment?.(`approval-${String(n)}`, title, lines);
+  const { flow } = session.project.config.approval;
+  if (flow.length !== 1 || flow[0] !== "person")
+    io.write(
+      `A person approved in the review: the model steps of the approval flow (${flow.join(", ")}) were not run.\n`,
+    );
 }

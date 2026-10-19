@@ -36,7 +36,7 @@ import {
 } from "@qajitsu/core";
 import { mapAroundChange } from "@qajitsu/report";
 import { explorationLines } from "./explore-review.js";
-import { approvalCommenter, runApprovalFlow } from "./approval-flow.js";
+import { approvalCommenter, recordReviewApproval, runApprovalFlow } from "./approval-flow.js";
 import { publisherFor } from "./publish.js";
 import { createMasker } from "@qajitsu/steps";
 import { exportRunTelemetry } from "./telemetry.js";
@@ -384,6 +384,15 @@ export async function runPlan(
           );
           continue;
         }
+        // REQ-PLAN-10/AC3: the person's decision is a step of the approval record like any other.
+        const comment = await approvalCommenter(session, io, publisherFor(session, ports));
+        await recordReviewApproval(session, io, {
+          plan: current,
+          planText: (await readPlan(ws, current.version)).text,
+          person: review.user,
+          now: ports.now,
+          comment,
+        });
         // Approve exactly the version the user reviewed, never whatever is newest on disk.
         const approval = await approvePlan(ws, {
           approver: review.user,
@@ -394,6 +403,11 @@ export async function runPlan(
         session.events.emit("approve", { kind: "user", name: review.user }, "plan.approved", { ...approval });
         await recordPlanFlags(session, flags, review.user);
         await recordApprovalContext(session);
+        await comment?.(
+          "approval-frozen",
+          `QAJitsu plan v${String(approval.version)} of ${ws.ticket} approved and frozen (run ${ws.runId})`,
+          [`Approved by ${review.user}.`, `Plan sha256 ${approval.sha256}`, `At ${approval.at}`],
+        );
         io.write(`Approved plan v${String(approval.version)} (sha256 ${approval.sha256.slice(0, 16)}…)\n`);
         return 0;
       }
@@ -520,7 +534,8 @@ export async function runApprove(
       context,
       flags: formatPlanFlags(flags)
         .split("\n")
-        .filter((l) => l.trim() !== ""),
+        .map((l) => l.replace(/^\s*!\s*/, ""))
+        .filter((l) => l !== ""),
       person: approver,
       asPerson: options.person === true,
       checkPerson,

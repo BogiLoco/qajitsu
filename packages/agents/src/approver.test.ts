@@ -100,7 +100,10 @@ describe("model approver of a plan (REQ-PLAN-10)", () => {
     });
     expect(flagged).toEqual({
       decision: "handover",
-      reasons: ["code flagged 1 expectation(s): TC-01 S1 fields.total: looks like a placeholder"],
+      reasons: [
+        "code flagged 1 expectation(s) it cannot check",
+        "TC-01 S1 fields.total: looks like a placeholder",
+      ],
       decidedBy: "code",
       model: "code",
     });
@@ -110,7 +113,7 @@ describe("model approver of a plan (REQ-PLAN-10)", () => {
       flags: [],
       modelRef: "local/qwen3:14b",
     });
-    expect(asked.reasons).toEqual(["the plan has 1 open question(s): Q1 Which rounding mode applies?"]);
+    expect(asked.reasons).toEqual(["the plan has 1 open question(s)", "Q1 Which rounding mode applies?"]);
     expect(approver.mock.doGenerateCalls).toHaveLength(0);
   });
 
