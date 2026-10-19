@@ -52,6 +52,9 @@ approval:
   validated like any agent output.
 - **A person step** approves as the current user (`--approver` in CI). `--person` lets a person decide at once in
   place of the model steps, e.g. after a handover.
+- **Choose a strong approver.** A weak model lets weak plans through. In a trial, gemma4:e2b approved guessed totals
+  that qwen3:14b had sent back for a revision; the run then ended FAILED on those values. Code still refuses plans it
+  flagged, and wrong expectations make tests fail rather than pass, but a strong approver saves the run.
 - The plan is frozen when every step approved the same version. A flow of model steps only (`flow: [model]`) is the
   project's decision to run without a person in the loop: the run can go on at once.
 
