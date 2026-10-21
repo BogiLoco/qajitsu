@@ -52,4 +52,49 @@ describe("transition graph (REQ-OBS-06)", () => {
     expect(svg).toContain("TC-01.S3 (failed)");
     expect(svg).not.toContain("<script");
   });
+
+  it("REQ-OBS-06/AC4: arrows end at the target's edge, parallel edges are apart, a step on the same node is a loop, and every edge is labelled", () => {
+    const graph = {
+      nodes: [
+        { id: "start", kind: "page" as const, label: "start" },
+        { id: "api:GET /cart", kind: "api" as const, label: "GET /cart" },
+        { id: "api:POST /cart/discount", kind: "api" as const, label: "POST /cart/discount" },
+      ],
+      edges: [
+        { from: "start", to: "api:GET /cart", label: "TC-01.S1", outcome: "failed" as const },
+        { from: "start", to: "api:GET /cart", label: "TC-05.S1", outcome: "passed" as const },
+        {
+          from: "api:POST /cart/discount",
+          to: "api:POST /cart/discount",
+          label: "TC-03.S2",
+          outcome: "failed" as const,
+        },
+      ],
+    };
+    const svg = renderGraphSvg(graph);
+    const paths = [
+      ...svg.matchAll(/<path class="edge" d="([^"]+)"[^>]*marker-end="url\(#arrow-(passed|failed)\)"/g),
+    ];
+    expect(paths).toHaveLength(3);
+    const [first, second, loop] = paths.map((m) => m[1] ?? "");
+    // Two edges between the same nodes are two different curves.
+    expect(first).not.toBe(second);
+    // The loop starts and ends on the same node's right side: a cubic curve back to it.
+    expect(loop).toMatch(/^M[\d.]+ [\d.]+C/);
+    // An arrow ends on the border of the target box, not inside it.
+    const box = /<rect x="(\d+)" y="(\d+)" width="(\d+)" height="(\d+)"[^>]*\/><text[^>]*>GET \/cart</.exec(
+      svg,
+    );
+    const bx = Number(box?.[1]);
+    const by = Number(box?.[2]);
+    const bw = Number(box?.[3]);
+    const bh = Number(box?.[4]);
+    const end = /([\d.]+) ([\d.]+)$/.exec(first ?? "");
+    const [x, y] = [Number(end?.[1]), Number(end?.[2])];
+    const near = (v: number, lo: number, hi: number) => v >= lo - 4 && v <= hi + 4;
+    const inside = (v: number, lo: number, hi: number) => v > lo + 2 && v < hi - 2;
+    expect(near(x, bx, bx + bw) && near(y, by, by + bh)).toBe(true);
+    expect(inside(x, bx, bx + bw) && inside(y, by, by + bh)).toBe(false);
+    for (const label of ["TC-01.S1", "TC-05.S1", "TC-03.S2"]) expect(svg).toContain(`>${label}</text>`);
+  });
 });

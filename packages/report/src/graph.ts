@@ -125,27 +125,82 @@ const esc = (s: string): string =>
  */
 export function renderGraphSvg(graph: TransitionGraph): string {
   const cols = Math.max(1, Math.ceil(Math.sqrt(graph.nodes.length)));
-  const w = 220;
-  const h = 90;
+  const w = 240;
+  const h = 110;
+  const boxW = 180;
+  const boxH = 40;
+  const top = 30;
   const pos = new Map(
-    graph.nodes.map((n, i) => [n.id, { x: 20 + (i % cols) * w, y: 20 + Math.floor(i / cols) * h }]),
+    graph.nodes.map((n, i) => [n.id, { x: 20 + (i % cols) * w, y: top + Math.floor(i / cols) * h }]),
   );
-  const width = 40 + cols * w;
-  const height = 40 + Math.ceil(graph.nodes.length / cols) * h;
+  // Room on the right of the last column for loops and their labels.
+  const width = 100 + cols * w;
+  const rows = Math.ceil(graph.nodes.length / cols);
+  const height = top + (rows - 1) * h + boxH + 30;
+  const center = (p: { x: number; y: number }) => ({ x: p.x + boxW / 2, y: p.y + boxH / 2 });
+  // REQ-OBS-06/AC4: where the line from a box's centre towards `toward` leaves the box (3 px outside it).
+  const border = (c: { x: number; y: number }, toward: { x: number; y: number }) => {
+    const dx = toward.x - c.x;
+    const dy = toward.y - c.y;
+    const t = Math.min(
+      dx === 0 ? Infinity : (boxW / 2 + 3) / Math.abs(dx),
+      dy === 0 ? Infinity : (boxH / 2 + 3) / Math.abs(dy),
+    );
+    return { x: c.x + dx * t, y: c.y + dy * t };
+  };
+  const n = (v: number) => String(Math.round(v * 10) / 10);
+  const color = (o: GraphEdge["outcome"]) => (o === "passed" ? "#1a7f37" : "#cf222e");
+  const label = (x: number, y: number, e: GraphEdge) =>
+    `<text x="${n(x)}" y="${n(y)}" text-anchor="middle" font-size="10" fill="${color(e.outcome)}" stroke="#fff" stroke-width="3" paint-order="stroke">${esc(e.label)}</text>`;
+  // Edges between the same two nodes, in either direction, are spread apart.
+  const groups = new Map<string, GraphEdge[]>();
+  for (const e of graph.edges) {
+    const key = [e.from, e.to].sort().join("\u0000");
+    groups.set(key, [...(groups.get(key) ?? []), e]);
+  }
   const lines = graph.edges.map((e) => {
     const a = pos.get(e.from);
     const b = pos.get(e.to);
     if (!a || !b) return "";
-    const color = e.outcome === "passed" ? "#1a7f37" : "#cf222e";
-    return `<line x1="${String(a.x + 90)}" y1="${String(a.y + 20)}" x2="${String(b.x + 90)}" y2="${String(b.y + 20)}" stroke="${color}" stroke-width="2" marker-end="url(#arrow-${e.outcome})"><title>${esc(e.label)} (${e.outcome})</title></line>`;
+    const group = groups.get([e.from, e.to].sort().join("\u0000")) ?? [e];
+    const index = group.indexOf(e);
+    const attrs = `stroke="${color(e.outcome)}" stroke-width="2" fill="none" marker-end="url(#arrow-${e.outcome})"`;
+    const title = `<title>${esc(e.label)} (${e.outcome})</title>`;
+    if (e.from === e.to) {
+      // A loop on the right side of the box, wider for each further loop, clear of the edges between rows.
+      const c = center(a);
+      const r = 16 + index * 12;
+      const x0 = a.x + boxW + 3;
+      const d = `M${n(x0)} ${n(c.y - 9)}C${n(x0 + 2 * r)} ${n(c.y - 9 - r)} ${n(x0 + 2 * r)} ${n(c.y + 9 + r)} ${n(x0)} ${n(c.y + 9)}`;
+      return `<g><path class="edge" d="${d}" ${attrs}>${title}</path>${label(x0 + 1.5 * r + 22, c.y + 4, e)}</g>`;
+    }
+    const ca = center(a);
+    const cb = center(b);
+    // Curve sideways by the edge's place in its group; the canonical direction keeps A→B and B→A apart.
+    const sign = e.from < e.to ? 1 : -1;
+    const offset = (index - (group.length - 1) / 2) * 34 * sign + (group.length > 1 ? 0 : 0);
+    const len = Math.hypot(cb.x - ca.x, cb.y - ca.y) || 1;
+    const normal = { x: -(cb.y - ca.y) / len, y: (cb.x - ca.x) / len };
+    const mid = {
+      x: (ca.x + cb.x) / 2 + normal.x * offset * 2,
+      y: (ca.y + cb.y) / 2 + normal.y * offset * 2,
+    };
+    const start = border(ca, mid);
+    const end = border(cb, mid);
+    const d = `M${n(start.x)} ${n(start.y)}Q${n(mid.x)} ${n(mid.y)} ${n(end.x)} ${n(end.y)}`;
+    // The label sits on the curve, halfway.
+    const lx = 0.25 * start.x + 0.5 * mid.x + 0.25 * end.x;
+    const ly = 0.25 * start.y + 0.5 * mid.y + 0.25 * end.y;
+    return `<g><path class="edge" d="${d}" ${attrs}>${title}</path>${label(lx, ly - 4, e)}</g>`;
   });
-  const boxes = graph.nodes.map((n) => {
-    const p = pos.get(n.id);
+  const boxes = graph.nodes.map((node) => {
+    const p = pos.get(node.id);
     if (!p) return "";
-    const fill = n.kind === "page" ? "#ddf4ff" : "#fff8c5";
-    return `<g><rect x="${String(p.x)}" y="${String(p.y)}" width="180" height="40" rx="6" fill="${fill}" stroke="#57606a"/><text x="${String(p.x + 90)}" y="${String(p.y + 25)}" text-anchor="middle" font-size="12">${esc(n.label.length > 26 ? `${n.label.slice(0, 25)}…` : n.label)}</text></g>`;
+    const fill = node.kind === "page" ? "#ddf4ff" : "#fff8c5";
+    return `<g><rect x="${String(p.x)}" y="${String(p.y)}" width="${String(boxW)}" height="${String(boxH)}" rx="6" fill="${fill}" stroke="#57606a"/><text x="${String(p.x + boxW / 2)}" y="${String(p.y + 25)}" text-anchor="middle" font-size="12">${esc(node.label.length > 26 ? `${node.label.slice(0, 25)}…` : node.label)}</text></g>`;
   });
   const marker = (o: string, c: string): string =>
-    `<marker id="arrow-${o}" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="${c}"/></marker>`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${String(width)}" height="${String(height)}" role="img" aria-label="Transition graph"><defs>${marker("passed", "#1a7f37")}${marker("failed", "#cf222e")}</defs>${lines.join("")}${boxes.join("")}</svg>`;
+    `<marker id="arrow-${o}" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="${c}"/></marker>`;
+  // Boxes first, then edges: the arrowheads stay visible on the boxes' borders.
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${String(width)}" height="${String(height)}" role="img" aria-label="Transition graph"><defs>${marker("passed", "#1a7f37")}${marker("failed", "#cf222e")}</defs>${boxes.join("")}${lines.join("")}</svg>`;
 }

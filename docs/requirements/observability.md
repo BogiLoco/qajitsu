@@ -78,6 +78,7 @@ Built by code from the journal, never drawn by an agent.
 - [x] AC1: Nodes are screens/pages (web: route pattern, mobile: screen/activity) and API endpoints (OpenAPI template); edges are tester actions.
 - [x] AC2: Edges coloured by outcome (passed, failed); shown in `report.html`.
 - [x] AC3: URL normalisation to route patterns (`/product/:id`) through router information or rules in `.qa/`.
+- [x] AC4: Every edge shows its direction with an arrowhead at the edge of the target node; several edges between the same two nodes are drawn apart, a step that stays on the same node is a loop above it, and each edge carries its step label (`TC-01.S2`).
 
 ### REQ-OBS-07 · Application map across runs
 
