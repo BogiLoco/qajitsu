@@ -124,3 +124,23 @@ only touched lightly so far.
 - [x] AC2: A checklist in `docs/demo/` lists every command with the date, version and result of its last pass and the defects found; it is updated with each pass.
 - [x] AC3: Every defect found gets a regression test that fails without the fix before it is fixed.
 - [x] AC4: Flows that can run without a person (promote then regression, `watch` while a run runs, `publish` in file mode, the `ci` commands with fixture events) become part of `pnpm test:e2e`.
+
+### REQ-NFR-10 · A merge needs green CI, on the Node.js version CI uses
+
+- Status: in-progress
+- Priority: must
+- Stage: later
+- Related: REQ-NFR-02, REQ-NFR-05, REQ-NFR-06, REQ-NFR-09
+- Note: accepted by the owner on 2026-10-21. CI on GitHub had been red on every pull request and on main since
+  2026-10-17 (a Node.js 22 warning in sandboxed tool output, a broken `pnpm demo`, then dev-tool advisories), and
+  pull requests were merged anyway; locally everything passed on Node.js 26. AC4 is a repository setting the owner
+  enables.
+
+The checks only protect anything if a red result stops a merge and if a contributor's machine runs what CI runs.
+
+**Acceptance criteria**
+
+- [x] AC1: Every pull request and push to main runs `pnpm verify` and the end-to-end suites (`pnpm demo` included) on Linux and macOS with the Node.js version of `.nvmrc`.
+- [x] AC2: The same runs every night on main and on demand, so a new runner image, Node.js patch release or advisory shows up without a pull request.
+- [x] AC3: `pnpm verify` warns when it runs on another Node.js major than `.nvmrc`, naming how to switch; it does not fail, newer Node.js may work.
+- [ ] AC4: main is protected: a pull request merges only when every CI job passed (required status checks, listed in CONTRIBUTING.md).

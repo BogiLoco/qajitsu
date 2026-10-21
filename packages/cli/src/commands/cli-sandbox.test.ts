@@ -89,6 +89,28 @@ describe("sandbox of a command-line session (REQ-EXEC-24)", () => {
     expect(Object.keys(env)).not.toContain("SSH_AUTH_SOCK");
   });
 
+  it("REQ-EXEC-24/AC2: the warning Node prints for the proxy QAJitsu sets is off, only where Node knows the flag", async () => {
+    const s = await sandbox();
+    // Node 22 printed "[UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental" into every tool's output (CI).
+    const on22 = sandboxEnv(s, "http://127.0.0.1:1234", {}, { PATH: "/bin" }, "v22.23.4");
+    expect(on22["NODE_OPTIONS"]).toBe("--disable-warning=UNDICI-EHPA");
+    const kept = sandboxEnv(
+      s,
+      "http://127.0.0.1:1234",
+      { NODE_OPTIONS: "--max-old-space-size=512" },
+      {},
+      "v24.1.0",
+    );
+    expect(kept["NODE_OPTIONS"]).toBe("--max-old-space-size=512 --disable-warning=UNDICI-EHPA");
+    // Older Node refuses unknown flags in NODE_OPTIONS and would not start the tool at all.
+    expect(sandboxEnv(s, "http://127.0.0.1:1234", {}, {}, "v20.10.0")["NODE_OPTIONS"]).toBeUndefined();
+    expect(sandboxEnv(s, "http://127.0.0.1:1234", {}, {}, "v20.11.0")["NODE_OPTIONS"]).toBe(
+      "--disable-warning=UNDICI-EHPA",
+    );
+    // No node on the tool's PATH: nothing to turn off.
+    expect(sandboxEnv(s, "http://127.0.0.1:1234", {}, {}, "")["NODE_OPTIONS"]).toBeUndefined();
+  });
+
   it("REQ-EXEC-24/AC2+AC3: runs with an argument array (no shell), answers prompts, reports exit codes and output", async () => {
     const s = await sandbox();
     const hello = tool(s, ["hello", "$(whoami); rm -rf /"]);

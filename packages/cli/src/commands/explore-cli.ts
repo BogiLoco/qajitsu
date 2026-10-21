@@ -26,6 +26,7 @@ import {
   createSandbox,
   findLeftovers,
   fromBase,
+  probe,
   removeSandbox,
   sandboxEnv,
   startAllowlistProxy,
@@ -194,7 +195,9 @@ export async function runCliExplore(
         const host = h.slice(0, 300);
         if (!refusedHosts.includes(host) && refusedHosts.length < 200) refusedHosts.push(host);
       });
-      const env = sandboxEnv(sandbox, proxy.url, configured);
+      // The node a tool started from PATH, which decides whether its proxy warning can be turned off.
+      const nodeVersion = (await probe("node", ["--version"]))?.trim() ?? "";
+      const env = sandboxEnv(sandbox, proxy.url, configured, process.env, nodeVersion);
       const id = await nextSessionId(session);
       await mkdir(ws.path("explore", id), { recursive: true });
       const store = createLocalEvidenceStore(ws.path("explore", id, "evidence"));
