@@ -130,3 +130,20 @@ Work spent on one ticket builds the regression suite instead of being lost.
 - [x] AC2: The report shows per ticket the status counts, open FAILED and NEEDS_REVIEW cases, and tickets with no run.
 - [x] AC3: All numbers are computed from structured results; a ticket without results is never counted as passed.
 - [x] AC4: The report can be published to Jira (a version page or comment) after preview.
+
+### REQ-PUB-10 · GO / NO-GO decision computed from the matrix
+
+- Status: proposed
+- Priority: should
+- Stage: 4
+- Related: REQ-EVD-04, REQ-VER-08, REQ-PUB-09, REQ-FLOW-04, INV-1, INV-6
+
+A decision per ticket; REQ-PUB-09 is the readiness of a whole release.
+
+**Acceptance criteria**
+
+- [ ] AC1: Every report ends with a decision: GO, NO-GO or NO DECISION, computed by code from the matrix and a project decision policy.
+- [ ] AC2: Default policy: GO only if every case is PASSED; any FAILED in a must-have (P0) case is NO-GO; any BLOCKED, NOT_RUN, NEEDS_REVIEW or FLAKY in a P0 case is NO DECISION.
+- [ ] AC3: The policy (case priorities, tolerated statuses for lower priorities) is versioned project configuration; the version used is recorded in the report.
+- [ ] AC4: The decision lists the cases that caused it; an agent may explain them in text, and that text is validated against the computed decision (REQ-VER-08).
+- [ ] AC5: The decision is advisory for the Jira workflow (REQ-FLOW-04) and never overrides a human sign-off rule.

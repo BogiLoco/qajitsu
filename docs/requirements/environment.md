@@ -132,3 +132,46 @@ Cases running at the same time never interfere through a shared test account.
 - [x] AC3: A pool account can be limited to lanes (`lanes: [mobile]`), e.g. for apps that allow one session per user.
 - [x] AC4: When no account is free the case waits up to `execution.account_wait_s`, then it is BLOCKED with the reason; it is never given an account in use.
 - [x] AC5: The journal records which pool member each attempt used (`user:standard#2`, never the user name); `qj env check` warns when a pool is smaller than the number of cases that can need it at once.
+
+### REQ-ENV-10 · Preview environments per change
+
+- Status: proposed
+- Priority: should
+- Stage: 6
+- Related: REQ-ENV-01, REQ-ENV-03, REQ-GEN-02
+
+Besides a provided environment (REQ-ENV-01) and one built from the repositories (REQ-ENV-03), the environment of a change can be one an existing platform creates per pull or merge request.
+
+**Acceptance criteria**
+
+- [ ] AC1: Mode `preview`: the environment URL for the change is resolved through an environment provider adapter; first adapters: Vercel, Netlify, a Kubernetes namespace through Helm or Argo CD.
+- [ ] AC2: QAJitsu never deploys, restarts or changes a preview environment; it only resolves and checks it (REQ-ENV-02).
+- [ ] AC3: An environment that cannot be resolved makes every case BLOCKED with the reason.
+
+### REQ-ENV-11 · DevOps agent: environment onboarding
+
+- Status: proposed
+- Priority: could
+- Stage: 6
+- Related: REQ-ENV-03, REQ-GEN-03, REQ-CTX-10
+
+**Acceptance criteria**
+
+- [ ] AC1: Optional, once per project: an agent reads the repository and CI files (Dockerfile, compose, pipeline config, README) when code access allows.
+- [ ] AC2: It proposes an environment configuration and a seed script as files for review; nothing is executed before a person approves.
+- [ ] AC3: After approval every run uses the approved configuration as code; the agent takes no part in normal runs.
+- [ ] AC4: A change to an approved configuration needs a new approval.
+
+### REQ-ENV-12 · Desktop test machines
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: REQ-EXEC-37, REQ-ENV-04, REQ-ENV-02
+
+**Acceptance criteria**
+
+- [ ] AC1: Desktop cases run on dedicated machines or virtual machines per operating system (Windows VMs, macOS hardware or macOS cloud hosts, Linux with a virtual display).
+- [ ] AC2: The build under test is installed from the change's artifact and its version is checked before the tests, like REQ-ENV-02.
+- [ ] AC3: Each run starts from a clean snapshot of the machine; the snapshot id is recorded in the run's journal.
+- [ ] AC4: A machine that cannot be reached, restored or prepared makes the desktop cases BLOCKED with the reason.

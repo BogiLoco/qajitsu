@@ -131,3 +131,38 @@ file other users of the machine could read.
 - [x] AC1: A missing tool is an error once, with the command that installs it: a check that already reports it (the Android SDK for its emulator, Appium for its drivers, Docker for Compose) is not repeated by another check, and the versions table points at that check instead of repeating the error.
 - [x] AC2: `doctor --models` checks only Node.js, the project config and the models (every role's and the approval flow's model), so tooling a model check does not need cannot fail it; combined with `--online` or `--fix` it is refused with how to run them. Every variant uses one exit code rule: `0` no errors (information and warnings allowed), `3` at least one error; documented and tested.
 - [x] AC3: On macOS and Linux `doctor` warns when `.env.local` (or another file the env secret provider reads) can be read by the group or others, with `chmod 600 <file>` as the fix; it never prints the file's content.
+
+### REQ-GEN-09 · Signed release images
+
+- Status: proposed
+- Priority: should
+- Stage: 3
+- Related: REQ-CI-01, REQ-NFR-05
+
+REQ-CI-01 already ships a Docker image for other CI systems; this makes the release images verifiable.
+
+**Acceptance criteria**
+
+- [ ] AC1: Official QAJitsu images are published from CI to a public registry for every release.
+- [ ] AC2: Images are built for amd64 and arm64.
+- [ ] AC3: Every image is signed and ships with an SBOM and build provenance that a user can check.
+
+### REQ-GEN-10 · Ready-to-run images and a Compose stack
+
+- Status: proposed
+- Priority: should
+- Stage: 9
+- Related: REQ-GEN-06, REQ-GEN-09, REQ-CI-01, REQ-CI-06, REQ-LLM-05, REQ-KNOW-08
+
+Pull and run instead of installing: images on a public registry and one Compose file that brings up QAJitsu with the
+chosen models. The images are built with `qj setup` (REQ-GEN-06), so the tool versions have one source; installing
+on the machine stays the other way.
+
+**Acceptance criteria**
+
+- [ ] AC1: Every release publishes images from CI to Docker Hub and GHCR: `qajitsu` (API and web: Node.js, git, browsers) and `qajitsu-android` (plus Java, Android SDK, emulator and Appium), built with `qj setup` at QAJitsu's pinned versions; the Dockerfiles of `ci/docker` are their source.
+- [ ] AC2: `qj stack init` writes a `compose.yaml` for the project: QAJitsu, Ollama and, when the knowledge base uses it, Chroma; parameters (preset, models per role, GPU, ports, volumes) come from options or a short questionnaire.
+- [ ] AC3: The models named for the roles are pulled into Ollama once, at the first start, by a step of the stack; `models.roles` of the project is written to match, and the stack fails with the model name when a pull fails.
+- [ ] AC4: Images, model names and their digests are pinned in the generated file and recorded with every run (REQ-OBS-10).
+- [ ] AC5: No secret is baked into an image or written into `compose.yaml`; secrets come from `.env.local` or the secret provider at run time.
+- [ ] AC6: The stack runs with Docker Engine and Podman; GPU access for Ollama is optional and documented per platform; the Android image states that the emulator needs KVM.

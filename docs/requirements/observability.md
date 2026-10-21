@@ -136,3 +136,15 @@ the tools that tested them, so a changed result cannot be told apart from a new 
 - [x] AC2: `report.html` and the ticket comment show these versions; `qj runs` and `qj evidence` show them for a run.
 - [x] AC3: `qj regression` and `qj run --fix-check` list the versions that differ from the run they compare with, next to the result.
 - [x] AC4: A version that cannot be read is recorded as unknown, never guessed.
+
+### REQ-OBS-11 · Run replay
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: REQ-OBS-06, REQ-EVD-02, REQ-WEB-01
+
+**Acceptance criteria**
+
+- [ ] AC1: A finished run can be replayed step by step in the web console: step, screenshot, network calls and logs on one timeline, in either display mode.
+- [ ] AC2: Replay uses only stored evidence; it never runs anything again.

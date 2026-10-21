@@ -208,3 +208,66 @@ person has to ask for a revision by hand. When the API description leaves no dou
 - [x] AC2: Anything else stays as written and is flagged as today: other number formats (`"1,01"`, `"$1.01"`, `"1.01 PLN"`, `" 1.01"`, `"1e3"`), a fraction for an `integer` field, a string field, a field the schema does not describe, or a project without an OpenAPI document.
 - [x] AC3: Only the type changes, never the value; the converted value is what the person approves and what the approved plan's SHA-256 covers.
 - [x] AC4: The conversion is deterministic code with fixture tests, including values that must not be converted.
+
+### REQ-PLAN-13 · Ticket readiness gate
+
+- Status: proposed
+- Priority: should
+- Stage: 2
+- Related: REQ-PLAN-05, REQ-CTX-01, REQ-FLOW-02
+
+Before planning, code and the planner check that the ticket can be tested at all.
+
+**Acceptance criteria**
+
+- [ ] AC1: Checks: acceptance criteria present, scope understandable, linked change found (when code access is not `none`), target environment known.
+- [ ] AC2: A ticket that fails the gate gets a list of concrete questions instead of a plan; in the Jira workflow it moves to the configured "needs info" status (REQ-FLOW-02).
+- [ ] AC3: The person can override the gate explicitly; the override is recorded in `run.json`.
+- [ ] AC4: The result is READY, NEEDS_CLARIFICATION or NOT_TESTABLE, with a risk level (low, medium, high) and a list of requirement gaps, posted to the ticket as a structured comment.
+- [ ] AC5: The risk level is computed by rules from the change (paths, components, migrations, security-relevant areas) where code access allows; the agent may add reasons but cannot lower a computed level.
+- [ ] AC6: A ticket answered after NEEDS_CLARIFICATION is checked again automatically when it returns to the start status.
+
+### REQ-PLAN-14 · Coverage matrix computed by code
+
+- Status: proposed
+- Priority: must
+- Stage: 2
+- Related: REQ-PLAN-02, REQ-PLAN-03, REQ-CTX-05, INV-6
+
+Whether the plan covers the ticket and the change is computed, not claimed by the agent.
+
+**Acceptance criteria**
+
+- [ ] AC1: Every acceptance criterion of the ticket maps to at least one test case or to an explicit exclusion with a reason.
+- [ ] AC2: With code access `full`, every changed endpoint, screen or component found in the diff maps to a test case or an explicit exclusion.
+- [ ] AC3: Uncovered items are shown to the reviewer as a risk list next to the plan ("changed but not tested").
+- [ ] AC4: A plan with uncovered items cannot be approved without an explicit confirmation, recorded in `run.json`.
+
+### REQ-PLAN-15 · Project lessons from revisions
+
+- Status: proposed
+- Priority: should
+- Stage: 7
+- Related: REQ-PLAN-04, REQ-CTX-07, REQ-KNOW-01, REQ-PRJ-04
+
+Each human correction makes the next plan better.
+
+**Acceptance criteria**
+
+- [ ] AC1: After approval, the differences between the first and the approved plan version are summarised as lessons (for example "always test both admin and user roles").
+- [ ] AC2: Lessons are stored in the project home and can be listed and removed (`qj lessons list|remove`).
+- [ ] AC3: The planner gets the relevant lessons and previously approved plans of similar tickets as examples.
+- [ ] AC4: Lessons never leave the project (REQ-PRJ-04).
+
+### REQ-PLAN-16 · Plan quality metrics
+
+- Status: proposed
+- Priority: should
+- Stage: 7
+- Related: REQ-PLAN-04, REQ-LLM-07, REQ-OBS-04, INV-6
+
+**Acceptance criteria**
+
+- [ ] AC1: Per project: share of plans approved without changes, average number of revision rounds, share of tickets stopped by the readiness gate (REQ-PLAN-13).
+- [ ] AC2: Defects reported later on a ticket marked as passed can be linked to the run (escaped defects).
+- [ ] AC3: The metrics are shown in `qj status`, `qj metrics` and the web console; numbers are computed from run records.

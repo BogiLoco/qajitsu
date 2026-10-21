@@ -414,3 +414,178 @@ session can never describe testing that did not happen or silently skip part of 
 - [x] AC8: An item claimed not done although an action of the session ran everything it names (its subcommand and flags) is rejected: a command that ran is done whatever its exit code or error, and that error is the result to report.
 - [x] AC9: Findings and the explorer's comment that code cannot confirm are sent back once; if the explorer insists, they are dropped from the session and journaled (`explore.claim_dropped`) while the checklist and the confirmed findings are kept. Text the explorer quotes ('…' or "…") cites what a tool printed and is not checked as a command it ran.
 - [x] AC10: An explorer that keeps claiming what code refuses does not lose its session: its last answer is corrected by code, never in its favour. An item whose claim is refused becomes not done with the refusal as the reason; an item an action did run (its subcommand and flags) gets that action; an item it did not report is not done. Each change is marked in the session and the report ("corrected by code") and journaled (`explore.claim_corrected`); a model cannot set that mark itself.
+
+### REQ-EXEC-26 · Poor network conditions
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: REQ-ENV-03
+
+**Acceptance criteria**
+
+- [ ] AC1: Cases can request latency, bandwidth limits, packet loss or dropped connections between the client and a service (Toxiproxy or browser throttling).
+- [ ] AC2: Conditions apply only to the run's own environment, never to shared environments.
+
+### REQ-EXEC-27 · Document verification
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: REQ-EXEC-02
+
+**Acceptance criteria**
+
+- [ ] AC1: Generated PDF, CSV and XLSX files can be checked for text, fields and totals by deterministic helpers.
+- [ ] AC2: The checked file is stored as evidence.
+
+### REQ-EXEC-28 · Audio, voice and IVR
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: REQ-EXEC-02
+
+**Acceptance criteria**
+
+- [ ] AC1: Audio is captured and transcribed (ffmpeg plus a speech-to-text model such as Whisper).
+- [ ] AC2: Assertions compare the transcript with expected phrases using a deterministic similarity threshold.
+- [ ] AC3: The recording and the transcript are stored as evidence.
+
+### REQ-EXEC-29 · Testing AI features
+
+- Status: proposed
+- Priority: should
+- Stage: 9
+- Related: REQ-EXEC-02, REQ-EXEC-30, INV-1
+
+Chatbots, assistants, RAG search and other features built on models answer differently between runs, so their verdict is statistical and computed by code. Deterministic checks come first; a judge may only add doubt (REQ-EXEC-30); uncertainty is never PASSED.
+
+**Acceptance criteria**
+
+- [ ] AC1: Cases for AI features use deterministic checks: required and forbidden content, schema, length, latency and reference sets.
+- [ ] AC2: Results are repeated a configurable number of times and reported as a pass rate against a threshold.
+- [ ] AC3: No model sets or upgrades a status; the judge of REQ-EXEC-30 can only move PASSED to NEEDS_REVIEW.
+- [ ] AC4: The verdict is computed from the pass rate with a confidence interval: PASSED only if the lower bound is at or above the threshold, FAILED if the upper bound is below it, otherwise NEEDS_REVIEW, with the number of repetitions shown.
+- [ ] AC5: Conversation cases support multi-turn scripts with checks per turn and a fixed seed or temperature where the system under test allows it; the settings used are recorded.
+- [ ] AC6: The model, version and prompt version of the system under test are recorded when the application exposes them.
+
+### REQ-EXEC-30 · LLM judge that can only downgrade
+
+- Status: proposed
+- Priority: should
+- Stage: 9
+- Related: REQ-EXEC-29, REQ-VER-06, REQ-VER-16, REQ-PLAN-06, INV-1, INV-5
+
+For qualities code cannot check (helpfulness, policy compliance, groundedness, tone) a judge adds evidence-backed doubt; like the auditor it can only move PASSED to NEEDS_REVIEW.
+
+**Acceptance criteria**
+
+- [ ] AC1: The rubric (criteria, scale, pass mark, examples) is part of the plan and frozen with it; the judge cannot use criteria that are not in the frozen plan.
+- [ ] AC2: The judge runs only after the case's deterministic checks passed; a case that failed them stays FAILED without judging.
+- [ ] AC3: A negative judgement moves a PASSED case to NEEDS_REVIEW; the judge never sets FAILED or PASSED.
+- [ ] AC4: The judge returns structured output per criterion with quoted spans of the answer as evidence; code checks that every quoted span exists in the answer, and a judgement with a missing or invented quote is discarded and the case becomes NEEDS_REVIEW.
+- [ ] AC5: Several judges from different model families can be configured with an agreement rule (for example 2 of 3); disagreement gives NEEDS_REVIEW.
+- [ ] AC6: A judge uses another provider or model family than the system under test and than the planner; it gets the answer, the rubric and the reference material, and the ticket text only as untrusted data.
+- [ ] AC7: Judge model, version, temperature, prompt and response are recorded in the audit trail; `qj verify-report` can check that the recorded judgement matches the recorded inputs.
+- [ ] AC8: An unavailable, timed-out or schema-invalid judge gives NEEDS_REVIEW, never PASSED.
+- [ ] AC9: The report shows the judge result in its own column, marked as model-based, next to the code verdict.
+
+### REQ-EXEC-31 · Judge calibration and drift control
+
+- Status: proposed
+- Priority: should
+- Stage: 9
+- Related: REQ-EXEC-30, REQ-VER-09, REQ-LLM-06
+
+**Acceptance criteria**
+
+- [ ] AC1: Each rubric has a calibration set of answers labelled by people; a judge is enabled for a rubric only if its agreement with the labels reaches a configured threshold (for example agreement rate or Cohen's kappa).
+- [ ] AC2: Every judging batch contains hidden canary answers with known labels; a judge that grades a canary wrongly voids the batch and the affected cases become NEEDS_REVIEW.
+- [ ] AC3: Calibration runs again on a schedule and whenever the judge model or the rubric changes; the results are stored and shown.
+- [ ] AC4: Cases the judge downgraded can be reviewed by a person; reviewed outcomes join the calibration set after approval.
+
+### REQ-EXEC-32 · Evaluation of retrieval-augmented answers
+
+- Status: proposed
+- Priority: could
+- Stage: 9
+- Related: REQ-EXEC-29, REQ-EXEC-30
+
+**Acceptance criteria**
+
+- [ ] AC1: Deterministic checks: the expected source documents were retrieved, cited sources exist, and quoted text appears in those sources.
+- [ ] AC2: Groundedness (claims supported by the retrieved text) is checked by the judge with quoted evidence (REQ-EXEC-30/AC4).
+- [ ] AC3: Retrieved documents and citations are stored as evidence.
+
+### REQ-EXEC-33 · Behaviour regression after model or prompt changes
+
+- Status: proposed
+- Priority: should
+- Stage: 9
+- Related: REQ-EXEC-29, REQ-VER-11
+
+**Acceptance criteria**
+
+- [ ] AC1: A frozen question set runs against the version before and after a change of model, prompt or retrieval configuration.
+- [ ] AC2: Pass rates are compared per case with confidence intervals; a statistically significant drop is FAILED, an inconclusive change is NEEDS_REVIEW.
+- [ ] AC3: The report shows the answers before and after for changed cases.
+
+### REQ-EXEC-34 · LLM evaluation tools as runners
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: REQ-EXEC-29, REQ-EXEC-30, REQ-GEN-02
+
+**Acceptance criteria**
+
+- [ ] AC1: Adapters run established LLM evaluation tools (for example promptfoo, DeepEval, Ragas, Inspect) as runners.
+- [ ] AC2: Deterministic metrics of these tools are compared with thresholds from the frozen plan; model-graded metrics are treated as judge results (REQ-EXEC-30, downgrade only).
+- [ ] AC3: The tools' raw output is stored as evidence.
+
+### REQ-EXEC-35 · External runner integrations
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: REQ-GEN-02, REQ-EXEC-06
+
+**Acceptance criteria**
+
+- [ ] AC1: Device farms (BrowserStack, Sauce Labs, LambdaTest) as execution targets for web and mobile.
+- [ ] AC2: k6 for load, Lighthouse for frontend performance, axe-core for accessibility, Pact for API contracts.
+- [ ] AC3: Each tool's own pass/fail output is the verdict source; thresholds come from the frozen plan.
+
+### REQ-EXEC-36 · Blockchain (EVM) application testing
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: REQ-GEN-02, REQ-ENV-03
+
+**Acceptance criteria**
+
+- [ ] AC1: A local chain or a mainnet fork at a pinned block (Anvil or Hardhat), with time control.
+- [ ] AC2: Contract calls through viem or ethers; dApp UI with a test wallet (Synpress).
+- [ ] AC3: Evidence: transaction hashes, receipts, events and state before and after.
+- [ ] AC4: Optional Foundry fuzz runs and Slither static analysis as additional runners.
+- [ ] AC5: Only local or test networks; mainnet transactions are denied.
+
+### REQ-EXEC-37 · Desktop application testing
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: REQ-EXEC-06, REQ-EXEC-09, REQ-GEN-02, REQ-ENV-12, INV-1
+
+Windows, macOS and Linux desktop applications through the same plan, steps library and evidence as web and mobile.
+
+**Acceptance criteria**
+
+- [ ] AC1: A desktop runner drives applications through the operating system's accessibility layer: Windows UI Automation (Appium Windows driver or FlaUI), macOS (Appium Mac2 driver), Linux (AT-SPI).
+- [ ] AC2: Electron apps run through Playwright's Electron support; Tauri apps through WebDriver.
+- [ ] AC3: Image-based locating (template matching) is a fallback only; image assertions use a fixed similarity threshold from the frozen plan.
+- [ ] AC4: Evidence: screenshots per step, video, the accessibility tree at a failure and the application's logs.
+- [ ] AC5: Agent-driven screen control may explore the application and propose selectors during planning, never execute approved cases or decide results.
+- [ ] AC6: The healer rules (REQ-EXEC-09) apply unchanged: selectors and waits only.

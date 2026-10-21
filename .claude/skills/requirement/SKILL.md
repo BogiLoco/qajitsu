@@ -12,7 +12,7 @@ Format, statuses and lifecycle are defined in `docs/requirements/README.md`; rea
 ## add <idea>
 
 1. Search first: `git grep -n -i "<key words>" docs/requirements/`. If an existing requirement covers it, propose a **change** instead.
-2. Pick the area file by topic (CTX, PLAN, ENV, CFG, WS, EXEC, VER, EVD, PUB, LLM, OBS, CI, GEN, NFR). If nothing fits, ask the user before creating a new area.
+2. Pick the area file by topic (CTX, PLAN, ENV, CFG, WS, EXEC, VER, EVD, PUB, LLM, OBS, CI, GEN, NFR, PRJ, KNOW, FLOW, WEB). If nothing fits, ask the user before creating a new area.
 3. Next free number = highest number in that file + 1 (ids are never reused, including deprecated ones).
 4. Write it from the template:
    - title in sentence case; one capability per requirement (split if criteria describe unrelated things);

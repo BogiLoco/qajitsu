@@ -4,7 +4,7 @@
 
 - Before implementing, find the requirement(s) and acceptance criteria the work covers: `REQ-<AREA>-NN`, criteria `REQ-X-NN/ACk`.
   Area files: context (CTX), plan (PLAN), environment (ENV), config-secrets (CFG), workspace (WS), execution (EXEC),
-  verification (VER), evidence (EVD), publishing (PUB), models (LLM), observability (OBS), ci-cd (CI), generic (GEN), non-functional (NFR).
+  verification (VER), evidence (EVD), publishing (PUB), models (LLM), observability (OBS), ci-cd (CI), generic (GEN), non-functional (NFR), Jira workflow (FLOW), web console (WEB).
 - Work that no requirement covers, or that contradicts one: stop and propose a requirement change with `/requirement` first. Do not silently build beyond or against the catalogue.
 - Tests are titled with the criterion id: `it("REQ-VER-03/AC1: denies agent writes to results/", ...)`.
 - Commits carry `Refs: REQ-...` in the footer; PRs list the ids in the "Requirements" section.

@@ -130,3 +130,36 @@ Teams can give agents domain knowledge that is not in the code.
 - [x] AC2: They are given to the planner as an additional source; plan cases based on them cite the imported case id.
 - [x] AC3: Imported text is treated as untrusted data and never as instructions.
 - [x] AC4: An unreachable source is reported and planning continues without it.
+
+### REQ-CTX-09 · Tickets from sources other than Jira
+
+- Status: proposed
+- Priority: should
+- Stage: 9
+- Related: REQ-CTX-01, REQ-CTX-08, REQ-GEN-02
+
+Jira stays the default source of the ticket; a ticket can also come from other tools and files through a ticket source adapter. Importing existing test cases is REQ-CTX-08.
+
+**Acceptance criteria**
+
+- [ ] AC1: Jira is the default source; no configuration is needed to keep today's behaviour.
+- [ ] AC2: Adapters for Confluence pages, Notion pages and local Markdown and JSON files.
+- [ ] AC3: Every source maps to one normalised ticket (title, description, acceptance criteria, attachments, links); missing fields are reported, never invented.
+- [ ] AC4: An unreachable or unparseable source stops the run before planning with a clear error; nothing is planned from partial input without confirmation.
+- [ ] AC5: Source content is treated as untrusted data in prompts.
+
+### REQ-CTX-10 · Code access levels
+
+- Status: proposed
+- Priority: must
+- Stage: 3
+- Related: REQ-CTX-04, REQ-CTX-05, REQ-EXEC-23, REQ-VER-11, REQ-VER-14, INV-11
+
+Some companies will not share source code. The project chooses how much of the code QAJitsu may read.
+
+**Acceptance criteria**
+
+- [ ] AC1: `code.access` in the project config: `full` (repositories at the change commit), `metadata` (PR/MR title, description and list of changed files, no file contents) or `none` (black-box).
+- [ ] AC2: With `metadata` or `none`, no repository content is fetched, cached or sent to any model; a test on the fetch layer proves it.
+- [ ] AC3: Features that need code (diff coverage, fix verification REQ-VER-11, mutation check REQ-VER-14) are switched off with a clear message instead of failing silently.
+- [ ] AC4: The access level is recorded in `run.json` and shown in the report header.
