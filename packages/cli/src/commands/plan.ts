@@ -45,6 +45,8 @@ import { approvalContext } from "./context-fingerprint.js";
 import {
   checkPlanExpectations,
   checkPlanSources,
+  convertNumericStrings,
+  formatNumericConversions,
   formatPlanFlags,
   formatSourceIssues,
   type PlanFlag,
@@ -161,7 +163,10 @@ async function acceptEditedPlan(
           : [error instanceof Error ? (error.message.split("\n")[0] ?? "invalid plan") : String(error)],
     };
   }
-  return { plan: await writePlanVersion(session.ws, draft), problems: [] };
+  return {
+    plan: await writeConvertedVersion(session, draft, { kind: "user", name: "editor" }),
+    problems: [],
+  };
 }
 
 /**
@@ -186,7 +191,49 @@ async function planFlagsOf(session: RunSession, context: ChangeContext): Promise
   const openapi = await runOpenApi(session);
   // REQ-EXEC-22/AC8: elements are also checked against the pages recorded before planning.
   const snapshot = context.snapshot ?? (await readPlanSnapshot(session.ws));
-  return (plan) => checkPlanExpectations(plan, { openapi, inventory: context.ui, snapshot });
+  // REQ-PLAN-12: what code converts itself is not a flag, so the planner is not sent back for it.
+  return (plan) =>
+    checkPlanExpectations(convertNumericStrings(plan, openapi).plan, {
+      openapi,
+      inventory: context.ui,
+      snapshot,
+    });
+}
+
+/**
+ * Stores a plan version with numbers written as text converted where the OpenAPI document leaves no doubt
+ * (REQ-PLAN-12/AC1): the conversions are kept in `run.json` (`planConversions`) and journaled.
+ */
+async function writeConvertedVersion(
+  session: RunSession,
+  draft: Parameters<typeof writePlanVersion>[1],
+  actor: { readonly kind: "agent" | "user"; readonly name: string },
+): Promise<Plan> {
+  const { plan: converted, conversions } = convertNumericStrings(draft, await runOpenApi(session));
+  const plan = await writePlanVersion(session.ws, converted);
+  if (conversions.length > 0) {
+    const previous = (session.ws.record.data["planConversions"] ?? {}) as Record<string, unknown>;
+    await session.ws.update({
+      data: {
+        ...session.ws.record.data,
+        planConversions: { ...previous, [`v${String(plan.version)}`]: conversions },
+      },
+    });
+    session.events.emit("plan", actor, "plan.converted", { version: plan.version, conversions });
+  }
+  return plan;
+}
+
+/** The conversions code made in a plan version, as lines next to the plan (REQ-PLAN-12/AC1). */
+function conversionLines(session: RunSession, plan: Plan): string | undefined {
+  const all = (session.ws.record.data["planConversions"] ?? {}) as Record<
+    string,
+    Parameters<typeof formatNumericConversions>[0]
+  >;
+  const mine = all[`v${String(plan.version)}`] ?? [];
+  return mine.length > 0
+    ? `Numbers written as text, converted by code (${String(mine.length)}):\n${formatNumericConversions(mine)}`
+    : undefined;
 }
 
 /** Records what was approved although code could not check it (REQ-PLAN-09/AC4). */
@@ -330,7 +377,10 @@ export async function runPlan(
         );
         await deps.save();
         // REQ-PLAN-08/AC1: code selects the cases for the depth and records why; the person reviews that selection.
-        const next = await writePlanVersion(ws, depth ? applyDepth(draft, depth) : draft);
+        const next = await writeConvertedVersion(session, depth ? applyDepth(draft, depth) : draft, {
+          kind: "agent",
+          name: "planner",
+        });
         session.events.emit("plan", { kind: "agent", name: "planner" }, "plan.version", {
           version: next.version,
           cases: next.cases.length,
@@ -349,6 +399,9 @@ export async function runPlan(
       for (const q of current.open_questions) io.write(`  ? ${q.id}: ${q.question}\n`);
       // REQ-PLAN-11/AC3+AC6: what a person accepted from exploration, and what of it no case covers.
       for (const line of await explorationLines(current, session)) io.write(`${line}\n`);
+      // REQ-PLAN-12/AC1: what code converted, next to the plan.
+      const converted = conversionLines(session, current);
+      if (converted) io.write(`${converted}\n`);
       // REQ-PLAN-09/AC3: what code cannot check, next to the plan.
       const flags = flagsOf(current);
       if (flags.length > 0)

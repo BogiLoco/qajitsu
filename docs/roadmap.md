@@ -245,7 +245,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-PLAN-08](requirements/plan.md#req-plan-08--test-depth-and-budget) Test depth and budget (should, implemented, AC 4/4)
 - [REQ-PLAN-10](requirements/plan.md#req-plan-10--approval-by-a-person-or-by-models-auditable) Approval by a person or by models, auditable (could, implemented, AC 6/6)
 - [REQ-PLAN-11](requirements/plan.md#req-plan-11--exploration-before-planning-accepted-by-a-person) Exploration before planning, accepted by a person (should, implemented, AC 8/8)
-- [REQ-PLAN-12](requirements/plan.md#req-plan-12--numbers-written-as-text-in-expectations-converted-by-code) Numbers written as text in expectations, converted by code (should, proposed, AC 0/4)
+- [REQ-PLAN-12](requirements/plan.md#req-plan-12--numbers-written-as-text-in-expectations-converted-by-code) Numbers written as text in expectations, converted by code (should, implemented, AC 4/4)
 - [REQ-ENV-08](requirements/environment.md#req-env-08--message-capture-email-sms-and-webhooks) Message capture: email, SMS and webhooks (should, implemented, AC 5/5)
 - [REQ-ENV-09](requirements/environment.md#req-env-09--account-pools) Account pools (should, implemented, AC 5/5)
 - [REQ-EXEC-11](requirements/execution.md#req-exec-11--human-in-the-loop-steps) Human-in-the-loop steps (should, implemented, AC 7/7)

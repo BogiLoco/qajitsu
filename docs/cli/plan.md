@@ -21,6 +21,13 @@ qajitsu doctor --models
    `~ changed` cases), `[e]dit` (opens `$EDITOR`; the edit is schema- and source-checked before it becomes a version)
    or `[q]uit`. Accepting a plan with open questions needs an explicit `yes` (REQ-PLAN-05).
 
+Numbers written as text are converted by code where the OpenAPI document leaves no doubt (REQ-PLAN-12): a field
+documented as `number` or `integer` whose expectation is exactly a decimal number (`total: "1.01"`) becomes that number
+(`1.01`) before the version is stored, and `qj plan` lists every conversion under "Numbers written as text, converted
+by code" (also in `run.json`, `planConversions`). Other formats (`"1,01"`, `"$1.01"`, `"1.01 PLN"`), a fraction for an
+integer, string fields and projects without OpenAPI stay as written and are flagged as before. The planner is not sent
+back for what code converts itself.
+
 Exploration items a person accepted with `qj explore review` are offered to the planner as untrusted data and cited as
 `{kind: explore, session: S01, item: O1}`; code refuses items nobody accepted, turns a case with no other source for its
 expected result into an open question, and lists accepted not-done items no case covers as open questions

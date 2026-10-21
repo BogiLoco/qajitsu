@@ -301,7 +301,9 @@ in the code under test (`testid:place-order`, `/app/checkout`), and before you s
 placeholders instead of values (`expected_total`, TBD), fields that are not in the OpenAPI response or have another
 type, steps with a description only, and `testid:` selectors the code does not define (for the case's own platform:
 a web id does not count in a mobile case). The planner gets one
-automatic round to fix them; what remains is listed under "Cannot be checked as written" next to the plan. A spec for
+automatic round to fix them; what remains is listed under "Cannot be checked as written" next to the plan. A number
+written as text for a field the OpenAPI document says is a number (`total: "1.01"`) is not sent back: code converts it
+to `1.01` and lists the conversion next to the plan. A spec for
 a mobile case that uses what only a browser has (`ui.as`, `ui.select`, `ui.goto` without a deep link scheme, `css:` or
 `role:` selectors) goes back to the author before anything runs.
 
