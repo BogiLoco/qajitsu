@@ -21,6 +21,11 @@ qajitsu doctor --models
    `~ changed` cases), `[e]dit` (opens `$EDITOR`; the edit is schema- and source-checked before it becomes a version)
    or `[q]uit`. Accepting a plan with open questions needs an explicit `yes` (REQ-PLAN-05).
 
+Exploration items a person accepted with `qj explore review` are offered to the planner as untrusted data and cited as
+`{kind: explore, session: S01, item: O1}`; code refuses items nobody accepted, turns a case with no other source for its
+expected result into an open question, and lists accepted not-done items no case covers as open questions
+(REQ-PLAN-11). `qj plan` prints what became of each accepted item.
+
 Everything ticket, PR, code and knowledge text is wrapped as untrusted data in prompts (REQ-CTX-05/AC6).
 Token usage and estimated cost are journaled per call (`model.usage`); `models.token_budget` stops the run (REQ-LLM-07).
 
