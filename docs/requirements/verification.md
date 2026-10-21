@@ -329,3 +329,38 @@ Anyone with access can run again exactly what was approved and compare.
 - [ ] AC1: A case can assert that a value shown in the UI equals the API response and the stored record.
 - [ ] AC2: Database reads are read-only, use a configured test connection and are limited to allowlisted tables.
 - [ ] AC3: A layer that cannot be read makes the case BLOCKED, never PASSED.
+
+### REQ-VER-23 · Test code quality gate
+
+- Status: proposed
+- Priority: must
+- Stage: 7
+- Related: REQ-EXEC-03, REQ-VER-06, REQ-VER-09, REQ-VER-14, INV-1, INV-4
+
+An agent can write a bad test, like a person. The gate catches before the run the generated tests whose assertions do
+not depend on the application. Planned expectations without a `verify()` are already rejected (REQ-EXEC-03/AC2).
+
+**Acceptance criteria**
+
+- [ ] AC1: Assertions whose result does not depend on the application are rejected: comparing constants, a value with itself, or the checked response with itself or a value derived from it (tautology).
+- [ ] AC2: Code that can skip or swallow an assertion is rejected: an empty or swallowing `catch` around a `verify()`, a condition or an early `return` that lets a `verify()` be skipped, and skipped or disabled cases (`test.skip`, `test.fixme`, `.only`).
+- [ ] AC3: An assertion on a too general target is rejected: the whole page, body or response where the plan names a specific field or element.
+- [ ] AC4: A spec that fails the gate is not run; it goes back to the author with the findings once (as REQ-EXEC-03/AC4), then the case is BLOCKED with the findings, never PASSED.
+- [ ] AC5: Every rule has a lying-agent test in the adversarial suite; the findings of the gate are listed in the case's record and in the report.
+
+### REQ-VER-24 · Human review of test code on demand
+
+- Status: proposed
+- Priority: could
+- Stage: 7
+- Related: REQ-VER-23, REQ-PLAN-04, REQ-EXEC-03, INV-1
+
+For a new project, a QA lead can read the generated tests before they run until the team trusts them.
+
+**Acceptance criteria**
+
+- [ ] AC1: Turned on per project (for example for the first N runs or until switched off) or per run with a flag; off by default.
+- [ ] AC2: With it on, generated specs wait for a person after the automatic checks; the person sees each spec next to its planned steps and expectations, and accepts it or sends it back with a reason.
+- [ ] AC3: A spec sent back goes to the author once with the reason, then the case is BLOCKED; an unreviewed spec never runs.
+- [ ] AC4: Each decision is recorded with the reviewer, the spec's SHA-256 and the time, in the run record and the journal; the report shows which specs a person reviewed.
+- [ ] AC5: The review can only stop a spec; it never sets or changes a status.

@@ -21,7 +21,7 @@ Instead of training a model, QAJitsu learns better and cheaper ways to plan and 
 - Status: proposed
 - Priority: should
 - Stage: 7
-- Related: REQ-SKILL-01, REQ-PRJ-04, REQ-PLAN-15, REQ-CTX-07
+- Related: REQ-SKILL-01, REQ-SKILL-04, REQ-SKILL-06, REQ-PRJ-04, REQ-PLAN-15, REQ-CTX-07
 - Note: TO BE REVIEWED: overlaps project knowledge (REQ-CTX-07, `.qa/knowledge/`) and lessons (REQ-PLAN-15); decide whether lessons become project skills or stay separate.
 
 **Acceptance criteria**
@@ -29,6 +29,9 @@ Instead of training a model, QAJitsu learns better and cheaper ways to plan and 
 - [ ] AC1: General skills (login, payments, roles and permissions, forms, CRUD APIs) ship with the open-source core and are built only from public or fictional data.
 - [ ] AC2: Project skills are built from the project's own work and stored in the project home; they never leave the project or the customer's installation.
 - [ ] AC3: A project skill can override a general one; the override is visible in the skill list.
+- [ ] AC4: A project can add its own skills for each agent role (analyst, planner, author, healer, auditor, approver, explorer); a skill declares the roles it applies to and is loaded only for them.
+- [ ] AC5: Project skills live in the project (`.qa/skills/<name>/` in the repository or the project home), so a team improves QAJitsu for its product itself, without changing QAJitsu; adding, listing and disabling them works from the CLI.
+- [ ] AC6: A project skill goes through the same review, evaluation and signing as any other (REQ-SKILL-04, REQ-SKILL-06) and cannot weaken the invariants.
 
 ### REQ-SKILL-03 · Skill candidates from approved work
 

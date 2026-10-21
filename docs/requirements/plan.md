@@ -272,3 +272,4 @@ Each human correction makes the next plan better.
 - [ ] AC1: Per project: share of plans approved without changes, average number of revision rounds, share of tickets stopped by the readiness gate (REQ-PLAN-13).
 - [ ] AC2: Defects reported later on a ticket marked as passed can be linked to the run (escaped defects).
 - [ ] AC3: The metrics are shown in `qj status`, `qj metrics` and the web console; numbers are computed from run records.
+- [ ] AC4: Per project also: false FAILED (FAILED cases later triaged as a test or environment problem), auditor downgrades of PASSED, and escaped defects (AC2), so a team sees whether tests check enough.

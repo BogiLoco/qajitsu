@@ -192,9 +192,11 @@ and `qj bench` reports detection and false-FAILED rates per model.
 <!-- prettier-ignore-start -->
 <!-- req-stage:7 -->
 - [REQ-PLAN-15](requirements/plan.md#req-plan-15--project-lessons-from-revisions) Project lessons from revisions (should, proposed, AC 0/4)
-- [REQ-PLAN-16](requirements/plan.md#req-plan-16--plan-quality-metrics) Plan quality metrics (should, proposed, AC 0/3)
+- [REQ-PLAN-16](requirements/plan.md#req-plan-16--plan-quality-metrics) Plan quality metrics (should, proposed, AC 0/4)
 - [REQ-VER-06](requirements/verification.md#req-ver-06--independent-auditor) Independent auditor (must, implemented, AC 3/3)
 - [REQ-VER-09](requirements/verification.md#req-ver-09--canary-check) Canary check (could, implemented, AC 2/2)
+- [REQ-VER-23](requirements/verification.md#req-ver-23--test-code-quality-gate) Test code quality gate (must, proposed, AC 0/5)
+- [REQ-VER-24](requirements/verification.md#req-ver-24--human-review-of-test-code-on-demand) Human review of test code on demand (could, proposed, AC 0/5)
 - [REQ-LLM-05](requirements/models.md#req-llm-05--local-models-used-honestly) Local models used honestly (should, implemented, AC 2/2)
 - [REQ-LLM-06](requirements/models.md#req-llm-06--model-benchmark) Model benchmark (should, implemented, AC 3/3)
 - [REQ-LLM-13](requirements/models.md#req-llm-13--model-routing-proposals-from-data) Model routing proposals from data (could, proposed, AC 0/3)
@@ -212,7 +214,7 @@ and `qj bench` reports detection and false-FAILED rates per model.
 - [REQ-WEB-08](requirements/web.md#req-web-08--contextual-chat) Contextual chat (could, proposed, AC 0/5)
 - [REQ-WEB-09](requirements/web.md#req-web-09--chat-actions-are-proposals) Chat actions are proposals (must, proposed, AC 0/3)
 - [REQ-SKILL-01](requirements/skills.md#req-skill-01--skill-format-and-progressive-loading) Skill format and progressive loading (should, proposed, AC 0/4)
-- [REQ-SKILL-02](requirements/skills.md#req-skill-02--general-and-project-skill-libraries) General and project skill libraries (should, proposed, AC 0/3)
+- [REQ-SKILL-02](requirements/skills.md#req-skill-02--general-and-project-skill-libraries) General and project skill libraries (should, proposed, AC 0/6)
 - [REQ-SKILL-06](requirements/skills.md#req-skill-06--skill-review-signing-and-traceability) Skill review, signing and traceability (must, proposed, AC 0/3)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
