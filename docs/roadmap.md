@@ -338,7 +338,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-PUB-07](requirements/publishing.md#req-pub-07--bug-reports-from-failed-cases) Bug reports from failed cases (should, implemented, AC 5/5)
 - [REQ-PUB-08](requirements/publishing.md#req-pub-08--promote-ticket-cases-to-the-regression-suite) Promote ticket cases to the regression suite (should, implemented, AC 4/4)
 - [REQ-PUB-09](requirements/publishing.md#req-pub-09--release-readiness-report) Release readiness report (could, implemented, AC 4/4)
-- [REQ-LLM-09](requirements/models.md#req-llm-09--start-with-an-api-key-only) Start with an API key only (should, in-progress, AC 5/6)
+- [REQ-LLM-09](requirements/models.md#req-llm-09--start-with-an-api-key-only) Start with an API key only (should, implemented, AC 6/6)
 - [REQ-LLM-10](requirements/models.md#req-llm-10--model-profiles-from-gateways-litellm-openrouter) Model profiles from gateways (LiteLLM, OpenRouter) (could, proposed, AC 0/4)
 - [REQ-OBS-08](requirements/observability.md#req-obs-08--map-as-planner-input) Map as planner input (could, implemented, AC 1/1)
 - [REQ-OBS-09](requirements/observability.md#req-obs-09--live-progress-of-a-run) Live progress of a run (should, implemented, AC 4/4)

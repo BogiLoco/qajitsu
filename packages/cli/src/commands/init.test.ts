@@ -249,18 +249,33 @@ describe("start with an API key only (REQ-LLM-09/AC1+AC4)", () => {
     expect((await configOf(yes)).budget.max_cost_usd).toBe(5);
   });
 
-  it("REQ-LLM-09/AC1: keys of providers without a built-in profile are named, with what to set by hand", async () => {
+  it("REQ-LLM-09/AC6: OpenAI and Google keys get their models too; the first key found is proposed, OpenRouter is named", async () => {
     const repo = await otherProject();
     const r = await run(repo, ["init", "pet-clinic", "--yes"], undefined, {
       OPENAI_API_KEY: "sk-x",
+      GEMINI_API_KEY: "g-x",
       OPENROUTER_API_KEY: "sk-or-x",
     });
+    expect(r.out).toContain("Found OPENAI_API_KEY (environment): OpenAI can run every role.");
     expect(r.out).toContain(
-      "Found OPENAI_API_KEY (environment): openai is not set up automatically yet; add it under models.providers with api_key: secret://env/OPENAI_API_KEY, choose models in models.roles and declare cost_per_mtok for a cost in dollars.",
+      "Models: openai/gpt-6.1-sol for every role, openai/gpt-6-luna as the auditor; at most $5.00 per run",
     );
     expect(r.out).toContain(
       "Found OPENROUTER_API_KEY (environment): openrouter is not set up automatically yet",
     );
-    expect((await configOf(repo)).models.roles).toEqual({ default: "local/qwen2.5-coder:32b" });
+    expect(r.out).toContain(
+      "Found GEMINI_API_KEY (environment): Google can run every role too; the project uses openai now, switch models.roles to use it instead.",
+    );
+    const config = await configOf(repo);
+    expect(config.models).toMatchObject({
+      providers: { openai: { type: "openai", api_key: "secret://env/OPENAI_API_KEY" } },
+      roles: { default: "openai/gpt-6.1-sol", auditor: "openai/gpt-6-luna" },
+    });
+    const google = await otherProject();
+    await run(google, ["init", "pet-clinic", "--yes"], undefined, { GEMINI_API_KEY: "g-x" });
+    expect((await configOf(google)).models).toMatchObject({
+      providers: { google: { type: "google", api_key: "secret://env/GEMINI_API_KEY" } },
+      roles: { default: "google/gemini-4-argon", auditor: "google/gemini-3.8-flash" },
+    });
   });
 });

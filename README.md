@@ -153,13 +153,14 @@ qj doctor --models     # optional: one real call per configured model role (and 
 qj knowledge add docs/ # optional: documentation the agents may search (see "Knowledge base")
 ```
 
-**Just an API key?** Put `ANTHROPIC_API_KEY=...` into `.env.local` next to where `.qa/` will be (or export it) before
-`qj init`: init finds the key by its name (never reading or printing the value), proposes Claude for every role
-(`anthropic/claude-sonnet-5-5`, `anthropic/claude-haiku-5-5` as the auditor) and a spending limit of $5 per run
-(`budget.max_cost_usd`), and writes them after your yes. Context windows and prices of Claude models are built in,
-so costs show in dollars; a model without a known price shows its cost as unknown, never $0, and reaching the limit
-stops the model stages (BLOCKED) and the remaining cases (NOT_RUN). Keys of OpenAI, Google or OpenRouter are found too
-and named with what to set by hand.
+**Just an API key?** Put `ANTHROPIC_API_KEY=...`, `OPENAI_API_KEY=...` or `GEMINI_API_KEY=...` into `.env.local`
+next to where `.qa/` will be (or export it) before `qj init`: init finds the key by its name (never reading or printing
+the value), proposes a model for every role and a cheaper one with vision as the auditor (Claude Sonnet 5.5 and Haiku
+5.5, GPT-6.1 Sol and GPT-6 Luna, or Gemini 4 Argon and Gemini 3.8 Flash) and a spending limit of $5 per run
+(`budget.max_cost_usd`), and writes them after your yes. Context windows and prices of these providers' models are
+built in, so costs show in dollars; a model without a known price shows its cost as unknown, never $0, and reaching
+the limit stops the model stages (BLOCKED) and the remaining cases (NOT_RUN). An OpenRouter key is found too and named
+with what to set by hand.
 
 Secrets are never written into `.qa/`: the configuration holds references like `secret://env/JIRA_TOKEN`, resolved
 from the environment or `.env.local` and masked everywhere (logs, evidence, reports, ticket comments). Teams with a secret

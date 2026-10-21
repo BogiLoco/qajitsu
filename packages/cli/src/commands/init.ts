@@ -196,14 +196,29 @@ export function findApiKeys(
  * (REQ-LLM-09/AC1+AC2); undefined for the others, which are set up by hand.
  */
 export function proposeModels(key: FoundKey): ProposedModels | undefined {
-  if (key.provider !== "anthropic") return undefined;
+  // A capable model for every role and another, cheaper one with vision as the auditor (REQ-VER-06), from the models
+  // with built-in prices (REQ-LLM-09/AC2+AC6). OpenRouter has none: its models are set by hand (REQ-LLM-10).
+  const pairs: Partial<Record<FoundKey["provider"], { type: string; main: string; auditor: string }>> = {
+    anthropic: { type: "anthropic", main: "claude-sonnet-5-5", auditor: "claude-haiku-5-5" },
+    openai: { type: "openai", main: "gpt-6.1-sol", auditor: "gpt-6-luna" },
+    google: { type: "google", main: "gemini-4-argon", auditor: "gemini-3.8-flash" },
+  };
+  const pair = pairs[key.provider];
+  if (!pair) return undefined;
+  const alias = key.provider;
   return {
-    providers: { anthropic: { type: "anthropic", api_key: `secret://env/${key.variable}`, models: {} } },
-    // The auditor is another model than the author by default (REQ-VER-06); Haiku reads screenshots too.
-    roles: { default: "anthropic/claude-sonnet-5-5", auditor: "anthropic/claude-haiku-5-5" },
-    summary: "anthropic/claude-sonnet-5-5 for every role, anthropic/claude-haiku-5-5 as the auditor",
+    providers: { [alias]: { type: pair.type, api_key: `secret://env/${key.variable}`, models: {} } },
+    roles: { default: `${alias}/${pair.main}`, auditor: `${alias}/${pair.auditor}` },
+    summary: `${alias}/${pair.main} for every role, ${alias}/${pair.auditor} as the auditor`,
   };
 }
+
+const PROVIDER_NAMES: Readonly<Record<FoundKey["provider"], string>> = {
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+  google: "Google",
+  openrouter: "OpenRouter",
+};
 
 /**
  * Builds `.qa/qa.project.yaml` and `.qa/envs/<env>.yaml` from what was detected and answered; the result
@@ -336,8 +351,13 @@ export async function runInit(
         );
         continue;
       }
-      if (models) continue;
-      io.write(`Found ${key.variable} (${key.where}): Anthropic can run every role.\n`);
+      if (models) {
+        io.write(
+          `Found ${key.variable} (${key.where}): ${PROVIDER_NAMES[key.provider]} can run every role too; the project uses ${models.summary.split("/")[0] ?? ""} now, switch models.roles to use it instead.\n`,
+        );
+        continue;
+      }
+      io.write(`Found ${key.variable} (${key.where}): ${PROVIDER_NAMES[key.provider]} can run every role.\n`);
       const use = (await ask(`Use it for ${proposed.summary}? (y/n)`, "y")).toLowerCase();
       if (!use.startsWith("y")) continue;
       const limit = Number(await ask("Spending limit per run in US dollars", String(DEFAULT_MAX_COST_USD)));

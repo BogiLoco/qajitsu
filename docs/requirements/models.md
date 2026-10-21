@@ -120,11 +120,11 @@ run, and every QAJitsu tool still goes through the guard.
 
 ### REQ-LLM-09 · Start with an API key only
 
-- Status: in-progress
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-PRJ-02, REQ-LLM-01, REQ-LLM-03, REQ-LLM-07, REQ-PLAN-08, REQ-CFG-01, INV-8
-- Note: accepted by the owner on 2026-10-21. Done for Anthropic, whose model ids, context windows and prices were checked on its pages that day; OpenAI and Google follow in AC6.
+- Note: accepted by the owner on 2026-10-21. Model ids, context windows and prices of Anthropic, OpenAI and Google were checked on their pages that day (OpenAI and Google added the same day as AC6).
 
 Someone with an API key of a cloud provider should be able to start without declaring model capabilities, context
 windows or prices: put the key in `.env.local`, run `qj init`, and go, with a spending limit from the first run.
@@ -136,7 +136,7 @@ windows or prices: put the key in `.env.local`, run `qj init`, and go, with a sp
 - [x] AC3: Estimates and tracking show cost in US dollars from these prices; a model without a known price shows the cost as unknown, never as 0.
 - [x] AC4: When a paid provider is chosen, `qj init` proposes `budget.max_cost_usd` (default 5); reaching it stops further cases as NOT_RUN (REQ-PLAN-08/AC3) and a model stage that would exceed it as BLOCKED with the reason.
 - [x] AC5: `qj doctor --models` checks each key with one minimal call; a rejected key is an error that names the variable, never the value.
-- [ ] AC6: OpenAI and Google models get built-in profiles and prices checked on their providers' pages, and `qj init` proposes their models like Anthropic's.
+- [x] AC6: OpenAI and Google models get built-in profiles and prices checked on their providers' pages, and `qj init` proposes their models like Anthropic's.
 
 ### REQ-LLM-10 · Model profiles from gateways (LiteLLM, OpenRouter)
 

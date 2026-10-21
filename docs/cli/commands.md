@@ -40,8 +40,9 @@ project. Running it again changes nothing without `--force`; runs and knowledge 
 
 When `.qa/` is created, `init` looks for provider keys by their names in the environment and in `.env.local`
 (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`); values
-are never read into the output (REQ-LLM-09). With an Anthropic key it proposes `anthropic/claude-sonnet-5-5` for every
-role and `anthropic/claude-haiku-5-5` as the auditor, asks for a spending limit per run (default $5,
+are never read into the output (REQ-LLM-09). With an Anthropic, OpenAI or Google key it proposes a model for every role
+and a cheaper one with vision as the auditor (`anthropic/claude-sonnet-5-5` and `claude-haiku-5-5`,
+`openai/gpt-6.1-sol` and `gpt-6-luna`, `google/gemini-4-argon` and `gemini-3.8-flash`), asks for a spending limit per run (default $5,
 `budget.max_cost_usd`) and writes both after a yes (`--yes` accepts). Other keys are named with what to set by hand.
 
 Exit codes: `0` registered and ready, `2` registered but not ready (the problems are listed), `3` errors.

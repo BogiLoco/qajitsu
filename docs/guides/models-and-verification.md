@@ -62,10 +62,13 @@ not yet by a contract like this one.
 
 ## Prices and the spending limit (REQ-LLM-09)
 
-Claude models have built-in profiles: context window and price per million input and output tokens, taken from
-Anthropic's pricing and models pages on the date in `BUILT_IN_PROFILES_CHECKED` (`packages/models/src/capabilities.ts`).
-Claude Haiku 5.5 uses its price for prompts over 100k tokens, so a limit errs on the safe side. Local models through
-Ollama cost nothing. Any other model has no built-in price: declare it in the project config, which also wins over a
+Claude, OpenAI and Gemini models have built-in profiles: context window and price per million input and output
+tokens, taken from the providers' pricing and models pages on the date in `BUILT_IN_PROFILES_CHECKED`
+(`packages/models/src/capabilities.ts`). A price that depends on the prompt size uses its higher tier, so a limit errs
+on the safe side. Prices announced to change have an end date: Gemini 4 Argon and Gemini 3.6/3.8 Flash cost what is
+built in through 2026-12-31, and after that their cost is unknown until the new price is built in or declared. Where a
+provider does not state a model's context window, the profile assumes a conservative 128k. Local models through Ollama
+cost nothing. Any other model has no built-in price: declare it in the project config, which also wins over a
 built-in value:
 
 ```yaml
