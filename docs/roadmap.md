@@ -346,6 +346,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-OBS-11](requirements/observability.md#req-obs-11--run-replay) Run replay (could, proposed, AC 0/2)
 - [REQ-CI-06](requirements/ci-cd.md#req-ci-06--toolchain-in-pipelines) Toolchain in pipelines (could, in-progress, AC 1/2)
 - [REQ-CI-07](requirements/ci-cd.md#req-ci-07--thin-ci-client) Thin CI client (should, proposed, AC 0/5)
+- [REQ-CI-08](requirements/ci-cd.md#req-ci-08--job-matrix-generated-from-the-plan) Job matrix generated from the plan (should, proposed, AC 0/5)
 - [REQ-GEN-06](requirements/generic.md#req-gen-06--toolchain-setup) Toolchain setup (should, implemented, AC 9/9)
 - [REQ-GEN-07](requirements/generic.md#req-gen-07--external-agent-mode-claude-code-subagents-do-the-agents-work) External agent mode: Claude Code subagents do the agents' work (should, proposed, AC 0/6)
 - [REQ-GEN-08](requirements/generic.md#req-gen-08--consistent-doctor-output-and-exit-codes) Consistent `doctor` output and exit codes (should, implemented, AC 3/3)
@@ -377,5 +378,8 @@ the evidence bundle as pipeline artifacts.
 - [REQ-SCALE-05](requirements/scale.md#req-scale-05--bring-your-own-key) Bring your own key (should, proposed, AC 0/2)
 - [REQ-SCALE-06](requirements/scale.md#req-scale-06--metering-and-cost-limits) Metering and cost limits (should, proposed, AC 0/2)
 - [REQ-SCALE-07](requirements/scale.md#req-scale-07--specialist-planners) Specialist planners (could, proposed, AC 0/3)
+- [REQ-SCALE-08](requirements/scale.md#req-scale-08--execution-targets-chosen-per-case-type) Execution targets chosen per case type (should, proposed, AC 0/5)
+- [REQ-SCALE-09](requirements/scale.md#req-scale-09--kubernetes-deployment) Kubernetes deployment (could, proposed, AC 0/6)
+- [REQ-SCALE-10](requirements/scale.md#req-scale-10--billing-units-plans-and-licences) Billing units, plans and licences (could, proposed, AC 0/8)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->

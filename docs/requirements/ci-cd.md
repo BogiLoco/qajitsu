@@ -86,15 +86,32 @@ The same CLI runs inside pipelines; humans still approve plans.
 - Status: proposed
 - Priority: should
 - Stage: later
-- Related: REQ-CI-01, REQ-CI-04, REQ-SCALE-01, REQ-SCALE-03, REQ-VER-15, REQ-CFG-03, INV-1
+- Related: REQ-CI-01, REQ-CI-04, REQ-CI-08, REQ-SCALE-01, REQ-SCALE-03, REQ-SCALE-08, REQ-VER-15, REQ-CFG-03, INV-1
 
 A pipeline step that does not run QAJitsu itself: it starts a run in the QAJitsu cloud or in the customer's own
 QAJitsu installation, follows it and reports back, so the CI runner needs no browsers, devices or models.
 
 **Acceptance criteria**
 
-- [ ] AC1: A CI step starts a run in the QAJitsu cloud or in a QAJitsu installation of the customer and shows its progress in the CI log (stages, cases, statuses) until it ends.
+- [ ] AC1: A CI step starts a run for a ticket, a pull or merge request, or a saved suite in the QAJitsu cloud or in a QAJitsu installation of the customer and shows its progress in the CI log (stages, cases, statuses) until it ends.
 - [ ] AC2: A time-out ends the step with the exit code of BLOCKED, never with success; a lost connection or a run that cannot be followed ends the same way, with the reason.
 - [ ] AC3: The step authenticates with short-lived tokens or OIDC (for example the CI provider's identity token exchanged for a run-scoped token); no long-lived key is stored in the repository or the pipeline configuration.
 - [ ] AC4: The link to the report and the certificate id (REQ-VER-15) are posted to the pull or merge request.
 - [ ] AC5: The step's exit code follows the run's computed statuses (REQ-CI-04), never a status reported by the client itself.
+
+### REQ-CI-08 · Job matrix generated from the plan
+
+- Status: proposed
+- Priority: should
+- Stage: later
+- Related: REQ-CI-01, REQ-CI-04, REQ-CI-06, REQ-GEN-10, REQ-EXEC-10, REQ-VER-15, REQ-SCALE-08, INV-1, INV-3
+
+Runs execute entirely inside the customer's CI: the customer's runners, the customer's minutes, no data leaving the CI.
+
+**Acceptance criteria**
+
+- [ ] AC1: From the approved plan's execution section, QAJitsu generates a job matrix for GitHub Actions and GitLab CI (for example `api`, `web`, `android-30`, `android-33`, `android-35`), one emulator per job.
+- [ ] AC2: Each job runs only its share of the frozen cases and uploads its results and evidence as artifacts with their hashes.
+- [ ] AC3: An aggregating job merges the shares into one matrix, checks that every share is present and untampered, computes the certificate and GO / NO-GO, and publishes; a missing, failed or tampered share makes its cases BLOCKED, never PASSED.
+- [ ] AC4: Runner limits are documented and checked (memory, KVM, GPU, macOS for iOS); a matrix that cannot fit the available runners is reported before any job starts.
+- [ ] AC5: Models are called through provider APIs from CI by default; local models are used only on runners that pass the doctor checks.

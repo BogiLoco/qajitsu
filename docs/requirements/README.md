@@ -5,31 +5,31 @@ The original planning document (`docs/plan.md`, Polish) explains the rationale; 
 
 ## Areas
 
-| Prefix | File                                   | Scope                                                                      |
-| ------ | -------------------------------------- | -------------------------------------------------------------------------- |
-| CTX    | [context.md](context.md)               | Jira ticket, linked changes, GitHub/GitLab repositories, code access       |
-| PLAN   | [plan.md](plan.md)                     | Analysis, test plan, approval and revisions                                |
-| ENV    | [environment.md](environment.md)       | Existing environments, local builds, health checks, allowlists             |
-| CFG    | [config-secrets.md](config-secrets.md) | Project config, variables, secrets, test accounts                          |
-| WS     | [workspace.md](workspace.md)           | Run folders, unique ids, retention and cleanup                             |
-| EXEC   | [execution.md](execution.md)           | Test authoring, runners (API, web, mobile), healing, retries               |
-| VER    | [verification.md](verification.md)     | Anti-hallucination layer: statuses, guard, gates, auditor                  |
-| EVD    | [evidence.md](evidence.md)             | Screenshots, videos, request/response, manifest, matrix                    |
-| PUB    | [publishing.md](publishing.md)         | Jira comment, attachments, local report and video sharing                  |
-| LLM    | [models.md](models.md)                 | Providers (cloud, LiteLLM, Ollama), roles, capabilities, costs             |
-| OBS    | [observability.md](observability.md)   | Event log, log viewer, OpenTelemetry, transition graph                     |
-| CI     | [ci-cd.md](ci-cd.md)                   | GitHub Actions, GitLab CI, approvals inside pipelines                      |
-| GEN    | [generic.md](generic.md)               | Plugging into any project, adapters, CLI                                   |
-| NFR    | [non-functional.md](non-functional.md) | Code standards, tests, docs, security, open source                         |
-| PRJ    | [projects.md](projects.md)             | Projects on one machine: homes, switching, status, isolation               |
-| KNOW   | [knowledge.md](knowledge.md)           | Knowledge base per project: add, sync, search, agent access                |
-| FLOW   | [workflow.md](workflow.md)             | Jira workflow: start from a status, approval and transitions in the ticket |
-| WEB    | [web.md](web.md)                       | Local web console: progress, details, plans, environments, chat            |
-| AUTO   | [automation.md](automation.md)         | Promoted suite without models, candidates, triage, reproduction scripts    |
-| PERF   | [performance.md](performance.md)       | Performance tests: frozen thresholds, runners, verdict from raw metrics    |
-| SKILL  | [skills.md](skills.md)                 | Versioned agent skills: format, libraries, evaluation, maintenance         |
-| TUNE   | [tuning.md](tuning.md)                 | Private model tuning on approved work (enterprise, later)                  |
-| SCALE  | [scale.md](scale.md)                   | Tester farm: queue, workers, self-hosted, tenants, metering                |
+| Prefix | File                                   | Scope                                                                        |
+| ------ | -------------------------------------- | ---------------------------------------------------------------------------- |
+| CTX    | [context.md](context.md)               | Jira ticket, linked changes, GitHub/GitLab repositories, code access         |
+| PLAN   | [plan.md](plan.md)                     | Analysis, test plan, approval and revisions                                  |
+| ENV    | [environment.md](environment.md)       | Existing environments, local builds, health checks, allowlists               |
+| CFG    | [config-secrets.md](config-secrets.md) | Project config, variables, secrets, test accounts                            |
+| WS     | [workspace.md](workspace.md)           | Run folders, unique ids, retention and cleanup                               |
+| EXEC   | [execution.md](execution.md)           | Test authoring, runners (API, web, mobile), healing, retries                 |
+| VER    | [verification.md](verification.md)     | Anti-hallucination layer: statuses, guard, gates, auditor                    |
+| EVD    | [evidence.md](evidence.md)             | Screenshots, videos, request/response, manifest, matrix                      |
+| PUB    | [publishing.md](publishing.md)         | Jira comment, attachments, local report and video sharing                    |
+| LLM    | [models.md](models.md)                 | Providers (cloud, LiteLLM, Ollama), roles, capabilities, costs               |
+| OBS    | [observability.md](observability.md)   | Event log, log viewer, OpenTelemetry, transition graph                       |
+| CI     | [ci-cd.md](ci-cd.md)                   | GitHub Actions, GitLab CI, approvals inside pipelines                        |
+| GEN    | [generic.md](generic.md)               | Plugging into any project, adapters, CLI                                     |
+| NFR    | [non-functional.md](non-functional.md) | Code standards, tests, docs, security, open source                           |
+| PRJ    | [projects.md](projects.md)             | Projects on one machine: homes, switching, status, isolation                 |
+| KNOW   | [knowledge.md](knowledge.md)           | Knowledge base per project: add, sync, search, agent access                  |
+| FLOW   | [workflow.md](workflow.md)             | Jira workflow: start from a status, approval and transitions in the ticket   |
+| WEB    | [web.md](web.md)                       | Local web console: progress, details, plans, environments, chat              |
+| AUTO   | [automation.md](automation.md)         | Promoted suite without models, candidates, triage, reproduction scripts      |
+| PERF   | [performance.md](performance.md)       | Performance tests: frozen thresholds, runners, verdict from raw metrics      |
+| SKILL  | [skills.md](skills.md)                 | Versioned agent skills: format, libraries, evaluation, maintenance           |
+| TUNE   | [tuning.md](tuning.md)                 | Private model tuning on approved work (enterprise, later)                    |
+| SCALE  | [scale.md](scale.md)                   | Tester farm: queue, workers, targets, Kubernetes, tenants, metering, billing |
 
 Related documents: [roadmap](../roadmap.md) (stages), [architecture overview](../architecture/overview.md),
 [invariants](../../.claude/rules/architecture-invariants.md) (`INV-1`..`INV-12`), [ADRs](../adr/) (`ADR-nnnn`), [glossary](../glossary.md).
@@ -100,7 +100,7 @@ Generated by `pnpm req:index`. Do not edit by hand.
 
 <!-- prettier-ignore-start -->
 <!-- req-index:start -->
-253 requirements (91 proposed, 1 accepted, 2 in-progress, 155 implemented, 3 deferred, 1 deprecated); 585/981 acceptance criteria done.
+257 requirements (95 proposed, 1 accepted, 2 in-progress, 155 implemented, 3 deferred, 1 deprecated); 585/1005 acceptance criteria done.
 
 | Id | Title | Status | Priority | Stage | AC done |
 | --- | --- | --- | --- | --- | --- |
@@ -261,6 +261,7 @@ Generated by `pnpm req:index`. Do not edit by hand.
 | [REQ-CI-05](ci-cd.md#req-ci-05--gradual-rollout-and-cost-control) | Gradual rollout and cost control | implemented | should | 10 | 3/3 |
 | [REQ-CI-06](ci-cd.md#req-ci-06--toolchain-in-pipelines) | Toolchain in pipelines | in-progress | could | later | 1/2 |
 | [REQ-CI-07](ci-cd.md#req-ci-07--thin-ci-client) | Thin CI client | proposed | should | later | 0/5 |
+| [REQ-CI-08](ci-cd.md#req-ci-08--job-matrix-generated-from-the-plan) | Job matrix generated from the plan | proposed | should | later | 0/5 |
 | [REQ-GEN-01](generic.md#req-gen-01--project-onboarding-through-qa) | Project onboarding through `.qa/` | implemented | must | 1 | 3/3 |
 | [REQ-GEN-02](generic.md#req-gen-02--adapter-interfaces) | Adapter interfaces | implemented | must | 1 | 3/3 |
 | [REQ-GEN-03](generic.md#req-gen-03--init-and-doctor) | `init` and `doctor` | implemented | must | 9 | 5/5 |
@@ -357,5 +358,8 @@ Generated by `pnpm req:index`. Do not edit by hand.
 | [REQ-SCALE-05](scale.md#req-scale-05--bring-your-own-key) | Bring your own key | proposed | should | later | 0/2 |
 | [REQ-SCALE-06](scale.md#req-scale-06--metering-and-cost-limits) | Metering and cost limits | proposed | should | later | 0/2 |
 | [REQ-SCALE-07](scale.md#req-scale-07--specialist-planners) | Specialist planners | proposed | could | later | 0/3 |
+| [REQ-SCALE-08](scale.md#req-scale-08--execution-targets-chosen-per-case-type) | Execution targets chosen per case type | proposed | should | later | 0/5 |
+| [REQ-SCALE-09](scale.md#req-scale-09--kubernetes-deployment) | Kubernetes deployment | proposed | could | later | 0/6 |
+| [REQ-SCALE-10](scale.md#req-scale-10--billing-units-plans-and-licences) | Billing units, plans and licences | proposed | could | later | 0/8 |
 <!-- req-index:end -->
 <!-- prettier-ignore-end -->
