@@ -197,3 +197,18 @@ describe("doctor --models with an API key (REQ-LLM-09/AC5)", () => {
     expect(r.out + r.err).not.toContain(key);
   }, 120_000);
 });
+
+describe("doctor with an invalid configuration (REQ-GEN-08/AC1, REQ-CFG-01)", () => {
+  it("REQ-GEN-08/AC1: the configuration check appears once, failed, with what is wrong", async () => {
+    const p = await createBuildProject();
+    cleanups.push(p.cleanup);
+    const yaml = join(p.project, ".qa", "qa.project.yaml");
+    await writeFile(yaml, `${await readFile(yaml, "utf8")}\ndecision: { tolerate: { high: [FAILED] } }\n`);
+    const r = await p.run(["doctor"]);
+    expect(r.exitCode).toBe(3);
+    expect(r.out.match(/project config:/g)).toHaveLength(1);
+    expect(r.out).toMatch(
+      /✘ project config: Invalid configuration in .*qa\.project\.yaml:\n {2}- decision\.tolerate: .*high/,
+    );
+  }, 120_000);
+});

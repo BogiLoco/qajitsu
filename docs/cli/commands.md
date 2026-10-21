@@ -638,7 +638,9 @@ Exit codes: `0` pulled and verified, `2` pulled but the hashes differ, `3` error
 
 ### `qajitsu export <ticket>`
 
-Writes pipeline artifacts of a run: `report.html`, `junit.xml`, the matrix and the evidence zip.
+Writes pipeline artifacts of a run: `report.html`, `junit.xml`, the matrix and the evidence zip. It ends with the
+statuses, what the exit code means, and the GO / NO-GO decision (REQ-PUB-10; also a `qajitsu.decision` property in
+`junit.xml`).
 
 - `--run <id>`: run id (default: latest run of the ticket)
 - `--out <dir>`: output folder, e.g. `qa-artifacts` (default: `<project-home>/exports/<TICKET>/<RUN>/`)

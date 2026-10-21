@@ -513,11 +513,15 @@ export function createProgram(version: string, io: ProgramIO): Command {
             )),
           );
         } catch (error) {
-          checks.push({
+          // REQ-GEN-08/AC1: the file exists but does not load: one failed check, not "found" and "invalid".
+          const failed = {
             name: "project config",
             ok: false,
             detail: error instanceof Error ? error.message : String(error),
-          });
+          };
+          const at = checks.findIndex((c) => c.name === "project config");
+          if (at >= 0) checks.splice(at, 1, failed);
+          else checks.push(failed);
         }
       }
       // REQ-GEN-03/AC4+AC5: versions of every tool and of the application under test.

@@ -84,12 +84,14 @@ export interface ReviewPorts {
 const formatError = (error: unknown, mask: (t: string) => string): string => {
   const code = error instanceof QajitsuError ? ` [${error.code}]` : "";
   const ctx = error instanceof QajitsuError ? error.context : {};
+  const message = error instanceof Error ? error.message : String(error);
+  // A message that already lists its issues (CONFIG_INVALID) does not get them twice.
   const list = (
     Array.isArray(ctx["issues"]) ? ctx["issues"] : Array.isArray(ctx["errors"]) ? ctx["errors"] : []
-  ) as unknown[];
+  ).filter((i: unknown) => !message.includes(String(i))) as unknown[];
   return mask(
     // Issues may come with their own marker ("  ! TC-01 ..."); each gets exactly one.
-    `Error${code}: ${error instanceof Error ? error.message : String(error)}\n${list.map((i) => `  - ${String(i).replace(/^\s*[!✘•-]?\s*/, "")}\n`).join("")}`,
+    `Error${code}: ${message}\n${list.map((i) => `  - ${String(i).replace(/^\s*[!✘•-]?\s*/, "")}\n`).join("")}`,
   );
 };
 

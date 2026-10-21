@@ -1,3 +1,4 @@
+import { formatDecision } from "@qajitsu/verifier";
 import { formatVersions } from "@qajitsu/report";
 import { readFile } from "node:fs/promises";
 import { QajitsuError } from "@qajitsu/core";
@@ -49,6 +50,8 @@ export async function runEvidence(
     );
     // REQ-OBS-10/AC2: what the run was tested with.
     io.write(`Tools: ${formatVersions(v.versions)}\n`);
+    // REQ-PUB-10: the release decision next to the statuses it comes from.
+    io.write(`${formatDecision(v.decision)}\n`);
     for (const c of cases) {
       io.write(`${c.caseId} ${c.status}${c.error ? ` (${c.error})` : ""}\n`);
       for (const f of c.failures)

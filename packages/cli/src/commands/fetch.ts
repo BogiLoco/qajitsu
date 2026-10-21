@@ -131,7 +131,7 @@ export async function runFetch(
     const code = error instanceof QajitsuError ? ` [${error.code}]` : "";
     const issues =
       error instanceof QajitsuError && Array.isArray(error.context["issues"])
-        ? (error.context["issues"] as unknown[])
+        ? (error.context["issues"] as unknown[]).filter((i) => !message.includes(String(i)))
         : [];
     io.writeError(
       masker.maskText(`Error${code}: ${message}\n${issues.map((i) => `  - ${String(i)}\n`).join("")}`),

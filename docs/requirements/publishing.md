@@ -133,17 +133,18 @@ Work spent on one ticket builds the regression suite instead of being lost.
 
 ### REQ-PUB-10 · GO / NO-GO decision computed from the matrix
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: 4
 - Related: REQ-EVD-04, REQ-VER-08, REQ-PUB-09, REQ-FLOW-04, INV-1, INV-6
+- Note: accepted by the owner on 2026-10-21 and implemented; AC5 holds until the Jira workflow (REQ-FLOW-04) exists: the decision is shown, nothing acts on it.
 
 A decision per ticket; REQ-PUB-09 is the readiness of a whole release.
 
 **Acceptance criteria**
 
-- [ ] AC1: Every report ends with a decision: GO, NO-GO or NO DECISION, computed by code from the matrix and a project decision policy.
-- [ ] AC2: Default policy: GO only if every case is PASSED; any FAILED in a must-have (P0) case is NO-GO; any BLOCKED, NOT_RUN, NEEDS_REVIEW or FLAKY in a P0 case is NO DECISION.
-- [ ] AC3: The policy (case priorities, tolerated statuses for lower priorities) is versioned project configuration; the version used is recorded in the report.
-- [ ] AC4: The decision lists the cases that caused it; an agent may explain them in text, and that text is validated against the computed decision (REQ-VER-08).
-- [ ] AC5: The decision is advisory for the Jira workflow (REQ-FLOW-04) and never overrides a human sign-off rule.
+- [x] AC1: Every report ends with a decision: GO, NO-GO or NO DECISION, computed by code from the matrix and a project decision policy.
+- [x] AC2: Default policy: GO only if every case is PASSED; any FAILED in a must-have (P0) case is NO-GO; any BLOCKED, NOT_RUN, NEEDS_REVIEW or FLAKY in a P0 case is NO DECISION.
+- [x] AC3: The policy (case priorities, tolerated statuses for lower priorities) is versioned project configuration; the version used is recorded in the report.
+- [x] AC4: The decision lists the cases that caused it; an agent may explain them in text, and that text is validated against the computed decision (REQ-VER-08).
+- [x] AC5: The decision is advisory for the Jira workflow (REQ-FLOW-04) and never overrides a human sign-off rule.

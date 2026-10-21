@@ -452,6 +452,13 @@ qj export SHOP-482 --out ./out    # report.html, junit.xml, matrices and the evi
 qj map                            # application map over every run: what was tested, what never was
 ```
 
+Every run ends with a **decision** computed by code from the statuses and the plan's priorities: **GO** only when
+every case PASSED, **NO-GO** when a case FAILED, **NO DECISION** when a case is BLOCKED, NOT_RUN, NEEDS_REVIEW or FLAKY
+(or nothing ran), with the cases that caused it: `Decision: NO-GO (policy v1): TC-01 FAILED (high)`. It is in the
+terminal, `matrix.md`, `report.html`, `junit.xml`, `qj evidence`, `qj export` and the ticket comment. A project can
+tolerate some statuses of medium and low priority cases (`decision:` in `qa.project.yaml`); must-have cases are never
+tolerated. The decision is advice for people and workflows, never a status.
+
 ### Step 6: publish to the ticket
 
 ```sh
@@ -1026,6 +1033,7 @@ run folder looks like this:
 | `web.matrix` in `qa.project.yaml`            | browsers (`chromium`, `firefox`, `webkit`) and viewports (`{ name, width, height }`) for web cases; the first combination is the primary run                                                                                                                                                      |
 | `execution:` in `qa.project.yaml`            | how cases run: `workers: { api, web }` cases at once per lane, `web_combinations` browsers of the matrix at once, `sequential: true` for one case at a time, `account_wait_s` for a free pool account                                                                                             |
 | `approval:` in `qa.project.yaml`             | the plan approval flow: `flow: [person]` (default) or with `model` steps, `model` (the approver, another model than the planner), `model_only: as-computed \| review`, `jira: off \| comment` ([details](docs/cli/plan.md#approval-flow-with-model-approvers-req-plan-10-adr-0010))               |
+| `decision:` in `qa.project.yaml`             | the GO / NO-GO policy: `version` (shown in every report) and `tolerate: { medium: [...], low: [...] }`, statuses of those cases that do not stand in the way of GO; high priority cases are never tolerated                                                                                       |
 | `budget:` in `qa.project.yaml`               | `max_minutes` and `max_cost_usd` per run: once reached, the remaining cases are NOT_RUN with the reason                                                                                                                                                                                           |
 | `.qa/baselines/`                             | approved screenshots for visual checks, written only by `qj baseline accept`; `visual: { threshold, color_threshold }` in `qa.project.yaml`                                                                                                                                                       |
 | `locales:` in `qa.project.yaml`              | locales and time zones cases can run in (`{ name: pl-PL, timezone: Europe/Warsaw }`); a plan case lists its own                                                                                                                                                                                   |

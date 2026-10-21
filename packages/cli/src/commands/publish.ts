@@ -1,3 +1,4 @@
+import { formatDecision } from "@qajitsu/verifier";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -128,6 +129,7 @@ function commentModel(
     planVersion: v.approval.version,
     planSha256: v.approval.sha256,
     ...(v.approvalNote ? { approvalNote: v.approvalNote } : {}),
+    decision: formatDecision(v.decision),
     rows: v.rows,
     summary: v.summary,
     failures,

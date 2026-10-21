@@ -44,6 +44,9 @@ import {
 import {
   applyVerificationChecks,
   checkApprovalRecords,
+  computeDecision,
+  formatDecision,
+  type DecisionResult,
   checkManifest,
   combineGates,
   combineStatuses,
@@ -95,6 +98,8 @@ export interface RunVerdict {
   readonly versions?: Readonly<Record<string, string>> | undefined;
   /** Set when no person approved the plan (REQ-PLAN-10/AC5): every report says so. */
   readonly approvalNote?: string | undefined;
+  /** GO, NO-GO or NO DECISION, computed from the matrix and the project's policy (REQ-PUB-10). */
+  readonly decision: DecisionResult;
 }
 
 /** `data.fixCheck` of `run.json`, written by `qj run --fix-check` (REQ-VER-11). */
@@ -411,7 +416,17 @@ export async function computeVerdict(
             : "–",
     };
   });
-  const summary = chooseSummary(undefined, rows).text;
+  // REQ-PUB-10: the release decision, computed by code from the statuses and the plan's priorities.
+  const decision = computeDecision(
+    rows.map((r) => ({
+      caseId: r.caseId,
+      priority: plan.cases.find((p) => p.id === r.caseId)?.priority ?? "high",
+      status: r.status,
+    })),
+    session.project.config.decision,
+  );
+  const decisionLine = formatDecision(decision);
+  const summary = chooseSummary(undefined, rows, decision.decision).text;
   const evidenceText = new Map<string, string>();
   const evidenceBytes = new Map<string, Buffer>();
   for (const m of manifest) {
@@ -529,7 +544,7 @@ export async function computeVerdict(
         `Evidence before the fix: qajitsu evidence ${ws.ticket} --run ${fixCheck.baseRun}`,
       ]
     : [];
-  const matrixMd = `${renderMatrixMarkdown(rows)}${approvalNote ? `\n_${approvalNote}_\n` : ""}`;
+  const matrixMd = `${renderMatrixMarkdown(rows)}\n**${decisionLine}**\n${approvalNote ? `\n_${approvalNote}_\n` : ""}`;
   const csv = renderMatrixCsv(rows);
   // REQ-EXEC-23/AC2: the tested mobile app, recorded by code when the devices were prepared.
   const testedApp = z
@@ -550,6 +565,7 @@ export async function computeVerdict(
       plan,
       planSha256: approval.sha256,
       ...(approvalNote ? { approvalNote } : {}),
+      decision: decisionLine,
       rows,
       attempts,
       environment,
@@ -630,12 +646,16 @@ export async function computeVerdict(
     fixCheck: fixCheckLines,
     ...(versions ? { versions } : {}),
     ...(approvalNote ? { approvalNote } : {}),
+    decision,
     junit: masker.maskText(
       renderJUnit(
         {
           ticket: ws.ticket,
           runId: ws.runId,
-          ...(approvalNote ? { properties: { "qajitsu.plan.approval": approvalNote } } : {}),
+          properties: {
+            "qajitsu.decision": decisionLine,
+            ...(approvalNote ? { "qajitsu.plan.approval": approvalNote } : {}),
+          },
         },
         cases.map((c) => {
           const p = plan.cases.find((x) => x.id === c.caseId);

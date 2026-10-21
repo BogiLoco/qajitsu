@@ -701,7 +701,10 @@ export async function runRun(
     const code = error instanceof QajitsuError ? ` [${error.code}]` : "";
     const issues =
       error instanceof QajitsuError && Array.isArray(error.context["issues"])
-        ? (error.context["issues"] as unknown[]).map((i) => `  - ${String(i)}\n`).join("")
+        ? (error.context["issues"] as unknown[])
+            .filter((i) => !(error instanceof Error && error.message.includes(String(i))))
+            .map((i) => `  - ${String(i)}\n`)
+            .join("")
         : "";
     io.writeError(
       masker.maskText(`Error${code}: ${error instanceof Error ? error.message : String(error)}\n${issues}`),

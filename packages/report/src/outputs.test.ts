@@ -223,6 +223,17 @@ describe("summary validation (REQ-VER-08/AC2)", () => {
   });
 });
 
+describe("summary and the GO / NO-GO decision (REQ-PUB-10/AC4)", () => {
+  it("REQ-PUB-10/AC4: a summary may explain the computed decision but never state another one", () => {
+    expect(validateSummary("NO-GO: TC-02 FAILED because the total was 1.02.", rows, "NO-GO")).toEqual([]);
+    expect(validateSummary("Looks like a GO, only TC-03 is BLOCKED.", rows, "NO-GO")).toContain(
+      "says GO, computed NO-GO",
+    );
+    expect(validateSummary("NO DECISION yet.", rows, "NO-GO")).toContain("says NO DECISION, computed NO-GO");
+    expect(chooseSummary("GO.", rows, "NO-GO").source).toBe("template");
+  });
+});
+
 describe("unzip", () => {
   it("round-trips zip() and rejects unsafe entry names", async () => {
     const { zip, unzip } = await import("./zip.js");

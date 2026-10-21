@@ -1,3 +1,4 @@
+import { formatDecision } from "@qajitsu/verifier";
 import { copyFile, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { ConfigError, QajitsuError, exitCodeFor } from "@qajitsu/core";
@@ -60,6 +61,7 @@ export async function runExport(
             : " (publish gates failed)"
           : "";
     io.write(`Statuses: ${counts.join(", ") || "no cases"}; exit code ${String(exit)}${why}\n`);
+    io.write(`${formatDecision(verdict.decision)}\n`);
     return exit;
   } catch (error) {
     const code = error instanceof QajitsuError ? ` [${error.code}]` : "";
