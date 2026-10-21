@@ -189,3 +189,21 @@ approved as usual. Exploration says what is worth testing; it never says what th
 - [x] AC6: An accepted not-done checklist item becomes a proposed case or an open question; the plan review lists those it covers and those it does not, so a gap left by exploration stays visible.
 - [x] AC7: The plan review marks cases from exploration with their source and links to the session report; the plan is approved and frozen as any other (REQ-PLAN-04, REQ-PLAN-06); nothing from exploration runs before that.
 - [x] AC8: An accepted observation can be kept in the project's knowledge base as known behaviour of the area it concerns (`qj explore review --keep O1`), so planners of later tickets touching that area see it, cited and checked like any other document.
+
+### REQ-PLAN-12 · Numbers written as text in expectations, converted by code
+
+- Status: proposed
+- Priority: should
+- Stage: later
+- Related: REQ-PLAN-09, REQ-PLAN-04, INV-4
+
+Local and cloud planners alike write numeric expectations as text (`total: "1.01"` where the API returns the number
+`1.01`). Code flags them (REQ-PLAN-09/AC2), the planner often keeps them after its one automatic revision, and the
+person has to ask for a revision by hand. When the API description leaves no doubt, code can fix the type itself.
+
+**Acceptance criteria**
+
+- [ ] AC1: When the OpenAPI response schema says a field is `number` or `integer` and a plan expects a string that is exactly a decimal number (`"1.01"`, `"80"`, `"-3"`), code converts it to that number before the plan version is shown, and lists every conversion (case, step, field, from, to) next to the plan.
+- [ ] AC2: Anything else stays as written and is flagged as today: other number formats (`"1,01"`, `"$1.01"`, `"1.01 PLN"`, `" 1.01"`, `"1e3"`), a fraction for an `integer` field, a string field, a field the schema does not describe, or a project without an OpenAPI document.
+- [ ] AC3: Only the type changes, never the value; the converted value is what the person approves and what the approved plan's SHA-256 covers.
+- [ ] AC4: The conversion is deterministic code with fixture tests, including values that must not be converted.

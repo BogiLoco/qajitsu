@@ -112,3 +112,19 @@ code as its own agents' output, executes, and computes the verdict. A person sti
 - [ ] AC4: Plugin hooks deny Claude Code writes to `results/`, `evidence/`, `plan/plan.approved.yaml`, `run.json`, `checks/`, `manual/` and `journal/`, and deny running `qj approve`, `qj answer` and `qj publish` from the session.
 - [ ] AC5: `qj approve` refuses to run inside an agent session (Claude Code's environment) and asks the person in their own terminal; approval stays human as in REQ-PLAN-07/AC4.
 - [ ] AC6: Every draft taken is journaled with its SHA-256 and the run records that its drafts came from an external agent; hashes and publish gates catch any change to results, evidence, checks or the approved plan, whatever wrote it.
+
+### REQ-GEN-08 · Consistent `doctor` output and exit codes
+
+- Status: proposed
+- Priority: should
+- Stage: later
+- Related: REQ-GEN-03, REQ-CFG-01, REQ-ENV-06
+
+Found while testing every command: `qj doctor` listed some Android lines twice, its variants did not use the same exit
+codes, and it said nothing about a secrets file other users of the machine could read.
+
+**Acceptance criteria**
+
+- [ ] AC1: Every check and every tool appears once in the output, also when a tool is found in several places (e.g. the Android SDK through `ANDROID_HOME` and QAJitsu's toolchain); the line says which one is used.
+- [ ] AC2: `doctor`, `doctor --models`, `doctor --online` and `doctor --fix` share one exit code rule: `0` no errors (information and warnings allowed), `3` at least one error; the rule is documented and tested for each variant.
+- [ ] AC3: On macOS and Linux `doctor` warns when `.env.local` (or another file the env secret provider reads) can be read by the group or others, with `chmod 600 <file>` as the fix; it never prints the file's content.
