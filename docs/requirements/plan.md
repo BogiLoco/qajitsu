@@ -229,19 +229,20 @@ Before planning, code and the planner check that the ticket can be tested at all
 
 ### REQ-PLAN-14 · Coverage matrix computed by code
 
-- Status: proposed
+- Status: implemented
 - Priority: must
 - Stage: 2
-- Related: REQ-PLAN-02, REQ-PLAN-03, REQ-CTX-05, INV-6
+- Related: REQ-PLAN-02, REQ-PLAN-03, REQ-CTX-05, REQ-PLAN-10, INV-6
+- Note: accepted by the owner on 2026-10-21 and implemented. Endpoints come from the analysis (method and path); screens and components are left to a later change.
 
 Whether the plan covers the ticket and the change is computed, not claimed by the agent.
 
 **Acceptance criteria**
 
-- [ ] AC1: Every acceptance criterion of the ticket maps to at least one test case or to an explicit exclusion with a reason.
-- [ ] AC2: With code access `full`, every changed endpoint, screen or component found in the diff maps to a test case or an explicit exclusion.
-- [ ] AC3: Uncovered items are shown to the reviewer as a risk list next to the plan ("changed but not tested").
-- [ ] AC4: A plan with uncovered items cannot be approved without an explicit confirmation, recorded in `run.json`.
+- [x] AC1: Every acceptance criterion of the ticket maps to at least one test case or to an explicit exclusion with a reason.
+- [x] AC2: With code access `full`, every changed endpoint, screen or component found in the diff maps to a test case or an explicit exclusion.
+- [x] AC3: Uncovered items are shown to the reviewer as a risk list next to the plan ("changed but not tested").
+- [x] AC4: A plan with uncovered items cannot be approved without an explicit confirmation, recorded in `run.json`.
 
 ### REQ-PLAN-15 · Project lessons from revisions
 

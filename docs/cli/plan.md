@@ -28,6 +28,14 @@ by code" (also in `run.json`, `planConversions`). Other formats (`"1,01"`, `"$1.
 integer, string fields and projects without OpenAPI stay as written and are flagged as before. The planner is not sent
 back for what code converts itself.
 
+Coverage is computed by code (REQ-PLAN-14). Every acceptance criterion of the ticket is covered by a case that cites
+it (`{kind: ac}` or a quote of it), by an existing test that lists it in `covers`, or by an exclusion with a reason in
+`out_of_scope` that starts with its id (`AC3: why`). Every endpoint the analysis found in the change is covered by a
+case whose step calls it (`POST /orders/42/cancel` calls `POST /orders/{id}/cancel`) or by an exclusion
+(`POST /orders: why`). `qj plan` lists the rest under "Not covered by any case"; approving them needs an explicit yes in
+the review or `qj approve --confirm-uncovered`, recorded in `run.json` (`planCoverage`), and a model step of the
+approval flow hands such a plan to a person.
+
 Exploration items a person accepted with `qj explore review` are offered to the planner as untrusted data and cited as
 `{kind: explore, session: S01, item: O1}`; code refuses items nobody accepted, turns a case with no other source for its
 expected result into an open question, and lists accepted not-done items no case covers as open questions

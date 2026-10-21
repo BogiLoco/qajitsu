@@ -114,10 +114,14 @@ describe("qajitsu plan / approve (REQ-PLAN-01..06, REQ-GEN-05)", () => {
     const revised = { ...draft, cases: draft.cases.slice(0, 1) };
     const result = await run(["plan", "DEMO-1"], {
       script: [...fullScript, { text: JSON.stringify(revised) }],
-      answers: ["r", "Drop TC-02", "a"],
+      // Without TC-02 nothing covers AC3: accepting that needs its own yes (REQ-PLAN-14/AC4).
+      answers: ["r", "Drop TC-02", "a", "yes"],
     });
     expect(result.exitCode).toBe(0);
     expect(result.out).toContain("Changes v1 → v2:\n- TC-02");
+    expect(result.out).toContain(
+      'Not covered by any case (1):\n  ? AC3 "Applying a second code replaces the first; codes never stack."',
+    );
     expect(result.out).toContain("Approved plan v2");
     const record = JSON.parse(await readFile(join(runDir(), "run.json"), "utf8")) as {
       data: { approval: { approver: string; version: number } };

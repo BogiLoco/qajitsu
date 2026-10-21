@@ -236,7 +236,8 @@ describe("lanes and sequential runs (REQ-EXEC-19)", () => {
     expect(
       (await p.run(["plan", "DEMO-1"], [{ text: analysis }, { text: JSON.stringify(plan) }])).exitCode,
     ).toBe(0);
-    expect((await p.run(["approve", "DEMO-1"])).exitCode).toBe(0);
+    // The mobile case replaces the one that covered AC3 (REQ-PLAN-14/AC4).
+    expect((await p.run(["approve", "DEMO-1", "--confirm-uncovered"])).exitCode).toBe(0);
     const runId = (await readRunIndex(join(p.home, "runs"), "DEMO-1" as TicketKey)).latest ?? "";
     const dir = join(p.home, "runs", "DEMO-1", runId);
     await copyFile(

@@ -21,3 +21,4 @@ export * from "./ui-snapshot.js";
 export * from "./blocked.js";
 export * from "./approval.js";
 export * from "./decision.js";
+export * from "./coverage.js";

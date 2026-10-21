@@ -45,7 +45,8 @@ describe("plan store (REQ-PLAN-02, REQ-PLAN-04, REQ-PLAN-06)", () => {
       fields: { total: 1.01 },
     });
     expect(plan.open_questions).toEqual([]);
-    expect(plan.out_of_scope).toHaveLength(1);
+    // One thing out of scope, and AC2 and AC4 left untested on purpose with their reasons (REQ-PLAN-14).
+    expect(plan.out_of_scope).toHaveLength(3);
   });
 
   it("REQ-PLAN-02/AC1: rejects missing sources, secret values as data, duplicate ids and empty steps", () => {

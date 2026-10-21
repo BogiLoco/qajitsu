@@ -275,6 +275,8 @@ Approves and freezes a plan version without the interactive loop (SHA-256 in `ru
 - `--approver <name>`: who approves (CI: the reviewer or the `/qa approve` author)
 - `--reuse-from <run>`: reuse the plan approved in this earlier run if the ticket did not change
 - `--person`: a person approves now, in place of the model steps of the approval flow (REQ-PLAN-10)
+- `--confirm-uncovered`: approve although no case covers some acceptance criteria or changed endpoints (REQ-PLAN-14);
+  the items and who confirmed them are recorded in `run.json`
 
 With `approval.flow` in the project config, model steps check the plan first (see [plan.md](plan.md#approval-flow-with-model-approvers-req-plan-10-adr-0010)).
 

@@ -43,8 +43,11 @@ import { exportRunTelemetry } from "./telemetry.js";
 import { anchorJournal } from "./verdict.js";
 import { approvalContext } from "./context-fingerprint.js";
 import {
+  checkPlanCoverage,
   checkPlanExpectations,
   checkPlanSources,
+  formatCoverageGaps,
+  type CoverageGap,
   convertNumericStrings,
   formatNumericConversions,
   formatPlanFlags,
@@ -229,6 +232,38 @@ function conversionLines(session: RunSession, plan: Plan): string | undefined {
     : undefined;
 }
 
+/** What of the ticket and the change no case covers (REQ-PLAN-14), from the ticket and the run's analysis. */
+async function coverageOf(
+  session: RunSession,
+  context: ChangeContext,
+): Promise<(plan: Plan) => CoverageGap[]> {
+  const analysis = AnalysisSchema.safeParse(
+    JSON.parse(await readFile(session.ws.path("analysis.json"), "utf8").catch(() => "null")) as unknown,
+  );
+  const endpoints = analysis.success ? analysis.data.endpoints : [];
+  return (plan) =>
+    checkPlanCoverage(plan, { acceptanceCriteria: context.ticket.acceptanceCriteria, endpoints });
+}
+
+/** Records what was approved although no case covers it (REQ-PLAN-14/AC4). */
+async function recordCoverageGaps(
+  session: RunSession,
+  gaps: readonly CoverageGap[],
+  approver: string,
+): Promise<void> {
+  if (gaps.length === 0) return;
+  await session.ws.update({
+    data: { ...session.ws.record.data, planCoverage: { confirmedBy: approver, gaps: [...gaps] } },
+  });
+  session.events.emit("approve", { kind: "user", name: approver }, "plan.coverage_confirmed", {
+    gaps: gaps.map((g) => g.id),
+  });
+}
+
+/** One line per gap, as the approval flow and its comments show them. */
+const gapLines = (gaps: readonly CoverageGap[]): string[] =>
+  gaps.map((g) => (g.kind === "criterion" ? `${g.id} "${g.text ?? ""}"` : `${g.id} changed in the diff`));
+
 /** Records what was approved although code could not check it (REQ-PLAN-09/AC4). */
 async function recordPlanFlags(
   session: RunSession,
@@ -347,6 +382,7 @@ export async function runPlan(
     });
     if (pages) context = { ...context, snapshot: pages };
     const flagsOf = await planFlagsOf(session, context);
+    const gapsOf = await coverageOf(session, context);
 
     let current: Plan | undefined;
     try {
@@ -401,6 +437,10 @@ export async function runPlan(
       const flags = flagsOf(current);
       if (flags.length > 0)
         io.write(`Cannot be checked as written (${String(flags.length)}):\n${formatPlanFlags(flags)}\n`);
+      // REQ-PLAN-14/AC3: what of the ticket and the change no case covers, next to the plan.
+      const gaps = gapsOf(current);
+      if (gaps.length > 0)
+        io.write(`Not covered by any case (${String(gaps.length)}):\n${formatCoverageGaps(gaps)}\n`);
       if (!io.ask) return 0;
 
       const answer = (await io.ask("[a]ccept, [r]evise, [e]dit, [q]uit? ")).trim().toLowerCase();
@@ -421,6 +461,16 @@ export async function runPlan(
           (
             await io.ask(
               `Approve with ${String(flags.length)} expectation(s) that cannot be checked as written? Type 'yes' to confirm: `,
+            )
+          ).trim() !== "yes"
+        )
+          continue;
+        // REQ-PLAN-14/AC4: leaving part of the ticket or the change untested is a decision of its own.
+        if (
+          gaps.length > 0 &&
+          (
+            await io.ask(
+              `Approve with ${String(gaps.length)} item(s) no case covers? Type 'yes' to confirm: `,
             )
           ).trim() !== "yes"
         )
@@ -450,6 +500,7 @@ export async function runPlan(
         });
         session.events.emit("approve", { kind: "user", name: review.user }, "plan.approved", { ...approval });
         await recordPlanFlags(session, flags, review.user);
+        await recordCoverageGaps(session, gaps, review.user);
         await recordApprovalContext(session);
         await comment?.(
           "approval-frozen",
@@ -512,6 +563,8 @@ export interface ApproveOptions {
   readonly confirmOpenQuestions?: boolean | undefined;
   /** Approve although code flags expectations it cannot check (REQ-PLAN-09/AC4). */
   readonly confirmPlaceholders?: boolean | undefined;
+  /** Approve although no case covers some criteria or changed endpoints (REQ-PLAN-14/AC4). */
+  readonly confirmUncovered?: boolean | undefined;
   /** Who approves, e.g. the reviewer of a GitHub protected environment or a `/qa approve` comment (CI). */
   readonly approver?: string | undefined;
   /**
@@ -560,7 +613,15 @@ export async function runApprove(
     }
     // REQ-PLAN-09/AC4: expectations code cannot check need an explicit confirmation.
     const flags = (await planFlagsOf(session, context))(plan);
+    // REQ-PLAN-14/AC4: what no case covers needs its own confirmation.
+    const gaps = (await coverageOf(session, context))(plan);
     const checkPerson = (): void => {
+      if (gaps.length > 0 && options.confirmUncovered !== true)
+        throw new ConfigError(
+          "PLAN_UNCOVERED",
+          `${String(gaps.length)} item(s) of the ticket or the change are covered by no case; add cases or exclusions with a reason, or approve with --confirm-uncovered.`,
+          { issues: gapLines(gaps) },
+        );
       if (flags.length > 0 && options.confirmPlaceholders !== true)
         throw new ConfigError(
           "PLAN_UNCHECKABLE",
@@ -586,6 +647,7 @@ export async function runApprove(
         .split("\n")
         .map((l) => l.replace(/^\s*!\s*/, ""))
         .filter((l) => l !== ""),
+      gaps: gapLines(gaps),
       person: approver,
       asPerson: options.person === true,
       checkPerson,
@@ -609,6 +671,7 @@ export async function runApprove(
       { ...approval },
     );
     await recordPlanFlags(session, flags, flow.approver);
+    await recordCoverageGaps(session, gaps, flow.approver);
     await comment?.(
       "approval-frozen",
       `QAJitsu plan v${String(approval.version)} of ${session.ws.ticket} approved and frozen (run ${session.ws.runId})`,

@@ -312,7 +312,10 @@ type, steps with a description only, and `testid:` selectors the code does not d
 a web id does not count in a mobile case). The planner gets one
 automatic round to fix them; what remains is listed under "Cannot be checked as written" next to the plan. A number
 written as text for a field the OpenAPI document says is a number (`total: "1.01"`) is not sent back: code converts it
-to `1.01` and lists the conversion next to the plan. A spec for
+to `1.01` and lists the conversion next to the plan. Code also computes coverage: every acceptance criterion of the
+ticket and every endpoint the analysis found in the change needs a case that cites or calls it, an existing test that
+covers it, or an exclusion with a reason in `out_of_scope` (`AC3: covered by the pricing service's tests`); the rest
+is listed under "Not covered by any case", and approving it needs its own confirmation (`--confirm-uncovered`). A spec for
 a mobile case that uses what only a browser has (`ui.as`, `ui.select`, `ui.goto` without a deep link scheme, `css:` or
 `role:` selectors) goes back to the author before anything runs.
 

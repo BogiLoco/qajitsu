@@ -65,6 +65,9 @@ Rules:
   a tester has to be present when the run reaches it.
 - "evidence" lists what proves the result: request, response, screenshot, video, trace, log, har.
 - Unclear behaviour goes to "open_questions" (Q1, ...); deliberately untested things go to "out_of_scope".
+- Every acceptance criterion and every changed endpoint needs a case. To leave one untested on purpose, put it in
+  "out_of_scope" with the reason, starting with its id: "AC3: covered by the pricing service's own tests" or
+  "POST /orders: not changed in behaviour". Code checks this; anything else is listed as not covered.
 - For a ticket of type Bug, mark the case(s) that reproduce the reported defect with "reproduces": true: they must
   fail on the version before the fix and pass with the fix. Other cases leave it out.
 - When existing manual test cases are listed, reuse what they check: a plan case based on one cites it with
