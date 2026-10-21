@@ -60,7 +60,7 @@ import { runMap } from "./commands/map.js";
 import { runCiComment, runCiDetect, runCiPublishPlan } from "./commands/ci.js";
 import { loadProject, type LoadedProject } from "./project.js";
 import type { ModelPorts } from "./session.js";
-import { formatDoctor, runDoctor } from "./doctor.js";
+import { formatDoctor, reportedBy, runDoctor } from "./doctor.js";
 import { projectChecks } from "./doctor-project.js";
 import { appVersions, formatAppVersions } from "./app-versions.js";
 import { formatToolVersions, toolVersions } from "./versions.js";
@@ -363,11 +363,11 @@ export function createProgram(version: string, io: ProgramIO): Command {
   knowledge
     .command("search")
     .description("Print the ranked chunks agents would get for a query, with source, section and date")
-    .argument("<query>", "search text")
+    .argument("<query...>", "search text (quotes not needed)")
     .option("--tag <tag>", "only documents with this tag (repeatable)", collect, [])
     .option("--limit <n>", "number of results (default 5)")
-    .action(async (query: string, options: { tag?: string[]; limit?: string }) => {
-      await withPorts((ports) => runKnowledgeSearch(query, options, commandIO, ports))();
+    .action(async (query: string[], options: { tag?: string[]; limit?: string }) => {
+      await withPorts((ports) => runKnowledgeSearch(query.join(" "), options, commandIO, ports))();
     });
 
   program
@@ -429,6 +429,60 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--fix", "run qj setup for the tools doctor finds missing")
     .option("--yes", "with --fix: no questions, licences accepted on your behalf")
     .action(async (options: { models?: boolean; online?: boolean; fix?: boolean; yes?: boolean }) => {
+      /** Probes every role's model and the approval flow's model (REQ-LLM-03/AC2, REQ-GEN-08/AC2). */
+      const probeConfiguredModels = async (): Promise<boolean> => {
+        if (!io.ports) return false;
+        try {
+          const project = await loadProject(io.cwd, resolved);
+          const { createModelRegistry } = await import("@qajitsu/models");
+          const { createMasker } = await import("@qajitsu/steps");
+          const { createCliSecretResolver } = await import("./adapters.js");
+          const masker = createMasker();
+          const models = createModelRegistry({
+            config: project.config.models,
+            resolveSecret: createCliSecretResolver(project, io.ports, masker),
+            fetch: io.ports.fetch,
+            ...(io.ports.extraModels ? { extra: io.ports.extraModels } : {}),
+          });
+          const approval = project.config.approval;
+          const probes = await probeModels(
+            models,
+            Object.keys(project.config.models.roles),
+            undefined,
+            approval.flow.includes("model") ? approval.model : undefined,
+          );
+          // REQ-LLM-09/AC5: a rejected key is named by its variable; provider messages can quote part of the key.
+          const keyOf = (model: string): string => {
+            const ref = project.config.models.providers[model.split("/")[0] ?? ""]?.api_key;
+            return ref === undefined
+              ? "the provider's key"
+              : (/^secret:\/\/env\/(\w+)$/.exec(ref)?.[1] ?? ref);
+          };
+          const shown = probes.map((p) =>
+            p.error === undefined
+              ? p
+              : {
+                  ...p,
+                  error: /\b(401|403)\b|unauthori[sz]ed|authentication|api[- _]?key/i.test(p.error)
+                    ? `the provider rejected the key in ${keyOf(p.model)}`
+                    : masker.maskText(p.error),
+                },
+          );
+          io.write(`${formatProbes(shown)}\n`);
+          return probes.every((p) => p.reachable && p.missing.length === 0);
+        } catch (error) {
+          io.write(`✘ models: ${error instanceof Error ? error.message : String(error)}\n`);
+          return false;
+        }
+      };
+      // REQ-GEN-08/AC2: --models judges only the models, so a missing phone tool does not fail a model check.
+      if (options.models === true && (options.online === true || options.fix === true)) {
+        io.writeError(
+          "--models checks only the models: run 'qj doctor --online' or 'qj doctor --fix' on its own.\n",
+        );
+        io.setExitCode(3);
+        return;
+      }
       const checks = runDoctor({
         nodeVersion: io.nodeVersion,
         hasProjectConfig:
@@ -440,6 +494,12 @@ export function createProgram(version: string, io: ProgramIO): Command {
           ok: false,
           detail: projectError instanceof Error ? projectError.message : "unknown error",
         });
+      if (options.models === true) {
+        io.write(`${formatDoctor(checks)}\n`);
+        const modelsOk = checks.every((c) => c.ok) && (await probeConfiguredModels());
+        io.setExitCode(modelsOk ? 0 : 3);
+        return;
+      }
       if (checks.every((c) => c.ok) && io.ports) {
         // REQ-GEN-03/AC2: secrets, Docker, Android/Appium and, with --online, Jira and code hosts.
         try {
@@ -453,11 +513,15 @@ export function createProgram(version: string, io: ProgramIO): Command {
             )),
           );
         } catch (error) {
-          checks.push({
+          // REQ-GEN-08/AC1: the file exists but does not load: one failed check, not "found" and "invalid".
+          const failed = {
             name: "project config",
             ok: false,
             detail: error instanceof Error ? error.message : String(error),
-          });
+          };
+          const at = checks.findIndex((c) => c.name === "project config");
+          if (at >= 0) checks.splice(at, 1, failed);
+          else checks.push(failed);
         }
       }
       // REQ-GEN-03/AC4+AC5: versions of every tool and of the application under test.
@@ -473,7 +537,12 @@ export function createProgram(version: string, io: ProgramIO): Command {
       });
       // docker and appium are already checks of their own above; the others fail here when needed and missing.
       for (const t of tools)
-        if (t.needed && t.version === undefined && !checks.some((c) => c.name === t.name))
+        if (
+          t.needed &&
+          t.version === undefined &&
+          !checks.some((c) => c.name === t.name) &&
+          reportedBy(t.name, checks) === undefined
+        )
           checks.push({
             name: t.name,
             ok: false,
@@ -501,7 +570,9 @@ export function createProgram(version: string, io: ProgramIO): Command {
               missing: [],
             }))
           : undefined;
-      io.write(`${formatDoctor(checks)}\n\n${formatToolVersions(tools)}\n`);
+      io.write(
+        `${formatDoctor(checks)}\n\n${formatToolVersions(tools, (name) => reportedBy(name, checks))}\n`,
+      );
       if (toolchain && toolchain.lines.length > 0)
         io.write(`\nToolchain (qj setup):\n${toolchain.lines.join("\n")}\n`);
       if (loaded) io.write(`\n${formatAppVersions(app)}\n`);
@@ -520,26 +591,6 @@ export function createProgram(version: string, io: ProgramIO): Command {
           const toolChecks = new Set([...TOOL_CHECKS, ...tools.map((t) => t.name)]);
           ok = code === 0 && checks.filter((c) => !toolChecks.has(c.name)).every((c) => c.ok);
           if (code === 0) io.write("Run qj doctor again to see the result.\n");
-        }
-      }
-      if (options.models === true && io.ports) {
-        try {
-          const project = await loadProject(io.cwd, resolved);
-          const { createModelRegistry } = await import("@qajitsu/models");
-          const { createMasker } = await import("@qajitsu/steps");
-          const { createCliSecretResolver } = await import("./adapters.js");
-          const models = createModelRegistry({
-            config: project.config.models,
-            resolveSecret: createCliSecretResolver(project, io.ports, createMasker()),
-            fetch: io.ports.fetch,
-            ...(io.ports.extraModels ? { extra: io.ports.extraModels } : {}),
-          });
-          const probes = await probeModels(models, Object.keys(project.config.models.roles));
-          io.write(`${formatProbes(probes)}\n`);
-          ok = ok && probes.every((p) => p.reachable && p.missing.length === 0);
-        } catch (error) {
-          io.write(`✘ models: ${error instanceof Error ? error.message : String(error)}\n`);
-          ok = false;
         }
       }
       io.setExitCode(ok ? 0 : 3);
@@ -589,6 +640,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--approver <name>", "who approves (CI: the reviewer or the /qa approve author)")
     .option("--reuse-from <run>", "reuse the plan approved in this earlier run if the ticket did not change")
     .option("--person", "a person approves now, in place of the model steps of the approval flow")
+    .option("--confirm-uncovered", "approve although no case covers some criteria or changed endpoints")
     .action(
       (
         ticket: string,
@@ -600,6 +652,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
           approver?: string;
           reuseFrom?: string;
           person?: boolean;
+          confirmUncovered?: boolean;
         },
       ) => withPorts((ports) => runApprove(ticket, options, commandIO, ports, review))(),
     );
@@ -851,9 +904,9 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .command("note")
     .description("Attach a note to a ticket; status shows it next to the ticket's open work")
     .argument("<ticket>", "Jira key, e.g. SHOP-482")
-    .argument("<text>", "the note")
-    .action((ticket: string, text: string) =>
-      withPorts((ports) => runNote(ticket, text, commandIO, ports, io.user ?? "unknown"))(),
+    .argument("<text...>", "the note (quotes not needed)")
+    .action((ticket: string, text: string[]) =>
+      withPorts((ports) => runNote(ticket, text.join(" "), commandIO, ports, io.user ?? "unknown"))(),
     );
 
   program

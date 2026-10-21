@@ -4,7 +4,6 @@ import {
   AgentOutputError,
   TokenBudgetExceededError,
   buildChangeContext,
-  createUsageTracker,
   loadKnowledge,
   runAnalyst,
   runPlanner,
@@ -39,12 +38,18 @@ import { explorationLines } from "./explore-review.js";
 import { approvalCommenter, recordReviewApproval, runApprovalFlow } from "./approval-flow.js";
 import { publisherFor } from "./publish.js";
 import { createMasker } from "@qajitsu/steps";
+import { runUsage, saveRunUsage } from "../run-usage.js";
 import { exportRunTelemetry } from "./telemetry.js";
 import { anchorJournal } from "./verdict.js";
 import { approvalContext } from "./context-fingerprint.js";
 import {
+  checkPlanCoverage,
   checkPlanExpectations,
   checkPlanSources,
+  formatCoverageGaps,
+  type CoverageGap,
+  convertNumericStrings,
+  formatNumericConversions,
   formatPlanFlags,
   formatSourceIssues,
   type PlanFlag,
@@ -82,12 +87,14 @@ export interface ReviewPorts {
 const formatError = (error: unknown, mask: (t: string) => string): string => {
   const code = error instanceof QajitsuError ? ` [${error.code}]` : "";
   const ctx = error instanceof QajitsuError ? error.context : {};
+  const message = error instanceof Error ? error.message : String(error);
+  // A message that already lists its issues (CONFIG_INVALID) does not get them twice.
   const list = (
     Array.isArray(ctx["issues"]) ? ctx["issues"] : Array.isArray(ctx["errors"]) ? ctx["errors"] : []
-  ) as unknown[];
+  ).filter((i: unknown) => !message.includes(String(i))) as unknown[];
   return mask(
     // Issues may come with their own marker ("  ! TC-01 ..."); each gets exactly one.
-    `Error${code}: ${error instanceof Error ? error.message : String(error)}\n${list.map((i) => `  - ${String(i).replace(/^\s*[!✘•-]?\s*/, "")}\n`).join("")}`,
+    `Error${code}: ${message}\n${list.map((i) => `  - ${String(i).replace(/^\s*[!✘•-]?\s*/, "")}\n`).join("")}`,
   );
 };
 
@@ -98,12 +105,7 @@ const formatError = (error: unknown, mask: (t: string) => string): string => {
 const exitFor = (error: unknown): number => (error instanceof TokenBudgetExceededError ? 2 : 3);
 
 function stageDeps(session: RunSession, ports: RuntimePorts): AgentStageDeps & { save: () => Promise<void> } {
-  const used = Number(session.ws.record.data["tokens"] ?? 0);
-  const usage = createUsageTracker({
-    events: session.events,
-    budget: session.project.config.models.token_budget,
-    alreadyUsed: used,
-  });
+  const usage = runUsage(session.ws, session.project, session.events);
   return {
     ws: session.ws,
     models: session.models,
@@ -112,11 +114,7 @@ function stageDeps(session: RunSession, ports: RuntimePorts): AgentStageDeps & {
     now: ports.now,
     maskJson: (v) => session.masker.maskJson(v),
     maskText: (t) => session.masker.maskText(t),
-    save: async () => {
-      await session.ws.update({
-        data: { ...session.ws.record.data, tokens: usage.total, costUsd: Number(usage.costUsd.toFixed(6)) },
-      });
-    },
+    save: () => saveRunUsage(session.ws, usage),
   };
 }
 
@@ -161,7 +159,10 @@ async function acceptEditedPlan(
           : [error instanceof Error ? (error.message.split("\n")[0] ?? "invalid plan") : String(error)],
     };
   }
-  return { plan: await writePlanVersion(session.ws, draft), problems: [] };
+  return {
+    plan: await writeConvertedVersion(session, draft, { kind: "user", name: "editor" }),
+    problems: [],
+  };
 }
 
 /**
@@ -186,8 +187,82 @@ async function planFlagsOf(session: RunSession, context: ChangeContext): Promise
   const openapi = await runOpenApi(session);
   // REQ-EXEC-22/AC8: elements are also checked against the pages recorded before planning.
   const snapshot = context.snapshot ?? (await readPlanSnapshot(session.ws));
-  return (plan) => checkPlanExpectations(plan, { openapi, inventory: context.ui, snapshot });
+  // REQ-PLAN-12: what code converts itself is not a flag, so the planner is not sent back for it.
+  return (plan) =>
+    checkPlanExpectations(convertNumericStrings(plan, openapi).plan, {
+      openapi,
+      inventory: context.ui,
+      snapshot,
+    });
 }
+
+/**
+ * Stores a plan version with numbers written as text converted where the OpenAPI document leaves no doubt
+ * (REQ-PLAN-12/AC1): the conversions are kept in `run.json` (`planConversions`) and journaled.
+ */
+async function writeConvertedVersion(
+  session: RunSession,
+  draft: Parameters<typeof writePlanVersion>[1],
+  actor: { readonly kind: "agent" | "user"; readonly name: string },
+): Promise<Plan> {
+  const { plan: converted, conversions } = convertNumericStrings(draft, await runOpenApi(session));
+  const plan = await writePlanVersion(session.ws, converted);
+  if (conversions.length > 0) {
+    const previous = (session.ws.record.data["planConversions"] ?? {}) as Record<string, unknown>;
+    await session.ws.update({
+      data: {
+        ...session.ws.record.data,
+        planConversions: { ...previous, [`v${String(plan.version)}`]: conversions },
+      },
+    });
+    session.events.emit("plan", actor, "plan.converted", { version: plan.version, conversions });
+  }
+  return plan;
+}
+
+/** The conversions code made in a plan version, as lines next to the plan (REQ-PLAN-12/AC1). */
+function conversionLines(session: RunSession, plan: Plan): string | undefined {
+  const all = (session.ws.record.data["planConversions"] ?? {}) as Record<
+    string,
+    Parameters<typeof formatNumericConversions>[0]
+  >;
+  const mine = all[`v${String(plan.version)}`] ?? [];
+  return mine.length > 0
+    ? `Numbers written as text, converted by code (${String(mine.length)}):\n${formatNumericConversions(mine)}`
+    : undefined;
+}
+
+/** What of the ticket and the change no case covers (REQ-PLAN-14), from the ticket and the run's analysis. */
+async function coverageOf(
+  session: RunSession,
+  context: ChangeContext,
+): Promise<(plan: Plan) => CoverageGap[]> {
+  const analysis = AnalysisSchema.safeParse(
+    JSON.parse(await readFile(session.ws.path("analysis.json"), "utf8").catch(() => "null")) as unknown,
+  );
+  const endpoints = analysis.success ? analysis.data.endpoints : [];
+  return (plan) =>
+    checkPlanCoverage(plan, { acceptanceCriteria: context.ticket.acceptanceCriteria, endpoints });
+}
+
+/** Records what was approved although no case covers it (REQ-PLAN-14/AC4). */
+async function recordCoverageGaps(
+  session: RunSession,
+  gaps: readonly CoverageGap[],
+  approver: string,
+): Promise<void> {
+  if (gaps.length === 0) return;
+  await session.ws.update({
+    data: { ...session.ws.record.data, planCoverage: { confirmedBy: approver, gaps: [...gaps] } },
+  });
+  session.events.emit("approve", { kind: "user", name: approver }, "plan.coverage_confirmed", {
+    gaps: gaps.map((g) => g.id),
+  });
+}
+
+/** One line per gap, as the approval flow and its comments show them. */
+const gapLines = (gaps: readonly CoverageGap[]): string[] =>
+  gaps.map((g) => (g.kind === "criterion" ? `${g.id} "${g.text ?? ""}"` : `${g.id} changed in the diff`));
 
 /** Records what was approved although code could not check it (REQ-PLAN-09/AC4). */
 async function recordPlanFlags(
@@ -257,6 +332,7 @@ export async function runPlan(
   const masker = createMasker();
   let session: RunSession | undefined;
   let closeKnowledge: () => Promise<void> = () => Promise.resolve();
+  let saveUsage: (() => Promise<void>) | undefined;
   try {
     session = await openSession(rawKey, options.run, io.cwd, ports, masker);
     const ws = session.ws;
@@ -277,6 +353,7 @@ export async function runPlan(
     const docs = await openRunKnowledge(session.project, masker, session.resolveSecret, io, ports);
     closeKnowledge = docs.close;
     const deps = { ...stageDeps(session, ports), ...(docs.access ? { knowledge: docs.access } : {}) };
+    saveUsage = deps.save;
     const depthOption = options.depth === undefined ? undefined : DepthSchema.safeParse(options.depth);
     if (depthOption && !depthOption.success)
       throw new ConfigError("PLAN_DEPTH_INVALID", "--depth must be smoke, standard or full.", {});
@@ -305,6 +382,7 @@ export async function runPlan(
     });
     if (pages) context = { ...context, snapshot: pages };
     const flagsOf = await planFlagsOf(session, context);
+    const gapsOf = await coverageOf(session, context);
 
     let current: Plan | undefined;
     try {
@@ -330,7 +408,10 @@ export async function runPlan(
         );
         await deps.save();
         // REQ-PLAN-08/AC1: code selects the cases for the depth and records why; the person reviews that selection.
-        const next = await writePlanVersion(ws, depth ? applyDepth(draft, depth) : draft);
+        const next = await writeConvertedVersion(session, depth ? applyDepth(draft, depth) : draft, {
+          kind: "agent",
+          name: "planner",
+        });
         session.events.emit("plan", { kind: "agent", name: "planner" }, "plan.version", {
           version: next.version,
           cases: next.cases.length,
@@ -349,10 +430,17 @@ export async function runPlan(
       for (const q of current.open_questions) io.write(`  ? ${q.id}: ${q.question}\n`);
       // REQ-PLAN-11/AC3+AC6: what a person accepted from exploration, and what of it no case covers.
       for (const line of await explorationLines(current, session)) io.write(`${line}\n`);
+      // REQ-PLAN-12/AC1: what code converted, next to the plan.
+      const converted = conversionLines(session, current);
+      if (converted) io.write(`${converted}\n`);
       // REQ-PLAN-09/AC3: what code cannot check, next to the plan.
       const flags = flagsOf(current);
       if (flags.length > 0)
         io.write(`Cannot be checked as written (${String(flags.length)}):\n${formatPlanFlags(flags)}\n`);
+      // REQ-PLAN-14/AC3: what of the ticket and the change no case covers, next to the plan.
+      const gaps = gapsOf(current);
+      if (gaps.length > 0)
+        io.write(`Not covered by any case (${String(gaps.length)}):\n${formatCoverageGaps(gaps)}\n`);
       if (!io.ask) return 0;
 
       const answer = (await io.ask("[a]ccept, [r]evise, [e]dit, [q]uit? ")).trim().toLowerCase();
@@ -373,6 +461,16 @@ export async function runPlan(
           (
             await io.ask(
               `Approve with ${String(flags.length)} expectation(s) that cannot be checked as written? Type 'yes' to confirm: `,
+            )
+          ).trim() !== "yes"
+        )
+          continue;
+        // REQ-PLAN-14/AC4: leaving part of the ticket or the change untested is a decision of its own.
+        if (
+          gaps.length > 0 &&
+          (
+            await io.ask(
+              `Approve with ${String(gaps.length)} item(s) no case covers? Type 'yes' to confirm: `,
             )
           ).trim() !== "yes"
         )
@@ -402,6 +500,7 @@ export async function runPlan(
         });
         session.events.emit("approve", { kind: "user", name: review.user }, "plan.approved", { ...approval });
         await recordPlanFlags(session, flags, review.user);
+        await recordCoverageGaps(session, gaps, review.user);
         await recordApprovalContext(session);
         await comment?.(
           "approval-frozen",
@@ -443,9 +542,11 @@ export async function runPlan(
     if (error instanceof AgentOutputError)
       io.writeError("The model did not produce a valid result; nothing was guessed.\n");
     if (error instanceof TokenBudgetExceededError && session) {
+      // What the calls before the stop cost belongs to the run (REQ-LLM-09/AC4).
+      await saveUsage?.();
       await session.ws.update({
         status: "failed",
-        data: { ...session.ws.record.data, blocked: { reason: "TOKEN_BUDGET_EXCEEDED" } },
+        data: { ...session.ws.record.data, blocked: { reason: error.code } },
       });
     }
     io.writeError(formatError(error, (t) => masker.maskText(t)));
@@ -462,6 +563,8 @@ export interface ApproveOptions {
   readonly confirmOpenQuestions?: boolean | undefined;
   /** Approve although code flags expectations it cannot check (REQ-PLAN-09/AC4). */
   readonly confirmPlaceholders?: boolean | undefined;
+  /** Approve although no case covers some criteria or changed endpoints (REQ-PLAN-14/AC4). */
+  readonly confirmUncovered?: boolean | undefined;
   /** Who approves, e.g. the reviewer of a GitHub protected environment or a `/qa approve` comment (CI). */
   readonly approver?: string | undefined;
   /**
@@ -510,7 +613,15 @@ export async function runApprove(
     }
     // REQ-PLAN-09/AC4: expectations code cannot check need an explicit confirmation.
     const flags = (await planFlagsOf(session, context))(plan);
+    // REQ-PLAN-14/AC4: what no case covers needs its own confirmation.
+    const gaps = (await coverageOf(session, context))(plan);
     const checkPerson = (): void => {
+      if (gaps.length > 0 && options.confirmUncovered !== true)
+        throw new ConfigError(
+          "PLAN_UNCOVERED",
+          `${String(gaps.length)} item(s) of the ticket or the change are covered by no case; add cases or exclusions with a reason, or approve with --confirm-uncovered.`,
+          { issues: gapLines(gaps) },
+        );
       if (flags.length > 0 && options.confirmPlaceholders !== true)
         throw new ConfigError(
           "PLAN_UNCHECKABLE",
@@ -536,6 +647,7 @@ export async function runApprove(
         .split("\n")
         .map((l) => l.replace(/^\s*!\s*/, ""))
         .filter((l) => l !== ""),
+      gaps: gapLines(gaps),
       person: approver,
       asPerson: options.person === true,
       checkPerson,
@@ -559,6 +671,7 @@ export async function runApprove(
       { ...approval },
     );
     await recordPlanFlags(session, flags, flow.approver);
+    await recordCoverageGaps(session, gaps, flow.approver);
     await comment?.(
       "approval-frozen",
       `QAJitsu plan v${String(approval.version)} of ${session.ws.ticket} approved and frozen (run ${session.ws.runId})`,

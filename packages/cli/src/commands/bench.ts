@@ -282,10 +282,17 @@ export async function runBench(
         const approved =
           planned === 0
             ? // Recorded as an automatic approval by the benchmark, never as a person's.
-              await runApprove(c.ticket, { run: runId, confirmOpenQuestions: true }, sub, benchPorts, {
-                ...review,
-                user: `bench:${review.user}`,
-              })
+              // The benchmark measures what a plan finds: a plan that misses part of the ticket runs and scores lower.
+              await runApprove(
+                c.ticket,
+                { run: runId, confirmOpenQuestions: true, confirmUncovered: true },
+                sub,
+                benchPorts,
+                {
+                  ...review,
+                  user: `bench:${review.user}`,
+                },
+              )
             : 3;
         if (approved === 0)
           await runRun(

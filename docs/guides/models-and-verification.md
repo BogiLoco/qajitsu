@@ -56,9 +56,47 @@ refuses every request the documentation does not allow, so the tests prove that 
 - runs the whole flow (fetch, analyst and planner, approve, run on the demo shop) with the key only in `.env.local`
   and nowhere in the journal, logs or `run.json`.
 
-What this cannot prove is how a real Claude model plans: the answers are scripted. A run with a real key
-(`qj doctor --models`, then `qj bench --model anthropic/<model>`) is still open (REQ-LLM-01/AC4). OpenAI and Google
-are built through the same AI SDK and covered by the registry tests, not yet by a contract like this one.
+What this cannot prove is how a real Claude model plans: the answers are scripted. A run with a real key was done on
+2026-10-18 (REQ-LLM-01/AC4). OpenAI and Google are built through the same AI SDK and covered by the registry tests,
+not yet by a contract like this one.
+
+## Prices and the spending limit (REQ-LLM-09)
+
+Claude, OpenAI and Gemini models have built-in profiles: context window and price per million input and output
+tokens, taken from the providers' pricing and models pages on the date in `BUILT_IN_PROFILES_CHECKED`
+(`packages/models/src/capabilities.ts`). A price that depends on the prompt size uses its higher tier, so a limit errs
+on the safe side. Prices announced to change have an end date: Gemini 4 Argon and Gemini 3.6/3.8 Flash cost what is
+built in through 2026-12-31, and after that their cost is unknown until the new price is built in or declared. Where a
+provider does not state a model's context window, the profile assumes a conservative 128k. Local models through Ollama
+cost nothing. Any other model has no built-in price: declare it in the project config, which also wins over a
+built-in value:
+
+```yaml
+models:
+  providers:
+    gateway:
+      {
+        type: openai-compatible,
+        base_url: https://llm.example.com/v1,
+        api_key: secret://env/GATEWAY_KEY,
+        models:
+          {
+            my-model:
+              {
+                tools: true,
+                structured_output: true,
+                vision: false,
+                context_window: 128000,
+                cost_per_mtok: { input: 1, output: 4 },
+              },
+          },
+      }
+```
+
+The run's cost adds up over its stages (plan, author, auditor, hints, exploration) in `run.json` (`costUsd`); a run
+with a call of a model without a price is marked `costUnknown` and estimates say "cost unknown", never $0.
+`budget.max_cost_usd` stops a model stage once the run's cost reaches it (`COST_BUDGET_EXCEEDED`, BLOCKED, exit code 2) and makes the cases not written yet NOT_RUN. `qj doctor --models` makes one call per role and names a rejected
+key by its variable, never by its value.
 
 ## Local models, honestly (REQ-LLM-05)
 

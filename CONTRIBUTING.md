@@ -16,7 +16,8 @@ Node.js 22 LTS and pnpm 10 (`corepack enable`). Then `pnpm install && pnpm verif
    Code in `packages/guard`, `packages/verifier` and `packages/steps` needs 95% coverage; anything that decides or
    publishes a status needs an adversarial test in `tests/adversarial`.
 4. **Tick criteria** you implemented and tested, set the status, run `pnpm req:index`.
-5. **Verify**: `pnpm verify` must be green. Never weaken a test or lower a threshold to get there.
+5. **Verify**: `pnpm verify` must be green, on the Node.js major of `.nvmrc` (CI's; verify warns on another one).
+   Never weaken a test or lower a threshold to get there.
 6. **Commit** with [Conventional Commits](https://www.conventionalcommits.org/) and a package scope, and reference requirements in the footer:
 
    ```text
@@ -26,7 +27,19 @@ Node.js 22 LTS and pnpm 10 (`corepack enable`). Then `pnpm install && pnpm verif
    ```
 
 7. **Changeset** for user-visible changes: `pnpm changeset`.
-8. **PR** using the template. One logical change per PR.
+8. **PR** using the template. One logical change per PR. It merges only when CI is green (REQ-NFR-10).
+
+### For maintainers: required checks
+
+Protect `main` in the repository settings (Settings → Branches → branch protection rule for `main`, or a ruleset):
+require a pull request and require these status checks to pass before merging:
+
+- `verify (ubuntu-latest)`, `verify (macos-latest)`
+- `e2e (ubuntu-latest, demo-shop self-test, sandboxed runner)`, `e2e (macos-latest, demo-shop self-test, sandboxed runner)`
+- `contributor-setup`, `dependency-review`
+
+The same workflow runs every night on main (and on demand from the Actions tab); a red nightly run is fixed before the
+next merge.
 
 ## Rules that matter most
 

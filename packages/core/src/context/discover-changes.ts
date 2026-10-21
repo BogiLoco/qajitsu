@@ -6,7 +6,8 @@ import type { Logger } from "../interfaces/common.js";
 import type { Ticket } from "../interfaces/ticket-source.js";
 
 /** Strategy that produced the changes of a run (REQ-CTX-03). */
-export type DiscoveryStrategy = "manual" | ProjectConfig["change_discovery"][number];
+/** How the change was found; `none` when the project shares no code (`code.access: none`, REQ-CTX-10). */
+export type DiscoveryStrategy = "manual" | "none" | ProjectConfig["change_discovery"][number];
 
 /** One repository of the change, keyed by its alias in `.qa/qa.project.yaml` (REQ-CTX-03/AC4). */
 export interface DiscoveredChange {

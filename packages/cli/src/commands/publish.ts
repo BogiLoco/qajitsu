@@ -1,3 +1,4 @@
+import { formatDecision } from "@qajitsu/verifier";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -24,7 +25,7 @@ import { openSession, type ModelPorts, type RunSession } from "../session.js";
 import { annotatedFirst } from "./annotated.js";
 import type { CommandIO } from "./fetch.js";
 import { exportRunTelemetry } from "./telemetry.js";
-import { anchorJournal, computeVerdict, writeReports, type RunVerdict } from "./verdict.js";
+import { anchorJournal, codeAccessNote, computeVerdict, writeReports, type RunVerdict } from "./verdict.js";
 
 /** Options of `qajitsu publish`. */
 export interface PublishOptions {
@@ -124,10 +125,12 @@ function commentModel(
     date: now.toISOString(),
     environment: v.environment,
     repos: Object.fromEntries(Object.entries(ws.record.repos).map(([k, r]) => [k, r.sha])),
+    ...(codeAccessNote(ws.record.data) ? { codeAccess: codeAccessNote(ws.record.data) } : {}),
     executor: user,
     planVersion: v.approval.version,
     planSha256: v.approval.sha256,
     ...(v.approvalNote ? { approvalNote: v.approvalNote } : {}),
+    decision: formatDecision(v.decision),
     rows: v.rows,
     summary: v.summary,
     failures,

@@ -45,7 +45,8 @@ const sha256 = (text: string): string => createHash("sha256").update(text).diges
 
 /**
  * The model step of a plan's approval flow (REQ-PLAN-10/AC2, ADR-0010). Code decides first: a plan with expectations
- * code flagged or with open questions is handed over to a person without asking the model. Otherwise another model
+ * code flagged, with items no case covers (REQ-PLAN-14) or with open questions is handed over to a person without
+ * asking the model. Otherwise another model
  * than the planner checks the plan against the ticket and its sources and approves, asks for a revision or hands
  * over; its answer is validated like any agent output and returned with the hashes of its prompt and answer.
  *
@@ -60,6 +61,8 @@ export async function runPlanApprover(
     readonly plan: Plan;
     readonly context: ChangeContext;
     readonly flags: readonly string[];
+    /** What of the ticket and the change no case covers, computed by code (REQ-PLAN-14). */
+    readonly gaps?: readonly string[];
     readonly modelRef: string;
   },
 ): Promise<ApproverDecision> {
@@ -85,6 +88,17 @@ export async function runPlanApprover(
     return {
       decision: "handover",
       reasons: [`code flagged ${String(input.flags.length)} expectation(s) it cannot check`, ...input.flags],
+      decidedBy: "code",
+      model: "code",
+    };
+  const gaps = input.gaps ?? [];
+  if (gaps.length > 0)
+    return {
+      decision: "handover",
+      reasons: [
+        `the plan covers ${String(gaps.length)} item(s) of the ticket or the change with no case`,
+        ...gaps,
+      ],
       decidedBy: "code",
       model: "code",
     };

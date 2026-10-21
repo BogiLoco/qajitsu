@@ -97,6 +97,7 @@ export async function runProjectInit(
           jiraUrl: options.jiraUrl,
           projectKey: options.projectKey,
           envUrl: options.envUrl,
+          env: ports.env,
         },
         { ...io, cwd: dirname(qaDir) },
       );
@@ -265,6 +266,13 @@ export async function runProjectRemove(
           (p) => `  ${p.name.padEnd(9)} ${String(p.files).padStart(6)} file(s) ${mb(p.bytes).padStart(10)}`,
         ),
         `  tickets with runs: ${String(tickets.length)}`,
+        // A profile exported into the project's home (the default of projects export) goes with it.
+        ...(await readdir(paths.exports).catch(() => [] as string[]))
+          .filter((f) => f.endsWith(".profile.yaml"))
+          .map(
+            (f) =>
+              `  deleted with it: the exported profile ${join(paths.exports, f)}: copy it out first to move the project`,
+          ),
         `  kept: ${record.qa_dir} (the repository's configuration)${options.deleteAudit === true ? "" : `, run journals in ${join(home, "audit", slug)}`}`,
         "",
       ].join("\n"),

@@ -133,6 +133,8 @@ export async function runApprovalFlow(
     readonly planText: string;
     readonly context: ChangeContext;
     readonly flags: readonly string[];
+    /** What no case covers (REQ-PLAN-14), one line each. */
+    readonly gaps?: readonly string[];
     readonly person: string;
     readonly asPerson: boolean;
     /** Throws when a person may not approve yet (unconfirmed flags or open questions). */
@@ -175,6 +177,7 @@ export async function runApprovalFlow(
       plan: input.plan,
       context: input.context,
       flags: input.flags,
+      gaps: input.gaps ?? [],
       modelRef,
     });
     await input.deps.save();
@@ -205,6 +208,7 @@ export async function runApprovalFlow(
       const confirm = [
         ...(input.plan.open_questions.length > 0 ? ["--confirm-open-questions"] : []),
         ...(input.flags.length > 0 ? ["--confirm-placeholders"] : []),
+        ...((input.gaps ?? []).length > 0 ? ["--confirm-uncovered"] : []),
       ];
       io.write(
         `A person must decide: approve it with --person${confirm.length > 0 ? ` (and ${confirm.join(" and ")})` : ""}, or revise it with qajitsu plan ${session.ws.ticket} --revise "…".\n`,

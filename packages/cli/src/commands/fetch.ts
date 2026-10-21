@@ -118,9 +118,17 @@ export async function runFetch(
           }
         : {}),
     });
-    io.write(`Change discovery: ${result.discovery.strategy}\n`);
+    // REQ-CTX-10: say how much of the code was read, so a found change is not taken for checked-out code.
+    const access = project.config.code.access;
+    if (access === "none")
+      io.write(
+        "Code access: none: nothing was read from the code hosts; plan from the ticket and the environment.\n",
+      );
+    else io.write(`Change discovery: ${result.discovery.strategy}\n`);
     for (const { repoAlias, change } of result.discovery.changes) {
-      io.write(`  ${repoAlias}: ${change.kind} ${change.id} @ ${change.headSha.slice(0, 12)}\n`);
+      io.write(
+        `  ${repoAlias}: ${change.kind} ${change.id} @ ${change.headSha.slice(0, 12)}${access === "metadata" ? " (description and file names only, no code)" : ""}\n`,
+      );
     }
     // REQ-CTX-08: existing manual test cases, an extra untrusted planner source.
     await importTestCases({ ws, sources: testCaseSources, events, masker, io, now: ports.now });
@@ -131,7 +139,7 @@ export async function runFetch(
     const code = error instanceof QajitsuError ? ` [${error.code}]` : "";
     const issues =
       error instanceof QajitsuError && Array.isArray(error.context["issues"])
-        ? (error.context["issues"] as unknown[])
+        ? (error.context["issues"] as unknown[]).filter((i) => !message.includes(String(i)))
         : [];
     io.writeError(
       masker.maskText(`Error${code}: ${message}\n${issues.map((i) => `  - ${String(i)}\n`).join("")}`),

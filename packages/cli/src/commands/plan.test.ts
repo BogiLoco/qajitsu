@@ -114,10 +114,14 @@ describe("qajitsu plan / approve (REQ-PLAN-01..06, REQ-GEN-05)", () => {
     const revised = { ...draft, cases: draft.cases.slice(0, 1) };
     const result = await run(["plan", "DEMO-1"], {
       script: [...fullScript, { text: JSON.stringify(revised) }],
-      answers: ["r", "Drop TC-02", "a"],
+      // Without TC-02 nothing covers AC3: accepting that needs its own yes (REQ-PLAN-14/AC4).
+      answers: ["r", "Drop TC-02", "a", "yes"],
     });
     expect(result.exitCode).toBe(0);
     expect(result.out).toContain("Changes v1 → v2:\n- TC-02");
+    expect(result.out).toContain(
+      'Not covered by any case (1):\n  ? AC3 "Applying a second code replaces the first; codes never stack."',
+    );
     expect(result.out).toContain("Approved plan v2");
     const record = JSON.parse(await readFile(join(runDir(), "run.json"), "utf8")) as {
       data: { approval: { approver: string; version: number } };
@@ -279,6 +283,30 @@ describe("qajitsu plan / approve (REQ-PLAN-01..06, REQ-GEN-05)", () => {
     const blocked = await run(["plan", "DEMO-1"], { script: fullScript });
     expect(blocked.exitCode).toBe(2);
     expect(blocked.err).toContain("[TOKEN_BUDGET_EXCEEDED]");
+  });
+
+  it("REQ-LLM-09/AC3+AC4: the run's cost budget in dollars stops the planning stage; what it cost is kept", async () => {
+    await fetched();
+    const yaml = join(project, ".qa", "qa.project.yaml");
+    await writeFile(
+      yaml,
+      (await readFile(yaml, "utf8")).replace(
+        "models: { roles: { default: mock/scripted }, token_budget: 100000 }",
+        // 1.2 USD per scripted call (100 input and 20 output tokens).
+        "models: { providers: { mock: { type: ollama, models: { scripted: { tools: true, structured_output: true, vision: true, context_window: 200000, cost_per_mtok: { input: 10000, output: 10000 } } } } }, roles: { default: mock/scripted } }\nbudget: { max_cost_usd: 1 }",
+      ),
+    );
+    const blocked = await run(["plan", "DEMO-1"], { script: fullScript });
+    expect(blocked.exitCode).toBe(2);
+    expect(blocked.err).toContain(
+      "Error [COST_BUDGET_EXCEEDED]: The run's cost budget of $1.00 was reached ($0.00 → $1.20).",
+    );
+    const record = JSON.parse(await readFile(join(runDir(), "run.json"), "utf8")) as {
+      data: { costUsd: number; costUnknown?: boolean; blocked: { reason: string } };
+    };
+    expect(record.data.blocked.reason).toBe("COST_BUDGET_EXCEEDED");
+    expect(record.data.costUsd).toBe(1.2);
+    expect(record.data.costUnknown).toBeUndefined();
   });
 
   it("refuses to plan before fetch or for unknown tickets", async () => {

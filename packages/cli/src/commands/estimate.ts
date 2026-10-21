@@ -26,6 +26,7 @@ export async function readRunHistory(root: string, exclude?: string): Promise<Ru
   const durations = new Map<string, number[]>();
   const tokens: number[] = [];
   const costs: number[] = [];
+  let costUnknown = false;
   let runs = 0;
   for (const ticket of await readdir(root).catch(() => [] as string[])) {
     if (!TicketKeySchema.safeParse(ticket).success) continue;
@@ -50,9 +51,13 @@ export async function readRunHistory(root: string, exclude?: string): Promise<Ru
       );
       if (!record.success) continue;
       const t = Number(record.data.data["tokens"] ?? 0);
-      const c = Number(record.data.data["costUsd"] ?? 0);
+      const c = record.data.data["costUsd"];
       if (t > 0) tokens.push(t / files.length);
-      if (c > 0) costs.push(c / files.length);
+      // REQ-LLM-09/AC3: a run whose cost is unknown does not count as free.
+      if (t > 0) {
+        if (typeof c === "number" && record.data.data["costUnknown"] !== true) costs.push(c / files.length);
+        else costUnknown = true;
+      }
     }
   }
   const avg = (xs: readonly number[]): number | undefined =>
@@ -61,7 +66,8 @@ export async function readRunHistory(root: string, exclude?: string): Promise<Ru
     runs,
     secondsPerCase: Object.fromEntries([...durations].map(([k, v]) => [k, avg(v) ?? 0])),
     tokensPerCase: avg(tokens),
-    costPerCase: avg(costs),
+    // One past run with an unknown cost makes the estimate's cost unknown, never a guess.
+    costPerCase: costUnknown ? undefined : avg(costs),
   };
 }
 
@@ -75,11 +81,13 @@ const duration = (s: number): string =>
  * @param plan - Cases about to run.
  * @param history - Past runs of the project.
  * @param variants - Extra runs per case type, e.g. `{ web: 2 }` for two more browser combinations.
+ * @param options - `models: false` for runs that call no model (regression packs).
  */
 export function formatEstimate(
   plan: Plan,
   history: RunHistory,
   variants: Readonly<Record<string, number>> = {},
+  options: { readonly models?: boolean } = {},
 ): string {
   const byType = new Map<string, number>();
   for (const c of plan.cases)
@@ -92,6 +100,6 @@ export function formatEstimate(
   const model =
     history.tokensPerCase === undefined
       ? "model use unknown (no past runs with usage)"
-      : `models ≈ ${String(Math.round((history.tokensPerCase * cases) / 1000))}k tokens${history.costPerCase === undefined ? "" : ` (~$${(history.costPerCase * cases).toFixed(2)})`}`;
-  return `Estimate: ${parts} execution(s) ≈ ${duration(seconds)}; ${model}; ${history.runs > 0 ? `from ${String(history.runs)} past run(s)` : "default timings, no past runs yet"}.`;
+      : `models ≈ ${String(Math.round((history.tokensPerCase * cases) / 1000))}k tokens${history.costPerCase === undefined ? " (cost unknown: no price for a model; declare cost_per_mtok)" : ` (~$${(history.costPerCase * cases).toFixed(2)})`}`;
+  return `Estimate: ${parts} execution(s) ≈ ${duration(seconds)}; ${options.models === false ? "no models" : model}; ${history.runs > 0 ? `from ${String(history.runs)} past run(s)` : "default timings, no past runs yet"}.`;
 }

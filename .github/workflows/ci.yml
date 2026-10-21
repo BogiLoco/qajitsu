@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   pull_request:
+  # REQ-NFR-10/AC2: every night on main, so a new runner image, Node.js patch release or security advisory shows up
+  # without waiting for the next pull request.
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read

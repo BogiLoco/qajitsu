@@ -23,10 +23,19 @@ const STATUS = TEST_STATUSES.join("|");
  *
  * @param text - Summary text.
  * @param rows - Matrix rows.
+ * @param decision - The GO / NO-GO decision computed by code (REQ-PUB-10/AC4), when there is one.
  * @returns Problems; empty when the summary is consistent.
  */
-export function validateSummary(text: string, rows: readonly MatrixRow[]): string[] {
+export function validateSummary(
+  text: string,
+  rows: readonly MatrixRow[],
+  decision?: "GO" | "NO-GO" | "NO DECISION",
+): string[] {
   const problems: string[] = [];
+  // REQ-PUB-10/AC4: a summary may explain the decision, never state another one.
+  if (decision !== undefined)
+    for (const m of text.matchAll(/\b(NO-GO|NO DECISION|GO)\b/g))
+      if (m[1] !== decision) problems.push(`says ${m[1] ?? ""}, computed ${decision}`);
   const counts = countStatuses(rows);
   const byId = new Map(rows.map((r) => [r.caseId, r.status]));
   const numberStatus = new RegExp(
@@ -68,14 +77,16 @@ export function validateSummary(text: string, rows: readonly MatrixRow[]): strin
  *
  * @param llmSummary - Candidate text, or undefined when no model summarised.
  * @param rows - Matrix rows.
+ * @param decision - The computed GO / NO-GO decision, when there is one (REQ-PUB-10/AC4).
  */
 export function chooseSummary(
   llmSummary: string | undefined,
   rows: readonly MatrixRow[],
+  decision?: "GO" | "NO-GO" | "NO DECISION",
 ): { text: string; source: "llm" | "template"; problems: string[] } {
   if (llmSummary === undefined || llmSummary.trim() === "")
     return { text: templateSummary(rows), source: "template", problems: [] };
-  const problems = validateSummary(llmSummary, rows);
+  const problems = validateSummary(llmSummary, rows, decision);
   return problems.length === 0
     ? { text: llmSummary.trim(), source: "llm", problems }
     : { text: templateSummary(rows), source: "template", problems };

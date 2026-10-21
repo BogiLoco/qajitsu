@@ -117,3 +117,83 @@ run, and every QAJitsu tool still goes through the guard.
 - [ ] AC4: Roles that use tools get QAJitsu's read-only tools through an MCP server of QAJitsu that applies the guard and journals every call; without it the provider's profile has no tools.
 - [ ] AC5: Tokens and the cost Claude Code reports are recorded per call and role like other providers; the run notes that the subscription was used.
 - [ ] AC6: In CI (`CI` set) a `claude-code` role is refused with a message to configure an API provider.
+
+### REQ-LLM-09 · Start with an API key only
+
+- Status: implemented
+- Priority: should
+- Stage: later
+- Related: REQ-PRJ-02, REQ-LLM-01, REQ-LLM-03, REQ-LLM-07, REQ-PLAN-08, REQ-CFG-01, INV-8
+- Note: accepted by the owner on 2026-10-21. Model ids, context windows and prices of Anthropic, OpenAI and Google were checked on their pages that day (OpenAI and Google added the same day as AC6).
+
+Someone with an API key of a cloud provider should be able to start without declaring model capabilities, context
+windows or prices: put the key in `.env.local`, run `qj init`, and go, with a spending limit from the first run.
+
+**Acceptance criteria**
+
+- [x] AC1: `qj init` finds provider keys by their variable names in the environment and the project's `.env.local` (e.g. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `OPENROUTER_API_KEY`), never by reading or printing their values, and proposes that provider with `secret://env/<NAME>` and a model per role; the configuration is written only after the person confirms. A key of a provider without built-in profiles is named with what to set by hand.
+- [x] AC2: Well-known cloud models have a built-in profile kept in code with the date it was checked: tools, structured output, vision, context window, and prices per million input and output tokens. A value declared in the project config wins over the built-in one; an unknown model needs its capabilities declared as today.
+- [x] AC3: Estimates and tracking show cost in US dollars from these prices; a model without a known price shows the cost as unknown, never as 0.
+- [x] AC4: When a paid provider is chosen, `qj init` proposes `budget.max_cost_usd` (default 5); reaching it stops further cases as NOT_RUN (REQ-PLAN-08/AC3) and a model stage that would exceed it as BLOCKED with the reason.
+- [x] AC5: `qj doctor --models` checks each key with one minimal call; a rejected key is an error that names the variable, never the value.
+- [x] AC6: OpenAI and Google models get built-in profiles and prices checked on their providers' pages, and `qj init` proposes their models like Anthropic's.
+
+### REQ-LLM-10 · Model profiles from gateways (LiteLLM, OpenRouter)
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: REQ-LLM-01, REQ-LLM-03, REQ-LLM-09
+
+Behind an OpenAI-compatible gateway the model name tells QAJitsu nothing about its capabilities and price. The
+gateways know them; QAJitsu should ask instead of making the user copy them into the config.
+
+**Acceptance criteria**
+
+- [ ] AC1: For an OpenAI-compatible provider marked as a gateway (`gateway: openrouter | litellm`), QAJitsu reads the gateway's model information (OpenRouter's model list, LiteLLM's model info) and uses the context window, supported features and prices it reports as the model's profile.
+- [ ] AC2: Values declared in the project config win; a capability the gateway does not report stays unknown, and a role that needs it is refused as in REQ-LLM-03/AC3 with how to declare it. Nothing is assumed.
+- [ ] AC3: The information is cached per provider with the time it was read; `qj doctor --models` shows for every capability where it came from (gateway, built-in profile, config).
+- [ ] AC4: A gateway that does not answer falls back to the config and built-in profiles with a warning; the key is sent only to that gateway and never logged.
+
+### REQ-LLM-11 · Cost per verified ticket
+
+- Status: proposed
+- Priority: should
+- Stage: 2
+- Related: REQ-LLM-07, REQ-LLM-09, REQ-PLAN-16
+- Note: TO BE REVIEWED: the original said prices come only from configuration, never hard-coded; REQ-LLM-09 (accepted 2026-10-21) built in Claude prices with config overrides, so AC3 was adapted to that. Confirm.
+
+**Acceptance criteria**
+
+- [ ] AC1: Tokens (input, cached input, output), model and cost are recorded per agent step and role.
+- [ ] AC2: Per run and per project: cost per verified ticket, cost per role, runner minutes per ticket and the share of steps done without a model.
+- [ ] AC3: A price declared in the project config (which wins over the built-in one, REQ-LLM-09/AC2) can carry the date it applies from; costs are computed with the price valid on the day of the call.
+- [ ] AC4: Trends over time are shown in `qj status`, `qj metrics` and the web console; numbers are computed from run records.
+
+### REQ-LLM-12 · Provider cost features: prompt caching and batches
+
+- Status: proposed
+- Priority: should
+- Stage: 3
+- Related: REQ-LLM-01, REQ-LLM-07, REQ-LLM-11, INV-11
+
+**Acceptance criteria**
+
+- [ ] AC1: Prompts are laid out with a stable prefix (instructions, project rules, repository context) so provider prompt caching applies; cache hits are recorded.
+- [ ] AC2: The cache duration (short or long) is chosen per project from the observed rate of runs; the choice is recorded.
+- [ ] AC3: Work that is not time-critical (benchmarks, nightly regression analysis, queued audits, data preparation) can go through a provider batch API where there is one.
+- [ ] AC4: The input size of each call is counted before sending; a call that would exceed its step budget or a provider price tier boundary is reduced or stopped with a reason.
+- [ ] AC5: All of this lives in `packages/models` behind the provider interface (INV-11); other packages only ask for "cacheable" or "batchable" work.
+
+### REQ-LLM-13 · Model routing proposals from data
+
+- Status: proposed
+- Priority: could
+- Stage: 7
+- Related: REQ-LLM-02, REQ-LLM-06, REQ-LLM-11, REQ-VER-14
+
+**Acceptance criteria**
+
+- [ ] AC1: Periodically, recorded costs and benchmark results are compared per role and model (for example the healer on a smaller model with the same success rate).
+- [ ] AC2: A cheaper model for a role is proposed only if plan acceptance, coverage and mutation score on the frozen benchmark are not worse.
+- [ ] AC3: Proposals are shown with expected savings and the evidence; a person applies them; nothing changes `models.roles` automatically.

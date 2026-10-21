@@ -14,12 +14,15 @@ import { scriptedModel, type Turn } from "./mock-model.js";
 export const DEMO_PASSWORD = "fictional-demo-password";
 const draftOf = (ticket: string): string =>
   readFileSync(new URL(`../../fixtures/plans/${ticket.toLowerCase()}-draft.json`, import.meta.url), "utf8");
-const analysis = JSON.stringify({
-  summary: "Cart API.",
-  change_type: ["api"],
-  endpoints: [{ method: "GET", path: "/cart", source: [{ kind: "ac", id: "AC1" }] }],
-  confidence: "high",
-});
+/** The analyst's answer: the cart endpoint for DEMO-1; other tickets name no endpoint their plans would not call. */
+const analysisOf = (ticket: string): string =>
+  JSON.stringify({
+    summary: "Cart API.",
+    change_type: ["api"],
+    endpoints:
+      ticket === "DEMO-1" ? [{ method: "GET", path: "/cart", source: [{ kind: "ac", id: "AC1" }] }] : [],
+    confidence: "high",
+  });
 const specFixture = (ticket: string, id: string): string =>
   fileURLToPath(new URL(`../../fixtures/specs/${ticket.toLowerCase()}/${id}.spec.ts`, import.meta.url));
 
@@ -31,7 +34,7 @@ export const flowScript = (ticket: string): Turn[] => {
   const draft = draftOf(ticket);
   const ids = (JSON.parse(draft) as { cases: { id: string }[] }).cases.map((c) => c.id);
   return [
-    { text: analysis },
+    { text: analysisOf(ticket) },
     { text: draft },
     ...ids.map((id) => ({ text: "```ts\n" + readFileSync(specFixture(ticket, id), "utf8") + "```" })),
   ];
@@ -72,7 +75,7 @@ export async function createDemoPipeline(
     ticket?: string;
     wrapExecutor?: (executor: AttemptExecutor) => AttemptExecutor;
     /** Extra ports, e.g. `browserUnavailable` for the browser matrix. */
-    ports?: Partial<RunPorts & ExplorePorts>;
+    ports?: Partial<RunPorts & ExplorePorts & { random: () => number }>;
     /** Changes the fixture plan draft before planning. */
     transformPlan?: (draft: string) => string;
     /** Changes a fixture spec before the run. */
@@ -154,14 +157,14 @@ export async function createDemoPipeline(
     })
       .exitOverride()
       .parseAsync(["node", "qj", ...args]);
-    return { out, err, exitCode };
+    return { out, err, exitCode, model };
   };
   const runDir = join(home, "runs", ticket, "20261003-1046-aaaa");
   /** fetch, plan, approve, copy fixture specs and run. */
   const executed = async () => {
     await run(["fetch", ticket, ...(ticket === "DEMO-1" ? [] : ["--ref", "shop=main"])]);
     const planDraft = (options.transformPlan ?? ((d: string) => d))(draftOf(ticket));
-    await run(["plan", ticket], { script: [{ text: analysis }, { text: planDraft }] });
+    await run(["plan", ticket], { script: [{ text: analysisOf(ticket) }, { text: planDraft }] });
     await run(["approve", ticket], options.approveScript ? { script: options.approveScript } : {});
     const ids = (JSON.parse(planDraft) as { cases: { id: string }[] }).cases.map((c) => c.id);
     for (const id of ids) {

@@ -68,7 +68,8 @@ describe("estimate and budget (REQ-PLAN-08/AC2+AC3)", () => {
     await p.prepare();
     const second = await p.run(["run", "DEMO-1", "--build"]);
     expect(second.out).toMatch(
-      /Estimate: 2 api execution\(s\) ≈ \d+ s; models ≈ \d+k tokens; from 1 past run\(s\)\./,
+      // REQ-LLM-09/AC3: the scripted model has no price, so the cost is unknown rather than left out or $0.
+      /Estimate: 2 api execution\(s\) ≈ \d+ s; models ≈ \d+k tokens \(cost unknown: no price for a model; declare cost_per_mtok\); from 1 past run\(s\)\./,
     );
   }, 240_000);
 

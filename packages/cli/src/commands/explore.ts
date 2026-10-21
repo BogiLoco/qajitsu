@@ -1,9 +1,10 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { runUsage, saveRunUsage } from "../run-usage.js";
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
 import { createRemoteEnvProvider, loginAccounts } from "@qajitsu/adapter-env-remote";
 import type { BrowserFactory } from "@qajitsu/adapter-runner-api";
 import { createPlaywrightBrowserFactory } from "@qajitsu/adapter-runner-web";
-import { buildChangeContext, createUsageTracker, runExplorer, type ExplorerReport } from "@qajitsu/agents";
+import { buildChangeContext, runExplorer, type ExplorerReport } from "@qajitsu/agents";
 import {
   CliExploreSessionSchema,
   ConfigError,
@@ -259,11 +260,7 @@ export async function runExplore(
     let modelId = "";
     try {
       modelId = (await session.models.forRole("explorer")).id;
-      const usage = createUsageTracker({
-        events,
-        budget: project.config.models.token_budget,
-        alreadyUsed: Number(ws.record.data["tokens"] ?? 0),
-      });
+      const usage = runUsage(ws, project, events);
       const result = await runExplorer(
         {
           ws,
@@ -295,7 +292,7 @@ export async function runExplore(
       report = result;
       summary = masker.maskText(result.summary);
       if (recorder.exhausted()) endReason = "step-budget";
-      await ws.update({ data: { ...ws.record.data, tokens: usage.total } });
+      await saveRunUsage(ws, usage);
     } catch (e) {
       if (timeBox.signal.aborted) endReason = "time-box";
       else if (recorder.exhausted()) endReason = "step-budget";

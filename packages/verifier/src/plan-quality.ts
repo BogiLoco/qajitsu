@@ -317,6 +317,94 @@ export function checkPlanExpectations(
   return flags;
 }
 
+/** The schema of one expected field (`total`, `lines.0.total`), when the response schema describes it. */
+function fieldNode(doc: Schema, root: Schema, key: string): Schema | undefined {
+  let node: Schema | undefined = root;
+  for (const part of key.split(".")) {
+    if (!node) return undefined;
+    if (/^\d+$/.test(part)) {
+      node = resolve(doc, node["items"]);
+      continue;
+    }
+    const props: unknown = node["properties"];
+    if (!isObject(props) || !(part in props)) return undefined;
+    node = resolve(doc, props[part]);
+  }
+  return node;
+}
+
+/** An exact decimal number as JSON writes it: no sign but minus, no leading zeros, no exponent, no spaces or units. */
+const EXACT_DECIMAL = /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/;
+
+/** One expected value code turned from text into a number (REQ-PLAN-12/AC1). */
+export interface NumericConversion {
+  readonly caseId: string;
+  readonly stepId: string;
+  /** `fields.total` */
+  readonly field: string;
+  readonly from: string;
+  readonly to: number;
+  /** The documented response it was checked against, e.g. `GET /cart 200`. */
+  readonly where: string;
+}
+
+/**
+ * Turns expected values written as text into numbers where the OpenAPI response schema leaves no doubt
+ * (REQ-PLAN-12): the field is `number` or `integer` and the text is exactly a decimal number (`"1.01"`, `"-3"`; a
+ * whole number for `integer`). Anything else stays as written for the type check to flag (REQ-PLAN-09/AC2). Only the
+ * type changes, never the value; the input is not modified.
+ *
+ * @param plan - A plan or a draft.
+ * @param openapi - The application's OpenAPI document; without one nothing is converted.
+ * @returns The plan with converted values, and every conversion.
+ */
+export function convertNumericStrings<T extends { readonly cases: Plan["cases"] }>(
+  plan: T,
+  openapi: unknown,
+): { plan: T; conversions: NumericConversion[] } {
+  const conversions: NumericConversion[] = [];
+  if (!isObject(openapi)) return { plan, conversions };
+  const doc = openapi;
+  const cases = plan.cases.map((c) => ({
+    ...c,
+    steps: c.steps.map((s) => {
+      const fields = s.expect.fields;
+      const response = fields ? responseSchema(doc, s.action, s.expect.status) : undefined;
+      if (!fields || !response) return s;
+      const next = Object.fromEntries(
+        Object.entries(fields).map(([key, value]) => {
+          if (typeof value !== "string" || !EXACT_DECIMAL.test(value)) return [key, value];
+          const types: unknown[] = [fieldNode(doc, response.schema, key)?.["type"]].flat();
+          const to = Number(value);
+          const fits = types.includes("number") || (types.includes("integer") && Number.isInteger(to));
+          if (!fits || !Number.isFinite(to)) return [key, value];
+          conversions.push({
+            caseId: c.id,
+            stepId: s.id,
+            field: `fields.${key}`,
+            from: value,
+            to,
+            where: response.where,
+          });
+          return [key, to];
+        }),
+      );
+      return { ...s, expect: { ...s.expect, fields: next } };
+    }),
+  }));
+  return { plan: conversions.length === 0 ? plan : { ...plan, cases }, conversions };
+}
+
+/** The conversions as lines next to the plan (REQ-PLAN-12/AC1). */
+export function formatNumericConversions(conversions: readonly NumericConversion[]): string {
+  return conversions
+    .map(
+      (v) =>
+        `  ~ ${v.caseId} ${v.stepId} ${v.field}: ${JSON.stringify(v.from)} → ${String(v.to)} (${v.where}: number)`,
+    )
+    .join("\n");
+}
+
 /** The flags as lines for the review (REQ-PLAN-09/AC3). */
 export function formatPlanFlags(flags: readonly PlanFlag[]): string {
   return flags

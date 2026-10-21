@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ConfigError } from "../errors.js";
+import { TEST_STATUSES } from "../status.js";
 import { MobileSchema } from "./mobile.js";
 import { BuildSchema, CleanupSchema, ServiceSchema } from "./services.js";
 
@@ -537,6 +538,29 @@ export const ProjectConfigSchema = z.strictObject({
     })
     .default({}),
   /**
+   * How much of the application's code QAJitsu may read (REQ-CTX-10): `full` checks out the repositories at the
+   * change, `metadata` keeps only the PR/MR title, description and the list of changed files, `none` reads nothing
+   * from the code hosts. The tests repository (`role: tests`) is QA's own and is fetched in every mode.
+   */
+  code: z
+    .strictObject({ access: z.enum(["full", "metadata", "none"]).default("full") })
+    .default({ access: "full" }),
+  /**
+   * GO / NO-GO policy (REQ-PUB-10/AC3): statuses of medium and low priority cases that do not stand in the way of GO.
+   * Must-have (high priority) cases are never tolerated; the version is recorded in every report.
+   */
+  decision: z
+    .strictObject({
+      version: z.string().min(1).max(40).default("1"),
+      tolerate: z
+        .strictObject({
+          medium: z.array(z.enum(TEST_STATUSES).exclude(["PASSED"])).default([]),
+          low: z.array(z.enum(TEST_STATUSES).exclude(["PASSED"])).default([]),
+        })
+        .default({ medium: [], low: [] }),
+    })
+    .default({ version: "1", tolerate: { medium: [], low: [] } }),
+  /**
    * Visual regression (REQ-EXEC-12): baselines live in `.qa/baselines/`; `threshold` is the default share of differing
    * pixels that still passes, `color_threshold` the per-pixel sensitivity (0 exact, 1 anything).
    */
@@ -712,13 +736,24 @@ export function parseProjectConfig(raw: unknown, source = ".qa/qa.project.yaml")
             .map(([role, ref]) => `models.roles.${role}: unknown provider in '${ref}'`)),
     ];
     if (missingHosts.length === 0) return result.data;
-    throw new ConfigError("CONFIG_INVALID", `Invalid configuration in ${source}`, {
-      source,
-      issues: missingHosts,
-    });
+    throw invalidConfig(source, missingHosts);
   }
-  const issues = result.error.issues.map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`);
-  throw new ConfigError("CONFIG_INVALID", `Invalid configuration in ${source}`, { source, issues });
+  throw invalidConfig(
+    source,
+    result.error.issues.map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`),
+  );
+}
+
+/**
+ * The error of an invalid configuration: every problem is in the message, so every command shows them, and in
+ * `context.issues` for code.
+ */
+function invalidConfig(source: string, issues: readonly string[]): ConfigError {
+  return new ConfigError(
+    "CONFIG_INVALID",
+    `Invalid configuration in ${source}:\n${issues.map((i) => `  - ${i}`).join("\n")}`,
+    { source, issues: [...issues] },
+  );
 }
 
 /** One browser and viewport combination of the web matrix (REQ-EXEC-13). */

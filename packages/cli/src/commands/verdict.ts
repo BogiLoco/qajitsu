@@ -44,6 +44,9 @@ import {
 import {
   applyVerificationChecks,
   checkApprovalRecords,
+  computeDecision,
+  formatDecision,
+  type DecisionResult,
   checkManifest,
   combineGates,
   combineStatuses,
@@ -64,6 +67,19 @@ export interface RunEnvironment {
   readonly deployedSha?: string | undefined;
   /** Stubbed services (REQ-ENV-05/AC2). */
   readonly stubs?: readonly string[] | undefined;
+}
+
+/**
+ * How much code the run could read, when the project does not share all of it (REQ-CTX-10/AC4), for the report
+ * headers: `code not shared (code.access: none)` or `metadata only: shop pr 12 @ 9f0fe9cae8f1`.
+ */
+export function codeAccessNote(data: Readonly<Record<string, unknown>>): string | undefined {
+  const access = data["codeAccess"] as
+    { level?: string; changes?: { repo: string; sha: string }[] } | undefined;
+  if (!access || access.level === "full" || access.level === undefined) return undefined;
+  if (access.level === "none") return "code not shared (code.access: none)";
+  const changes = (access.changes ?? []).map((c) => `${c.repo} @ ${c.sha.slice(0, 12)}`).join(", ");
+  return `metadata only, no code (code.access: metadata)${changes ? `: ${changes}` : ""}`;
 }
 
 /** Statuses, gates and rendered reports of a run, all computed from files on disk (invariants 1, 6, 7). */
@@ -95,6 +111,8 @@ export interface RunVerdict {
   readonly versions?: Readonly<Record<string, string>> | undefined;
   /** Set when no person approved the plan (REQ-PLAN-10/AC5): every report says so. */
   readonly approvalNote?: string | undefined;
+  /** GO, NO-GO or NO DECISION, computed from the matrix and the project's policy (REQ-PUB-10). */
+  readonly decision: DecisionResult;
 }
 
 /** `data.fixCheck` of `run.json`, written by `qj run --fix-check` (REQ-VER-11). */
@@ -411,7 +429,17 @@ export async function computeVerdict(
             : "–",
     };
   });
-  const summary = chooseSummary(undefined, rows).text;
+  // REQ-PUB-10: the release decision, computed by code from the statuses and the plan's priorities.
+  const decision = computeDecision(
+    rows.map((r) => ({
+      caseId: r.caseId,
+      priority: plan.cases.find((p) => p.id === r.caseId)?.priority ?? "high",
+      status: r.status,
+    })),
+    session.project.config.decision,
+  );
+  const decisionLine = formatDecision(decision);
+  const summary = chooseSummary(undefined, rows, decision.decision).text;
   const evidenceText = new Map<string, string>();
   const evidenceBytes = new Map<string, Buffer>();
   for (const m of manifest) {
@@ -529,7 +557,7 @@ export async function computeVerdict(
         `Evidence before the fix: qajitsu evidence ${ws.ticket} --run ${fixCheck.baseRun}`,
       ]
     : [];
-  const matrixMd = `${renderMatrixMarkdown(rows)}${approvalNote ? `\n_${approvalNote}_\n` : ""}`;
+  const matrixMd = `${renderMatrixMarkdown(rows)}\n**${decisionLine}**\n${approvalNote ? `\n_${approvalNote}_\n` : ""}`;
   const csv = renderMatrixCsv(rows);
   // REQ-EXEC-23/AC2: the tested mobile app, recorded by code when the devices were prepared.
   const testedApp = z
@@ -550,10 +578,12 @@ export async function computeVerdict(
       plan,
       planSha256: approval.sha256,
       ...(approvalNote ? { approvalNote } : {}),
+      decision: decisionLine,
       rows,
       attempts,
       environment,
       repos: Object.fromEntries(Object.entries(ws.record.repos).map(([k, v]) => [k, v.sha])),
+      ...(codeAccessNote(ws.record.data) ? { codeAccess: codeAccessNote(ws.record.data) } : {}),
       ...(testedApp.success ? { app: testedApp.data } : {}),
       ...(versions ? { versions } : {}),
       gates: g,
@@ -630,12 +660,16 @@ export async function computeVerdict(
     fixCheck: fixCheckLines,
     ...(versions ? { versions } : {}),
     ...(approvalNote ? { approvalNote } : {}),
+    decision,
     junit: masker.maskText(
       renderJUnit(
         {
           ticket: ws.ticket,
           runId: ws.runId,
-          ...(approvalNote ? { properties: { "qajitsu.plan.approval": approvalNote } } : {}),
+          properties: {
+            "qajitsu.decision": decisionLine,
+            ...(approvalNote ? { "qajitsu.plan.approval": approvalNote } : {}),
+          },
         },
         cases.map((c) => {
           const p = plan.cases.find((x) => x.id === c.caseId);

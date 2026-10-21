@@ -23,7 +23,7 @@
     "test:hooks": "node --test \".claude/hooks/__tests__/*.test.mjs\"",
     "req:check": "node scripts/requirements.mjs check",
     "req:index": "node scripts/requirements.mjs index",
-    "verify": "node scripts/ensure-chromium.mjs && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test:coverage && pnpm test:hooks && pnpm req:check",
+    "verify": "node scripts/check-node.mjs && node scripts/ensure-chromium.mjs && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test:coverage && pnpm test:hooks && pnpm req:check",
     "bench": "pnpm build && cd examples/demo-shop && node ../../packages/cli/dist/bin.js bench",
     "docs": "typedoc",
     "qajitsu": "node packages/cli/dist/bin.js",
@@ -59,6 +59,7 @@
     "typedoc": "^0.28.20",
     "typescript": "catalog:",
     "typescript-eslint": "^8.71.0",
+    "vite": "^8.3.5",
     "vitest": "catalog:",
     "yaml": "catalog:",
     "zod": "catalog:"

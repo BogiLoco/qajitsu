@@ -552,7 +552,14 @@ describe("qajitsu explore --cli (REQ-EXEC-24)", () => {
     const session = CliExploreSessionSchema.parse(
       JSON.parse(await readFile(join(p.runDir, "explore", "S01", "session.json"), "utf8")),
     );
-    expect(session.cleaned.processes.some((c) => c.startsWith("B1 "))).toBe(true);
+    // B1 is reported as left running or as cleaned up (under load it can end between the two scans), and its process
+    // does not outlive the session either way.
+    const b1 = [...session.leftovers.processes, ...session.cleaned.processes].find((c) =>
+      c.startsWith("B1 "),
+    );
+    expect(b1).toMatch(/^B1 \(pid \d+\)/);
+    const pid = Number(/pid (\d+)/.exec(b1 ?? "")?.[1]);
+    expect(() => process.kill(pid, 0)).toThrow();
     // The running serve was stopped by Ctrl+C, not by its own 20 s timeout.
     expect(session.actions.map((a) => [a.id, a.timedOut, a.endedBy !== undefined])).toEqual([
       ["A01", false, false],

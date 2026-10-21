@@ -2,7 +2,13 @@ import { readFileSync } from "node:fs";
 import { PlanSchema } from "@qajitsu/core";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
-import { checkPlanExpectations, formatPlanFlags, isPlaceholder } from "./plan-quality.js";
+import {
+  checkPlanExpectations,
+  convertNumericStrings,
+  formatNumericConversions,
+  formatPlanFlags,
+  isPlaceholder,
+} from "./plan-quality.js";
 import { buildUiInventory } from "./ui-inventory.js";
 
 const openapi = parse(
@@ -454,5 +460,76 @@ describe("concrete expected values (REQ-PLAN-09)", () => {
         openapi: secured,
       }),
     ).toEqual([]);
+  });
+});
+
+describe("numbers written as text (REQ-PLAN-12)", () => {
+  const cart = (fields: Record<string, unknown>, action = "GET /cart") =>
+    plan([{ action, expect: { description: "d", status: 200, fields } }]);
+  const order = (fields: Record<string, unknown>) =>
+    plan([{ action: "POST /orders", expect: { description: "d", status: 201, fields } }]);
+
+  it("REQ-PLAN-12/AC1+AC3: an exact decimal for a number field becomes that number, every conversion listed", () => {
+    const { plan: converted, conversions } = convertNumericStrings(
+      cart({ total: "1.01", subtotal: "-3" }),
+      openapi,
+    );
+    expect(converted.cases[0]?.steps[0]?.expect.fields).toEqual({ total: 1.01, subtotal: -3 });
+    expect(conversions).toEqual([
+      {
+        caseId: "TC-01",
+        stepId: "S1",
+        field: "fields.total",
+        from: "1.01",
+        to: 1.01,
+        where: "GET /cart 200",
+      },
+      { caseId: "TC-01", stepId: "S1", field: "fields.subtotal", from: "-3", to: -3, where: "GET /cart 200" },
+    ]);
+    // Converted, nothing is left for the type check to flag.
+    expect(checkPlanExpectations(converted, { openapi }).filter((f) => f.kind === "schema")).toEqual([]);
+    expect(formatNumericConversions(conversions)).toBe(
+      [
+        '  ~ TC-01 S1 fields.total: "1.01" → 1.01 (GET /cart 200: number)',
+        '  ~ TC-01 S1 fields.subtotal: "-3" → -3 (GET /cart 200: number)',
+      ].join("\n"),
+    );
+  });
+
+  it("REQ-PLAN-12/AC1: an integer field takes a whole number", () => {
+    const { plan: converted } = convertNumericStrings(order({ quantity: "2", total: "80" }), openapi);
+    expect(converted.cases[0]?.steps[0]?.expect.fields).toEqual({ quantity: 2, total: 80 });
+  });
+
+  it.each([
+    ["1,01", "comma"],
+    ["$1.01", "currency"],
+    ["1.01 PLN", "unit"],
+    [" 1.01", "space"],
+    ["1e3", "exponent"],
+    ["01.5", "leading zero"],
+    ["1.", "trailing dot"],
+    ["", "empty"],
+  ])("REQ-PLAN-12/AC2: %s (%s) stays as written and is still flagged", (value) => {
+    const { plan: converted, conversions } = convertNumericStrings(cart({ total: value }), openapi);
+    expect(conversions).toEqual([]);
+    expect(converted.cases[0]?.steps[0]?.expect.fields).toEqual({ total: value });
+  });
+
+  it("REQ-PLAN-12/AC2: a fraction for an integer field, a string field, an unknown field, an unknown call or no OpenAPI are left alone", () => {
+    expect(convertNumericStrings(order({ quantity: "2.5" }), openapi).conversions).toEqual([]);
+    expect(convertNumericStrings(order({ id: "42" }), openapi).conversions).toEqual([]);
+    expect(convertNumericStrings(cart({ total_after: "9.54" }), openapi).conversions).toEqual([]);
+    expect(convertNumericStrings(cart({ total: "9.54" }, "GET /nowhere"), openapi).conversions).toEqual([]);
+    expect(convertNumericStrings(cart({ total: "9.54" }), undefined).conversions).toEqual([]);
+    // A number already is left as it is.
+    expect(convertNumericStrings(cart({ total: 9.54 }), openapi).conversions).toEqual([]);
+  });
+
+  it("REQ-PLAN-12/AC3: only the type changes; the input plan is not modified", () => {
+    const input = cart({ total: "10.50" });
+    const { plan: converted } = convertNumericStrings(input, openapi);
+    expect(converted.cases[0]?.steps[0]?.expect.fields).toEqual({ total: 10.5 });
+    expect(input.cases[0]?.steps[0]?.expect.fields).toEqual({ total: "10.50" });
   });
 });

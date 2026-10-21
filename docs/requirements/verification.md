@@ -210,3 +210,122 @@ ticket's statuses.
 - [ ] AC9: Optionally a model proposes mutants that fit the ticket (e.g. rounding before summing); they are applied by code to changed lines only, labelled as model-proposed, and judged like the others.
 - [ ] AC10: A mutant that is not counted (does not build, does not start, BLOCKED, time-out) is replaced by the next one from the same seed, up to twice `--max` attempts and never more; the report separates valid mutants (killed and survived) from not counted ones with their reasons and logs, and warns when too few valid mutants remain for the score to mean much.
 - [ ] AC11: Besides the static report, a model may analyse the results: why each survivor got through, the missing case to add (as a draft for `qj mutate promote`), groups and priorities of weak spots, and candidates for equivalent mutants; every statement cites an existing mutant diff, line, test or evidence and is dropped without one, numbers are checked against the computed results and the text is rejected on mismatch, and the analysis is shown as a suggestion with its model, hashed like other check records, never changing the score or marking a mutant equivalent.
+
+### REQ-VER-15 · Verifiable test certificate
+
+- Status: proposed
+- Priority: should
+- Stage: 9
+- Related: REQ-VER-05, REQ-OBS-05, REQ-VER-16
+
+Every run ends with one signed statement that ties together everything the run used and produced, so anyone can check later that nothing was changed after the fact.
+
+**Acceptance criteria**
+
+- [ ] AC1: Each published report includes a certificate: hash of the frozen plan, evidence manifest hash, matrix hash, tool versions, deployed version, time.
+- [ ] AC2: The certificate is signed with a project key.
+- [ ] AC3: `qj verify-report <path>` checks the signature and all hashes and reports any changed file.
+- [ ] AC4: All files of the audit trail (REQ-VER-16) form a Merkle tree; the certificate holds its root hash, so one changed byte anywhere changes the root.
+- [ ] AC5: The certificate uses a standard attestation format (an in-toto statement in a DSSE envelope) with a published schema.
+- [ ] AC6: Signing keys come from the secret provider or a KMS/HSM; keys can be rotated and old certificates stay verifiable with the public key that signed them.
+- [ ] AC7: The Jira comment and `report.html` show the certificate id, the root hash and how to verify it.
+
+### REQ-VER-16 · Complete audit trail
+
+- Status: proposed
+- Priority: must
+- Stage: 3
+- Related: REQ-VER-04, REQ-VER-05, REQ-OBS-05, REQ-PLAN-06, INV-7
+
+Everything that influenced the verdict is recorded and hashed, not only the results.
+
+**Acceptance criteria**
+
+- [ ] AC1: The trail covers: ticket snapshot at the start, commit SHA and diff reference, every plan version with its approval (who, when, which version), generated test code, runner and tool versions, container image digests, deployed environment version, raw runner output, all evidence, matrix and report.
+- [ ] AC2: The agent journal is part of the trail: prompts, model responses, tool calls with arguments and results, provider, model name and version, token counts.
+- [ ] AC3: Secrets are masked before hashing (REQ-CFG-06); the hash covers exactly the stored, masked content.
+- [ ] AC4: A run whose trail is incomplete (missing file, hash mismatch) cannot publish a certificate; the gap is reported.
+- [ ] AC5: The trail can be exported as one archive for an external auditor, readable without QAJitsu.
+
+### REQ-VER-17 · Trusted timestamps
+
+- Status: proposed
+- Priority: should
+- Stage: 9
+- Related: REQ-VER-15
+
+**Acceptance criteria**
+
+- [ ] AC1: The certificate's root hash can be timestamped by an RFC 3161 time-stamping authority configured per project.
+- [ ] AC2: Qualified electronic timestamps under eIDAS can be used by configuring a qualified trust service provider.
+- [ ] AC3: The timestamp token is stored with the certificate and checked by `qj verify-report`.
+- [ ] AC4: Only the hash is sent to the authority, never content.
+- [ ] AC5: An unavailable authority does not block the run; the certificate is marked "not timestamped" and can be timestamped later.
+
+### REQ-VER-18 · Public and private transparency logs
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: REQ-VER-15, REQ-VER-17
+
+**Acceptance criteria**
+
+- [ ] AC1: Opt-in: the certificate can be recorded in a transparency log, publicly (Sigstore Rekor) or privately (a self-hosted log run by the customer).
+- [ ] AC2: Opt-in: the root hash can be anchored with OpenTimestamps.
+- [ ] AC3: Only hashes and the signature go to a public log; signing uses a service identity, never a personal account or e-mail.
+- [ ] AC4: `qj verify-report` confirms the log's inclusion proof when there is one.
+
+### REQ-VER-19 · Immutable evidence storage
+
+- Status: proposed
+- Priority: should
+- Stage: 9
+- Related: REQ-VER-16, REQ-WS-03
+
+**Acceptance criteria**
+
+- [ ] AC1: Evidence and certificates can be stored in write-once storage (for example S3 Object Lock in compliance mode) with a retention period per project.
+- [ ] AC2: During retention, cleanup (REQ-WS-03) skips locked runs and says so.
+- [ ] AC3: Storage location and retention are recorded in the certificate.
+
+### REQ-VER-20 · Reproduce a run from its certificate
+
+- Status: proposed
+- Priority: should
+- Stage: 9
+- Related: REQ-VER-15, REQ-PLAN-06, REQ-EXEC-01
+
+Anyone with access can run again exactly what was approved and compare.
+
+**Acceptance criteria**
+
+- [ ] AC1: `qj reproduce <certificate>` runs the frozen plan again with the same generated tests, runner versions and image digests against a chosen environment, without any agent step.
+- [ ] AC2: The new run produces its own certificate and a comparison with the original: same, different or not reproducible per case.
+- [ ] AC3: Differences are never merged into the original run; the original certificate stays unchanged.
+
+### REQ-VER-21 · Open verifier and audit documentation
+
+- Status: proposed
+- Priority: should
+- Stage: 9
+- Related: REQ-VER-15, REQ-NFR-06
+
+**Acceptance criteria**
+
+- [ ] AC1: The verifier is open source, works offline and needs no QAJitsu account or server.
+- [ ] AC2: The certificate and manifest formats are documented so a third party can write its own verifier.
+- [ ] AC3: The documentation states what a valid certificate proves (nothing was changed after the run, who approved what, what ran) and what it does not prove (that the plan covered every risk).
+
+### REQ-VER-22 · Cross-layer consistency checks
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: REQ-EXEC-07, REQ-ENV-01
+
+**Acceptance criteria**
+
+- [ ] AC1: A case can assert that a value shown in the UI equals the API response and the stored record.
+- [ ] AC2: Database reads are read-only, use a configured test connection and are limited to allowlisted tables.
+- [ ] AC3: A layer that cannot be read makes the case BLOCKED, never PASSED.

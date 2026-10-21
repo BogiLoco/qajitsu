@@ -80,3 +80,21 @@ The same CLI runs inside pipelines; humans still approve plans.
 
 - [x] AC1: The GitHub Action and the GitLab template cache `~/.qajitsu/toolchain/` keyed by the toolchain manifest and `.qa/toolchain.yaml`, so a pipeline installs a tool once and later jobs reuse it.
 - [ ] AC2: A Docker image with Java, the Android SDK, emulator, system image and Appium installed by `qj setup` runs Android tests on a host with KVM; the documentation names the hosts where it cannot (no nested virtualisation).
+
+### REQ-CI-07 · Thin CI client
+
+- Status: proposed
+- Priority: should
+- Stage: later
+- Related: REQ-CI-01, REQ-CI-04, REQ-SCALE-01, REQ-SCALE-03, REQ-VER-15, REQ-CFG-03, INV-1
+
+A pipeline step that does not run QAJitsu itself: it starts a run in the QAJitsu cloud or in the customer's own
+QAJitsu installation, follows it and reports back, so the CI runner needs no browsers, devices or models.
+
+**Acceptance criteria**
+
+- [ ] AC1: A CI step starts a run in the QAJitsu cloud or in a QAJitsu installation of the customer and shows its progress in the CI log (stages, cases, statuses) until it ends.
+- [ ] AC2: A time-out ends the step with the exit code of BLOCKED, never with success; a lost connection or a run that cannot be followed ends the same way, with the reason.
+- [ ] AC3: The step authenticates with short-lived tokens or OIDC (for example the CI provider's identity token exchanged for a run-scoped token); no long-lived key is stored in the repository or the pipeline configuration.
+- [ ] AC4: The link to the report and the certificate id (REQ-VER-15) are posted to the pull or merge request.
+- [ ] AC5: The step's exit code follows the run's computed statuses (REQ-CI-04), never a status reported by the client itself.

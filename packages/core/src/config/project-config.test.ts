@@ -225,4 +225,28 @@ describe("web matrix (REQ-EXEC-13)", () => {
       ).toBe("review");
     });
   });
+
+  it("REQ-PUB-10/AC3: the decision policy defaults to GO only when every case PASSED; must-have cases have no tolerance to set", () => {
+    const base = { project: "demo", jira: { type: "file", tickets_dir: "t", project_key: "DEMO" } };
+    expect(parseProjectConfig(base).decision).toEqual({ version: "1", tolerate: { medium: [], low: [] } });
+    expect(
+      parseProjectConfig({ ...base, decision: { version: "2026-10", tolerate: { low: ["FAILED"] } } })
+        .decision,
+    ).toEqual({ version: "2026-10", tolerate: { medium: [], low: ["FAILED"] } });
+    expect(() => parseProjectConfig({ ...base, decision: { tolerate: { high: ["FAILED"] } } })).toThrow();
+    expect(() => parseProjectConfig({ ...base, decision: { tolerate: { low: ["PASSED"] } } })).toThrow();
+  });
+
+  it("REQ-CFG-01: an invalid configuration names every problem in its message, so every command shows them", () => {
+    const base = { project: "demo", jira: { type: "file", tickets_dir: "t", project_key: "DEMO" } };
+    let message = "";
+    try {
+      parseProjectConfig({ ...base, decision: { tolerate: { high: ["FAILED"] } } }, ".qa/qa.project.yaml");
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toMatch(
+      /^Invalid configuration in \.qa\/qa\.project\.yaml:\n {2}- decision\.tolerate: .*high/,
+    );
+  });
 });

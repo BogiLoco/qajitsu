@@ -166,13 +166,26 @@ export async function createSandbox(fixture: string | undefined): Promise<CliSan
 /**
  * The environment of a sandboxed tool (REQ-EXEC-24/AC2): PATH, LANG and TERM of the person, the sandbox's HOME and
  * TMPDIR, the proxy, and the configured variables; nothing else (no tokens, no cloud credentials, no SSH agent).
+ *
+ * `NODE_USE_ENV_PROXY` makes Node send its requests through the proxy, and Node 22 and later then print an
+ * "EnvHttpProxyAgent is experimental" warning into the tool's output. QAJitsu caused it, so it turns that one warning
+ * off; every other warning of the tool stays. Only for a Node that knows the flag (20.11 and later): an older one
+ * refuses unknown flags in `NODE_OPTIONS` and would not start.
+ *
+ * @param nodeVersion - Version of the `node` on the tool's PATH (`v22.23.4`); empty when there is none.
  */
 export function sandboxEnv(
   sandbox: CliSandbox,
   proxy: string,
   configured: Readonly<Record<string, string>>,
   host: Readonly<Record<string, string | undefined>> = process.env,
+  nodeVersion: string = process.version,
 ): Record<string, string> {
+  const [major = 0, minor = 0] = nodeVersion.replace(/^v/, "").split(".").map(Number);
+  const quiet = major > 20 || (major === 20 && minor >= 11);
+  const nodeOptions = [configured["NODE_OPTIONS"], quiet ? "--disable-warning=UNDICI-EHPA" : undefined]
+    .filter((o) => o !== undefined && o !== "")
+    .join(" ");
   const keep = (name: string): Record<string, string> =>
     host[name] === undefined ? {} : { [name]: host[name] };
   return {
@@ -195,6 +208,7 @@ export function sandboxEnv(
     no_proxy: "localhost,127.0.0.1,::1",
     NODE_USE_ENV_PROXY: "1",
     ...configured,
+    ...(nodeOptions === "" ? {} : { NODE_OPTIONS: nodeOptions }),
   };
 }
 
@@ -402,7 +416,8 @@ export async function insideSandbox(sandbox: CliSandbox, path: string): Promise<
 /** Output of a helper program, or undefined when it cannot run (no Docker, no ps). */
 export type ToolProbe = (program: string, args: readonly string[]) => Promise<string | undefined>;
 
-const probe: ToolProbe = (program, args) =>
+/** Runs a helper program on the person's PATH and returns its output (15 s at most). */
+export const probe: ToolProbe = (program, args) =>
   new Promise((done) => {
     // SIGKILL: a hung Docker client may ignore SIGTERM, and the session must never wait for it.
     execFile(

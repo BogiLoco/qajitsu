@@ -26,6 +26,7 @@
       "source": [
         { "kind": "quote", "text": "Applying a second code replaces the first; codes never stack." }
       ],
+      "data": { "user": "user:standard" },
       "steps": [
         {
           "id": "S1",
@@ -46,5 +47,9 @@
     }
   ],
   "open_questions": [],
-  "out_of_scope": ["Fixed-amount codes (comment from product owner)"]
+  "out_of_scope": [
+    "Fixed-amount codes (comment from product owner)",
+    "AC2: the reduced total depends on the price list of the next ticket; this fixture checks only that codes are accepted",
+    "AC4: unknown codes are left to the seeded-bug cases of the demo; this fixture stays at two cases"
+  ]
 }

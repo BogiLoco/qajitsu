@@ -240,14 +240,23 @@ export async function toolVersions(input: {
 /**
  * The "Versions" section of `qj doctor` (REQ-GEN-03/AC4): ✔ found, ✘ missing and needed (with the install
  * command), · missing and not needed by this project.
+ *
+ * @param tools - Tool versions.
+ * @param reportedAbove - The check that already reported a missing tool, if any (REQ-GEN-08/AC1).
  */
-export function formatToolVersions(tools: readonly ToolVersion[]): string {
+export function formatToolVersions(
+  tools: readonly ToolVersion[],
+  reportedAbove: (tool: string) => string | undefined = () => undefined,
+): string {
   const width = Math.max(...tools.map((t) => t.name.length));
   return [
     "Versions:",
     ...tools.map((t) => {
       const name = t.name.padEnd(width);
       if (t.version !== undefined) return `  ✔ ${name}  ${t.version}`;
+      const above = t.needed ? reportedAbove(t.name) : undefined;
+      // REQ-GEN-08/AC1: a missing tool a check already reported is not repeated with its install command.
+      if (above !== undefined) return `  ✘ ${name}  not found (see ${above} above)`;
       if (t.needed)
         return `  ✘ ${name}  not found (needed for ${t.why ?? "this project"})${t.install ? `; install: ${t.install}` : ""}`;
       return `  · ${name}  not found (not needed by this project)`;

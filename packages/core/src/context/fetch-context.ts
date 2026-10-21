@@ -22,6 +22,12 @@ export interface FetchResult {
 
 const json = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`;
 
+/** Names of the files a unified diff changes (`diff --git a/x b/x`), in order, each once. */
+function changedFiles(diff: string): string[] {
+  const names = [...diff.matchAll(/^diff --git a\/\S+ b\/(\S+)$/gm)].map((m) => m[1] ?? "");
+  return [...new Set(names.filter((n) => n !== ""))];
+}
+
 /**
  * Stage `fetch` (REQ-CTX-01..04): ticket snapshot, change discovery, diffs and review comments,
  * worktrees at the exact SHA and SHAs in `run.json`. Deterministic code, no agent (invariant 9).
@@ -59,64 +65,104 @@ export async function fetchContext(options: {
       developmentLinks: ticket.developmentLinks.length,
     });
 
-    let discovery: Discovery;
-    const base = { ticket, config, codeHosts, logger, ...(signal ? { signal } : {}) };
-    try {
-      discovery = await discoverChanges({
-        ...base,
-        ...(options.overrides ? { overrides: options.overrides } : {}),
-      });
-    } catch (error) {
-      if (!(error instanceof ConfigError) || error.code !== "CHANGE_NOT_FOUND" || !options.askForChange)
-        throw error;
-      const answers = await options.askForChange(error.message);
-      if (answers.length === 0) throw error;
-      events.emit("fetch", { kind: "user", name: "cli" }, "change.provided", { answers });
-      discovery = await discoverChanges({
-        ...base,
-        overrides: {
-          urls: answers.filter((a) => /^https?:\/\//.test(a)),
-          refs: answers.filter((a) => !/^https?:\/\//.test(a)),
-        },
-      });
-    }
-    events.emit("fetch", ORCHESTRATOR, "changes.discovered", {
-      strategy: discovery.strategy,
-      changes: discovery.changes.map((c) => ({
-        repo: c.repoAlias,
-        kind: c.change.kind,
-        id: c.change.id,
-        sha: c.change.headSha,
-      })),
-      skippedLinks: discovery.skippedLinks,
-    });
-
+    // REQ-CTX-10: with code.access none nothing is read from the code hosts; with metadata only what describes the
+    // change (title, description, changed file names) is kept, never file contents.
+    const access = config.code.access;
     const shas: Record<string, string> = {};
     const repos: Record<
       string,
       { host: string; path: string; sha: string; change?: string; strategy?: string; role?: "tests" }
     > = {};
-    for (const { repoAlias, change } of discovery.changes) {
-      const repo = config.repos[repoAlias];
-      const host = codeHosts[change.host] ?? (repo ? codeHosts[repo.host] : undefined);
-      if (!repo || !host)
-        throw new ConfigError("REPO_UNKNOWN", `Repository '${repoAlias}' is not configured.`, { repoAlias });
-      const diff = await host.getDiff(change, signal);
-      await writeFile(ws.path("repos", `${repoAlias}.diff`), diff, "utf8");
-      const comments = await host.getReviewComments(change, signal);
-      await writeFile(ws.path("repos", `${repoAlias}.change.json`), json({ change, comments }), "utf8");
-      const cloneUrl = await host.cloneUrl(repo.path);
-      const mirror = await git.ensureMirror(repo.host, repo.path, cloneUrl, signal);
-      await git.addWorktree(mirror, change.headSha, ws.path("repos", repoAlias), cloneUrl, signal);
-      shas[repoAlias] = change.headSha;
-      repos[repoAlias] = {
-        host: repo.host,
-        path: repo.path,
-        sha: change.headSha,
-        change: change.url ?? `${change.kind}:${change.id}`,
+    const described: { repo: string; sha: string; url?: string }[] = [];
+    let discovery: Discovery = { strategy: "none", changes: [], skippedLinks: [] };
+    if (access !== "none") {
+      const base = { ticket, config, codeHosts, logger, ...(signal ? { signal } : {}) };
+      try {
+        discovery = await discoverChanges({
+          ...base,
+          ...(options.overrides ? { overrides: options.overrides } : {}),
+        });
+      } catch (error) {
+        if (!(error instanceof ConfigError) || error.code !== "CHANGE_NOT_FOUND" || !options.askForChange)
+          throw error;
+        const answers = await options.askForChange(error.message);
+        if (answers.length === 0) throw error;
+        events.emit("fetch", { kind: "user", name: "cli" }, "change.provided", { answers });
+        discovery = await discoverChanges({
+          ...base,
+          overrides: {
+            urls: answers.filter((a) => /^https?:\/\//.test(a)),
+            refs: answers.filter((a) => !/^https?:\/\//.test(a)),
+          },
+        });
+      }
+      events.emit("fetch", ORCHESTRATOR, "changes.discovered", {
         strategy: discovery.strategy,
-      };
-      events.emit("fetch", ORCHESTRATOR, "repo.checked_out", { repo: repoAlias, sha: change.headSha });
+        changes: discovery.changes.map((c) => ({
+          repo: c.repoAlias,
+          kind: c.change.kind,
+          id: c.change.id,
+          sha: c.change.headSha,
+        })),
+        skippedLinks: discovery.skippedLinks,
+      });
+
+      for (const { repoAlias, change } of discovery.changes) {
+        const repo = config.repos[repoAlias];
+        const host = codeHosts[change.host] ?? (repo ? codeHosts[repo.host] : undefined);
+        if (!repo || !host)
+          throw new ConfigError("REPO_UNKNOWN", `Repository '${repoAlias}' is not configured.`, {
+            repoAlias,
+          });
+        if (access === "metadata") {
+          // The file names come from the diff read in memory; its contents are dropped here, never stored or sent.
+          const files = changedFiles(await host.getDiff(change, signal));
+          await writeFile(
+            ws.path("repos", `${repoAlias}.meta.json`),
+            json({
+              change: {
+                kind: change.kind,
+                id: change.id,
+                headSha: change.headSha,
+                ...(change.title === undefined ? {} : { title: change.title }),
+                ...(change.description === undefined ? {} : { description: change.description }),
+                ...(change.url === undefined ? {} : { url: change.url }),
+                ...(change.sourceBranch === undefined ? {} : { sourceBranch: change.sourceBranch }),
+                ...(change.targetBranch === undefined ? {} : { targetBranch: change.targetBranch }),
+              },
+              files,
+            }),
+            "utf8",
+          );
+          described.push({
+            repo: repoAlias,
+            sha: change.headSha,
+            ...(change.url ? { url: change.url } : {}),
+          });
+          events.emit("fetch", ORCHESTRATOR, "repo.described", {
+            repo: repoAlias,
+            sha: change.headSha,
+            files: files.length,
+          });
+          continue;
+        }
+        const diff = await host.getDiff(change, signal);
+        await writeFile(ws.path("repos", `${repoAlias}.diff`), diff, "utf8");
+        const comments = await host.getReviewComments(change, signal);
+        await writeFile(ws.path("repos", `${repoAlias}.change.json`), json({ change, comments }), "utf8");
+        const cloneUrl = await host.cloneUrl(repo.path);
+        const mirror = await git.ensureMirror(repo.host, repo.path, cloneUrl, signal);
+        await git.addWorktree(mirror, change.headSha, ws.path("repos", repoAlias), cloneUrl, signal);
+        shas[repoAlias] = change.headSha;
+        repos[repoAlias] = {
+          host: repo.host,
+          path: repo.path,
+          sha: change.headSha,
+          change: change.url ?? `${change.kind}:${change.id}`,
+          strategy: discovery.strategy,
+        };
+        events.emit("fetch", ORCHESTRATOR, "repo.checked_out", { repo: repoAlias, sha: change.headSha });
+      }
     }
     // REQ-CTX-06/AC1: the tests repository is checked out like any other repo, at its default branch; change
     // discovery never looks at it. It is context for the planner and the author, not part of the analysed change.
@@ -158,6 +204,8 @@ export async function fetchContext(options: {
       status: "completed",
       stage: "fetch",
       repos,
+      // REQ-CTX-10/AC4: what the run could read of the code, for the reports.
+      data: { ...ws.record.data, codeAccess: { level: access, changes: described } },
       checkpoints: [...ws.record.checkpoints, { stage: "fetch", at: options.now().toISOString() }],
     });
     events.emit("fetch", ORCHESTRATOR, "stage.end", { status: "ok" });

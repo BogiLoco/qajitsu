@@ -51,4 +51,36 @@ describe("doctor --models (REQ-LLM-03/AC2)", () => {
       "triage",
     ]);
   });
+
+  it("REQ-GEN-08/AC2: the approval flow's model is probed too, and must be another model than the planner", async () => {
+    const answer = (id: string) => ({
+      ...scriptedModel([{ tools: [{ name: "ping", input: { value: "ok" } }] }, { text: "done" }]),
+      id,
+    });
+    const planner = answer("local/gemma4:e2b");
+    const registry = (approver: ReturnType<typeof answer>) => ({
+      forRole: () => Promise.resolve(planner),
+      resolve: () => Promise.resolve(approver),
+    });
+    const other = await probeModels(
+      registry(answer("local/qwen3:14b")),
+      ["planner"],
+      undefined,
+      "local/qwen3:14b",
+    );
+    expect(other.map((p) => [p.role, p.model, p.missing])).toEqual([
+      ["planner", "local/gemma4:e2b", []],
+      ["approver", "local/qwen3:14b", []],
+    ]);
+    const same = await probeModels(
+      registry(answer("local/gemma4:e2b")),
+      ["planner"],
+      undefined,
+      "local/gemma4:e2b",
+    );
+    expect(same[1]?.missing).toEqual(["another model than the planner (both are local/gemma4:e2b)"]);
+    expect(formatProbes(same)).toContain(
+      "✘ approver: local/gemma4:e2b missing another model than the planner",
+    );
+  });
 });

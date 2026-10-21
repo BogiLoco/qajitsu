@@ -2152,6 +2152,81 @@
       },
       "additionalProperties": false
     },
+    "code": {
+      "default": {
+        "access": "full"
+      },
+      "type": "object",
+      "properties": {
+        "access": {
+          "default": "full",
+          "type": "string",
+          "enum": [
+            "full",
+            "metadata",
+            "none"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "decision": {
+      "default": {
+        "version": "1",
+        "tolerate": {
+          "medium": [],
+          "low": []
+        }
+      },
+      "type": "object",
+      "properties": {
+        "version": {
+          "default": "1",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "tolerate": {
+          "default": {
+            "medium": [],
+            "low": []
+          },
+          "type": "object",
+          "properties": {
+            "medium": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "FAILED",
+                  "FLAKY",
+                  "BLOCKED",
+                  "NOT_RUN",
+                  "NEEDS_REVIEW"
+                ]
+              }
+            },
+            "low": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "FAILED",
+                  "FLAKY",
+                  "BLOCKED",
+                  "NOT_RUN",
+                  "NEEDS_REVIEW"
+                ]
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "visual": {
       "default": {
         "threshold": 0.001,

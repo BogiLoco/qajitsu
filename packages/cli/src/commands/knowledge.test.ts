@@ -95,6 +95,8 @@ describe("qj knowledge (REQ-KNOW-01..05)", () => {
     expect(added.out).toContain("2 added");
     expect((await p.run(["knowledge", "add", "--qa-knowledge"])).out).toContain("1 added");
     const found = await p.run(["knowledge", "search", "cancel paid order"]);
+    // REQ-NFR-09/AC3: an unquoted query is the same query (found in the pass: "too many arguments").
+    expect((await p.run(["knowledge", "search", "cancel", "paid", "order"])).out).toBe(found.out);
     expect(found.out).toMatch(
       /^\d\. docs\/orders\.md › Orders > Cancel \(20\d\d-\d\d-\d\d\) \[[0-9a-f]{16}-0\]\n {3}A paid order can be cancelled within 24 hours/m,
     );

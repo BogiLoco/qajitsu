@@ -149,9 +149,18 @@ qj setup               # installs what .qa/ needs (browsers, Docker, Java, Andro
                        # at tested versions into ~/.qajitsu/toolchain; your compatible tools are used as they are
 qj doctor --online     # checks Node, config, secrets, Docker, mobile tooling, ticket system and code host access;
                        # lists the version of every tool and of the application under test (--fix runs qj setup)
-qj doctor --models     # optional: one real call per configured model role
+qj doctor --models     # optional: one real call per configured model role (and the approval model); only models
 qj knowledge add docs/ # optional: documentation the agents may search (see "Knowledge base")
 ```
+
+**Just an API key?** Put `ANTHROPIC_API_KEY=...`, `OPENAI_API_KEY=...` or `GEMINI_API_KEY=...` into `.env.local`
+next to where `.qa/` will be (or export it) before `qj init`: init finds the key by its name (never reading or printing
+the value), proposes a model for every role and a cheaper one with vision as the auditor (Claude Sonnet 5.5 and Haiku
+5.5, GPT-6.1 Sol and GPT-6 Luna, or Gemini 4 Argon and Gemini 3.8 Flash) and a spending limit of $5 per run
+(`budget.max_cost_usd`), and writes them after your yes. Context windows and prices of these providers' models are
+built in, so costs show in dollars; a model without a known price shows its cost as unknown, never $0, and reaching
+the limit stops the model stages (BLOCKED) and the remaining cases (NOT_RUN). An OpenRouter key is found too and named
+with what to set by hand.
 
 Secrets are never written into `.qa/`: the configuration holds references like `secret://env/JIRA_TOKEN`, resolved
 from the environment or `.env.local` and masked everywhere (logs, evidence, reports, ticket comments). Teams with a secret
@@ -301,7 +310,12 @@ in the code under test (`testid:place-order`, `/app/checkout`), and before you s
 placeholders instead of values (`expected_total`, TBD), fields that are not in the OpenAPI response or have another
 type, steps with a description only, and `testid:` selectors the code does not define (for the case's own platform:
 a web id does not count in a mobile case). The planner gets one
-automatic round to fix them; what remains is listed under "Cannot be checked as written" next to the plan. A spec for
+automatic round to fix them; what remains is listed under "Cannot be checked as written" next to the plan. A number
+written as text for a field the OpenAPI document says is a number (`total: "1.01"`) is not sent back: code converts it
+to `1.01` and lists the conversion next to the plan. Code also computes coverage: every acceptance criterion of the
+ticket and every endpoint the analysis found in the change needs a case that cites or calls it, an existing test that
+covers it, or an exclusion with a reason in `out_of_scope` (`AC3: covered by the pricing service's tests`); the rest
+is listed under "Not covered by any case", and approving it needs its own confirmation (`--confirm-uncovered`). A spec for
 a mobile case that uses what only a browser has (`ui.as`, `ui.select`, `ui.goto` without a deep link scheme, `css:` or
 `role:` selectors) goes back to the author before anything runs.
 
@@ -441,6 +455,13 @@ qj evidence SHOP-482 --serve      # report and evidence on http://127.0.0.1:<por
 qj export SHOP-482 --out ./out    # report.html, junit.xml, matrices and the evidence zip for a pipeline
 qj map                            # application map over every run: what was tested, what never was
 ```
+
+Every run ends with a **decision** computed by code from the statuses and the plan's priorities: **GO** only when
+every case PASSED, **NO-GO** when a case FAILED, **NO DECISION** when a case is BLOCKED, NOT_RUN, NEEDS_REVIEW or FLAKY
+(or nothing ran), with the cases that caused it: `Decision: NO-GO (policy v1): TC-01 FAILED (high)`. It is in the
+terminal, `matrix.md`, `report.html`, `junit.xml`, `qj evidence`, `qj export` and the ticket comment. A project can
+tolerate some statuses of medium and low priority cases (`decision:` in `qa.project.yaml`); must-have cases are never
+tolerated. The decision is advice for people and workflows, never a status.
 
 ### Step 6: publish to the ticket
 
@@ -1003,26 +1024,28 @@ run folder looks like this:
 
 ## 9. Configuration (`.qa/`)
 
-| File                                         | Purpose                                                                                                                                                                                                                                                                                           |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.qa/qa.project.yaml`                        | the project: ticket system, code hosts, repositories, environments, models, services and build, mobile, verification, telemetry, cleanup, audit, web, publish and knowledge base options. Schema: `schemas/qa.project.schema.json`; reference: `templates/qa/qa.project.yaml`                     |
-| `.qa/envs/<name>.yaml`                       | an environment: `base_url`, health and version paths, test accounts as aliases with `secret://` passwords (one account or a `pool:` of accounts, optionally limited to `lanes:` or `shared: true`), login recipe or `auth/` script, web session, feature flags, `production: true` for production |
-| `.qa/knowledge/*.md`                         | short domain notes the team commits (business rules, glossary), always given to the agents in full; larger documentation goes into the [knowledge base](#5-knowledge-base)                                                                                                                        |
-| `.qa/routes.yaml`                            | route patterns (`/product/:id`) for the transition graph and the application map                                                                                                                                                                                                                  |
-| `.qa/hooks/`                                 | `seed` after `--build` starts the app; `setup`/`teardown` around every run (`hooks:` in the project config); `BASE_URL` and the run marker `QAJITSU_RUN`, no secrets                                                                                                                              |
-| `.qa/auth/`                                  | login scripts for logins one request cannot do (forms, cookies, SSO): `login: { script: auth/<file> }` in a profile; values are masked                                                                                                                                                            |
-| `.qa/stubs/<name>/`                          | WireMock/Mockoon mappings for stubbed dependencies                                                                                                                                                                                                                                                |
-| `.qa/bench.yaml`                             | benchmark cases                                                                                                                                                                                                                                                                                   |
-| `web.matrix` in `qa.project.yaml`            | browsers (`chromium`, `firefox`, `webkit`) and viewports (`{ name, width, height }`) for web cases; the first combination is the primary run                                                                                                                                                      |
-| `execution:` in `qa.project.yaml`            | how cases run: `workers: { api, web }` cases at once per lane, `web_combinations` browsers of the matrix at once, `sequential: true` for one case at a time, `account_wait_s` for a free pool account                                                                                             |
-| `approval:` in `qa.project.yaml`             | the plan approval flow: `flow: [person]` (default) or with `model` steps, `model` (the approver, another model than the planner), `model_only: as-computed \| review`, `jira: off \| comment` ([details](docs/cli/plan.md#approval-flow-with-model-approvers-req-plan-10-adr-0010))               |
-| `budget:` in `qa.project.yaml`               | `max_minutes` and `max_cost_usd` per run: once reached, the remaining cases are NOT_RUN with the reason                                                                                                                                                                                           |
-| `.qa/baselines/`                             | approved screenshots for visual checks, written only by `qj baseline accept`; `visual: { threshold, color_threshold }` in `qa.project.yaml`                                                                                                                                                       |
-| `locales:` in `qa.project.yaml`              | locales and time zones cases can run in (`{ name: pl-PL, timezone: Europe/Warsaw }`); a plan case lists its own                                                                                                                                                                                   |
-| `messages:` in `qa.project.yaml`             | message capture for e-mails, SMS gateways and webhooks: `base_url` (webhook.site or self-hosted, must be on `environments.allowlist`), `email_domain`, `api_key: secret://...`, `timeout_s`                                                                                                       |
-| `test_cases:` in `qa.project.yaml`           | existing manual test cases imported by `qj fetch`: `{ type: xray, client_id, client_secret }`, `{ type: zephyr, token }`, `{ type: testrail, base_url, user, token, project_id }` or `{ type: file, path: cases.csv }` (`.csv` or `.xlsx`; columns id, ticket, title, step, expected)             |
-| `.qa/toolchain.yaml`                         | tool versions for this project, private mirrors (npm with a `secret://` token, Playwright, Java, Android, Homebrew), proxy and company CA for `qj setup`; `~/.qajitsu/toolchain.yaml` holds the same for the machine                                                                              |
-| `.env.local` (next to `.qa/`, not committed) | secret values for `secret://env/NAME`                                                                                                                                                                                                                                                             |
+| File                                         | Purpose                                                                                                                                                                                                                                                                                                            |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `.qa/qa.project.yaml`                        | the project: ticket system, code hosts, repositories, environments, models, services and build, mobile, verification, telemetry, cleanup, audit, web, publish and knowledge base options. Schema: `schemas/qa.project.schema.json`; reference: `templates/qa/qa.project.yaml`                                      |
+| `.qa/envs/<name>.yaml`                       | an environment: `base_url`, health and version paths, test accounts as aliases with `secret://` passwords (one account or a `pool:` of accounts, optionally limited to `lanes:` or `shared: true`), login recipe or `auth/` script, web session, feature flags, `production: true` for production                  |
+| `.qa/knowledge/*.md`                         | short domain notes the team commits (business rules, glossary), always given to the agents in full; larger documentation goes into the [knowledge base](#5-knowledge-base)                                                                                                                                         |
+| `.qa/routes.yaml`                            | route patterns (`/product/:id`) for the transition graph and the application map                                                                                                                                                                                                                                   |
+| `.qa/hooks/`                                 | `seed` after `--build` starts the app; `setup`/`teardown` around every run (`hooks:` in the project config); `BASE_URL` and the run marker `QAJITSU_RUN`, no secrets                                                                                                                                               |
+| `.qa/auth/`                                  | login scripts for logins one request cannot do (forms, cookies, SSO): `login: { script: auth/<file> }` in a profile; values are masked                                                                                                                                                                             |
+| `.qa/stubs/<name>/`                          | WireMock/Mockoon mappings for stubbed dependencies                                                                                                                                                                                                                                                                 |
+| `.qa/bench.yaml`                             | benchmark cases                                                                                                                                                                                                                                                                                                    |
+| `web.matrix` in `qa.project.yaml`            | browsers (`chromium`, `firefox`, `webkit`) and viewports (`{ name, width, height }`) for web cases; the first combination is the primary run                                                                                                                                                                       |
+| `execution:` in `qa.project.yaml`            | how cases run: `workers: { api, web }` cases at once per lane, `web_combinations` browsers of the matrix at once, `sequential: true` for one case at a time, `account_wait_s` for a free pool account                                                                                                              |
+| `approval:` in `qa.project.yaml`             | the plan approval flow: `flow: [person]` (default) or with `model` steps, `model` (the approver, another model than the planner), `model_only: as-computed \| review`, `jira: off \| comment` ([details](docs/cli/plan.md#approval-flow-with-model-approvers-req-plan-10-adr-0010))                                |
+| `code:` in `qa.project.yaml`                 | how much code QAJitsu may read: `access: full` (default; repositories at the change), `metadata` (PR/MR title, description and changed file names, no code) or `none` (nothing from the code hosts); without code, plans come from the ticket, documentation and the environment's pages, and `--build` is refused |
+| `decision:` in `qa.project.yaml`             | the GO / NO-GO policy: `version` (shown in every report) and `tolerate: { medium: [...], low: [...] }`, statuses of those cases that do not stand in the way of GO; high priority cases are never tolerated                                                                                                        |
+| `budget:` in `qa.project.yaml`               | `max_minutes` and `max_cost_usd` per run: once reached, the remaining cases are NOT_RUN with the reason                                                                                                                                                                                                            |
+| `.qa/baselines/`                             | approved screenshots for visual checks, written only by `qj baseline accept`; `visual: { threshold, color_threshold }` in `qa.project.yaml`                                                                                                                                                                        |
+| `locales:` in `qa.project.yaml`              | locales and time zones cases can run in (`{ name: pl-PL, timezone: Europe/Warsaw }`); a plan case lists its own                                                                                                                                                                                                    |
+| `messages:` in `qa.project.yaml`             | message capture for e-mails, SMS gateways and webhooks: `base_url` (webhook.site or self-hosted, must be on `environments.allowlist`), `email_domain`, `api_key: secret://...`, `timeout_s`                                                                                                                        |
+| `test_cases:` in `qa.project.yaml`           | existing manual test cases imported by `qj fetch`: `{ type: xray, client_id, client_secret }`, `{ type: zephyr, token }`, `{ type: testrail, base_url, user, token, project_id }` or `{ type: file, path: cases.csv }` (`.csv` or `.xlsx`; columns id, ticket, title, step, expected)                              |
+| `.qa/toolchain.yaml`                         | tool versions for this project, private mirrors (npm with a `secret://` token, Playwright, Java, Android, Homebrew), proxy and company CA for `qj setup`; `~/.qajitsu/toolchain.yaml` holds the same for the machine                                                                                               |
+| `.env.local` (next to `.qa/`, not committed) | secret values for `secret://env/NAME`                                                                                                                                                                                                                                                                              |
 
 Layers, each overriding the previous: defaults → `qa.project.yaml` → `envs/<env>.yaml` → secrets → run options
 (`--env`, `--set`, `QAJITSU_WORKSPACE`). The effective configuration (secrets masked) is stored in `run.json`.
