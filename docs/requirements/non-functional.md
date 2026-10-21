@@ -144,3 +144,59 @@ The checks only protect anything if a red result stops a merge and if a contribu
 - [x] AC2: The same runs every night on main and on demand, so a new runner image, Node.js patch release or advisory shows up without a pull request.
 - [x] AC3: `pnpm verify` warns when it runs on another Node.js major than `.nvmrc`, naming how to switch; it does not fail, newer Node.js may work.
 - [ ] AC4: main is protected: a pull request merges only when every CI job passed (required status checks, listed in CONTRIBUTING.md).
+
+### REQ-NFR-11 · Stage timing, budgets and profiling
+
+- Status: proposed
+- Priority: should
+- Stage: 5
+- Related: REQ-OBS-01, REQ-OBS-03, REQ-LLM-11
+
+Most of a run's time goes to model calls, starting environments and executing tests, not to QAJitsu's own code. Every stage is measured before anything is optimised or rewritten.
+
+**Acceptance criteria**
+
+- [ ] AC1: Every pipeline stage and agent step is recorded as a timed span (start, end, waiting time, model or tool used) in the run's journal and exported through OpenTelemetry when configured.
+- [ ] AC2: `qj status` and the web console show where the time went per run and per project: model calls, environment, test execution, local processing.
+- [ ] AC3: Each stage has a configurable time budget with project defaults; exceeding it is a warning with the measured value and never changes a test status.
+- [ ] AC4: A trend view per stage shows whether runs get faster or slower across releases of QAJitsu and of the project.
+- [ ] AC5: A benchmark run on the demo shop measures stage times for every QAJitsu release; a regression beyond a configured tolerance fails the release pipeline.
+
+### REQ-NFR-12 · Pipeline speed by design
+
+- Status: proposed
+- Priority: should
+- Stage: 6
+- Related: REQ-NFR-11, REQ-EXEC-10, REQ-EXEC-19, REQ-PRJ-08, REQ-ENV-03, REQ-LLM-12
+- Note: TO BE REVIEWED: parts already exist (git mirrors and the code index cache REQ-PRJ-08, parallel lanes REQ-EXEC-10/19, web sessions per account); mark which criteria are already met before accepting.
+
+The largest gains come from not waiting: independent work runs in parallel, environments and repositories are reused, and tests do not repeat expensive setup.
+
+**Acceptance criteria**
+
+- [ ] AC1: Independent agent calls (for example context gathering, readiness checks and reviewer passes) run in parallel within a configurable concurrency limit; the orchestrator stays deterministic about the order of results.
+- [ ] AC2: Repositories are fetched from per-project mirrors with shallow or partial clone and sparse checkout where the analysis allows it.
+- [ ] AC3: Environments start from prebuilt images, cached layers or snapshots; warm pools can be configured for workers and test machines.
+- [ ] AC4: Web and mobile cases reuse a recorded authenticated state per test account and prepare data through APIs where the plan allows, instead of repeating UI login and setup in every case.
+- [ ] AC5: Cases are spread across parallel workers by their measured duration in earlier runs.
+- [ ] AC6: Reports reference large evidence files (videos, traces) instead of embedding them, and load them lazily.
+- [ ] AC7: Expensive verification modes (mutation check, fix verification, reproduction) run only for changes above a configured risk level or on demand.
+
+### REQ-NFR-13 · Native components for trust-critical and heavy processing
+
+- Status: proposed
+- Priority: could
+- Stage: 9
+- Related: REQ-NFR-11, REQ-VER-15, REQ-VER-21, REQ-CFG-06, INV-2, INV-7, INV-10, ADR-0012
+- Note: TO BE REVIEWED: architecture decision (a second language and toolchain); ADR-0012 is only proposed, and the rule is that nothing moves to Rust without measurements from REQ-NFR-11.
+
+TypeScript stays the language of the orchestrator, agents, runners, web console and integrations. A small set of components is written in Rust where it brings a real gain in trust, safety or speed (ADR-0012, proposed).
+
+**Acceptance criteria**
+
+- [ ] AC1: One shared Rust library implements hashing, the Merkle tree, the manifest format, signature checks, streaming masking and secret scanning, and image comparison.
+- [ ] AC2: The library is used from Node through native bindings, by the standalone verifier (CLI and WebAssembly) and by the self-hosted worker, so the same code produces and checks evidence.
+- [ ] AC3: The TypeScript and Rust implementations of hashing and manifest checks are cross-tested on shared fixtures; any difference fails CI.
+- [ ] AC4: Optional separate programs: an egress proxy and sandbox enforcing the allowlist and write bans at operating-system level, and the code-context indexer served over MCP; an existing proxy may be used instead if it passes the same tests.
+- [ ] AC5: Native binaries are built for Linux, macOS and Windows on amd64 and arm64, signed, and installable without a Rust toolchain.
+- [ ] AC6: Every native component has a pure fallback or a clear error when the binary is missing; a missing native component never weakens a check silently.

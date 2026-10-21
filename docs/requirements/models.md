@@ -154,3 +154,46 @@ gateways know them; QAJitsu should ask instead of making the user copy them into
 - [ ] AC2: Values declared in the project config win; a capability the gateway does not report stays unknown, and a role that needs it is refused as in REQ-LLM-03/AC3 with how to declare it. Nothing is assumed.
 - [ ] AC3: The information is cached per provider with the time it was read; `qj doctor --models` shows for every capability where it came from (gateway, built-in profile, config).
 - [ ] AC4: A gateway that does not answer falls back to the config and built-in profiles with a warning; the key is sent only to that gateway and never logged.
+
+### REQ-LLM-11 · Cost per verified ticket
+
+- Status: proposed
+- Priority: should
+- Stage: 2
+- Related: REQ-LLM-07, REQ-LLM-09, REQ-PLAN-16
+- Note: TO BE REVIEWED: the original said prices come only from configuration, never hard-coded; REQ-LLM-09 (accepted 2026-10-21) built in Claude prices with config overrides, so AC3 was adapted to that. Confirm.
+
+**Acceptance criteria**
+
+- [ ] AC1: Tokens (input, cached input, output), model and cost are recorded per agent step and role.
+- [ ] AC2: Per run and per project: cost per verified ticket, cost per role, runner minutes per ticket and the share of steps done without a model.
+- [ ] AC3: A price declared in the project config (which wins over the built-in one, REQ-LLM-09/AC2) can carry the date it applies from; costs are computed with the price valid on the day of the call.
+- [ ] AC4: Trends over time are shown in `qj status`, `qj metrics` and the web console; numbers are computed from run records.
+
+### REQ-LLM-12 · Provider cost features: prompt caching and batches
+
+- Status: proposed
+- Priority: should
+- Stage: 3
+- Related: REQ-LLM-01, REQ-LLM-07, REQ-LLM-11, INV-11
+
+**Acceptance criteria**
+
+- [ ] AC1: Prompts are laid out with a stable prefix (instructions, project rules, repository context) so provider prompt caching applies; cache hits are recorded.
+- [ ] AC2: The cache duration (short or long) is chosen per project from the observed rate of runs; the choice is recorded.
+- [ ] AC3: Work that is not time-critical (benchmarks, nightly regression analysis, queued audits, data preparation) can go through a provider batch API where there is one.
+- [ ] AC4: The input size of each call is counted before sending; a call that would exceed its step budget or a provider price tier boundary is reduced or stopped with a reason.
+- [ ] AC5: All of this lives in `packages/models` behind the provider interface (INV-11); other packages only ask for "cacheable" or "batchable" work.
+
+### REQ-LLM-13 · Model routing proposals from data
+
+- Status: proposed
+- Priority: could
+- Stage: 7
+- Related: REQ-LLM-02, REQ-LLM-06, REQ-LLM-11, REQ-VER-14
+
+**Acceptance criteria**
+
+- [ ] AC1: Periodically, recorded costs and benchmark results are compared per role and model (for example the healer on a smaller model with the same success rate).
+- [ ] AC2: A cheaper model for a role is proposed only if plan acceptance, coverage and mutation score on the frozen benchmark are not worse.
+- [ ] AC3: Proposals are shown with expected savings and the evidence; a person applies them; nothing changes `models.roles` automatically.

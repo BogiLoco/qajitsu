@@ -28,4 +28,29 @@ body:
     id: area
     attributes:
       label: Area
-      options: [CTX, PLAN, ENV, CFG, WS, EXEC, VER, EVD, PUB, LLM, OBS, CI, GEN, NFR, PRJ, KNOW, FLOW, WEB]
+      options:
+        [
+          CTX,
+          PLAN,
+          ENV,
+          CFG,
+          WS,
+          EXEC,
+          VER,
+          EVD,
+          PUB,
+          LLM,
+          OBS,
+          CI,
+          GEN,
+          NFR,
+          PRJ,
+          KNOW,
+          FLOW,
+          WEB,
+          AUTO,
+          PERF,
+          SKILL,
+          TUNE,
+          SCALE,
+        ]

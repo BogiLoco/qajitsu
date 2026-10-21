@@ -146,6 +146,9 @@ REQ-CI-01 already ships a Docker image for other CI systems; this makes the rele
 - [ ] AC1: Official QAJitsu images are published from CI to a public registry for every release.
 - [ ] AC2: Images are built for amd64 and arm64.
 - [ ] AC3: Every image is signed and ships with an SBOM and build provenance that a user can check.
+- [ ] AC4: Tags follow releases (exact version, minor and `latest`); runs record the image digest, never only a tag.
+- [ ] AC5: The quick start in the documentation runs the demo-shop flow with one container command and no other installation.
+- [ ] AC6: Images run as a non-root user and contain no secrets; configuration and secrets come only from mounted config or the secret provider.
 
 ### REQ-GEN-10 · Ready-to-run images and a Compose stack
 
@@ -185,6 +188,9 @@ depends on all twenty adapter packages, so everyone installs every integration (
 - [ ] AC4: A plugin works only through the adapter interfaces of `@qajitsu/core` (INV-12): it cannot replace the guard, the verifier, status computation, masking or publish gates, and it gets secrets only through the secret provider.
 - [ ] AC5: The plugins and versions a run used are recorded with the run (REQ-OBS-10).
 - [ ] AC6: Offline installations take plugins from the offline bundle of `qj setup --download` (REQ-GEN-06).
+- [ ] AC7: Each plugin has a manifest: name, version, plugin type (ticket source, test-case source, publisher, runner, environment provider, secret provider, tool), the range of the core's adapter API it works with, required secrets, network hosts and permissions.
+- [ ] AC8: A plugin whose core API range does not match is refused with a clear message.
+- [ ] AC9: A plugin reaches the network only to the hosts in its manifest that are also on the environment allowlist, and never writes results, evidence or the frozen plan; the guard enforces it like for agents.
 
 ### REQ-GEN-12 · Plugin tiers, dev kit and registry
 
@@ -204,3 +210,6 @@ what makes the results trustworthy.
 - [ ] AC4: The registry lists plugins with tier, publisher, versions, licence, checksum and signature; `qj plugin add` installs only signed plugins whose publisher the installation trusts, and community plugins only after an explicit confirmation.
 - [ ] AC5: No tier changes the invariants: a paid or partner plugin cannot set or upgrade a status (INV-1), see unmasked secrets (INV-8) or skip the guard; the contract tests check it.
 - [ ] AC6: The open-source core stays complete for the flow from ticket to published result; commercial plugins add integrations and features, never a missing piece of that flow.
+- [ ] AC7: A plugin is marked "verified" in the registry only after it passed the dev kit's contract tests in CI and a review of its manifest.
+- [ ] AC8: Adapter interfaces follow semantic versioning; a breaking change gets a new major version and a documented transition period.
+- [ ] AC9: A template repository and the `/new-adapter` guide describe how to build, test and publish a plugin.

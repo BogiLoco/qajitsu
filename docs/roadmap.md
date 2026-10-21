@@ -66,6 +66,7 @@ Analyst and planner agents on several model providers; plan review loop and free
 - [REQ-LLM-03](requirements/models.md#req-llm-03--capability-profiles) Capability profiles (must, implemented, AC 3/3)
 - [REQ-LLM-04](requirements/models.md#req-llm-04--structured-output-with-repair) Structured output with repair (must, implemented, AC 3/3)
 - [REQ-LLM-07](requirements/models.md#req-llm-07--cost-and-token-tracking) Cost and token tracking (should, implemented, AC 2/2)
+- [REQ-LLM-11](requirements/models.md#req-llm-11--cost-per-verified-ticket) Cost per verified ticket (should, proposed, AC 0/4)
 - [REQ-PRJ-01](requirements/projects.md#req-prj-01--project-home-and-data-layout) Project home and data layout (must, implemented, AC 5/5)
 - [REQ-PRJ-02](requirements/projects.md#req-prj-02--project-initialisation-qj-init) Project initialisation (`qj init`) (must, implemented, AC 6/6)
 - [REQ-PRJ-03](requirements/projects.md#req-prj-03--active-project-and-switching) Active project and switching (must, implemented, AC 7/7)
@@ -104,7 +105,8 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 - [REQ-EVD-01](requirements/evidence.md#req-evd-01--api-evidence) API evidence (must, implemented, AC 3/3)
 - [REQ-EVD-04](requirements/evidence.md#req-evd-04--test-matrix) Test matrix (must, implemented, AC 3/3)
 - [REQ-EVD-05](requirements/evidence.md#req-evd-05--report-formats) Report formats (must, implemented, AC 3/3)
-- [REQ-GEN-09](requirements/generic.md#req-gen-09--signed-release-images) Signed release images (should, proposed, AC 0/3)
+- [REQ-LLM-12](requirements/models.md#req-llm-12--provider-cost-features-prompt-caching-and-batches) Provider cost features: prompt caching and batches (should, proposed, AC 0/5)
+- [REQ-GEN-09](requirements/generic.md#req-gen-09--signed-release-images) Signed release images (should, proposed, AC 0/6)
 - [REQ-NFR-04](requirements/non-functional.md#req-nfr-04--framework-self-test) Framework self-test (must, implemented, AC 2/2)
 - [REQ-PRJ-05](requirements/projects.md#req-prj-05--project-status-what-is-in-the-project-and-what-is-in-progress) Project status: what is in the project and what is in progress (must, implemented, AC 6/6)
 - [REQ-PRJ-06](requirements/projects.md#req-prj-06--continue-after-switching) Continue after switching (must, implemented, AC 3/3)
@@ -145,6 +147,7 @@ without touching assertions, `qj logs` and the report timeline show what happene
 - [REQ-PUB-06](requirements/publishing.md#req-pub-06--failure-videos-and-evidence-for-the-user) Failure videos and evidence for the user (must, implemented, AC 3/3)
 - [REQ-OBS-02](requirements/observability.md#req-obs-02--viewing-logs) Viewing logs (must, implemented, AC 3/3)
 - [REQ-OBS-06](requirements/observability.md#req-obs-06--transition-graph-per-run) Transition graph per run (should, implemented, AC 3/3)
+- [REQ-NFR-11](requirements/non-functional.md#req-nfr-11--stage-timing-budgets-and-profiling) Stage timing, budgets and profiling (should, proposed, AC 0/5)
 - [REQ-WEB-01](requirements/web.md#req-web-01--local-web-console) Local web console (should, proposed, AC 0/3)
 - [REQ-WEB-04](requirements/web.md#req-web-04--dojo-mode-and-professional-mode) Dojo mode and Professional mode (should, proposed, AC 0/6)
 - [REQ-WEB-05](requirements/web.md#req-web-05--run-details-live-steps-and-logs) Run details: live steps and logs (should, proposed, AC 0/5)
@@ -173,6 +176,7 @@ the variable schema and secrets, seeds data with the run's marker, and cleans ev
 - [REQ-WS-02](requirements/workspace.md#req-ws-02--labels-and-names-for-runtime-resources) Labels and names for runtime resources (must, implemented, AC 2/2)
 - [REQ-WS-03](requirements/workspace.md#req-ws-03--cleanup-policy-and-retention) Cleanup policy and retention (must, implemented, AC 4/4)
 - [REQ-WS-04](requirements/workspace.md#req-ws-04--run-management-commands) Run management commands (should, implemented, AC 3/3)
+- [REQ-NFR-12](requirements/non-functional.md#req-nfr-12--pipeline-speed-by-design) Pipeline speed by design (should, proposed, AC 0/7)
 - [REQ-PRJ-07](requirements/projects.md#req-prj-07--start-fresh-and-clean-up) Start fresh and clean up (should, implemented, AC 5/5)
 - [REQ-WEB-06](requirements/web.md#req-web-06--environment-management-screen) Environment management screen (should, proposed, AC 0/5)
 <!-- /req-stage -->
@@ -193,6 +197,7 @@ and `qj bench` reports detection and false-FAILED rates per model.
 - [REQ-VER-09](requirements/verification.md#req-ver-09--canary-check) Canary check (could, implemented, AC 2/2)
 - [REQ-LLM-05](requirements/models.md#req-llm-05--local-models-used-honestly) Local models used honestly (should, implemented, AC 2/2)
 - [REQ-LLM-06](requirements/models.md#req-llm-06--model-benchmark) Model benchmark (should, implemented, AC 3/3)
+- [REQ-LLM-13](requirements/models.md#req-llm-13--model-routing-proposals-from-data) Model routing proposals from data (could, proposed, AC 0/3)
 - [REQ-KNOW-01](requirements/knowledge.md#req-know-01--knowledge-base-per-project-created-on-demand) Knowledge base per project, created on demand (should, implemented, AC 4/4)
 - [REQ-KNOW-02](requirements/knowledge.md#req-know-02--add-documents-from-files-and-folders) Add documents from files and folders (should, implemented, AC 5/5)
 - [REQ-KNOW-03](requirements/knowledge.md#req-know-03--remove-documents-and-reset) Remove documents and reset (should, implemented, AC 2/2)
@@ -206,6 +211,9 @@ and `qj bench` reports detection and false-FAILED rates per model.
 - [REQ-KNOW-11](requirements/knowledge.md#req-know-11--measured-benefit) Measured benefit (should, implemented, AC 1/1)
 - [REQ-WEB-08](requirements/web.md#req-web-08--contextual-chat) Contextual chat (could, proposed, AC 0/5)
 - [REQ-WEB-09](requirements/web.md#req-web-09--chat-actions-are-proposals) Chat actions are proposals (must, proposed, AC 0/3)
+- [REQ-SKILL-01](requirements/skills.md#req-skill-01--skill-format-and-progressive-loading) Skill format and progressive loading (should, proposed, AC 0/4)
+- [REQ-SKILL-02](requirements/skills.md#req-skill-02--general-and-project-skill-libraries) General and project skill libraries (should, proposed, AC 0/3)
+- [REQ-SKILL-06](requirements/skills.md#req-skill-06--skill-review-signing-and-traceability) Skill review, signing and traceability (must, proposed, AC 0/3)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 
@@ -246,8 +254,13 @@ documentation site and the Claude Code plugin are available.
 - [REQ-GEN-03](requirements/generic.md#req-gen-03--init-and-doctor) `init` and `doctor` (must, implemented, AC 5/5)
 - [REQ-GEN-04](requirements/generic.md#req-gen-04--claude-code-plugin-interface) Claude Code plugin interface (could, implemented, AC 1/1)
 - [REQ-GEN-10](requirements/generic.md#req-gen-10--ready-to-run-images-and-a-compose-stack) Ready-to-run images and a Compose stack (should, proposed, AC 0/6)
-- [REQ-GEN-11](requirements/generic.md#req-gen-11--integrations-as-plugins-installed-on-demand) Integrations as plugins, installed on demand (should, proposed, AC 0/6)
+- [REQ-GEN-11](requirements/generic.md#req-gen-11--integrations-as-plugins-installed-on-demand) Integrations as plugins, installed on demand (should, proposed, AC 0/9)
 - [REQ-NFR-07](requirements/non-functional.md#req-nfr-07--platforms) Platforms (should, implemented, AC 2/2)
+- [REQ-NFR-13](requirements/non-functional.md#req-nfr-13--native-components-for-trust-critical-and-heavy-processing) Native components for trust-critical and heavy processing (could, proposed, AC 0/6)
+- [REQ-SKILL-03](requirements/skills.md#req-skill-03--skill-candidates-from-approved-work) Skill candidates from approved work (could, proposed, AC 0/4)
+- [REQ-SKILL-04](requirements/skills.md#req-skill-04--skill-evaluation-gate-quality-first-then-cost) Skill evaluation gate: quality first, then cost (must, proposed, AC 0/4)
+- [REQ-SKILL-05](requirements/skills.md#req-skill-05--model-specific-skill-variants) Model-specific skill variants (could, proposed, AC 0/3)
+- [REQ-SKILL-07](requirements/skills.md#req-skill-07--skill-maintenance) Skill maintenance (should, proposed, AC 0/4)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 
@@ -273,6 +286,9 @@ the evidence bundle as pipeline artifacts.
 - [REQ-FLOW-07](requirements/workflow.md#req-flow-07--run-commands-in-ticket-comments) Run commands in ticket comments (should, proposed, AC 0/4)
 - [REQ-FLOW-08](requirements/workflow.md#req-flow-08--qa-result-field-and-labels-in-jira) QA result field and labels in Jira (should, proposed, AC 0/3)
 - [REQ-FLOW-09](requirements/workflow.md#req-flow-09--ticket-actions-from-the-web-console) Ticket actions from the web console (should, proposed, AC 0/3)
+- [REQ-AUTO-01](requirements/automation.md#req-auto-01--automation-candidates-ranked-by-value) Automation candidates ranked by value (should, proposed, AC 0/3)
+- [REQ-AUTO-02](requirements/automation.md#req-auto-02--failure-triage-by-reproduction) Failure triage by reproduction (should, proposed, AC 0/6)
+- [REQ-AUTO-04](requirements/automation.md#req-auto-04--portable-bug-reproduction-scripts) Portable bug reproduction scripts (should, proposed, AC 0/5)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
 
@@ -332,7 +348,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-GEN-06](requirements/generic.md#req-gen-06--toolchain-setup) Toolchain setup (should, implemented, AC 9/9)
 - [REQ-GEN-07](requirements/generic.md#req-gen-07--external-agent-mode-claude-code-subagents-do-the-agents-work) External agent mode: Claude Code subagents do the agents' work (should, proposed, AC 0/6)
 - [REQ-GEN-08](requirements/generic.md#req-gen-08--consistent-doctor-output-and-exit-codes) Consistent `doctor` output and exit codes (should, implemented, AC 3/3)
-- [REQ-GEN-12](requirements/generic.md#req-gen-12--plugin-tiers-dev-kit-and-registry) Plugin tiers, dev kit and registry (could, proposed, AC 0/6)
+- [REQ-GEN-12](requirements/generic.md#req-gen-12--plugin-tiers-dev-kit-and-registry) Plugin tiers, dev kit and registry (could, proposed, AC 0/9)
 - [REQ-NFR-09](requirements/non-functional.md#req-nfr-09--exploratory-pass-over-every-command-before-a-release) Exploratory pass over every command before a release (should, implemented, AC 4/4)
 - [REQ-NFR-10](requirements/non-functional.md#req-nfr-10--a-merge-needs-green-ci-on-the-nodejs-version-ci-uses) A merge needs green CI, on the Node.js version CI uses (must, in-progress, AC 3/4)
 - [REQ-PRJ-09](requirements/projects.md#req-prj-09--export-and-import-of-a-project-profile) Export and import of a project profile (could, implemented, AC 2/2)
@@ -341,5 +357,24 @@ the evidence bundle as pipeline artifacts.
 - [REQ-WEB-02](requirements/web.md#req-web-02--gamified-dojo-avatar) Gamified dojo avatar (could, proposed, AC 0/5)
 - [REQ-WEB-03](requirements/web.md#req-web-03--outcome-reactions-during-execution) Outcome reactions during execution (could, proposed, AC 0/9)
 - [REQ-WEB-10](requirements/web.md#req-web-10--shareable-run-summary) Shareable run summary (could, proposed, AC 0/2)
+- [REQ-AUTO-03](requirements/automation.md#req-auto-03--suite-maintenance) Suite maintenance (could, proposed, AC 0/3)
+- [REQ-PERF-01](requirements/performance.md#req-perf-01--performance-plan-with-frozen-thresholds) Performance plan with frozen thresholds (should, proposed, AC 0/3)
+- [REQ-PERF-02](requirements/performance.md#req-perf-02--tool-agnostic-performance-runners) Tool-agnostic performance runners (should, proposed, AC 0/4)
+- [REQ-PERF-03](requirements/performance.md#req-perf-03--verdict-from-raw-metrics) Verdict from raw metrics (must, proposed, AC 0/3)
+- [REQ-PERF-04](requirements/performance.md#req-perf-04--baselines-and-trends) Baselines and trends (should, proposed, AC 0/3)
+- [REQ-PERF-05](requirements/performance.md#req-perf-05--safe-load-generation) Safe load generation (must, proposed, AC 0/3)
+- [REQ-PERF-06](requirements/performance.md#req-perf-06--performance-evidence) Performance evidence (should, proposed, AC 0/2)
+- [REQ-TUNE-01](requirements/tuning.md#req-tune-01--training-data-from-the-audit-trail-with-consent) Training data from the audit trail, with consent (should, proposed, AC 0/4)
+- [REQ-TUNE-02](requirements/tuning.md#req-tune-02--tuning-cycle-with-a-gate-and-shadow-mode) Tuning cycle with a gate and shadow mode (could, proposed, AC 0/5)
+- [REQ-TUNE-03](requirements/tuning.md#req-tune-03--training-providers-and-data-residency) Training providers and data residency (must, proposed, AC 0/3)
+- [REQ-TUNE-04](requirements/tuning.md#req-tune-04--shared-base-model-with-per-tenant-adapters) Shared base model with per-tenant adapters (could, proposed, AC 0/2)
+- [REQ-TUNE-05](requirements/tuning.md#req-tune-05--licences-of-base-models) Licences of base models (must, proposed, AC 0/2)
+- [REQ-SCALE-01](requirements/scale.md#req-scale-01--control-plane-and-run-queue) Control plane and run queue (should, proposed, AC 0/3)
+- [REQ-SCALE-02](requirements/scale.md#req-scale-02--worker-pool-and-autoscaling) Worker pool and autoscaling (should, proposed, AC 0/3)
+- [REQ-SCALE-03](requirements/scale.md#req-scale-03--self-hosted-worker) Self-hosted worker (must, proposed, AC 0/2)
+- [REQ-SCALE-04](requirements/scale.md#req-scale-04--tenant-isolation) Tenant isolation (must, proposed, AC 0/2)
+- [REQ-SCALE-05](requirements/scale.md#req-scale-05--bring-your-own-key) Bring your own key (should, proposed, AC 0/2)
+- [REQ-SCALE-06](requirements/scale.md#req-scale-06--metering-and-cost-limits) Metering and cost limits (should, proposed, AC 0/2)
+- [REQ-SCALE-07](requirements/scale.md#req-scale-07--specialist-planners) Specialist planners (could, proposed, AC 0/3)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
