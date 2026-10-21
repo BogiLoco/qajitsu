@@ -40,19 +40,21 @@ Commit `ae9a935` plus the fixes listed below; models: `local/gemma4:e2b` (planne
 | `telemetry export`                                                                                     | no OTLP endpoint configured                                                                                                         | ok: says so                                                            |
 | `pull`                                                                                                 | file tickets                                                                                                                        | ok: refused, it needs Jira                                             |
 | `answer`                                                                                               | no step waiting                                                                                                                     | ok: `NO_PENDING_STEP`                                                  |
+| `pnpm demo`, `pnpm test:e2e`                                                                           | the whole offline demo and every end-to-end suite                                                                                   | ok after D2 (mobile suite skipped: no Android SDK)                     |
 | `bench`                                                                                                | five cases with real models take hours                                                                                              | not run live; covered by `bench.test.ts`                               |
 
 ### Defects found and fixed
 
-| ID  | Command                    | Defect                                                                                 | Fix                                              |
-| --- | -------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| P1  | `export`                   | exit code 1 after writing the files, without a word why                                | prints the statuses and what the exit code means |
-| P2  | `regression`               | the estimate of a run without models said "models ≈ 0k tokens (cost unknown ...)"      | says "no models"                                 |
-| P3  | `init`                     | the next step said "choose models in models.roles" right after they were chosen        | names `doctor --models` instead                  |
-| P4  | `projects remove`          | deleted a profile `projects export` had just written into the project's home, silently | lists it as deleted with the project             |
-| P5  | `knowledge search`, `note` | unquoted words failed with "too many arguments"                                        | take the words as one text                       |
-| D1  | `doctor --models`          | passed an approver that was the planner's own model, which `qj approve` refuses        | flags it (REQ-GEN-08)                            |
-| T1  | test suite                 | the Ctrl+C clean-up test of `explore --cli` failed once under load                     | checks that the process is gone, in either list  |
+| ID  | Command                    | Defect                                                                                                                                               | Fix                                                             |
+| --- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| P1  | `export`                   | exit code 1 after writing the files, without a word why                                                                                              | prints the statuses and what the exit code means                |
+| P2  | `regression`               | the estimate of a run without models said "models ≈ 0k tokens (cost unknown ...)"                                                                    | says "no models"                                                |
+| P3  | `init`                     | the next step said "choose models in models.roles" right after they were chosen                                                                      | names `doctor --models` instead                                 |
+| P4  | `projects remove`          | deleted a profile `projects export` had just written into the project's home, silently                                                               | lists it as deleted with the project                            |
+| P5  | `knowledge search`, `note` | unquoted words failed with "too many arguments"                                                                                                      | take the words as one text                                      |
+| D1  | `doctor --models`          | passed an approver that was the planner's own model, which `qj approve` refuses                                                                      | flags it (REQ-GEN-08)                                           |
+| D2  | `pnpm demo`                | broken since the 401 check of 2026-10-18: the recorded plan's TC-02 named no test account, so approval stopped; `pnpm test:e2e` is not part of PR CI | the recorded plan names `user:standard`, as its spec always did |
+| T1  | test suite                 | the Ctrl+C clean-up test of `explore --cli` failed once under load                                                                                   | checks that the process is gone, in either list                 |
 
 The previous pass (2026-10-17/18, findings F0–F27) is summarised in the pull requests of `feat/exploretests` and
 `fix/anthropic-trial`.
