@@ -108,10 +108,11 @@ Quality bars for the codebase and the project itself.
 
 ### REQ-NFR-09 · Exploratory pass over every command before a release
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-NFR-02, REQ-EXEC-25, REQ-PUB-08, REQ-EXEC-17, REQ-CI-01
+- Note: accepted by the owner on 2026-10-21; the first pass under it is recorded in `docs/demo/command-pass.md`.
 
 Unit and contract tests did not catch problems that showed up as soon as a person used the commands one after another
 (an exploratory pass found more than twenty). `promote`, `regression`, `watch`, `publish` and the `ci` commands were
@@ -119,7 +120,7 @@ only touched lightly so far.
 
 **Acceptance criteria**
 
-- [ ] AC1: Before a release every command and subcommand is run on the demo shop in a lab with its own HOME (offline, with Docker, with a browser), including `promote`, `regression`, `watch`, `publish` (file and a Jira test instance or fixture), `ci detect`, `ci publish-plan`, `ci comment` and `export`.
-- [ ] AC2: A checklist in `docs/demo/` lists every command with the date, version and result of its last pass and the defects found; it is updated with each pass.
-- [ ] AC3: Every defect found gets a regression test that fails without the fix before it is fixed.
-- [ ] AC4: Flows that can run without a person (promote then regression, `watch` while a run runs, `publish` in file mode, the `ci` commands with fixture events) become part of `pnpm test:e2e`.
+- [x] AC1: Before a release every command and subcommand is run on the demo shop in a lab with its own HOME (offline, with Docker, with a browser), including `promote`, `regression`, `watch`, `publish` (file and a Jira test instance or fixture), `ci detect`, `ci publish-plan`, `ci comment` and `export`.
+- [x] AC2: A checklist in `docs/demo/` lists every command with the date, version and result of its last pass and the defects found; it is updated with each pass.
+- [x] AC3: Every defect found gets a regression test that fails without the fix before it is fixed.
+- [x] AC4: Flows that can run without a person (promote then regression, `watch` while a run runs, `publish` in file mode, the `ci` commands with fixture events) become part of `pnpm test:e2e`.

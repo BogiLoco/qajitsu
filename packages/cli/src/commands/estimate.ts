@@ -81,11 +81,13 @@ const duration = (s: number): string =>
  * @param plan - Cases about to run.
  * @param history - Past runs of the project.
  * @param variants - Extra runs per case type, e.g. `{ web: 2 }` for two more browser combinations.
+ * @param options - `models: false` for runs that call no model (regression packs).
  */
 export function formatEstimate(
   plan: Plan,
   history: RunHistory,
   variants: Readonly<Record<string, number>> = {},
+  options: { readonly models?: boolean } = {},
 ): string {
   const byType = new Map<string, number>();
   for (const c of plan.cases)
@@ -99,5 +101,5 @@ export function formatEstimate(
     history.tokensPerCase === undefined
       ? "model use unknown (no past runs with usage)"
       : `models ≈ ${String(Math.round((history.tokensPerCase * cases) / 1000))}k tokens${history.costPerCase === undefined ? " (cost unknown: no price for a model; declare cost_per_mtok)" : ` (~$${(history.costPerCase * cases).toFixed(2)})`}`;
-  return `Estimate: ${parts} execution(s) ≈ ${duration(seconds)}; ${model}; ${history.runs > 0 ? `from ${String(history.runs)} past run(s)` : "default timings, no past runs yet"}.`;
+  return `Estimate: ${parts} execution(s) ≈ ${duration(seconds)}; ${options.models === false ? "no models" : model}; ${history.runs > 0 ? `from ${String(history.runs)} past run(s)` : "default timings, no past runs yet"}.`;
 }

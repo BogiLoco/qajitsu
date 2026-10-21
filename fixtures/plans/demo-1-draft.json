@@ -26,6 +26,7 @@
       "source": [
         { "kind": "quote", "text": "Applying a second code replaces the first; codes never stack." }
       ],
+      "data": { "user": "user:standard" },
       "steps": [
         {
           "id": "S1",

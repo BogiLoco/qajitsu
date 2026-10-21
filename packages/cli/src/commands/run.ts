@@ -780,6 +780,8 @@ async function executeCases(
       {
         web: Math.max(0, webCombinations(project.config.web).length - 1),
       },
+      // A regression run calls no model (REQ-EXEC-17/AC1): its estimate says nothing about models or their cost.
+      { models: ws.record.data["regression"] === undefined },
     )}\n`,
   );
   // REQ-PLAN-08/AC3: the run's budget; remaining cases are NOT_RUN with the reason once a limit is reached.

@@ -71,6 +71,9 @@ describe("qajitsu status, note and resume (REQ-PRJ-05, REQ-PRJ-06)", () => {
     await p.run(["fetch", "DEMO-1"]);
     expect((await p.run(["note", "DEMO-1", "waiting for test data from Anna"])).exitCode).toBe(0);
     await p.run(["note", "DEMO-1", `login works with ${PASSWORD}`]);
+    // REQ-NFR-09/AC3: an unquoted note is one note (found in the pass: "too many arguments").
+    expect((await p.run(["note", "DEMO-1", "ask", "Anna", "again"])).exitCode).toBe(0);
+    expect(await readFile(join(p.home, "runs", "DEMO-1", "notes.json"), "utf8")).toContain("ask Anna again");
     const out = (await p.run(["status"])).out;
     expect(out).toContain("note (");
     expect(out).toContain("waiting for test data from Anna");

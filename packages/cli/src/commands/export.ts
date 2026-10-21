@@ -44,8 +44,23 @@ export async function runExport(
     await copyFile(bundle.path, join(out, bundle.name));
     io.write(`${[...files, bundle.name].map((f) => join(out, f)).join("\n")}\n`);
     if (!verdict.ok) io.writeError(`Publish gates failed: ${verdict.failed.map((g) => g.gate).join(", ")}\n`);
-    const code = exitCodeFor(verdict.cases.map((c) => c.status));
-    return !verdict.ok && code === 0 ? 2 : code;
+    const statuses = verdict.cases.map((c) => c.status);
+    const code = exitCodeFor(statuses);
+    const exit = !verdict.ok && code === 0 ? 2 : code;
+    // The exit code is for the pipeline step; say what it means, so a 1 after the files is not taken for a failure.
+    const counts = [...new Set(statuses)].map(
+      (s) => `${String(statuses.filter((x) => x === s).length)} ${s}`,
+    );
+    const why =
+      exit === 1
+        ? " (a FAILED case fails the pipeline step)"
+        : exit === 2
+          ? verdict.ok
+            ? " (not every case PASSED)"
+            : " (publish gates failed)"
+          : "";
+    io.write(`Statuses: ${counts.join(", ") || "no cases"}; exit code ${String(exit)}${why}\n`);
+    return exit;
   } catch (error) {
     const code = error instanceof QajitsuError ? ` [${error.code}]` : "";
     io.writeError(

@@ -86,8 +86,13 @@ describe("start fresh and clean up (REQ-PRJ-07)", () => {
   it("REQ-PRJ-07/AC3+AC4: projects remove lists first, needs confirmation, keeps .qa/ and the run journals, and clears the active project", async () => {
     const p = await setup();
     const runId = await fetchRun(p);
+    // REQ-NFR-09/AC3: a profile exported into the project's home goes with it; the listing says so (found in the pass).
+    expect((await p.run(["projects", "export", "demo"])).exitCode).toBe(0);
     const dry = await p.run(["projects", "remove", "demo", "--dry-run"]);
     expect(dry.exitCode).toBe(0);
+    expect(dry.out).toMatch(
+      / {2}deleted with it: the exported profile .*exports\/demo\.profile\.yaml: copy it out first to move the project/,
+    );
     expect(dry.out).toMatch(/Project demo: .*projects\/demo \(\d+\.\d MB\)/);
     expect(dry.out).toMatch(/runs\s+\d+ file\(s\)/);
     expect(dry.out).toContain("tickets with runs: 1");

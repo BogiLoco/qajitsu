@@ -361,8 +361,12 @@ export async function runInit(
     io.write(
       [
         "Created .qa/qa.project.yaml and .qa/envs/local.yaml.",
-        "Next: put secrets in .env.local (JIRA_TOKEN, GITHUB_TOKEN, ...), choose models in models.roles,",
-        "then run 'qajitsu doctor --online' and 'qajitsu fetch <TICKET>'.",
+        models
+          ? "Next: put the other secrets in .env.local (JIRA_TOKEN, GITHUB_TOKEN, ...), then run 'qajitsu doctor --models',"
+          : "Next: put secrets in .env.local (JIRA_TOKEN, GITHUB_TOKEN, ...), choose models in models.roles,",
+        models
+          ? "'qajitsu doctor --online' and 'qajitsu fetch <TICKET>'."
+          : "then run 'qajitsu doctor --online' and 'qajitsu fetch <TICKET>'.",
         "",
       ].join("\n"),
     );

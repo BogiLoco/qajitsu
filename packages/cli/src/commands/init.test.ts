@@ -222,6 +222,10 @@ describe("start with an API key only (REQ-LLM-09/AC1+AC4)", () => {
       "Models: anthropic/claude-sonnet-5-5 for every role, anthropic/claude-haiku-5-5 as the auditor; at most $5.00 per run",
     );
     expect(r.out + r.err).not.toContain("sk-ant-do-not-print");
+    // Found in the pass: the next step said "choose models in models.roles" although they were just chosen.
+    expect(r.out).toContain(
+      "Next: put the other secrets in .env.local (JIRA_TOKEN, GITHUB_TOKEN, ...), then run 'qajitsu doctor --models',",
+    );
     const config = await configOf(repo);
     expect(config.models).toMatchObject({
       providers: { anthropic: { type: "anthropic", api_key: "secret://env/ANTHROPIC_API_KEY" } },

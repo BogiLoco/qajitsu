@@ -363,11 +363,11 @@ export function createProgram(version: string, io: ProgramIO): Command {
   knowledge
     .command("search")
     .description("Print the ranked chunks agents would get for a query, with source, section and date")
-    .argument("<query>", "search text")
+    .argument("<query...>", "search text (quotes not needed)")
     .option("--tag <tag>", "only documents with this tag (repeatable)", collect, [])
     .option("--limit <n>", "number of results (default 5)")
-    .action(async (query: string, options: { tag?: string[]; limit?: string }) => {
-      await withPorts((ports) => runKnowledgeSearch(query, options, commandIO, ports))();
+    .action(async (query: string[], options: { tag?: string[]; limit?: string }) => {
+      await withPorts((ports) => runKnowledgeSearch(query.join(" "), options, commandIO, ports))();
     });
 
   program
@@ -898,9 +898,9 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .command("note")
     .description("Attach a note to a ticket; status shows it next to the ticket's open work")
     .argument("<ticket>", "Jira key, e.g. SHOP-482")
-    .argument("<text>", "the note")
-    .action((ticket: string, text: string) =>
-      withPorts((ports) => runNote(ticket, text, commandIO, ports, io.user ?? "unknown"))(),
+    .argument("<text...>", "the note (quotes not needed)")
+    .action((ticket: string, text: string[]) =>
+      withPorts((ports) => runNote(ticket, text.join(" "), commandIO, ports, io.user ?? "unknown"))(),
     );
 
   program

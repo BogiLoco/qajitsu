@@ -265,6 +265,8 @@ describe("qajitsu ci and pipeline outputs (REQ-CI-03, REQ-CI-04)", () => {
     const out = join(p.project, "qa-artifacts");
     const exported = await p.run(["export", "DEMO-1", "--run", second, "--out", "qa-artifacts"]);
     expect(exported.exitCode).toBe(0);
+    // REQ-NFR-09/AC3: the exit code says why (found in the exploratory pass: exit 1 without a word).
+    expect(exported.out).toContain("Statuses: 2 PASSED; exit code 0");
     expect((await readdir(out)).sort()).toEqual(
       [
         "DEMO-1_" + second + "_evidence.zip",
