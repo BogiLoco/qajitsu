@@ -166,3 +166,41 @@ on the machine stays the other way.
 - [ ] AC4: Images, model names and their digests are pinned in the generated file and recorded with every run (REQ-OBS-10).
 - [ ] AC5: No secret is baked into an image or written into `compose.yaml`; secrets come from `.env.local` or the secret provider at run time.
 - [ ] AC6: The stack runs with Docker Engine and Podman; GPU access for Ollama is optional and documented per platform; the Android image states that the emulator needs KVM.
+
+### REQ-GEN-11 · Integrations as plugins, installed on demand
+
+- Status: proposed
+- Priority: should
+- Stage: 9
+- Related: REQ-GEN-02, REQ-GEN-03, REQ-GEN-06, REQ-NFR-05, ADR-0011, INV-12
+
+Integrations stay in this repository, but an installation carries only what a project uses. Today `@qajitsu/cli`
+depends on all twenty adapter packages, so everyone installs every integration (LanceDB alone is about 230 MB).
+
+**Acceptance criteria**
+
+- [ ] AC1: The core installation carries the core adapters only: Jira, GitHub, GitLab, local repositories, the API and web runners, secrets from the environment and local evidence. Every other integration (for example Xray, Zephyr, TestRail, Vault, Doppler, Confluence, Chroma, LanceDB, the mobile runner, webhook.site) is a plugin package published from this repository.
+- [ ] AC2: `qj doctor` reads the project configuration and names every plugin it needs and lacks (for example `test_cases: { type: xray }` without the Xray plugin) with the command that installs it; a command that needs a missing plugin stops with the same message instead of a module error.
+- [ ] AC3: `qj setup` and `qj doctor --fix` install the plugins the project needs into the QAJitsu home at versions pinned for the QAJitsu release, checked against their published checksums, without install scripts; `qj plugin list|add|remove` shows and changes them by hand.
+- [ ] AC4: A plugin works only through the adapter interfaces of `@qajitsu/core` (INV-12): it cannot replace the guard, the verifier, status computation, masking or publish gates, and it gets secrets only through the secret provider.
+- [ ] AC5: The plugins and versions a run used are recorded with the run (REQ-OBS-10).
+- [ ] AC6: Offline installations take plugins from the offline bundle of `qj setup --download` (REQ-GEN-06).
+
+### REQ-GEN-12 · Plugin tiers, dev kit and registry
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: REQ-GEN-11, REQ-NFR-05, REQ-NFR-06, ADR-0011, INV-1, INV-8
+
+Plugins from QAJitsu, from partners and from the community, free or paid, through one mechanism that never weakens
+what makes the results trustworthy.
+
+**Acceptance criteria**
+
+- [ ] AC1: Every plugin has a tier shown wherever it is listed: official open source (Apache-2.0, this repository), official commercial (QAJitsu's own licence), partner, or community.
+- [ ] AC2: A commercial plugin needs a licence key from the secret provider; the key is checked offline against a signature in the key, so a run never depends on a licence server; an expired or missing licence stops only the commands that use that plugin, with the reason.
+- [ ] AC3: A plugin dev kit (`create-qajitsu-plugin`) gives a template, the adapter interfaces, contract tests every plugin must pass and an adversarial suite for plugins that touch statuses, evidence or secrets.
+- [ ] AC4: The registry lists plugins with tier, publisher, versions, licence, checksum and signature; `qj plugin add` installs only signed plugins whose publisher the installation trusts, and community plugins only after an explicit confirmation.
+- [ ] AC5: No tier changes the invariants: a paid or partner plugin cannot set or upgrade a status (INV-1), see unmasked secrets (INV-8) or skip the guard; the contract tests check it.
+- [ ] AC6: The open-source core stays complete for the flow from ticket to published result; commercial plugins add integrations and features, never a missing piece of that flow.

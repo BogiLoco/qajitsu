@@ -246,6 +246,7 @@ documentation site and the Claude Code plugin are available.
 - [REQ-GEN-03](requirements/generic.md#req-gen-03--init-and-doctor) `init` and `doctor` (must, implemented, AC 5/5)
 - [REQ-GEN-04](requirements/generic.md#req-gen-04--claude-code-plugin-interface) Claude Code plugin interface (could, implemented, AC 1/1)
 - [REQ-GEN-10](requirements/generic.md#req-gen-10--ready-to-run-images-and-a-compose-stack) Ready-to-run images and a Compose stack (should, proposed, AC 0/6)
+- [REQ-GEN-11](requirements/generic.md#req-gen-11--integrations-as-plugins-installed-on-demand) Integrations as plugins, installed on demand (should, proposed, AC 0/6)
 - [REQ-NFR-07](requirements/non-functional.md#req-nfr-07--platforms) Platforms (should, implemented, AC 2/2)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
@@ -331,6 +332,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-GEN-06](requirements/generic.md#req-gen-06--toolchain-setup) Toolchain setup (should, implemented, AC 9/9)
 - [REQ-GEN-07](requirements/generic.md#req-gen-07--external-agent-mode-claude-code-subagents-do-the-agents-work) External agent mode: Claude Code subagents do the agents' work (should, proposed, AC 0/6)
 - [REQ-GEN-08](requirements/generic.md#req-gen-08--consistent-doctor-output-and-exit-codes) Consistent `doctor` output and exit codes (should, implemented, AC 3/3)
+- [REQ-GEN-12](requirements/generic.md#req-gen-12--plugin-tiers-dev-kit-and-registry) Plugin tiers, dev kit and registry (could, proposed, AC 0/6)
 - [REQ-NFR-09](requirements/non-functional.md#req-nfr-09--exploratory-pass-over-every-command-before-a-release) Exploratory pass over every command before a release (should, implemented, AC 4/4)
 - [REQ-NFR-10](requirements/non-functional.md#req-nfr-10--a-merge-needs-green-ci-on-the-nodejs-version-ci-uses) A merge needs green CI, on the Node.js version CI uses (must, in-progress, AC 3/4)
 - [REQ-PRJ-09](requirements/projects.md#req-prj-09--export-and-import-of-a-project-profile) Export and import of a project profile (could, implemented, AC 2/2)
