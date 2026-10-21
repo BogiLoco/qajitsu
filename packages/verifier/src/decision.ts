@@ -7,7 +7,7 @@ export type ReleaseDecision = "GO" | "NO-GO" | "NO DECISION";
 export interface DecisionCase {
   readonly caseId: string;
   readonly priority: "high" | "medium" | "low";
-  readonly status: TestStatus | string;
+  readonly status: TestStatus;
 }
 
 /**
@@ -17,8 +17,8 @@ export interface DecisionCase {
 export interface DecisionPolicy {
   readonly version: string;
   readonly tolerate: {
-    readonly medium: readonly string[];
-    readonly low: readonly string[];
+    readonly medium: readonly TestStatus[];
+    readonly low: readonly TestStatus[];
   };
 }
 

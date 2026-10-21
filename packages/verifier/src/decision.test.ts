@@ -1,7 +1,8 @@
+import type { TestStatus } from "@qajitsu/core";
 import { describe, expect, it } from "vitest";
-import { computeDecision, DEFAULT_DECISION_POLICY, formatDecision } from "./decision.js";
+import { computeDecision, DEFAULT_DECISION_POLICY, formatDecision, type DecisionPolicy } from "./decision.js";
 
-const c = (caseId: string, priority: "high" | "medium" | "low", status: string) =>
+const c = (caseId: string, priority: "high" | "medium" | "low", status: TestStatus) =>
   ({ caseId, priority, status }) as const;
 
 describe("GO / NO-GO decision (REQ-PUB-10)", () => {
@@ -25,7 +26,7 @@ describe("GO / NO-GO decision (REQ-PUB-10)", () => {
     expect(formatDecision(d)).toBe("Decision: NO-GO (policy v1): TC-01 FAILED (high)");
   });
 
-  it.each(["BLOCKED", "NOT_RUN", "NEEDS_REVIEW", "FLAKY"])(
+  it.each(["BLOCKED", "NOT_RUN", "NEEDS_REVIEW", "FLAKY"] as const)(
     "REQ-PUB-10/AC2: %s in a must-have case is NO DECISION, never GO",
     (status) => {
       const d = computeDecision([c("TC-01", "high", status), c("TC-02", "high", "PASSED")]);
@@ -40,10 +41,10 @@ describe("GO / NO-GO decision (REQ-PUB-10)", () => {
   });
 
   it("REQ-PUB-10/AC3: the policy may tolerate statuses of lower priorities, never of must-have cases; its version is recorded", () => {
-    const policy = {
+    const policy: DecisionPolicy = {
       version: "2026-10",
       tolerate: { medium: ["NEEDS_REVIEW"], low: ["FAILED", "NOT_RUN"] },
-    } as const;
+    };
     const d = computeDecision(
       [c("TC-01", "high", "PASSED"), c("TC-02", "medium", "NEEDS_REVIEW"), c("TC-03", "low", "FAILED")],
       policy,
