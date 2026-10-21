@@ -16,18 +16,39 @@ export interface CapabilityOverride {
   readonly cost_per_mtok?: { readonly input: number; readonly output: number } | undefined;
 }
 
+/** When the built-in context windows and prices were last checked against the providers' pages (REQ-LLM-09/AC2). */
+export const BUILT_IN_PROFILES_CHECKED = "2026-10-21";
+
+const claude = (contextWindow: number, input: number, output: number): ModelProfile => ({
+  tools: true,
+  structuredOutput: true,
+  vision: true,
+  contextWindow,
+  costPerMTok: { input, output },
+});
+
 /**
- * Conservative built-in profiles by provider type and model-id pattern (REQ-LLM-03). Unknown local
- * models get no tools and no structured output, so they fail the capability check instead of
- * producing quietly broken plans; declare capabilities in config after checking with `doctor --models`.
+ * Conservative built-in profiles by provider type and model-id pattern (REQ-LLM-03), the first match wins. Unknown
+ * local models get no tools and no structured output, so they fail the capability check instead of producing quietly
+ * broken plans; declare capabilities in config after checking with `doctor --models`.
+ *
+ * Claude prices are the base input and output prices per million tokens from Anthropic's pricing page, checked on
+ * {@link BUILT_IN_PROFILES_CHECKED} (REQ-LLM-09/AC2); Haiku 5.5 uses its price for prompts over 100k tokens, so a budget
+ * errs on the safe side. Other cloud models have no built-in price: their cost is unknown until `cost_per_mtok` is
+ * declared. Local models through Ollama cost nothing.
  */
 const BUILT_IN: readonly { readonly type: string; readonly match: RegExp; readonly profile: ModelProfile }[] =
   [
-    {
-      type: "anthropic",
-      match: /^claude-.*haiku/,
-      profile: { tools: true, structuredOutput: true, vision: true, contextWindow: 200_000 },
-    },
+    { type: "anthropic", match: /^claude-(fable|mythos)-5-1\b/, profile: claude(1_000_000, 10, 50) },
+    { type: "anthropic", match: /^claude-opus-5-5\b/, profile: claude(1_000_000, 4, 20) },
+    { type: "anthropic", match: /^claude-sonnet-5-5\b/, profile: claude(1_000_000, 2, 10) },
+    { type: "anthropic", match: /^claude-haiku-5-5\b/, profile: claude(1_000_000, 0.5, 2.5) },
+    { type: "anthropic", match: /^claude-(fable|mythos)-5\b/, profile: claude(200_000, 10, 50) },
+    { type: "anthropic", match: /^claude-opus-(5|4-[5-8])\b/, profile: claude(200_000, 5, 25) },
+    { type: "anthropic", match: /^claude-opus-4(-1)?\b/, profile: claude(200_000, 15, 75) },
+    { type: "anthropic", match: /^claude-sonnet-5\b/, profile: claude(200_000, 2, 10) },
+    { type: "anthropic", match: /^claude-sonnet-4(-[56])?\b/, profile: claude(200_000, 3, 15) },
+    { type: "anthropic", match: /^claude-haiku-4-5\b/, profile: claude(200_000, 1, 5) },
     {
       type: "anthropic",
       match: /^claude-/,
@@ -46,7 +67,13 @@ const BUILT_IN: readonly { readonly type: string; readonly match: RegExp; readon
     {
       type: "ollama",
       match: /^(qwen3|qwen2\.5|llama3\.[1-3]|mistral|gemma[34]|gpt-oss)/,
-      profile: { tools: true, structuredOutput: true, vision: false, contextWindow: 32_768 },
+      profile: {
+        tools: true,
+        structuredOutput: true,
+        vision: false,
+        contextWindow: 32_768,
+        costPerMTok: { input: 0, output: 0 },
+      },
     },
   ];
 
@@ -64,7 +91,10 @@ export function modelProfile(
   model: string,
   override: CapabilityOverride = {},
 ): ModelProfile {
-  const base = BUILT_IN.find((b) => b.type === providerType && b.match.test(model))?.profile ?? UNKNOWN;
+  const base =
+    BUILT_IN.find((b) => b.type === providerType && b.match.test(model))?.profile ??
+    // A local model costs nothing even when its capabilities are unknown.
+    (providerType === "ollama" ? { ...UNKNOWN, costPerMTok: { input: 0, output: 0 } } : UNKNOWN);
   return {
     tools: override.tools ?? base.tools,
     structuredOutput: override.structured_output ?? base.structuredOutput,

@@ -165,3 +165,35 @@ describe("consistent doctor output and exit codes (REQ-GEN-08)", () => {
     expect((await p.run(["doctor"])).out).not.toContain("secrets file");
   }, 120_000);
 });
+
+describe("doctor --models with an API key (REQ-LLM-09/AC5)", () => {
+  it("REQ-LLM-09/AC5: a rejected key is an error that names its variable, never its value", async () => {
+    const key = "sk-ant-do-not-print-123";
+    const rejecting = (() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            type: "error",
+            error: { type: "authentication_error", message: `invalid x-api-key ${key}` },
+          }),
+          { status: 401, headers: { "content-type": "application/json" } },
+        ),
+      )) as typeof fetch;
+    const p = await createBuildProject(undefined, { ports: { fetch: rejecting } });
+    cleanups.push(p.cleanup);
+    const yaml = join(p.project, ".qa", "qa.project.yaml");
+    await writeFile(
+      yaml,
+      (await readFile(yaml, "utf8")).replace(
+        "models: { roles: { default: mock/scripted } }",
+        "models: { providers: { anthropic: { type: anthropic, api_key: 'secret://env/ANTHROPIC_API_KEY' } }, roles: { default: anthropic/claude-sonnet-5-5 } }",
+      ),
+    );
+    const r = await p.run(["doctor", "--models"], undefined, { env: { ANTHROPIC_API_KEY: key } });
+    expect(r.exitCode).toBe(3);
+    expect(r.out).toContain(
+      "✘ analyst: anthropic/claude-sonnet-5-5 unreachable: the provider rejected the key in ANTHROPIC_API_KEY",
+    );
+    expect(r.out + r.err).not.toContain(key);
+  }, 120_000);
+});

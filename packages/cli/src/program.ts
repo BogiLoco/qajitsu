@@ -437,9 +437,10 @@ export function createProgram(version: string, io: ProgramIO): Command {
           const { createModelRegistry } = await import("@qajitsu/models");
           const { createMasker } = await import("@qajitsu/steps");
           const { createCliSecretResolver } = await import("./adapters.js");
+          const masker = createMasker();
           const models = createModelRegistry({
             config: project.config.models,
-            resolveSecret: createCliSecretResolver(project, io.ports, createMasker()),
+            resolveSecret: createCliSecretResolver(project, io.ports, masker),
             fetch: io.ports.fetch,
             ...(io.ports.extraModels ? { extra: io.ports.extraModels } : {}),
           });
@@ -450,7 +451,24 @@ export function createProgram(version: string, io: ProgramIO): Command {
             undefined,
             approval.flow.includes("model") ? approval.model : undefined,
           );
-          io.write(`${formatProbes(probes)}\n`);
+          // REQ-LLM-09/AC5: a rejected key is named by its variable; provider messages can quote part of the key.
+          const keyOf = (model: string): string => {
+            const ref = project.config.models.providers[model.split("/")[0] ?? ""]?.api_key;
+            return ref === undefined
+              ? "the provider's key"
+              : (/^secret:\/\/env\/(\w+)$/.exec(ref)?.[1] ?? ref);
+          };
+          const shown = probes.map((p) =>
+            p.error === undefined
+              ? p
+              : {
+                  ...p,
+                  error: /\b(401|403)\b|unauthori[sz]ed|authentication|api[- _]?key/i.test(p.error)
+                    ? `the provider rejected the key in ${keyOf(p.model)}`
+                    : masker.maskText(p.error),
+                },
+          );
+          io.write(`${formatProbes(shown)}\n`);
           return probes.every((p) => p.reachable && p.missing.length === 0);
         } catch (error) {
           io.write(`✘ models: ${error instanceof Error ? error.message : String(error)}\n`);

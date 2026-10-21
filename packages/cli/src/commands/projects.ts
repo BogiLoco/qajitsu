@@ -97,6 +97,7 @@ export async function runProjectInit(
           jiraUrl: options.jiraUrl,
           projectKey: options.projectKey,
           envUrl: options.envUrl,
+          env: ports.env,
         },
         { ...io, cwd: dirname(qaDir) },
       );

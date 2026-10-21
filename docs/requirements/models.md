@@ -120,21 +120,23 @@ run, and every QAJitsu tool still goes through the guard.
 
 ### REQ-LLM-09 · Start with an API key only
 
-- Status: proposed
+- Status: in-progress
 - Priority: should
 - Stage: later
 - Related: REQ-PRJ-02, REQ-LLM-01, REQ-LLM-03, REQ-LLM-07, REQ-PLAN-08, REQ-CFG-01, INV-8
+- Note: accepted by the owner on 2026-10-21. Done for Anthropic, whose model ids, context windows and prices were checked on its pages that day; OpenAI and Google follow in AC6.
 
 Someone with an API key of a cloud provider should be able to start without declaring model capabilities, context
 windows or prices: put the key in `.env.local`, run `qj init`, and go, with a spending limit from the first run.
 
 **Acceptance criteria**
 
-- [ ] AC1: `qj init` finds provider keys by their variable names in the environment and the project's `.env.local` (e.g. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `OPENROUTER_API_KEY`), never by reading or printing their values, and proposes that provider with `secret://env/<NAME>` and a model per role; the configuration is written only after the person confirms.
-- [ ] AC2: Well-known cloud models have a built-in profile kept in code with the date it was checked: tools, structured output, vision, context window, and prices per million input and output tokens. A value declared in the project config wins over the built-in one; an unknown model needs its capabilities declared as today.
-- [ ] AC3: Estimates and tracking show cost in US dollars from these prices; a model without a known price shows the cost as unknown, never as 0.
-- [ ] AC4: When a paid provider is chosen, `qj init` proposes `budget.max_cost_usd` (default 5); reaching it stops further cases as NOT_RUN (REQ-PLAN-08/AC3) and a model stage that would exceed it as BLOCKED with the reason.
-- [ ] AC5: `qj doctor --models` checks each key with one minimal call; a rejected key is an error that names the variable, never the value.
+- [x] AC1: `qj init` finds provider keys by their variable names in the environment and the project's `.env.local` (e.g. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `OPENROUTER_API_KEY`), never by reading or printing their values, and proposes that provider with `secret://env/<NAME>` and a model per role; the configuration is written only after the person confirms. A key of a provider without built-in profiles is named with what to set by hand.
+- [x] AC2: Well-known cloud models have a built-in profile kept in code with the date it was checked: tools, structured output, vision, context window, and prices per million input and output tokens. A value declared in the project config wins over the built-in one; an unknown model needs its capabilities declared as today.
+- [x] AC3: Estimates and tracking show cost in US dollars from these prices; a model without a known price shows the cost as unknown, never as 0.
+- [x] AC4: When a paid provider is chosen, `qj init` proposes `budget.max_cost_usd` (default 5); reaching it stops further cases as NOT_RUN (REQ-PLAN-08/AC3) and a model stage that would exceed it as BLOCKED with the reason.
+- [x] AC5: `qj doctor --models` checks each key with one minimal call; a rejected key is an error that names the variable, never the value.
+- [ ] AC6: OpenAI and Google models get built-in profiles and prices checked on their providers' pages, and `qj init` proposes their models like Anthropic's.
 
 ### REQ-LLM-10 · Model profiles from gateways (LiteLLM, OpenRouter)
 

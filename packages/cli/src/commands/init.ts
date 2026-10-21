@@ -135,6 +135,74 @@ export interface InitAnswers {
   readonly jiraUrl?: string | undefined;
   readonly projectKey: string;
   readonly envUrl: string;
+  /** Models of a cloud provider whose key was found and accepted (REQ-LLM-09/AC1). */
+  readonly models?: ProposedModels | undefined;
+  /** `budget.max_cost_usd` (REQ-LLM-09/AC4). */
+  readonly maxCostUsd?: number | undefined;
+}
+
+/** A provider key found by its variable name (REQ-LLM-09/AC1); the value is never read into the result. */
+export interface FoundKey {
+  readonly provider: "anthropic" | "openai" | "google" | "openrouter";
+  readonly variable: string;
+  readonly where: "environment" | ".env.local";
+}
+
+/** The `models` section proposed for a found key. */
+export interface ProposedModels {
+  readonly providers: Readonly<Record<string, unknown>>;
+  readonly roles: Readonly<Record<string, string>>;
+  readonly summary: string;
+}
+
+const KEY_VARIABLES: readonly [FoundKey["provider"], string][] = [
+  ["anthropic", "ANTHROPIC_API_KEY"],
+  ["openai", "OPENAI_API_KEY"],
+  ["google", "GOOGLE_GENERATIVE_AI_API_KEY"],
+  ["google", "GEMINI_API_KEY"],
+  ["openrouter", "OPENROUTER_API_KEY"],
+];
+
+/** Default spending limit per run proposed with a paid provider (REQ-LLM-09/AC4). */
+export const DEFAULT_MAX_COST_USD = 5;
+
+/**
+ * Provider keys present in the environment or in the project's `.env.local`, by variable name only (REQ-LLM-09/AC1).
+ * Values are neither returned nor printed.
+ *
+ * @param env - The process environment.
+ * @param envFile - Text of `.env.local`, if any.
+ */
+export function findApiKeys(
+  env: Readonly<Record<string, string | undefined>>,
+  envFile: string | undefined,
+): FoundKey[] {
+  const inFile = new Set(
+    (envFile ?? "")
+      .split("\n")
+      .flatMap((line) => /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(line)?.[1] ?? []),
+  );
+  return KEY_VARIABLES.flatMap(([provider, variable]): FoundKey[] =>
+    env[variable] !== undefined && env[variable] !== ""
+      ? [{ provider, variable, where: "environment" }]
+      : inFile.has(variable)
+        ? [{ provider, variable, where: ".env.local" }]
+        : [],
+  );
+}
+
+/**
+ * The models proposed for a found key, for providers whose models have built-in profiles and prices
+ * (REQ-LLM-09/AC1+AC2); undefined for the others, which are set up by hand.
+ */
+export function proposeModels(key: FoundKey): ProposedModels | undefined {
+  if (key.provider !== "anthropic") return undefined;
+  return {
+    providers: { anthropic: { type: "anthropic", api_key: `secret://env/${key.variable}`, models: {} } },
+    // The auditor is another model than the author by default (REQ-VER-06); Haiku reads screenshots too.
+    roles: { default: "anthropic/claude-sonnet-5-5", auditor: "anthropic/claude-haiku-5-5" },
+    summary: "anthropic/claude-sonnet-5-5 for every role, anthropic/claude-haiku-5-5 as the auditor",
+  };
 }
 
 /**
@@ -175,10 +243,13 @@ export function renderInitConfig(d: DetectedProject, a: InitAnswers): { project:
     },
     repos: { [repo]: { host: alias, path: d.codeHost.path, ...(d.openapi ? { openapi: d.openapi } : {}) } },
     environments: { default: "local", allowlist: [new URL(a.envUrl).origin] },
-    models: {
-      providers: { local: { type: "ollama", base_url: "http://localhost:11434", models: {} } },
-      roles: { default: "local/qwen2.5-coder:32b" },
-    },
+    models: a.models
+      ? { providers: a.models.providers, roles: a.models.roles }
+      : {
+          providers: { local: { type: "ollama", base_url: "http://localhost:11434", models: {} } },
+          roles: { default: "local/qwen2.5-coder:32b" },
+        },
+    ...(a.maxCostUsd === undefined ? {} : { budget: { max_cost_usd: a.maxCostUsd } }),
     ...(d.composeFile && appService
       ? {
           services: Object.fromEntries(
@@ -225,6 +296,8 @@ export async function runInit(
     readonly jiraUrl?: string | undefined;
     readonly projectKey?: string | undefined;
     readonly envUrl?: string | undefined;
+    /** The process environment, to find provider keys by name (REQ-LLM-09/AC1). */
+    readonly env?: Readonly<Record<string, string | undefined>> | undefined;
   },
   io: CommandIO,
 ): Promise<number> {
@@ -248,11 +321,36 @@ export async function runInit(
     const jiraUrl = await ask("Jira URL (empty: tickets from files)", options.jiraUrl);
     const projectKey = (await ask("Jira project key", options.projectKey ?? "PROJ")).toUpperCase();
     const envUrl = await ask("URL of the test environment", options.envUrl ?? "http://localhost:3000");
+    // REQ-LLM-09/AC1: a provider key by its name; its models are written only after a yes.
+    const keys = findApiKeys(
+      options.env ?? {},
+      await readFile(join(io.cwd, ".env.local"), "utf8").catch(() => undefined),
+    );
+    let models: ProposedModels | undefined;
+    let maxCostUsd: number | undefined;
+    for (const key of keys) {
+      const proposed = proposeModels(key);
+      if (!proposed) {
+        io.write(
+          `Found ${key.variable} (${key.where}): ${key.provider} is not set up automatically yet; add it under models.providers with api_key: secret://env/${key.variable}, choose models in models.roles and declare cost_per_mtok for a cost in dollars.\n`,
+        );
+        continue;
+      }
+      if (models) continue;
+      io.write(`Found ${key.variable} (${key.where}): Anthropic can run every role.\n`);
+      const use = (await ask(`Use it for ${proposed.summary}? (y/n)`, "y")).toLowerCase();
+      if (!use.startsWith("y")) continue;
+      const limit = Number(await ask("Spending limit per run in US dollars", String(DEFAULT_MAX_COST_USD)));
+      models = proposed;
+      maxCostUsd = Number.isFinite(limit) && limit > 0 ? limit : DEFAULT_MAX_COST_USD;
+      io.write(`Models: ${proposed.summary}; at most $${maxCostUsd.toFixed(2)} per run\n`);
+    }
     const answers: InitAnswers = {
       jiraType: jiraUrl === "" ? "file" : jiraUrl.includes("atlassian.net") ? "cloud" : "datacenter",
       ...(jiraUrl === "" ? {} : { jiraUrl }),
       projectKey,
       envUrl,
+      ...(models ? { models, maxCostUsd } : {}),
     };
     const files = renderInitConfig(d, answers);
     await mkdir(join(qaDir, "envs"), { recursive: true });

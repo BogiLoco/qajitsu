@@ -1,8 +1,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
+import { runUsage, saveRunUsage } from "../run-usage.js";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
-import { buildChangeContext, createUsageTracker, runCliExplorer, type ExplorerReport } from "@qajitsu/agents";
+import { buildChangeContext, runCliExplorer, type ExplorerReport } from "@qajitsu/agents";
 import {
   CliExploreSessionSchema,
   ConfigError,
@@ -265,11 +266,7 @@ export async function runCliExplore(
       if (error === undefined && !aborted())
         try {
           modelId = (await session.models.forRole("explorer")).id;
-          const usage = createUsageTracker({
-            events,
-            budget: project.config.models.token_budget,
-            alreadyUsed: Number(ws.record.data["tokens"] ?? 0),
-          });
+          const usage = runUsage(ws, project, events);
           const result = await runCliExplorer(
             {
               ws,
@@ -297,7 +294,7 @@ export async function runCliExplore(
           report = result;
           summary = mask(result.summary);
           if (recorder.exhausted()) endReason = "step-budget";
-          await ws.update({ data: { ...ws.record.data, tokens: usage.total } });
+          await saveRunUsage(ws, usage);
         } catch (e) {
           if (stoppedBy()) endReason = "error";
           else if (timeBox.signal.aborted) endReason = "time-box";

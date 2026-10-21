@@ -30,7 +30,12 @@ const otherProject = async () => {
   return repo;
 };
 
-const run = async (cwd: string, args: string[], answers?: string[]) => {
+const run = async (
+  cwd: string,
+  args: string[],
+  answers?: string[],
+  env: Readonly<Record<string, string>> = {},
+) => {
   let out = "";
   let err = "";
   let exitCode = 0;
@@ -43,7 +48,7 @@ const run = async (cwd: string, args: string[], answers?: string[]) => {
     setExitCode: (c) => (exitCode = c),
     ...(answers ? { ask: () => Promise.resolve(queue.shift() ?? "") } : {}),
     ports: {
-      env: { QAJITSU_HOME: join(dirname(cwd), ".qajitsu-test") },
+      env: { QAJITSU_HOME: join(dirname(cwd), ".qajitsu-test"), ...env },
       home: dirname(cwd),
       now: () => new Date("2026-10-06T09:00:00Z"),
       random: () => 0,
@@ -197,5 +202,61 @@ describe("qajitsu init (REQ-GEN-03/AC3)", () => {
     expect((await run(bank, ["--project", "shop", "logs", "BANK-1"])).out.split("\n")[0]).toBe(
       "Project: shop (flag)",
     );
+  });
+});
+
+describe("start with an API key only (REQ-LLM-09/AC1+AC4)", () => {
+  const configOf = async (repo: string) =>
+    parseProjectConfig(parse(await readFile(join(repo, ".qa", "qa.project.yaml"), "utf8")) as unknown);
+
+  it("REQ-LLM-09/AC1+AC4: a key in .env.local is found by its name; after a yes the roles use it with a spending limit", async () => {
+    const repo = await otherProject();
+    await writeFile(
+      join(repo, ".env.local"),
+      "# keys\nexport ANTHROPIC_API_KEY=sk-ant-do-not-print\nOTHER=1\n",
+    );
+    const r = await run(repo, ["init", "pet-clinic"], ["", "VET", "http://localhost:8080", "", ""]);
+    expect(r.err).toBe("");
+    expect(r.out).toContain("Found ANTHROPIC_API_KEY (.env.local): Anthropic can run every role.");
+    expect(r.out).toContain(
+      "Models: anthropic/claude-sonnet-5-5 for every role, anthropic/claude-haiku-5-5 as the auditor; at most $5.00 per run",
+    );
+    expect(r.out + r.err).not.toContain("sk-ant-do-not-print");
+    const config = await configOf(repo);
+    expect(config.models).toMatchObject({
+      providers: { anthropic: { type: "anthropic", api_key: "secret://env/ANTHROPIC_API_KEY" } },
+      roles: { default: "anthropic/claude-sonnet-5-5", auditor: "anthropic/claude-haiku-5-5" },
+    });
+    expect(config.budget.max_cost_usd).toBe(5);
+  });
+
+  it("REQ-LLM-09/AC1: nothing changes without a yes; with --yes the key in the environment is used and the limit is the default", async () => {
+    const declined = await otherProject();
+    const no = await run(declined, ["init", "pet-clinic"], ["", "VET", "http://localhost:8080", "n"], {
+      ANTHROPIC_API_KEY: "sk-ant-x",
+    });
+    expect(no.out).toContain("Found ANTHROPIC_API_KEY (environment)");
+    const kept = await configOf(declined);
+    expect(kept.models.roles).toEqual({ default: "local/qwen2.5-coder:32b" });
+    expect(kept.budget.max_cost_usd).toBeUndefined();
+    const yes = await otherProject();
+    await run(yes, ["init", "pet-clinic", "--yes"], undefined, { ANTHROPIC_API_KEY: "sk-ant-x" });
+    expect((await configOf(yes)).models.roles["default"]).toBe("anthropic/claude-sonnet-5-5");
+    expect((await configOf(yes)).budget.max_cost_usd).toBe(5);
+  });
+
+  it("REQ-LLM-09/AC1: keys of providers without a built-in profile are named, with what to set by hand", async () => {
+    const repo = await otherProject();
+    const r = await run(repo, ["init", "pet-clinic", "--yes"], undefined, {
+      OPENAI_API_KEY: "sk-x",
+      OPENROUTER_API_KEY: "sk-or-x",
+    });
+    expect(r.out).toContain(
+      "Found OPENAI_API_KEY (environment): openai is not set up automatically yet; add it under models.providers with api_key: secret://env/OPENAI_API_KEY, choose models in models.roles and declare cost_per_mtok for a cost in dollars.",
+    );
+    expect(r.out).toContain(
+      "Found OPENROUTER_API_KEY (environment): openrouter is not set up automatically yet",
+    );
+    expect((await configOf(repo)).models.roles).toEqual({ default: "local/qwen2.5-coder:32b" });
   });
 });

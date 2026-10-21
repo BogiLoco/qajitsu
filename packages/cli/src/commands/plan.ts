@@ -4,7 +4,6 @@ import {
   AgentOutputError,
   TokenBudgetExceededError,
   buildChangeContext,
-  createUsageTracker,
   loadKnowledge,
   runAnalyst,
   runPlanner,
@@ -39,6 +38,7 @@ import { explorationLines } from "./explore-review.js";
 import { approvalCommenter, recordReviewApproval, runApprovalFlow } from "./approval-flow.js";
 import { publisherFor } from "./publish.js";
 import { createMasker } from "@qajitsu/steps";
+import { runUsage, saveRunUsage } from "../run-usage.js";
 import { exportRunTelemetry } from "./telemetry.js";
 import { anchorJournal } from "./verdict.js";
 import { approvalContext } from "./context-fingerprint.js";
@@ -100,12 +100,7 @@ const formatError = (error: unknown, mask: (t: string) => string): string => {
 const exitFor = (error: unknown): number => (error instanceof TokenBudgetExceededError ? 2 : 3);
 
 function stageDeps(session: RunSession, ports: RuntimePorts): AgentStageDeps & { save: () => Promise<void> } {
-  const used = Number(session.ws.record.data["tokens"] ?? 0);
-  const usage = createUsageTracker({
-    events: session.events,
-    budget: session.project.config.models.token_budget,
-    alreadyUsed: used,
-  });
+  const usage = runUsage(session.ws, session.project, session.events);
   return {
     ws: session.ws,
     models: session.models,
@@ -114,11 +109,7 @@ function stageDeps(session: RunSession, ports: RuntimePorts): AgentStageDeps & {
     now: ports.now,
     maskJson: (v) => session.masker.maskJson(v),
     maskText: (t) => session.masker.maskText(t),
-    save: async () => {
-      await session.ws.update({
-        data: { ...session.ws.record.data, tokens: usage.total, costUsd: Number(usage.costUsd.toFixed(6)) },
-      });
-    },
+    save: () => saveRunUsage(session.ws, usage),
   };
 }
 
@@ -304,6 +295,7 @@ export async function runPlan(
   const masker = createMasker();
   let session: RunSession | undefined;
   let closeKnowledge: () => Promise<void> = () => Promise.resolve();
+  let saveUsage: (() => Promise<void>) | undefined;
   try {
     session = await openSession(rawKey, options.run, io.cwd, ports, masker);
     const ws = session.ws;
@@ -324,6 +316,7 @@ export async function runPlan(
     const docs = await openRunKnowledge(session.project, masker, session.resolveSecret, io, ports);
     closeKnowledge = docs.close;
     const deps = { ...stageDeps(session, ports), ...(docs.access ? { knowledge: docs.access } : {}) };
+    saveUsage = deps.save;
     const depthOption = options.depth === undefined ? undefined : DepthSchema.safeParse(options.depth);
     if (depthOption && !depthOption.success)
       throw new ConfigError("PLAN_DEPTH_INVALID", "--depth must be smoke, standard or full.", {});
@@ -496,9 +489,11 @@ export async function runPlan(
     if (error instanceof AgentOutputError)
       io.writeError("The model did not produce a valid result; nothing was guessed.\n");
     if (error instanceof TokenBudgetExceededError && session) {
+      // What the calls before the stop cost belongs to the run (REQ-LLM-09/AC4).
+      await saveUsage?.();
       await session.ws.update({
         status: "failed",
-        data: { ...session.ws.record.data, blocked: { reason: "TOKEN_BUDGET_EXCEEDED" } },
+        data: { ...session.ws.record.data, blocked: { reason: error.code } },
       });
     }
     io.writeError(formatError(error, (t) => masker.maskText(t)));

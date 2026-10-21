@@ -1,4 +1,5 @@
 import type { KnowledgePorts } from "./knowledge.js";
+import { runUsage, saveRunUsage } from "../run-usage.js";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { compareDeployedSha, createRemoteEnvProvider } from "@qajitsu/adapter-env-remote";
@@ -17,7 +18,7 @@ import {
   compareImages,
   createPlaywrightBrowserFactory,
 } from "@qajitsu/adapter-runner-web";
-import { buildChangeContext, checkSpec, createUsageTracker, healSpec, runAuthor } from "@qajitsu/agents";
+import { buildChangeContext, checkSpec, healSpec, runAuthor } from "@qajitsu/agents";
 import {
   AnalysisSchema,
   ConfigError,
@@ -797,11 +798,7 @@ async function executeCases(
   } else if (missing.length > 0) {
     io.write(`Writing specs for ${missing.map((c) => c.id).join(", ")}…\n`);
     const analysis = AnalysisSchema.parse(JSON.parse(await readFile(ws.path("analysis.json"), "utf8")));
-    const usage = createUsageTracker({
-      events,
-      budget: project.config.models.token_budget,
-      alreadyUsed: Number(ws.record.data["tokens"] ?? 0),
-    });
+    const usage = runUsage(ws, project, events, { costBudget: false });
     const deps = {
       ws,
       models: session.models,
@@ -833,12 +830,11 @@ async function executeCases(
       Object.keys(env.profile.accounts),
       () =>
         timeStop() ??
-        (budget.max_cost_usd !== undefined &&
-        Number(ws.record.data["costUsd"] ?? 0) + usage.costUsd >= budget.max_cost_usd
+        (budget.max_cost_usd !== undefined && usage.costUsd >= budget.max_cost_usd
           ? `the run's cost budget ($${budget.max_cost_usd.toFixed(2)}) was reached`
           : undefined),
     );
-    await ws.update({ data: { ...ws.record.data, tokens: usage.total } });
+    await saveRunUsage(ws, usage);
     for (const a of authored)
       if (a.skipped !== undefined) notRun.set(a.caseId, a.skipped);
       else if (!a.file)
@@ -975,11 +971,7 @@ async function executeCases(
     // REQ-EXEC-09 + REQ-EXEC-22/AC4: web and mobile cases are healed; API cases have no selectors.
     const type = plan.cases.find((c) => c.id === caseId)?.type;
     if (regression.success || (type !== "web" && type !== "mobile")) return undefined;
-    const usage = createUsageTracker({
-      events,
-      budget: project.config.models.token_budget,
-      alreadyUsed: Number(ws.record.data["tokens"] ?? 0),
-    });
+    const usage = runUsage(ws, project, events, { costBudget: false });
     const dom = failed.evidence.find((e) => e.name === "failure.html")?.content;
     const recorded = failed.evidence.find((e) => e.name === "failure-elements.json")?.content;
     let elements: UiElementFact[] | undefined;

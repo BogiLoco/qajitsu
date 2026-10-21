@@ -1,8 +1,9 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { runUsage, saveRunUsage } from "../run-usage.js";
 import { join, relative, sep } from "node:path";
 import { runCases, type RunCasesOptions } from "@qajitsu/adapter-runner-api";
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
-import { createUsageTracker, runAuditor, runBlockedHints, runTriage, type AuditInput } from "@qajitsu/agents";
+import { runAuditor, runBlockedHints, runTriage, type AuditInput } from "@qajitsu/agents";
 import {
   AuditRecordSchema,
   CanaryRecordSchema,
@@ -86,11 +87,7 @@ export async function auditRun(session: RunSession, now: () => Date): Promise<Au
       texts[m.path] = masker.maskText((await readFile(ws.path("evidence", m.path), "utf8")).slice(0, 4000));
     }
   }
-  const usage = createUsageTracker({
-    events,
-    budget: project.config.models.token_budget,
-    alreadyUsed: Number(ws.record.data["tokens"] ?? 0),
-  });
+  const usage = runUsage(ws, project, events);
   let record: AuditRecord;
   try {
     const result = await runAuditor(
@@ -115,7 +112,7 @@ export async function auditRun(session: RunSession, now: () => Date): Promise<Au
     };
     events.emit("audit", SYSTEM, "audit.failed", { mode, error: record.error });
   }
-  await ws.update({ data: { ...ws.record.data, tokens: usage.total } });
+  await saveRunUsage(ws, usage);
   await writeRecord(session, "audit.json", record);
   return record;
 }
@@ -253,11 +250,7 @@ export async function triageRun(session: RunSession, now: () => Date): Promise<T
     logs[name] = masker.maskText(
       (await readFile(ws.path("logs", name), "utf8").catch(() => "")).slice(-3000),
     );
-  const usage = createUsageTracker({
-    events,
-    budget: project.config.models.token_budget,
-    alreadyUsed: Number(ws.record.data["tokens"] ?? 0),
-  });
+  const usage = runUsage(ws, project, events);
   let record: TriageRecord;
   try {
     const answer = await runTriage(
@@ -285,7 +278,7 @@ export async function triageRun(session: RunSession, now: () => Date): Promise<T
     };
     events.emit("triage", SYSTEM, "triage.failed", { error: record.error });
   }
-  await ws.update({ data: { ...ws.record.data, tokens: usage.total } });
+  await saveRunUsage(ws, usage);
   await writeRecord(session, "triage.json", record);
   return record;
 }
@@ -322,11 +315,7 @@ export async function blockedRun(session: RunSession, now: () => Date): Promise<
     logs[name] = masker.maskText(
       (await readFile(ws.path("logs", name), "utf8").catch(() => "")).slice(-3000),
     );
-  const usage = createUsageTracker({
-    events,
-    budget: project.config.models.token_budget,
-    alreadyUsed: Number(ws.record.data["tokens"] ?? 0),
-  });
+  const usage = runUsage(ws, project, events);
   let record: BlockedRecord;
   try {
     const answer = await runBlockedHints(
@@ -364,7 +353,7 @@ export async function blockedRun(session: RunSession, now: () => Date): Promise<
     };
     events.emit("triage", SYSTEM, "blocked.failed", { error: record.error });
   }
-  await ws.update({ data: { ...ws.record.data, tokens: usage.total } });
+  await saveRunUsage(ws, usage);
   await writeRecord(session, "blocked.json", record);
   return record;
 }
