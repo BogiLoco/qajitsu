@@ -149,7 +149,7 @@ qj setup               # installs what .qa/ needs (browsers, Docker, Java, Andro
                        # at tested versions into ~/.qajitsu/toolchain; your compatible tools are used as they are
 qj doctor --online     # checks Node, config, secrets, Docker, mobile tooling, ticket system and code host access;
                        # lists the version of every tool and of the application under test (--fix runs qj setup)
-qj doctor --models     # optional: one real call per configured model role
+qj doctor --models     # optional: one real call per configured model role (and the approval model); only models
 qj knowledge add docs/ # optional: documentation the agents may search (see "Knowledge base")
 ```
 

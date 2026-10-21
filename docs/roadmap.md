@@ -281,7 +281,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-CI-06](requirements/ci-cd.md#req-ci-06--toolchain-in-pipelines) Toolchain in pipelines (could, in-progress, AC 1/2)
 - [REQ-GEN-06](requirements/generic.md#req-gen-06--toolchain-setup) Toolchain setup (should, implemented, AC 9/9)
 - [REQ-GEN-07](requirements/generic.md#req-gen-07--external-agent-mode-claude-code-subagents-do-the-agents-work) External agent mode: Claude Code subagents do the agents' work (should, proposed, AC 0/6)
-- [REQ-GEN-08](requirements/generic.md#req-gen-08--consistent-doctor-output-and-exit-codes) Consistent `doctor` output and exit codes (should, proposed, AC 0/3)
+- [REQ-GEN-08](requirements/generic.md#req-gen-08--consistent-doctor-output-and-exit-codes) Consistent `doctor` output and exit codes (should, implemented, AC 3/3)
 - [REQ-NFR-09](requirements/non-functional.md#req-nfr-09--exploratory-pass-over-every-command-before-a-release) Exploratory pass over every command before a release (should, proposed, AC 0/4)
 - [REQ-PRJ-09](requirements/projects.md#req-prj-09--export-and-import-of-a-project-profile) Export and import of a project profile (could, implemented, AC 2/2)
 - [REQ-KNOW-12](requirements/knowledge.md#req-know-12--online-sources) Online sources (could, implemented, AC 2/2)

@@ -1,7 +1,8 @@
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createBuildProject } from "../../../tests/support/cli-build.js";
+import type { Turn } from "../../../tests/support/mock-model.js";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -100,5 +101,67 @@ describe("versions in doctor (REQ-GEN-03/AC4+AC5)", () => {
     expect(r.out).toMatch(
       /✔ android app +built in the shop worktree of each run: node android\/build\.mjs → android\/app\.apk/,
     );
+  }, 120_000);
+});
+
+describe("consistent doctor output and exit codes (REQ-GEN-08)", () => {
+  const brokenMobile =
+    "\nmobile:\n  appium: { bin: ./missing-appium }\n  android: { app: { source: path, repo: shop, path: a.apk }, app_id: a.b, sdk_root: /nonexistent/sdk, emulator: { avd: qa, system_image: 'system-images;android-34;google_apis;arm64-v8a' } }\n";
+  const withConfig = async (p: { project: string }, extra: string) => {
+    const yaml = join(p.project, ".qa", "qa.project.yaml");
+    await writeFile(yaml, (await readFile(yaml, "utf8")) + extra);
+  };
+
+  it("REQ-GEN-08/AC1: a missing Android SDK and Appium are reported once each, with the command that installs them", async () => {
+    const p = await createBuildProject();
+    cleanups.push(p.cleanup);
+    await withConfig(p, brokenMobile);
+    const r = await p.run(["doctor"]);
+    expect(r.exitCode).toBe(3);
+    const checks = r.out.split("\nVersions:")[0] ?? "";
+    expect(checks).toMatch(
+      /✘ android: missing \/nonexistent\/sdk\/platform-tools\/adb.*; install: qj setup --only android/,
+    );
+    expect(checks).toMatch(
+      /✘ appium: .*missing-appium not found; install: qj setup --only appium,uiautomator2/,
+    );
+    expect(checks).not.toContain("✘ android sdk:");
+    expect(checks).not.toContain("✘ emulator:");
+    expect(checks).not.toContain("✘ appium uiautomator2:");
+    // The versions table still lists them, pointing at the check above instead of repeating it.
+    expect(r.out).toMatch(/✘ android sdk +not found \(see android above\)/);
+    expect(r.out).toMatch(/✘ appium uiautomator2 +not found \(see appium above\)/);
+  }, 120_000);
+
+  it("REQ-GEN-08/AC2: doctor --models judges only the models, the approval flow's model included", async () => {
+    const p = await createBuildProject();
+    cleanups.push(p.cleanup);
+    await withConfig(p, `${brokenMobile}approval: { flow: [model, person], model: mock/approver }\n`);
+    const probe: Turn[] = [{ tools: [{ name: "ping", input: { value: "ok" } }] }, { text: "done" }];
+    const r = await p.run(["doctor", "--models"], Array.from({ length: 12 }, () => probe).flat());
+    expect(r.out).toContain("✔ approver: mock/approver ok");
+    expect(r.out).not.toContain("android");
+    expect(r.exitCode).toBe(0);
+    const both = await p.run(["doctor", "--models", "--online"]);
+    expect(both.exitCode).toBe(3);
+    expect(both.err).toContain(
+      "--models checks only the models: run 'qj doctor --online' or 'qj doctor --fix' on its own.",
+    );
+  }, 120_000);
+
+  it("REQ-GEN-08/AC3: a .env.local others can read is a warning with the fix, never with its content", async () => {
+    const p = await createBuildProject();
+    cleanups.push(p.cleanup);
+    const file = join(p.project, ".env.local");
+    await writeFile(file, "SOME_TOKEN=do-not-print-me\n", { mode: 0o644 });
+    await chmod(file, 0o644);
+    const open = await p.run(["doctor"]);
+    expect(open.out).toContain(
+      `! secrets file: ${file} can be read by other users of this machine (mode 644); fix: chmod 600 ${file}`,
+    );
+    expect(open.out).not.toContain("do-not-print-me");
+    expect(open.exitCode).toBe(0);
+    await chmod(file, 0o600);
+    expect((await p.run(["doctor"])).out).not.toContain("secrets file");
   }, 120_000);
 });

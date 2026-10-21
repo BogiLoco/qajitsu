@@ -1,12 +1,12 @@
 import { execFile } from "node:child_process";
-import { access, readFile, readdir } from "node:fs/promises";
+import { access, readFile, readdir, stat } from "node:fs/promises";
 import { devNull, platform } from "node:os";
 import { join, resolve } from "node:path";
 import { androidSdkRoot } from "@qajitsu/adapter-runner-mobile";
 import { createMasker } from "@qajitsu/steps";
 import { parse } from "yaml";
 import { buildAdapters, createCliSecretResolver, type RuntimePorts } from "./adapters.js";
-import type { DoctorCheck } from "./doctor.js";
+import { secretFileCheck, type DoctorCheck } from "./doctor.js";
 import { createCliLogger } from "./logger.js";
 import type { LoadedProject } from "./project.js";
 
@@ -71,6 +71,14 @@ export async function projectChecks(
         : `cannot resolve ${missing.join(", ")}`,
   });
 
+  // REQ-GEN-08/AC3: the file the env secret provider reads must not be readable by others.
+  const envFile = join(project.projectDir, ".env.local");
+  const envStat = await stat(envFile).catch(() => undefined);
+  const exposed = envStat
+    ? secretFileCheck({ path: envFile, mode: envStat.mode, platform: platform() })
+    : undefined;
+  if (exposed) checks.push(exposed);
+
   const services = Object.values(project.config.services);
   if (services.some((s) => s.kind !== "process")) {
     const version = await run("docker", ["version", "--format", "{{.Server.Version}}"]);
@@ -102,7 +110,7 @@ export async function projectChecks(
       detail:
         missingTools.length === 0
           ? `SDK ${sdk}`
-          : `missing ${missingTools.join(", ")}; qj setup installs them`,
+          : `missing ${missingTools.join(", ")}; install: qj setup --only android`,
     });
   }
   if (mobile && !mobile.appium.url) {
@@ -114,7 +122,13 @@ export async function projectChecks(
     checks.push({
       name: "appium",
       ok: version !== undefined,
-      detail: version ? `Appium ${version}` : `${bin} not found; qj setup installs it`,
+      detail: version
+        ? `Appium ${version}`
+        : `${bin} not found; install: qj setup --only ${[
+            "appium",
+            ...(mobile.android ? ["uiautomator2"] : []),
+            ...(mobile.ios && !mobile.ios.farm ? ["xcuitest"] : []),
+          ].join(",")}`,
     });
   }
   if (mobile?.ios && !mobile.ios.farm)

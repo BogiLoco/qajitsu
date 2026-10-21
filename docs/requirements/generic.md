@@ -115,16 +115,19 @@ code as its own agents' output, executes, and computes the verdict. A person sti
 
 ### REQ-GEN-08 · Consistent `doctor` output and exit codes
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-GEN-03, REQ-CFG-01, REQ-ENV-06
 
-Found while testing every command: `qj doctor` listed some Android lines twice, its variants did not use the same exit
-codes, and it said nothing about a secrets file other users of the machine could read.
+- Note: accepted by the owner on 2026-10-21 with AC2 made precise (a model check fails only on models) and implemented.
+
+Found while testing every command: `qj doctor` listed a missing Android SDK, emulator and Appium two or three times,
+`doctor --models` failed on a missing Android SDK although every model answered, and it said nothing about a secrets
+file other users of the machine could read.
 
 **Acceptance criteria**
 
-- [ ] AC1: Every check and every tool appears once in the output, also when a tool is found in several places (e.g. the Android SDK through `ANDROID_HOME` and QAJitsu's toolchain); the line says which one is used.
-- [ ] AC2: `doctor`, `doctor --models`, `doctor --online` and `doctor --fix` share one exit code rule: `0` no errors (information and warnings allowed), `3` at least one error; the rule is documented and tested for each variant.
-- [ ] AC3: On macOS and Linux `doctor` warns when `.env.local` (or another file the env secret provider reads) can be read by the group or others, with `chmod 600 <file>` as the fix; it never prints the file's content.
+- [x] AC1: A missing tool is an error once, with the command that installs it: a check that already reports it (the Android SDK for its emulator, Appium for its drivers, Docker for Compose) is not repeated by another check, and the versions table points at that check instead of repeating the error.
+- [x] AC2: `doctor --models` checks only Node.js, the project config and the models (every role's and the approval flow's model), so tooling a model check does not need cannot fail it; combined with `--online` or `--fix` it is refused with how to run them. Every variant uses one exit code rule: `0` no errors (information and warnings allowed), `3` at least one error; documented and tested.
+- [x] AC3: On macOS and Linux `doctor` warns when `.env.local` (or another file the env secret provider reads) can be read by the group or others, with `chmod 600 <file>` as the fix; it never prints the file's content.

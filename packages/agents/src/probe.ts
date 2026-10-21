@@ -6,7 +6,8 @@ import { AGENT_ROLES, missingCapabilities } from "./roles.js";
 
 /** Result of probing the model of one role (REQ-LLM-03/AC2). */
 export interface ModelProbe {
-  readonly role: ModelRole;
+  /** The role, or `approver` for the model step of the plan approval flow (REQ-PLAN-10). */
+  readonly role: ModelRole | "approver";
   readonly model: string;
   readonly reachable: boolean;
   /** Whether the model actually called a tool when asked to; undefined when not probed. */
@@ -22,21 +23,33 @@ export interface ModelProbe {
  *
  * @param models - Model registry.
  * @param roles - Configured role names (keys of `models.roles`), `default` expands to unassigned roles.
+ * @param signal - Cancels the probes.
+ * @param approver - The model reference of `approval.model`, probed as the `approver` (REQ-PLAN-10, REQ-GEN-08).
  */
 export async function probeModels(
   models: ModelRegistry,
   roles: readonly string[],
   signal?: AbortSignal,
+  approver?: string,
 ): Promise<ModelProbe[]> {
-  const wanted = roles.includes("default") ? MODEL_ROLES : MODEL_ROLES.filter((r) => roles.includes(r));
+  const wanted: (ModelRole | "approver")[] = [
+    ...(roles.includes("default") ? MODEL_ROLES : MODEL_ROLES.filter((r) => roles.includes(r))),
+    ...(approver === undefined ? [] : (["approver"] as const)),
+  ];
   const results: ModelProbe[] = [];
   for (const role of wanted) {
     let id = "?";
     try {
-      const resolved = await models.forRole(role);
+      const resolved =
+        role === "approver" ? await models.resolve(approver ?? "") : await models.forRole(role);
       id = resolved.id;
       const def = AGENT_ROLES.find((r) => r.role === role);
-      const missing = def ? missingCapabilities(def, resolved.profile) : [];
+      // ADR-0010: the approver checks the planner's work, so it must be another model (REQ-PLAN-10/AC2).
+      const planner = role === "approver" ? (await models.forRole("planner")).id : undefined;
+      const missing = [
+        ...(def ? missingCapabilities(def, resolved.profile) : []),
+        ...(planner === resolved.id ? [`another model than the planner (both are ${planner})`] : []),
+      ];
       let called = false as boolean;
       await generateText({
         model: resolved.model,

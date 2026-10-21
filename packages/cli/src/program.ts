@@ -60,7 +60,7 @@ import { runMap } from "./commands/map.js";
 import { runCiComment, runCiDetect, runCiPublishPlan } from "./commands/ci.js";
 import { loadProject, type LoadedProject } from "./project.js";
 import type { ModelPorts } from "./session.js";
-import { formatDoctor, runDoctor } from "./doctor.js";
+import { formatDoctor, reportedBy, runDoctor } from "./doctor.js";
 import { projectChecks } from "./doctor-project.js";
 import { appVersions, formatAppVersions } from "./app-versions.js";
 import { formatToolVersions, toolVersions } from "./versions.js";
@@ -429,6 +429,42 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--fix", "run qj setup for the tools doctor finds missing")
     .option("--yes", "with --fix: no questions, licences accepted on your behalf")
     .action(async (options: { models?: boolean; online?: boolean; fix?: boolean; yes?: boolean }) => {
+      /** Probes every role's model and the approval flow's model (REQ-LLM-03/AC2, REQ-GEN-08/AC2). */
+      const probeConfiguredModels = async (): Promise<boolean> => {
+        if (!io.ports) return false;
+        try {
+          const project = await loadProject(io.cwd, resolved);
+          const { createModelRegistry } = await import("@qajitsu/models");
+          const { createMasker } = await import("@qajitsu/steps");
+          const { createCliSecretResolver } = await import("./adapters.js");
+          const models = createModelRegistry({
+            config: project.config.models,
+            resolveSecret: createCliSecretResolver(project, io.ports, createMasker()),
+            fetch: io.ports.fetch,
+            ...(io.ports.extraModels ? { extra: io.ports.extraModels } : {}),
+          });
+          const approval = project.config.approval;
+          const probes = await probeModels(
+            models,
+            Object.keys(project.config.models.roles),
+            undefined,
+            approval.flow.includes("model") ? approval.model : undefined,
+          );
+          io.write(`${formatProbes(probes)}\n`);
+          return probes.every((p) => p.reachable && p.missing.length === 0);
+        } catch (error) {
+          io.write(`✘ models: ${error instanceof Error ? error.message : String(error)}\n`);
+          return false;
+        }
+      };
+      // REQ-GEN-08/AC2: --models judges only the models, so a missing phone tool does not fail a model check.
+      if (options.models === true && (options.online === true || options.fix === true)) {
+        io.writeError(
+          "--models checks only the models: run 'qj doctor --online' or 'qj doctor --fix' on its own.\n",
+        );
+        io.setExitCode(3);
+        return;
+      }
       const checks = runDoctor({
         nodeVersion: io.nodeVersion,
         hasProjectConfig:
@@ -440,6 +476,12 @@ export function createProgram(version: string, io: ProgramIO): Command {
           ok: false,
           detail: projectError instanceof Error ? projectError.message : "unknown error",
         });
+      if (options.models === true) {
+        io.write(`${formatDoctor(checks)}\n`);
+        const modelsOk = checks.every((c) => c.ok) && (await probeConfiguredModels());
+        io.setExitCode(modelsOk ? 0 : 3);
+        return;
+      }
       if (checks.every((c) => c.ok) && io.ports) {
         // REQ-GEN-03/AC2: secrets, Docker, Android/Appium and, with --online, Jira and code hosts.
         try {
@@ -473,7 +515,12 @@ export function createProgram(version: string, io: ProgramIO): Command {
       });
       // docker and appium are already checks of their own above; the others fail here when needed and missing.
       for (const t of tools)
-        if (t.needed && t.version === undefined && !checks.some((c) => c.name === t.name))
+        if (
+          t.needed &&
+          t.version === undefined &&
+          !checks.some((c) => c.name === t.name) &&
+          reportedBy(t.name, checks) === undefined
+        )
           checks.push({
             name: t.name,
             ok: false,
@@ -501,7 +548,9 @@ export function createProgram(version: string, io: ProgramIO): Command {
               missing: [],
             }))
           : undefined;
-      io.write(`${formatDoctor(checks)}\n\n${formatToolVersions(tools)}\n`);
+      io.write(
+        `${formatDoctor(checks)}\n\n${formatToolVersions(tools, (name) => reportedBy(name, checks))}\n`,
+      );
       if (toolchain && toolchain.lines.length > 0)
         io.write(`\nToolchain (qj setup):\n${toolchain.lines.join("\n")}\n`);
       if (loaded) io.write(`\n${formatAppVersions(app)}\n`);
@@ -520,26 +569,6 @@ export function createProgram(version: string, io: ProgramIO): Command {
           const toolChecks = new Set([...TOOL_CHECKS, ...tools.map((t) => t.name)]);
           ok = code === 0 && checks.filter((c) => !toolChecks.has(c.name)).every((c) => c.ok);
           if (code === 0) io.write("Run qj doctor again to see the result.\n");
-        }
-      }
-      if (options.models === true && io.ports) {
-        try {
-          const project = await loadProject(io.cwd, resolved);
-          const { createModelRegistry } = await import("@qajitsu/models");
-          const { createMasker } = await import("@qajitsu/steps");
-          const { createCliSecretResolver } = await import("./adapters.js");
-          const models = createModelRegistry({
-            config: project.config.models,
-            resolveSecret: createCliSecretResolver(project, io.ports, createMasker()),
-            fetch: io.ports.fetch,
-            ...(io.ports.extraModels ? { extra: io.ports.extraModels } : {}),
-          });
-          const probes = await probeModels(models, Object.keys(project.config.models.roles));
-          io.write(`${formatProbes(probes)}\n`);
-          ok = ok && probes.every((p) => p.reachable && p.missing.length === 0);
-        } catch (error) {
-          io.write(`✘ models: ${error instanceof Error ? error.message : String(error)}\n`);
-          ok = false;
         }
       }
       io.setExitCode(ok ? 0 : 3);

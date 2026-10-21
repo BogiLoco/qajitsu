@@ -125,13 +125,21 @@ A third section, **Toolchain (qj setup)**, shows what `qj setup` would do for ev
 use yours, use QAJitsu's, install (with version, size and source), start Docker, or what you have to do. A tool of
 yours that is not compatible is information (`!`), with the compatible range and the fix; it is never changed.
 
-- `--models`: probe the configured model of every role (makes real model calls)
+- `--models`: probe the configured model of every role and the model of the approval flow, which must be another
+  model than the planner's (makes real model calls);
+  only Node.js, the project config and the models are checked then, so a missing Android SDK does not fail it; it
+  cannot be combined with `--online` or `--fix`
 - `--online`: check access to Jira, every code host and every toolchain source (npm registry, Playwright host, Java and
   Android mirrors, Homebrew; makes real requests)
 - `--fix`: run `qj setup --only <the tools found missing>` (REQ-GEN-06/AC9)
 - `--yes`: with `--fix`, no questions; licences are accepted on your behalf and listed
 
-Exit codes: `0` every check passed, `3` at least one check failed (after `--fix`: `0` when setup succeeded and every
+A missing tool is reported once: when a check already reports it (the Android SDK for its emulator, Appium for its
+drivers, Docker for Compose), the versions table says `see android above` instead of repeating it. A `.env.local`
+other users of the machine can read is a warning (`!`) with `chmod 600 <file>` as the fix; its content is never
+printed (REQ-GEN-08).
+
+Exit codes: `0` every check passed (warnings allowed), `3` at least one check failed (after `--fix`: `0` when setup succeeded and every
 other check passed).
 
 ### `qajitsu setup`
