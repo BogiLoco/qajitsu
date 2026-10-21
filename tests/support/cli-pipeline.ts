@@ -157,7 +157,7 @@ export async function createDemoPipeline(
     })
       .exitOverride()
       .parseAsync(["node", "qj", ...args]);
-    return { out, err, exitCode };
+    return { out, err, exitCode, model };
   };
   const runDir = join(home, "runs", ticket, "20261003-1046-aaaa");
   /** fetch, plan, approve, copy fixture specs and run. */

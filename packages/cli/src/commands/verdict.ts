@@ -69,6 +69,19 @@ export interface RunEnvironment {
   readonly stubs?: readonly string[] | undefined;
 }
 
+/**
+ * How much code the run could read, when the project does not share all of it (REQ-CTX-10/AC4), for the report
+ * headers: `code not shared (code.access: none)` or `metadata only: shop pr 12 @ 9f0fe9cae8f1`.
+ */
+export function codeAccessNote(data: Readonly<Record<string, unknown>>): string | undefined {
+  const access = data["codeAccess"] as
+    { level?: string; changes?: { repo: string; sha: string }[] } | undefined;
+  if (!access || access.level === "full" || access.level === undefined) return undefined;
+  if (access.level === "none") return "code not shared (code.access: none)";
+  const changes = (access.changes ?? []).map((c) => `${c.repo} @ ${c.sha.slice(0, 12)}`).join(", ");
+  return `metadata only, no code (code.access: metadata)${changes ? `: ${changes}` : ""}`;
+}
+
 /** Statuses, gates and rendered reports of a run, all computed from files on disk (invariants 1, 6, 7). */
 export interface RunVerdict {
   readonly plan: Plan;
@@ -570,6 +583,7 @@ export async function computeVerdict(
       attempts,
       environment,
       repos: Object.fromEntries(Object.entries(ws.record.repos).map(([k, v]) => [k, v.sha])),
+      ...(codeAccessNote(ws.record.data) ? { codeAccess: codeAccessNote(ws.record.data) } : {}),
       ...(testedApp.success ? { app: testedApp.data } : {}),
       ...(versions ? { versions } : {}),
       gates: g,

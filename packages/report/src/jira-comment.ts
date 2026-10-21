@@ -29,6 +29,8 @@ export interface CommentModel {
   };
   /** Tested repositories and SHAs (REQ-CTX-04/AC3). */
   readonly repos: Readonly<Record<string, string>>;
+  /** How much code the project shares, when not all of it (REQ-CTX-10/AC4), e.g. `metadata only: shop pr 12 @ 9f0fe9ca`. */
+  readonly codeAccess?: string | undefined;
   /** Versions of the tools the run used (REQ-OBS-10/AC2). */
   readonly versions?: Readonly<Record<string, string>> | undefined;
   readonly executor: string;
@@ -125,7 +127,7 @@ const header = (m: CommentModel): string[] => [
     Object.entries(m.repos)
       .map(([k, v]) => `${k}@${v.slice(0, 12)}`)
       .join(", ") || "–"
-  }`,
+  }${m.codeAccess ? ` (${m.codeAccess})` : ""}`,
   `Plan v${String(m.planVersion)} (sha256 ${m.planSha256.slice(0, 12)}) · executed by ${m.executor} with QAJitsu`,
   ...(m.approvalNote ? [m.approvalNote] : []),
   ...(m.decision ? [m.decision] : []),

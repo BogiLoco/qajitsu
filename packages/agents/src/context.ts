@@ -116,6 +116,18 @@ export interface ChangeContext {
     readonly diffInlined: boolean;
   }[];
   readonly knowledge: readonly { readonly name: string; readonly text: string }[];
+  /**
+   * How much of the code the project shares (REQ-CTX-10). With `metadata` the changes are described by title,
+   * description and file names only; with `none` there is nothing about the change but the ticket.
+   */
+  readonly codeAccess?: {
+    readonly level: "full" | "metadata" | "none";
+    readonly changes: readonly {
+      readonly alias: string;
+      readonly change: Pick<ChangeRef, "kind" | "id" | "headSha" | "title" | "description" | "url">;
+      readonly files: readonly string[];
+    }[];
+  };
   /** Tests repositories of the run with their code index (REQ-CTX-06); not part of the change. */
   readonly testsRepos: readonly { readonly alias: string; readonly index: TestsRepoIndex }[];
   /**
@@ -285,9 +297,28 @@ export async function buildChangeContext(
     for (const f of await uiSources(ws.path("repos", repo.alias)))
       sources.push({ path: `${repo.alias}/${f.path}`, text: f.text });
   const ui = buildUiInventory(sources, [], { testIdAttribute: options.testIdAttribute });
+  // REQ-CTX-10: a project that shares no code, or only the description of its changes.
+  const access = ws.record.data["codeAccess"] as
+    { level: "full" | "metadata" | "none"; changes: { repo: string }[] } | undefined;
+  const codeAccess =
+    access && access.level !== "full"
+      ? {
+          level: access.level,
+          changes: await Promise.all(
+            access.changes.map(async (c) => {
+              const meta = JSON.parse(await readFile(ws.path("repos", `${c.repo}.meta.json`), "utf8")) as {
+                change: Pick<ChangeRef, "kind" | "id" | "headSha" | "title" | "description" | "url">;
+                files: string[];
+              };
+              return { alias: c.repo, change: meta.change, files: meta.files };
+            }),
+          ),
+        }
+      : undefined;
   return {
     ticket,
     repos,
+    ...(codeAccess ? { codeAccess } : {}),
     knowledge,
     testsRepos,
     explorations,
@@ -357,6 +388,29 @@ export function renderChangeContext(
     ...t.comments.map((c) => `- ${c.author}: ${c.body}`),
   ].join("\n");
   const parts = ["## Ticket", untrusted("ticket", ticketText)];
+  // REQ-CTX-10: say plainly what is not there, so no agent looks for code or cites a diff.
+  if (context.codeAccess?.level === "none")
+    parts.push(
+      "## Code access: none\nThe project shares no code: there is no diff, no pull request and no repository. Plan from the ticket, the documentation and what the environment shows; do not cite diff sources.",
+    );
+  if (context.codeAccess?.level === "metadata") {
+    parts.push(
+      "## Code access: metadata only\nThe project shares how its changes are described, not their code: no diff and no repository. Do not cite diff sources.",
+    );
+    for (const c of context.codeAccess.changes)
+      parts.push(
+        `### Change of '${c.alias}' (${c.change.kind} ${c.change.id} @ ${c.change.headSha.slice(0, 12)})`,
+        untrusted(
+          `repos/${c.alias}.meta.json`,
+          [
+            `Title: ${c.change.title ?? "-"}`,
+            `Description: ${c.change.description ?? "-"}`,
+            `Changed files (${String(c.files.length)}):`,
+            ...c.files.map((f) => `- ${f}`),
+          ].join("\n"),
+        ),
+      );
+  }
   for (const repo of context.repos) {
     parts.push(
       `## Repository '${repo.alias}' (${repo.change.kind} ${repo.change.id} @ ${repo.change.headSha.slice(0, 12)}; code under repos/${repo.alias}/)`,

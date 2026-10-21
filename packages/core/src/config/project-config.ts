@@ -538,6 +538,14 @@ export const ProjectConfigSchema = z.strictObject({
     })
     .default({}),
   /**
+   * How much of the application's code QAJitsu may read (REQ-CTX-10): `full` checks out the repositories at the
+   * change, `metadata` keeps only the PR/MR title, description and the list of changed files, `none` reads nothing
+   * from the code hosts. The tests repository (`role: tests`) is QA's own and is fetched in every mode.
+   */
+  code: z
+    .strictObject({ access: z.enum(["full", "metadata", "none"]).default("full") })
+    .default({ access: "full" }),
+  /**
    * GO / NO-GO policy (REQ-PUB-10/AC3): statuses of medium and low priority cases that do not stand in the way of GO.
    * Must-have (high priority) cases are never tolerated; the version is recorded in every report.
    */

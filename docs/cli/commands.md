@@ -230,6 +230,11 @@ warning and in the journal, and fetching continues without it.
 
 Exit codes: `0` fetched, `3` configuration, access or ticket errors.
 
+With `code: { access: metadata }` in the project config only the description of each change is kept (title,
+description, changed file names in `repos/<repo>.meta.json`); no repository is checked out and no diff or review
+comment is stored. With `access: none` nothing is read from the code hosts. The tests repository (`role: tests`) is
+fetched in every mode. Commands that need the code (`--build`, `--fix-check`) say so (REQ-CTX-10).
+
 ### `qajitsu plan <ticket>`
 
 Analyses the fetched change and writes a plan version; in a terminal, the review loop accepts, revises or edits it.

@@ -166,6 +166,9 @@ test_types: [api, web]
 # Plan approval flow (REQ-PLAN-10, ADR-0010): a person by default; a model step needs a model other than the planner's
 # approval: { flow: [model, person], model: local/qwen3:14b, model_only: as-computed, jira: off }
 #
+# How much code QAJitsu may read (REQ-CTX-10): full (default), metadata (PR title, description, file names) or none
+# code: { access: full }
+#
 # GO / NO-GO policy (REQ-PUB-10): GO only if every case PASSED; statuses of medium and low cases may be tolerated
 # decision: { version: "1", tolerate: { medium: [], low: [NOT_RUN] } }
 #

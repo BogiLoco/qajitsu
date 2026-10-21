@@ -86,7 +86,7 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 <!-- prettier-ignore-start -->
 <!-- req-stage:3 -->
 - [REQ-CTX-06](requirements/context.md#req-ctx-06--test-repository-awareness) Test repository awareness (should, implemented, AC 5/5)
-- [REQ-CTX-10](requirements/context.md#req-ctx-10--code-access-levels) Code access levels (must, proposed, AC 0/4)
+- [REQ-CTX-10](requirements/context.md#req-ctx-10--code-access-levels) Code access levels (must, implemented, AC 4/4)
 - [REQ-ENV-01](requirements/environment.md#req-env-01--provided-environment) Provided environment (must, implemented, AC 3/3)
 - [REQ-ENV-02](requirements/environment.md#req-env-02--deployed-version-check) Deployed version check (should, implemented, AC 3/3)
 - [REQ-ENV-07](requirements/environment.md#req-env-07--default-environment-selection) Default environment selection (should, implemented, AC 3/3)

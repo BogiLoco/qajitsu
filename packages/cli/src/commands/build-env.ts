@@ -61,6 +61,13 @@ export async function prepareBuild(
   const build = project.config.build;
   if (!build)
     throw new ConfigError("BUILD_NOT_CONFIGURED", "`build` is not configured in .qa/qa.project.yaml.", {});
+  // REQ-CTX-10/AC3: building needs the code; a project that shares none says so instead of a missing worktree.
+  if (project.config.code.access !== "full")
+    throw new ConfigError(
+      "CODE_ACCESS_REQUIRED",
+      `--build builds the application from its code, but this project shares ${project.config.code.access === "none" ? "no code" : "only the description of its changes"} (code.access: ${project.config.code.access}). Test a provided environment with --env instead.`,
+      { access: project.config.code.access },
+    );
   // REQ-CTX-04/AC4: only the worktree fetched for this run is built, so the tested code is the analysed code.
   if (ws.record.repos[build.repo] === undefined)
     throw new ConfigError(

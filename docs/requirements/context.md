@@ -150,16 +150,17 @@ Jira stays the default source of the ticket; a ticket can also come from other t
 
 ### REQ-CTX-10 · Code access levels
 
-- Status: proposed
+- Status: implemented
 - Priority: must
 - Stage: 3
 - Related: REQ-CTX-04, REQ-CTX-05, REQ-EXEC-23, REQ-VER-11, REQ-VER-14, INV-11
+- Note: accepted by the owner on 2026-10-21 and implemented. TO BE REVIEWED: with `metadata` the code hosts return the changed file names together with the diff, so the diff is read once in memory to list the names and dropped; nothing of it is stored, cached or sent to a model. The tests repository (`role: tests`) is fetched in every mode.
 
 Some companies will not share source code. The project chooses how much of the code QAJitsu may read.
 
 **Acceptance criteria**
 
-- [ ] AC1: `code.access` in the project config: `full` (repositories at the change commit), `metadata` (PR/MR title, description and list of changed files, no file contents) or `none` (black-box).
-- [ ] AC2: With `metadata` or `none`, no repository content is fetched, cached or sent to any model; a test on the fetch layer proves it.
-- [ ] AC3: Features that need code (diff coverage, fix verification REQ-VER-11, mutation check REQ-VER-14) are switched off with a clear message instead of failing silently.
-- [ ] AC4: The access level is recorded in `run.json` and shown in the report header.
+- [x] AC1: `code.access` in the project config: `full` (repositories at the change commit), `metadata` (PR/MR title, description and list of changed files, no file contents) or `none` (black-box).
+- [x] AC2: With `metadata` or `none`, no repository content is fetched, cached or sent to any model; a test on the fetch layer proves it.
+- [x] AC3: Features that need code (diff coverage, fix verification REQ-VER-11, mutation check REQ-VER-14) are switched off with a clear message instead of failing silently.
+- [x] AC4: The access level is recorded in `run.json` and shown in the report header.

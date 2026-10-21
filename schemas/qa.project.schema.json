@@ -2152,6 +2152,24 @@
       },
       "additionalProperties": false
     },
+    "code": {
+      "default": {
+        "access": "full"
+      },
+      "type": "object",
+      "properties": {
+        "access": {
+          "default": "full",
+          "type": "string",
+          "enum": [
+            "full",
+            "metadata",
+            "none"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "decision": {
       "default": {
         "version": "1",
