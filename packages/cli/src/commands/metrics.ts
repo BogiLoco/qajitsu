@@ -9,7 +9,7 @@ import {
   readRunIndex,
   resolveWorkspaceRoot,
 } from "@qajitsu/core";
-import { costInsights, digestRun, weeklyCosts, type RunDigest } from "@qajitsu/report";
+import { costInsights, digestRun, timeInsights, weeklyCosts, type RunDigest } from "@qajitsu/report";
 import type { RuntimePorts } from "../adapters.js";
 import { loadProject } from "../project.js";
 import type { CommandIO } from "./fetch.js";
@@ -111,6 +111,46 @@ export function costSamples(digests: readonly RunDigest[]): Sample[] {
               insights.costPerVerifiedTicketUsd,
             ),
           ],
+    ),
+  ];
+}
+
+/** Time samples of a project (REQ-NFR-11/AC2+AC4): medians per run by category, per stage, and per QAJitsu version. */
+export function timeSamples(digests: readonly RunDigest[]): Sample[] {
+  const t = timeInsights(digests);
+  if (t.runs === 0) return [];
+  const seconds = (ms: number): number => Number((ms / 1000).toFixed(3));
+  const gauge = (name: string, help: string, labels: Record<string, string>, ms: number): Sample => ({
+    name,
+    help,
+    type: "gauge",
+    labels,
+    value: seconds(ms),
+  });
+  return [
+    ...(
+      [
+        ["active", t.perRun.activeMs],
+        ["model", t.perRun.modelMs],
+        ["environment", t.perRun.environmentMs],
+        ["tests", t.perRun.testsMs],
+        ["qajitsu", t.perRun.otherMs],
+      ] as const
+    ).map(([category, ms]) =>
+      gauge("qajitsu_run_time_seconds", "Median time of a run by category.", { category }, ms),
+    ),
+    ...Object.entries(t.stages).map(([stage, ms]) =>
+      gauge("qajitsu_stage_seconds", "Median time of a stage in a run.", { stage }, ms),
+    ),
+    ...Object.entries(t.byVersion).flatMap(([version, stages]) =>
+      Object.entries(stages).map(([stage, ms]) =>
+        gauge(
+          "qajitsu_stage_seconds_by_version",
+          "Median stage time by QAJitsu version (release trend).",
+          { stage, qajitsu_version: version },
+          ms,
+        ),
+      ),
     ),
   ];
 }
@@ -249,7 +289,8 @@ export async function collectMetrics(root: string, now: Date): Promise<Sample[]>
       }
     }
   }
-  samples.push(...costSamples(await readRunDigests(root)));
+  const digests = await readRunDigests(root);
+  samples.push(...costSamples(digests), ...timeSamples(digests));
   samples.push({
     name: "qajitsu_plan_accepted_unchanged_ratio",
     help: "Approved runs whose first plan version was approved.",

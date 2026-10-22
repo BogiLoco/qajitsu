@@ -172,6 +172,10 @@ test_types: [api, web]
 # GO / NO-GO policy (REQ-PUB-10): GO only if every case PASSED; statuses of medium and low cases may be tolerated
 # decision: { version: "1", tolerate: { medium: [], low: [NOT_RUN] } }
 #
+# Time budget per stage in seconds (REQ-NFR-11): over it is a warning with the measured time, never a status.
+# Defaults: fetch 300, analyze 900, plan 1200, run 3600, audit 900, triage 600, explore 3600
+# timing: { budgets_s: { run: 1800 } }
+#
 # A person reviews generated specs before they run (REQ-VER-24): for the first runs of a new project, or always
 # spec_review: { first_runs: 5, always: false }
 #

@@ -1,3 +1,4 @@
+import { warnStageBudgets } from "../timing.js";
 import {
   QajitsuError,
   TicketKeySchema,
@@ -133,6 +134,8 @@ export async function runFetch(
     // REQ-CTX-08: existing manual test cases, an extra untrusted planner source.
     await importTestCases({ ws, sources: testCaseSources, events, masker, io, now: ports.now });
     io.write(`Context written to ${ws.dir}\n`);
+    // REQ-NFR-11/AC3: a stage over its time budget is a warning, never a status.
+    await warnStageBudgets({ ws, events, project }, io, ["fetch"]);
     return 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

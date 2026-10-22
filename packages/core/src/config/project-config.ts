@@ -584,6 +584,15 @@ export const ProjectConfigSchema = z.strictObject({
     })
     .default({ version: "1", tolerate: { medium: [], low: [] } }),
   /**
+   * Time budget per pipeline stage in seconds (REQ-NFR-11/AC3): a stage that takes longer is a warning with the
+   * measured time; it never changes a test status.
+   */
+  timing: z
+    .strictObject({
+      budgets_s: z.record(z.string(), z.number().int().positive()).default({}),
+    })
+    .default({ budgets_s: {} }),
+  /**
    * Human review of generated specs (REQ-VER-24): a person reads each spec next to its planned steps before it runs,
    * for the project's first `first_runs` executed runs, or always. Off by default; `qj run --review-specs` turns it
    * on for one run.

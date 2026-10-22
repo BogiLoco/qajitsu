@@ -1,3 +1,4 @@
+import { warnStageBudgets } from "../timing.js";
 import type { KnowledgePorts } from "./knowledge.js";
 import { runUsage, saveRunUsage } from "../run-usage.js";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
@@ -772,6 +773,8 @@ export async function runRun(
         );
     }
     // REQ-OBS-03: export what this command added to the journal; telemetry never changes the result.
+    // REQ-NFR-11/AC3: a stage over its time budget is a warning, never a status.
+    await warnStageBudgets(session, io, ["run", "audit", "triage"]);
     await anchorJournal(session);
     const telemetry = await exportRunTelemetry(session, ports.fetch);
     if (telemetry?.error !== undefined) io.writeError(`Telemetry export failed: ${telemetry.error}\n`);

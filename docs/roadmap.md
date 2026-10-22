@@ -147,7 +147,7 @@ without touching assertions, `qj logs` and the report timeline show what happene
 - [REQ-PUB-06](requirements/publishing.md#req-pub-06--failure-videos-and-evidence-for-the-user) Failure videos and evidence for the user (must, implemented, AC 3/3)
 - [REQ-OBS-02](requirements/observability.md#req-obs-02--viewing-logs) Viewing logs (must, implemented, AC 3/3)
 - [REQ-OBS-06](requirements/observability.md#req-obs-06--transition-graph-per-run) Transition graph per run (should, implemented, AC 4/4)
-- [REQ-NFR-11](requirements/non-functional.md#req-nfr-11--stage-timing-budgets-and-profiling) Stage timing, budgets and profiling (should, proposed, AC 0/5)
+- [REQ-NFR-11](requirements/non-functional.md#req-nfr-11--stage-timing-budgets-and-profiling) Stage timing, budgets and profiling (should, in-progress, AC 4/5)
 - [REQ-WEB-01](requirements/web.md#req-web-01--local-web-console) Local web console (should, proposed, AC 0/3)
 - [REQ-WEB-04](requirements/web.md#req-web-04--dojo-mode-and-professional-mode) Dojo mode and Professional mode (should, proposed, AC 0/6)
 - [REQ-WEB-05](requirements/web.md#req-web-05--run-details-live-steps-and-logs) Run details: live steps and logs (should, proposed, AC 0/5)

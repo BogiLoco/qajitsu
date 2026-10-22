@@ -1,3 +1,4 @@
+import { warnStageBudgets } from "../timing.js";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -441,6 +442,8 @@ export async function runPlan(
       const gaps = gapsOf(current);
       if (gaps.length > 0)
         io.write(`Not covered by any case (${String(gaps.length)}):\n${formatCoverageGaps(gaps)}\n`);
+      // REQ-NFR-11/AC3: a stage over its time budget is a warning, never a status.
+      await warnStageBudgets(session, io, ["analyze", "plan"]);
       if (!io.ask) return 0;
 
       const answer = (await io.ask("[a]ccept, [r]evise, [e]dit, [q]uit? ")).trim().toLowerCase();

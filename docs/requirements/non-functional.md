@@ -147,19 +147,21 @@ The checks only protect anything if a red result stops a merge and if a contribu
 
 ### REQ-NFR-11 · Stage timing, budgets and profiling
 
-- Status: proposed
+- Status: in-progress
 - Priority: should
 - Stage: 5
 - Related: REQ-OBS-01, REQ-OBS-03, REQ-LLM-11
 
 Most of a run's time goes to model calls, starting environments and executing tests, not to QAJitsu's own code. Every stage is measured before anything is optimised or rewritten.
 
+- Note: TO BE REVIEWED (2026-10-22): AC5 needs a release workflow and a baseline measured on the CI runner type; a baseline from a developer machine would mislead. The web console views of AC2 and AC4 come with REQ-WEB-01.
+
 **Acceptance criteria**
 
-- [ ] AC1: Every pipeline stage and agent step is recorded as a timed span (start, end, waiting time, model or tool used) in the run's journal and exported through OpenTelemetry when configured.
-- [ ] AC2: `qj status` and the web console show where the time went per run and per project: model calls, environment, test execution, local processing.
-- [ ] AC3: Each stage has a configurable time budget with project defaults; exceeding it is a warning with the measured value and never changes a test status.
-- [ ] AC4: A trend view per stage shows whether runs get faster or slower across releases of QAJitsu and of the project.
+- [x] AC1: Every pipeline stage and agent step is recorded as a timed span (start, end, waiting time, model or tool used) in the run's journal and exported through OpenTelemetry when configured.
+- [x] AC2: `qj status` (and the web console with REQ-WEB-01) shows where the time went per run and per project: model calls, environment, test execution, local processing.
+- [x] AC3: Each stage has a configurable time budget with project defaults; exceeding it is a warning with the measured value and never changes a test status.
+- [x] AC4: A trend view per stage shows whether runs get faster or slower across releases of QAJitsu and of the project.
 - [ ] AC5: A benchmark run on the demo shop measures stage times for every QAJitsu release; a regression beyond a configured tolerance fails the release pipeline.
 
 ### REQ-NFR-12 · Pipeline speed by design

@@ -26,7 +26,7 @@ import { registerConfiguredSecrets } from "../session.js";
 import type { CommandIO } from "./fetch.js";
 import { nextStage, rootOf } from "./runs.js";
 import { readRunDigests } from "./metrics.js";
-import { costInsights, weeklyCosts, type RunDigest } from "@qajitsu/report";
+import { costInsights, formatDuration, timeInsights, weeklyCosts, type RunDigest } from "@qajitsu/report";
 
 /** One ticket with unfinished work (REQ-PRJ-05/AC2). */
 export interface OpenWork {
@@ -192,6 +192,30 @@ export function costLines(digests: readonly RunDigest[]): string[] {
   ];
 }
 
+/**
+ * Time lines of a project (REQ-NFR-11/AC2+AC4): where a run's time goes, the stages, and the stage trend by QAJitsu
+ * version and by week.
+ */
+export function timeLines(digests: readonly RunDigest[]): string[] {
+  const t = timeInsights(digests);
+  if (t.runs === 0) return [];
+  const p = t.perRun;
+  const stages = (s: Readonly<Record<string, number>>): string =>
+    Object.entries(s)
+      .map(([stage, ms]) => `${stage} ${formatDuration(ms)}`)
+      .join(" · ");
+  const trend = (groups: Readonly<Record<string, Readonly<Record<string, number>>>>): string[] =>
+    Object.entries(groups)
+      .slice(-4)
+      .map(([k, s]) => `    ${k}: ${stages(s)}`);
+  return [
+    `Time per run (median of ${String(t.runs)}): ${formatDuration(p.activeMs)} active: models ${formatDuration(p.modelMs)}, environment ${formatDuration(p.environmentMs)}, tests ${formatDuration(p.testsMs)}, QAJitsu ${formatDuration(p.otherMs)}`,
+    `  stages: ${stages(t.stages)}`,
+    ...(Object.keys(t.byVersion).length > 1 ? ["  by QAJitsu version:", ...trend(t.byVersion)] : []),
+    ...(Object.keys(t.byWeek).length > 1 ? ["  by week:", ...trend(t.byWeek)] : []),
+  ];
+}
+
 /** Status lines of one project and its index for `context.json` (REQ-PRJ-05/AC1+AC3). */
 async function projectStatus(project: LoadedProject, ports: RuntimePorts): Promise<string[]> {
   const problems = (await projectChecks(project, ports, { online: false })).filter((c) => !c.ok);
@@ -209,6 +233,7 @@ async function projectStatus(project: LoadedProject, ports: RuntimePorts): Promi
   }
   // REQ-PRJ-05/AC6: environments of this project's runs that are still running, so none is forgotten for days.
   const runsRoot = rootOf(project, ports);
+  const digests = await readRunDigests(runsRoot);
   const running = (await runningEnvironments(ports.dockerExec)).filter((e) =>
     existsSync(join(runsRoot, e.ticket, e.runId)),
   );
@@ -228,7 +253,8 @@ async function projectStatus(project: LoadedProject, ports: RuntimePorts): Promi
     `Knowledge base: ${await knowledgeSummary(project)}`,
     ...renderWork(open, done),
     ...environments,
-    ...costLines(await readRunDigests(runsRoot)),
+    ...costLines(digests),
+    ...timeLines(digests),
   ];
 }
 

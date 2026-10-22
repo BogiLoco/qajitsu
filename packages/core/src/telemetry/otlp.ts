@@ -192,11 +192,13 @@ export function buildOtlp(
       }
     }
     if (e.event === "model.usage") {
+      // REQ-NFR-11/AC1: the call's own duration, recorded when it ended, gives the span its start.
+      const ms = num(detail(e, "durationMs"));
       spans.push({
         key: `model:${String(i)}`,
         parent: stage.key,
         name: `gen_ai ${str(detail(e, "role")) ?? e.actor.name}`,
-        start: e.ts,
+        start: ms === undefined ? e.ts : new Date(Date.parse(e.ts) - ms).toISOString(),
         end: e.ts,
         endIndex: i,
         // OpenTelemetry GenAI conventions, so Langfuse and similar tools pick up prompts and costs.
@@ -204,6 +206,8 @@ export function buildOtlp(
           "gen_ai.request.model": str(detail(e, "model")),
           "gen_ai.usage.input_tokens": num(detail(e, "inputTokens")),
           "gen_ai.usage.output_tokens": num(detail(e, "outputTokens")),
+          "gen_ai.usage.cache_read_input_tokens": num(detail(e, "cachedInputTokens")),
+          "qajitsu.wait_ms": num(detail(e, "durationMs")),
           "qajitsu.cost_usd": num(detail(e, "costUsd")),
           "qajitsu.role": str(detail(e, "role")),
         },
