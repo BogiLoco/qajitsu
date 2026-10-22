@@ -176,6 +176,10 @@ test_types: [api, web]
 # result is posted to the ticket (always | not_ready | never)
 # readiness: { comment: always, risk_rules: [{ pattern: "^api/payments/", level: high, reason: "payments API" }] }
 #
+# Prompt cache and input limits (REQ-LLM-12), inside models: { ... }:
+#   cache_ttl: auto            # auto | 5m | 1h | off
+#   max_input_tokens: 150000   # stop calls that would send more
+#
 # Time budget per stage in seconds (REQ-NFR-11): over it is a warning with the measured time, never a status.
 # Defaults: fetch 300, analyze 900, plan 1200, run 3600, audit 900, triage 600, explore 3600
 # timing: { budgets_s: { run: 1800 } }

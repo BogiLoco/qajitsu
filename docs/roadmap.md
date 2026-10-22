@@ -105,7 +105,7 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 - [REQ-EVD-01](requirements/evidence.md#req-evd-01--api-evidence) API evidence (must, implemented, AC 3/3)
 - [REQ-EVD-04](requirements/evidence.md#req-evd-04--test-matrix) Test matrix (must, implemented, AC 3/3)
 - [REQ-EVD-05](requirements/evidence.md#req-evd-05--report-formats) Report formats (must, implemented, AC 3/3)
-- [REQ-LLM-12](requirements/models.md#req-llm-12--provider-cost-features-prompt-caching-and-batches) Provider cost features: prompt caching and batches (should, proposed, AC 0/5)
+- [REQ-LLM-12](requirements/models.md#req-llm-12--provider-cost-features-prompt-caching-and-batches) Provider cost features: prompt caching and batches (should, in-progress, AC 4/5)
 - [REQ-GEN-09](requirements/generic.md#req-gen-09--signed-release-images) Signed release images (should, proposed, AC 0/6)
 - [REQ-NFR-04](requirements/non-functional.md#req-nfr-04--framework-self-test) Framework self-test (must, implemented, AC 2/2)
 - [REQ-PRJ-05](requirements/projects.md#req-prj-05--project-status-what-is-in-the-project-and-what-is-in-progress) Project status: what is in the project and what is in progress (must, implemented, AC 6/6)

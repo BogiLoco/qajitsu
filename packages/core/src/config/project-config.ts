@@ -44,6 +44,8 @@ const CapabilityOverrideSchema = z.strictObject({
       cache_write: z.number().nonnegative().optional(),
     })
     .optional(),
+  /** Prompt size above which the provider charges more (REQ-LLM-12/AC4); calls above it are stopped. */
+  price_tier_tokens: z.number().int().positive().optional(),
   /**
    * Prices with the day they apply from (REQ-LLM-11/AC3): a call is charged with the latest price whose `from` is not
    * after the day of the call; before the first one, `cost_per_mtok` or the built-in price applies.
@@ -356,8 +358,15 @@ export const ProjectConfigSchema = z.strictObject({
       roles: z.record(z.string(), z.string()).default({}),
       /** Per-run token budget; exceeding it stops the run with BLOCKED (REQ-LLM-07/AC2). */
       token_budget: z.number().int().positive().optional(),
+      /**
+       * Prompt cache duration (REQ-LLM-12/AC2): `auto` chooses from how close together the project's model calls are;
+       * `off` sends no cache breakpoints.
+       */
+      cache_ttl: z.enum(["auto", "5m", "1h", "off"]).default("auto"),
+      /** Most input tokens one model call may send (REQ-LLM-12/AC4); larger calls are stopped with the reason. */
+      max_input_tokens: z.number().int().positive().optional(),
     })
-    .default({ providers: {}, roles: {} }),
+    .default({ providers: {}, roles: {}, cache_ttl: "auto" }),
   /**
    * Scripts from `.qa/hooks/` around every run (REQ-GEN-01/AC2): `setup` after the environment is healthy and
    * before the cases (a failure makes every case BLOCKED), `teardown` after the cases (a failure is a warning).

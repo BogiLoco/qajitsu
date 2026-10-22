@@ -23,6 +23,7 @@ import { openMcpTools } from "./mcp.js";
 import { renderTestsRepo } from "./tests-repo.js";
 import { modelExchange } from "./exchange.js";
 import { callUsage } from "./usage.js";
+import { prepareCall } from "./prepare-call.js";
 import { untrusted, UNTRUSTED_DATA_RULES, type ChangeContext } from "./context.js";
 import { modelForRole, stageGuard, type AgentStageDeps } from "./roles-run.js";
 import { AGENT_ROLES } from "./roles.js";
@@ -300,8 +301,7 @@ export async function runAuthor(
         const startedAt = Date.now();
         const result = await generateText({
           model: model.model,
-          system: AUTHOR_SYSTEM,
-          messages,
+          ...prepareCall(model, AUTHOR_SYSTEM, messages),
           ...(tools ? { tools, stopWhen: stepCountIs(10) } : {}),
           ...(deps.signal ? { abortSignal: deps.signal } : {}),
           maxRetries: 2,

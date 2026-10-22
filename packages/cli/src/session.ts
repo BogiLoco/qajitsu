@@ -6,6 +6,7 @@ import {
   createEventLog,
   fileSink,
   journalTailHash,
+  listTickets,
   openRunWorkspace,
   readRunIndex,
   resolveWorkspaceRoot,
@@ -13,7 +14,13 @@ import {
   type Logger,
   type RunWorkspace,
 } from "@qajitsu/core";
-import { createModelRegistry, type ModelRegistry, type ResolvedModel } from "@qajitsu/models";
+import {
+  chooseCacheTtl,
+  createModelRegistry,
+  type CacheTtl,
+  type ModelRegistry,
+  type ResolvedModel,
+} from "@qajitsu/models";
 import { createMasker, type Masker } from "@qajitsu/steps";
 import { createCliSecretResolver, type RuntimePorts } from "./adapters.js";
 import { createCliLogger } from "./logger.js";
@@ -126,13 +133,54 @@ export async function openSession(
   });
   const resolveSecret = createCliSecretResolver(project, ports, masker);
   await registerConfiguredSecrets(project, resolveSecret);
+  // REQ-LLM-12/AC2: the prompt cache duration of the run, chosen once and recorded with its reason.
+  const cacheTtl = await runCacheTtl(project.config.models.cache_ttl, root, ws, events);
   const models = createModelRegistry({
     config: project.config.models,
     resolveSecret,
     fetch: ports.fetch,
+    cacheTtl,
     ...(ports.extraModels ? { extra: ports.extraModels } : {}),
   });
   return { project, ws, masker, logger, events, models, resolveSecret, now: ports.now };
+}
+
+/**
+ * The prompt cache duration of a run (REQ-LLM-12/AC2): the configured one, or with `auto` the one the project's recent
+ * model calls point to. The choice is recorded in `run.json` (`promptCache`) and the journal once per run.
+ */
+async function runCacheTtl(
+  configured: "auto" | "5m" | "1h" | "off",
+  root: string,
+  ws: RunWorkspace,
+  events: EventLog,
+): Promise<CacheTtl> {
+  const recorded = ws.record.data["promptCache"] as { ttl?: CacheTtl } | undefined;
+  if (recorded?.ttl !== undefined && configured === "auto") return recorded.ttl;
+  let choice: { ttl: CacheTtl; basis: string };
+  if (configured !== "auto") choice = { ttl: configured, basis: "models.cache_ttl" };
+  else {
+    const times: number[] = [];
+    // The latest runs of every ticket of the project, newest first, up to 30.
+    const runs: string[] = [];
+    for (const ticket of await listTickets(root).catch(() => []))
+      for (const r of (await readRunIndex(root, ticket).catch(() => ({ runs: [] }))).runs)
+        runs.push(join(root, ticket, r.runId));
+    for (const dir of runs.sort().slice(-30)) {
+      const text = await readFile(join(dir, "journal", "events.jsonl"), "utf8").catch(() => "");
+      for (const line of text.split("\n"))
+        if (line.includes('"model.usage"')) {
+          const ts = /"ts":"([^"]+)"/.exec(line)?.[1];
+          if (ts) times.push(Date.parse(ts));
+        }
+    }
+    choice = chooseCacheTtl(times.filter((t) => !Number.isNaN(t)).slice(-500));
+  }
+  if (recorded?.ttl !== choice.ttl) {
+    await ws.update({ data: { ...ws.record.data, promptCache: choice } });
+    events.emit("timing", { kind: "system", name: "orchestrator" }, "models.cache_ttl", choice);
+  }
+  return choice.ttl;
 }
 
 /**

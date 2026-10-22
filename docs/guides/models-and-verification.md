@@ -122,6 +122,21 @@ also of runs that decided nothing, over the tickets with a GO or NO-GO decision)
 ticket, the share of pipeline stages that needed no model, and the cost per verified ticket by ISO week as a trend.
 When some call had no known price the cost is shown as a lower bound ("at least"), never as an exact number.
 
+### Prompt caching and input limits (REQ-LLM-12)
+
+Agents send their instructions and the ticket and repository context first, the same for every repair of an answer
+and every case of a stage, so providers can cache that prefix. Anthropic needs an explicit cache breakpoint, which
+QAJitsu sets on the instructions and the context message; OpenAI and Google cache a stable prefix by themselves. Cache
+reads show up as `cachedInputTokens` in the journal and are charged at the cache price (REQ-LLM-11).
+`models.cache_ttl` sets the cache duration: `auto` (default) chooses five minutes when the project's model calls
+usually come within five minutes of each other and one hour when within an hour (the longer cache costs more to
+write), `5m`, `1h`, or `off`. The choice and its reason are recorded in `run.json` (`promptCache`).
+
+Before every call QAJitsu estimates its input (one token per four characters, a fixed amount per image) and stops a
+call that would exceed the model's context window, its price tier boundary (Gemini Pro charges more above 200k
+tokens; `price_tier_tokens` sets it for any model) or `models.max_input_tokens`, with the estimate and the limit
+(`MODEL_INPUT_TOO_LARGE`); nothing is sent.
+
 ## Local models, honestly (REQ-LLM-05)
 
 Local models are good at the roles that read and classify: **summary**, **analyst** on small changes and

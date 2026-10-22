@@ -15,6 +15,7 @@ import { z } from "zod";
 import { AgentOutputError } from "./errors.js";
 import { modelExchange } from "./exchange.js";
 import { callUsage, type UsageTracker } from "./usage.js";
+import { prepareCall } from "./prepare-call.js";
 
 /** A tool an agent may call. Execution happens only after the guard allows it (REQ-VER-03/AC3). */
 export interface AgentTool {
@@ -185,8 +186,7 @@ export async function runStructuredAgent<T extends z.ZodType>(
     try {
       result = await generateText({
         model: run.model.model,
-        system: run.system,
-        messages,
+        ...prepareCall(run.model, run.system, messages),
         ...(constrained
           ? { output: Output.object({ schema: jsonSchema(decodingSchema(run.schema)), name: run.role }) }
           : {}),

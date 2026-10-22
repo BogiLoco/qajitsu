@@ -14,6 +14,7 @@ import { generateText } from "ai";
 import { extractCode } from "./author.js";
 import { modelExchange } from "./exchange.js";
 import { callUsage } from "./usage.js";
+import { prepareCall } from "./prepare-call.js";
 import { untrusted, UNTRUSTED_DATA_RULES } from "./context.js";
 import { modelForRole, type AgentStageDeps } from "./roles-run.js";
 
@@ -84,8 +85,7 @@ export async function healSpec(
   const startedAt = Date.now();
   const result = await generateText({
     model: model.model,
-    system: HEALER_SYSTEM,
-    prompt,
+    ...prepareCall(model, HEALER_SYSTEM, [{ role: "user", content: prompt }]),
     ...(deps.signal ? { abortSignal: deps.signal } : {}),
     maxRetries: 2,
   });

@@ -1472,7 +1472,8 @@
     "models": {
       "default": {
         "providers": {},
-        "roles": {}
+        "roles": {},
+        "cache_ttl": "auto"
       },
       "type": "object",
       "properties": {
@@ -1556,6 +1557,11 @@
                       ],
                       "additionalProperties": false
                     },
+                    "price_tier_tokens": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
                     "prices": {
                       "type": "array",
                       "items": {
@@ -1618,6 +1624,21 @@
           }
         },
         "token_budget": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "cache_ttl": {
+          "default": "auto",
+          "type": "string",
+          "enum": [
+            "auto",
+            "5m",
+            "1h",
+            "off"
+          ]
+        },
+        "max_input_tokens": {
           "type": "integer",
           "exclusiveMinimum": 0,
           "maximum": 9007199254740991

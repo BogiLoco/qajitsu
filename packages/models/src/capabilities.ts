@@ -13,6 +13,8 @@ export interface ModelProfile extends ModelCapabilities {
   readonly costPerMTok?: TokenPrice | undefined;
   /** Prices with the day they apply from, oldest first (REQ-LLM-11/AC3). */
   readonly datedPrices?: readonly (TokenPrice & { readonly from: string })[] | undefined;
+  /** Prompt size above which the provider charges a higher price (REQ-LLM-12/AC4). */
+  readonly priceTierTokens?: number | undefined;
 }
 
 /**
@@ -57,6 +59,7 @@ export interface CapabilityOverride {
         readonly cache_write?: number | undefined;
       }
     | undefined;
+  readonly price_tier_tokens?: number | undefined;
   readonly prices?:
     | readonly {
         readonly from: string;
@@ -166,7 +169,11 @@ const BUILT_IN: readonly {
   ...GOOGLE.map(([id, input, output, until]) => ({
     type: "google",
     match: exact(id),
-    profile: cloud(1_000_000, input, output),
+    // Pro models charge more above 200k prompt tokens (REQ-LLM-12/AC4); the price here is that higher tier.
+    profile: {
+      ...cloud(1_000_000, input, output),
+      ...(id.includes("-pro") ? { priceTierTokens: 200_000 } : {}),
+    },
     ...(until ? { priceUntil: until } : {}),
   })),
   { type: "anthropic", match: /^claude-(fable|mythos)-5-1\b/, profile: claude(1_000_000, 10, 50) },
@@ -236,6 +243,9 @@ export function modelProfile(
     vision: override.vision ?? base.vision,
     contextWindow: override.context_window ?? base.contextWindow,
     costPerMTok: override.cost_per_mtok ? fromConfig(override.cost_per_mtok) : base.costPerMTok,
+    ...((override.price_tier_tokens ?? base.priceTierTokens) === undefined
+      ? {}
+      : { priceTierTokens: override.price_tier_tokens ?? base.priceTierTokens }),
     ...(override.prices && override.prices.length > 0
       ? {
           datedPrices: [...override.prices]
