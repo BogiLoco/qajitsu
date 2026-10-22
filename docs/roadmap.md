@@ -59,7 +59,7 @@ Analyst and planner agents on several model providers; plan review loop and free
 - [REQ-PLAN-05](requirements/plan.md#req-plan-05--open-questions-instead-of-guessing) Open questions instead of guessing (must, implemented, AC 2/2)
 - [REQ-PLAN-06](requirements/plan.md#req-plan-06--plan-freeze) Plan freeze (must, implemented, AC 4/4)
 - [REQ-PLAN-09](requirements/plan.md#req-plan-09--concrete-expected-values) Concrete expected values (must, implemented, AC 9/9)
-- [REQ-PLAN-13](requirements/plan.md#req-plan-13--ticket-readiness-gate) Ticket readiness gate (should, proposed, AC 0/6)
+- [REQ-PLAN-13](requirements/plan.md#req-plan-13--ticket-readiness-gate) Ticket readiness gate (should, in-progress, AC 4/6)
 - [REQ-PLAN-14](requirements/plan.md#req-plan-14--coverage-matrix-computed-by-code) Coverage matrix computed by code (must, implemented, AC 4/4)
 - [REQ-LLM-01](requirements/models.md#req-llm-01--multiple-providers) Multiple providers (must, implemented, AC 7/7)
 - [REQ-LLM-02](requirements/models.md#req-llm-02--model-per-role) Model per role (must, implemented, AC 2/2)

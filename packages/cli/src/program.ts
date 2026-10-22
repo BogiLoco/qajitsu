@@ -607,6 +607,10 @@ export function createProgram(version: string, io: ProgramIO): Command {
       "--build",
       "start the environment and the app from the worktree to record their pages and first screen for the planner, then stop them",
     )
+    .option(
+      "--override-readiness <reason>",
+      "plan although the readiness gate did not find the ticket READY; the reason is recorded",
+    )
     .action(
       (
         ticket: string,
@@ -617,6 +621,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
           env?: string;
           snapshot?: boolean;
           build?: boolean;
+          overrideReadiness?: string;
         },
       ) => withPorts((ports) => runPlan(ticket, options, commandIO, ports, review))(),
     );

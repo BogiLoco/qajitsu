@@ -265,8 +265,18 @@ like an unknown selector (AC8). An environment that cannot be reached is reporte
 - `--build`: start the environment from the run's worktree (and the mobile devices, building the app when configured)
   only to record the pages and the app's first screen for the planner, then stop them (REQ-EXEC-22/AC9). Use it
   when the application is built per run, so the plan expects the texts the application really shows.
+- `--override-readiness <reason>`: plan although the readiness gate did not find the ticket READY (REQ-PLAN-13/AC3);
+  the reason is recorded in `run.json` and the journal
 
-Exit codes: `0` plan written (and approved, if accepted in the review), `2` token budget exceeded, `3` errors.
+Before the first plan of a run, the readiness gate (REQ-PLAN-13) checks the ticket: acceptance criteria, a found
+change (unless `code.access: none`), and how sure the analyst is. It prints `READY`, `NEEDS_CLARIFICATION` or
+`NOT_TESTABLE` with a risk level computed from the changed paths (migrations, authentication, payments,
+infrastructure, size, the ticket's labels; extra rules in `readiness.risk_rules`), the gaps and concrete questions,
+writes `readiness.json` and posts the result to the ticket (`readiness.comment`: `always`, `not_ready` or `never`).
+A ticket that is not READY gets no plan unless `--override-readiness` is given.
+
+Exit codes: `0` plan written (and approved, if accepted in the review), `2` token budget exceeded or the ticket is not
+ready, `3` errors.
 
 ### `qajitsu approve <ticket>`
 

@@ -584,6 +584,24 @@ export const ProjectConfigSchema = z.strictObject({
     })
     .default({ version: "1", tolerate: { medium: [], low: [] } }),
   /**
+   * The ticket readiness gate (REQ-PLAN-13): extra risk rules over the changed paths, and when its result is posted to
+   * the ticket (`always`, only when the ticket is not READY, or `never`).
+   */
+  readiness: z
+    .strictObject({
+      risk_rules: z
+        .array(
+          z.strictObject({
+            pattern: z.string().min(1).max(500),
+            level: z.enum(["low", "medium", "high"]),
+            reason: z.string().min(1).max(200),
+          }),
+        )
+        .default([]),
+      comment: z.enum(["always", "not_ready", "never"]).default("always"),
+    })
+    .default({ risk_rules: [], comment: "always" }),
+  /**
    * Time budget per pipeline stage in seconds (REQ-NFR-11/AC3): a stage that takes longer is a warning with the
    * measured time; it never changes a test status.
    */

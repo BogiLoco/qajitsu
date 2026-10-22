@@ -172,6 +172,10 @@ test_types: [api, web]
 # GO / NO-GO policy (REQ-PUB-10): GO only if every case PASSED; statuses of medium and low cases may be tolerated
 # decision: { version: "1", tolerate: { medium: [], low: [NOT_RUN] } }
 #
+# Ticket readiness gate before the first plan (REQ-PLAN-13): extra risk rules over the changed paths, and when the
+# result is posted to the ticket (always | not_ready | never)
+# readiness: { comment: always, risk_rules: [{ pattern: "^api/payments/", level: high, reason: "payments API" }] }
+#
 # Time budget per stage in seconds (REQ-NFR-11): over it is a warning with the measured time, never a status.
 # Defaults: fetch 300, analyze 900, plan 1200, run 3600, audit 900, triage 600, explore 3600
 # timing: { budgets_s: { run: 1800 } }

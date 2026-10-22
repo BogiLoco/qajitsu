@@ -3,6 +3,11 @@
 exports[`replay of recorded model answers (REQ-LLM-14/AC5) > REQ-LLM-14/AC5: gemma4:e2b's analysis and plan for DEMO-1, invalid answers and repairs included, go through the current checks 1`] = `
 "Project: demo (ticket prefix DEMO)
 Analysing the change…
+Readiness: READY · risk low
+  risk analyst: The cart endpoint might return an incorrect total (sum of unit price × quantity) if rounding or initial calculation is flawed.
+  risk analyst: Applying discount codes might result in incorrect total reduction when a single valid code is applied (percentage reduction).
+  risk analyst: The system may fail to correctly handle sequential discount codes, potentially allowing codes to stack instead of replacing the first one (AC3).
+  risk analyst: The system may fail to return an appropriate 404 error with the code DISCOUNT_NOT_FOUND when an unknown discount code is submitted, leaving the total unchanged (AC4).
 Writing the test plan…
 Plan v1: 4 case(s), 0 open question(s)
 <run>/plan/plan.v1.md

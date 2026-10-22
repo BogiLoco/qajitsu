@@ -38,6 +38,7 @@ import { mapAroundChange } from "@qajitsu/report";
 import { explorationLines } from "./explore-review.js";
 import { approvalCommenter, recordReviewApproval, runApprovalFlow } from "./approval-flow.js";
 import { publisherFor } from "./publish.js";
+import { recordReadinessOverride, runReadinessGate } from "./readiness.js";
 import { createMasker } from "@qajitsu/steps";
 import { runUsage, saveRunUsage } from "../run-usage.js";
 import { exportRunTelemetry } from "./telemetry.js";
@@ -75,6 +76,8 @@ export interface PlanOptions {
   readonly snapshot?: boolean | undefined;
   /** Start the environment and the app from the worktree to record them, then stop them (REQ-EXEC-22/AC9). */
   readonly build?: boolean | undefined;
+  /** Plan although the readiness gate did not find the ticket READY, with the reason (REQ-PLAN-13/AC3). */
+  readonly overrideReadiness?: string | undefined;
 }
 
 /** Ports of the review loop (REQ-PLAN-04/AC1). */
@@ -372,6 +375,55 @@ export async function runPlan(
       io.write("Analysing the change…\n");
       analysis = await runAnalyst(deps, context);
       await deps.save();
+    }
+    // REQ-PLAN-13: before the first plan, code checks that the ticket can be tested at all.
+    const planned = await readPlan(ws).then(
+      () => true,
+      () => false,
+    );
+    if (!planned && ws.record.data["readiness"] === undefined) {
+      const readiness = await runReadinessGate(session, io, {
+        analysis,
+        env: options.env,
+        publisher: publisherFor(session, ports),
+        now: ports.now,
+      });
+      if (readiness.result !== "READY") {
+        if (options.overrideReadiness === undefined) {
+          io.write(
+            `No plan for ${ws.ticket}: answer the questions in the ticket and run qajitsu plan ${ws.ticket} again in a new run, or plan anyway with --override-readiness "<reason>".\n`,
+          );
+          return 2;
+        }
+        await recordReadinessOverride(session, {
+          user: review.user,
+          reason: options.overrideReadiness,
+          result: readiness.result,
+          now: ports.now,
+        });
+        io.write(`Planning although the ticket is ${readiness.result}: ${options.overrideReadiness}\n`);
+      }
+    } else if (!planned && options.overrideReadiness !== undefined) {
+      const recorded = (ws.record.data["readiness"] as { result?: string } | undefined)?.result;
+      if (recorded !== undefined && recorded !== "READY")
+        await recordReadinessOverride(session, {
+          user: review.user,
+          reason: options.overrideReadiness,
+          result: recorded,
+          now: ports.now,
+        });
+    } else if (!planned) {
+      const recorded = (ws.record.data["readiness"] as { result?: string } | undefined)?.result;
+      if (
+        recorded !== undefined &&
+        recorded !== "READY" &&
+        ws.record.data["readinessOverride"] === undefined
+      ) {
+        io.write(
+          `No plan for ${ws.ticket}: the readiness gate found it ${recorded} (readiness.json); plan anyway with --override-readiness "<reason>".\n`,
+        );
+        return 2;
+      }
     }
     const mapAround = await writeMapAround(session, ports, analysis, context, io);
     if (mapAround) context = { ...context, mapAround };

@@ -211,20 +211,22 @@ person has to ask for a revision by hand. When the API description leaves no dou
 
 ### REQ-PLAN-13 · Ticket readiness gate
 
-- Status: proposed
+- Status: in-progress
 - Priority: should
 - Stage: 2
 - Related: REQ-PLAN-05, REQ-CTX-01, REQ-FLOW-02
+
+- Note: TO BE REVIEWED (2026-10-22): an unknown environment is reported as a gap but does not stop planning: the plan does not need it and `qj run --env` names it later; asking the ticket's author would be the wrong person. AC2's move to "needs info" comes with REQ-FLOW-02, AC6's automatic re-check with REQ-FLOW-01.
 
 Before planning, code and the planner check that the ticket can be tested at all.
 
 **Acceptance criteria**
 
-- [ ] AC1: Checks: acceptance criteria present, scope understandable, linked change found (when code access is not `none`), target environment known.
+- [x] AC1: Checks: acceptance criteria present, scope understandable, linked change found (when code access is not `none`), target environment known.
 - [ ] AC2: A ticket that fails the gate gets a list of concrete questions instead of a plan; in the Jira workflow it moves to the configured "needs info" status (REQ-FLOW-02).
-- [ ] AC3: The person can override the gate explicitly; the override is recorded in `run.json`.
-- [ ] AC4: The result is READY, NEEDS_CLARIFICATION or NOT_TESTABLE, with a risk level (low, medium, high) and a list of requirement gaps, posted to the ticket as a structured comment.
-- [ ] AC5: The risk level is computed by rules from the change (paths, components, migrations, security-relevant areas) where code access allows; the agent may add reasons but cannot lower a computed level.
+- [x] AC3: The person can override the gate explicitly; the override is recorded in `run.json`.
+- [x] AC4: The result is READY, NEEDS_CLARIFICATION or NOT_TESTABLE, with a risk level (low, medium, high) and a list of requirement gaps, posted to the ticket as a structured comment.
+- [x] AC5: The risk level is computed by rules from the change (paths, components, migrations, security-relevant areas) where code access allows; the agent may add reasons but cannot lower a computed level.
 - [ ] AC6: A ticket answered after NEEDS_CLARIFICATION is checked again automatically when it returns to the start status.
 
 ### REQ-PLAN-14 · Coverage matrix computed by code

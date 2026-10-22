@@ -2270,6 +2270,58 @@
       },
       "additionalProperties": false
     },
+    "readiness": {
+      "default": {
+        "risk_rules": [],
+        "comment": "always"
+      },
+      "type": "object",
+      "properties": {
+        "risk_rules": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "pattern": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "level": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            },
+            "required": [
+              "pattern",
+              "level",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "comment": {
+          "default": "always",
+          "type": "string",
+          "enum": [
+            "always",
+            "not_ready",
+            "never"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "timing": {
       "default": {
         "budgets_s": {}
