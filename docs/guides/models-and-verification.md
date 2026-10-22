@@ -98,6 +98,30 @@ with a call of a model without a price is marked `costUnknown` and estimates say
 `budget.max_cost_usd` stops a model stage once the run's cost reaches it (`COST_BUDGET_EXCEEDED`, BLOCKED, exit code 2) and makes the cases not written yet NOT_RUN. `qj doctor --models` makes one call per role and names a rejected
 key by its variable, never by its value.
 
+### Cache prices, dated prices and cost per verified ticket (REQ-LLM-11)
+
+Every model call records its input tokens, the input tokens read from or written to the provider's prompt cache,
+output tokens, duration and cost, per role (`model.usage` in the journal). Cache reads and writes are charged with
+their own price when one is set, and as input otherwise, so a cost is never lower than it may be. A price can carry
+the day it applies from; a call is charged with the price valid on its day:
+
+```yaml
+models:
+  providers:
+    claude:
+      type: anthropic
+      models:
+        claude-opus-5-5:
+          cost_per_mtok: { input: 5, output: 25, cached_input: 0.5, cache_write: 6.25 }
+          prices:
+            - { from: "2026-12-01", input: 4, output: 20, cached_input: 0.4 }
+```
+
+`qj status` and `qj metrics` show what the project's runs cost: the cost per verified ticket (every run's cost,
+also of runs that decided nothing, over the tickets with a GO or NO-GO decision), the cost per role, runner minutes per
+ticket, the share of pipeline stages that needed no model, and the cost per verified ticket by ISO week as a trend.
+When some call had no known price the cost is shown as a lower bound ("at least"), never as an exact number.
+
 ## Local models, honestly (REQ-LLM-05)
 
 Local models are good at the roles that read and classify: **summary**, **analyst** on small changes and

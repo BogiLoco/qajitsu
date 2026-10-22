@@ -32,9 +32,32 @@ const CapabilityOverrideSchema = z.strictObject({
    * requests only when it is set explicitly: without it Qwen3 thinks and returns neither text nor a tool call.
    */
   think: z.boolean().optional(),
-  /** USD per million input and output tokens, for cost estimates (REQ-LLM-07). */
+  /**
+   * USD per million input and output tokens, for cost estimates (REQ-LLM-07); `cached_input` and `cache_write` for
+   * prompt cache reads and writes (REQ-LLM-11/AC1), charged as input when not given.
+   */
   cost_per_mtok: z
-    .strictObject({ input: z.number().nonnegative(), output: z.number().nonnegative() })
+    .strictObject({
+      input: z.number().nonnegative(),
+      output: z.number().nonnegative(),
+      cached_input: z.number().nonnegative().optional(),
+      cache_write: z.number().nonnegative().optional(),
+    })
+    .optional(),
+  /**
+   * Prices with the day they apply from (REQ-LLM-11/AC3): a call is charged with the latest price whose `from` is not
+   * after the day of the call; before the first one, `cost_per_mtok` or the built-in price applies.
+   */
+  prices: z
+    .array(
+      z.strictObject({
+        from: z.iso.date(),
+        input: z.number().nonnegative(),
+        output: z.number().nonnegative(),
+        cached_input: z.number().nonnegative().optional(),
+        cache_write: z.number().nonnegative().optional(),
+      }),
+    )
     .optional(),
 });
 

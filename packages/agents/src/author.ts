@@ -22,6 +22,7 @@ import { guardTools } from "./loop.js";
 import { openMcpTools } from "./mcp.js";
 import { renderTestsRepo } from "./tests-repo.js";
 import { modelExchange } from "./exchange.js";
+import { callUsage } from "./usage.js";
 import { untrusted, UNTRUSTED_DATA_RULES, type ChangeContext } from "./context.js";
 import { modelForRole, stageGuard, type AgentStageDeps } from "./roles-run.js";
 import { AGENT_ROLES } from "./roles.js";
@@ -294,6 +295,7 @@ export async function runAuthor(
       let askedAboutSelectors = false;
       for (let attempt = 1; attempt <= AUTHOR_MAX_ATTEMPTS; attempt += 1) {
         attempts += 1;
+        const startedAt = Date.now();
         const result = await generateText({
           model: model.model,
           system: AUTHOR_SYSTEM,
@@ -307,10 +309,7 @@ export async function runAuthor(
           "author",
           model.id,
           model.profile,
-          {
-            inputTokens: result.usage.inputTokens ?? 0,
-            outputTokens: result.usage.outputTokens ?? 0,
-          },
+          callUsage(result.usage, startedAt),
           modelExchange("author", "author", model, { system: AUTHOR_SYSTEM, messages }, result),
         );
         const code = extractCode(result.text);

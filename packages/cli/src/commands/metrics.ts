@@ -9,6 +9,7 @@ import {
   readRunIndex,
   resolveWorkspaceRoot,
 } from "@qajitsu/core";
+import { costInsights, digestRun, weeklyCosts, type RunDigest } from "@qajitsu/report";
 import type { RuntimePorts } from "../adapters.js";
 import { loadProject } from "../project.js";
 import type { CommandIO } from "./fetch.js";
@@ -20,6 +21,98 @@ export interface Sample {
   readonly type: "gauge" | "counter";
   readonly labels: Readonly<Record<string, string>>;
   readonly value: number;
+}
+
+/**
+ * The digest of every run of a workspace (REQ-LLM-11/AC2), computed from each run's record, journal and results.
+ *
+ * @param root - Workspace root.
+ */
+export async function readRunDigests(root: string): Promise<RunDigest[]> {
+  const digests: RunDigest[] = [];
+  for (const ticket of await listTickets(root))
+    for (const entry of (await readRunIndex(root, ticket)).runs) {
+      const dir = join(root, ticket, entry.runId);
+      const parsed = RunRecordSchema.safeParse(
+        JSON.parse(await readFile(join(dir, "run.json"), "utf8").catch(() => "null")) as unknown,
+      );
+      if (!parsed.success) continue;
+      const attemptsMs: number[] = [];
+      for (const file of (await readdir(join(dir, "results")).catch(() => [] as string[])).filter((f) =>
+        f.endsWith(".json"),
+      )) {
+        const r = CaseResultFileSchema.safeParse(
+          JSON.parse(await readFile(join(dir, "results", file), "utf8").catch(() => "null")) as unknown,
+        );
+        if (r.success) for (const a of r.data.attempts) attemptsMs.push(a.durationMs ?? 0);
+      }
+      const { events } = parseEventLines(
+        await readFile(join(dir, "journal", "events.jsonl"), "utf8").catch(() => ""),
+      );
+      digests.push(
+        digestRun({
+          ticket,
+          runId: parsed.data.runId,
+          createdAt: parsed.data.createdAt,
+          data: parsed.data.data,
+          events,
+          attemptsMs,
+        }),
+      );
+    }
+  return digests;
+}
+
+/** Cost samples of a project (REQ-LLM-11/AC2+AC4): per verified ticket, per role, per week. */
+export function costSamples(digests: readonly RunDigest[]): Sample[] {
+  const all = costInsights(digests);
+  const gauge = (name: string, help: string, labels: Record<string, string>, value: number): Sample => ({
+    name,
+    help,
+    type: "gauge",
+    labels,
+    value,
+  });
+  return [
+    gauge("qajitsu_verified_tickets", "Tickets with a GO or NO-GO decision.", {}, all.verifiedTickets),
+    ...(all.costPerVerifiedTicketUsd === undefined
+      ? []
+      : [
+          gauge(
+            "qajitsu_cost_per_verified_ticket_usd",
+            "Model cost of every run over the verified tickets (a lower bound when cost_known is 0).",
+            { cost_known: all.costKnown ? "1" : "0" },
+            all.costPerVerifiedTicketUsd,
+          ),
+        ]),
+    ...Object.entries(all.byRole).map(([role, r]) =>
+      gauge("qajitsu_role_cost_usd", "Model cost per agent role.", { role }, r.costUsd),
+    ),
+    gauge(
+      "qajitsu_runner_minutes_per_ticket",
+      "Test execution minutes per ticket.",
+      {},
+      all.runnerMinutesPerTicket,
+    ),
+    gauge(
+      "qajitsu_stages_without_model_ratio",
+      "Share of pipeline stages that called no model.",
+      {},
+      all.stagesWithoutModelShare,
+    ),
+    ...weeklyCosts(digests).flatMap(({ week, insights }) =>
+      insights.costPerVerifiedTicketUsd === undefined
+        ? []
+        : [
+            gauge(
+              "qajitsu_week_cost_per_verified_ticket_usd",
+              "Cost per verified ticket by ISO week (trend).",
+              { week },
+              insights.costPerVerifiedTicketUsd,
+            ),
+          ],
+    ),
+  ];
 }
 
 /** Groups BLOCKED reasons into a few stable categories (labels must stay low-cardinality). */
@@ -156,6 +249,7 @@ export async function collectMetrics(root: string, now: Date): Promise<Sample[]>
       }
     }
   }
+  samples.push(...costSamples(await readRunDigests(root)));
   samples.push({
     name: "qajitsu_plan_accepted_unchanged_ratio",
     help: "Approved runs whose first plan version was approved.",

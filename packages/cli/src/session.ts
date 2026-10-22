@@ -29,6 +29,8 @@ export interface RunSession {
   readonly models: ModelRegistry;
   /** Resolves `secret://` references and registers values with the masker. */
   readonly resolveSecret: (reference: string) => Promise<string>;
+  /** The command's clock (ports), for timestamps and the day a price applies to. */
+  readonly now?: () => Date;
 }
 
 /** Ports for model access that tests can replace (mock providers by alias). */
@@ -130,7 +132,7 @@ export async function openSession(
     fetch: ports.fetch,
     ...(ports.extraModels ? { extra: ports.extraModels } : {}),
   });
-  return { project, ws, masker, logger, events, models, resolveSecret };
+  return { project, ws, masker, logger, events, models, resolveSecret, now: ports.now };
 }
 
 /**

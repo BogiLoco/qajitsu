@@ -25,6 +25,8 @@ import { loadProject, type LoadedProject } from "../project.js";
 import { registerConfiguredSecrets } from "../session.js";
 import type { CommandIO } from "./fetch.js";
 import { nextStage, rootOf } from "./runs.js";
+import { readRunDigests } from "./metrics.js";
+import { costInsights, weeklyCosts, type RunDigest } from "@qajitsu/report";
 
 /** One ticket with unfinished work (REQ-PRJ-05/AC2). */
 export interface OpenWork {
@@ -164,6 +166,32 @@ const renderWork = (open: readonly OpenWork[], done: number): string[] => [
   ...(done > 0 ? [`Done: ${String(done)} ticket(s)`] : []),
 ];
 
+const usd = (n: number): string => `$${n.toFixed(n < 1 ? 3 : 2)}`;
+
+/** Cost lines of a project (REQ-LLM-11/AC2+AC4): per verified ticket, by role, and the last weeks as a trend. */
+export function costLines(digests: readonly RunDigest[]): string[] {
+  const all = costInsights(digests);
+  if (all.runs === 0) return [];
+  const bound = all.costKnown ? "" : " (at least: some calls had no known price)";
+  const roles = Object.entries(all.byRole)
+    .sort(([, a], [, b]) => b.costUsd - a.costUsd)
+    .map(([role, r]) => `${role} ${usd(r.costUsd)}`)
+    .join(", ");
+  const weeks = weeklyCosts(digests)
+    .slice(-4)
+    .map(
+      ({ week, insights }) =>
+        `${week} ${insights.costPerVerifiedTicketUsd === undefined ? "–" : usd(insights.costPerVerifiedTicketUsd)} (${String(insights.verifiedTickets)})`,
+    )
+    .join(" · ");
+  return [
+    `Cost: ${usd(all.costUsd)}${bound} over ${String(all.runs)} run(s); ${String(all.verifiedTickets)} of ${String(all.tickets)} ticket(s) verified${all.costPerVerifiedTicketUsd === undefined ? "" : `, ${usd(all.costPerVerifiedTicketUsd)} per verified ticket`}`,
+    ...(roles ? [`  by role: ${roles}`] : []),
+    `  runner ${all.runnerMinutesPerTicket.toFixed(1)} min per ticket; ${String(Math.round(all.stagesWithoutModelShare * 100))}% of stages without a model`,
+    ...(weeks ? [`  per verified ticket by week: ${weeks}`] : []),
+  ];
+}
+
 /** Status lines of one project and its index for `context.json` (REQ-PRJ-05/AC1+AC3). */
 async function projectStatus(project: LoadedProject, ports: RuntimePorts): Promise<string[]> {
   const problems = (await projectChecks(project, ports, { online: false })).filter((c) => !c.ok);
@@ -200,6 +228,7 @@ async function projectStatus(project: LoadedProject, ports: RuntimePorts): Promi
     `Knowledge base: ${await knowledgeSummary(project)}`,
     ...renderWork(open, done),
     ...environments,
+    ...costLines(await readRunDigests(runsRoot)),
   ];
 }
 

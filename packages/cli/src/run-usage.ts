@@ -44,13 +44,14 @@ export function runTranscript(
  * @param options - `costBudget: false` for stages that stop between cases themselves (the author in `qj run`).
  */
 export function runUsage(
-  session: Pick<RunSession, "ws" | "project" | "events" | "masker">,
+  session: Pick<RunSession, "ws" | "project" | "events" | "masker" | "now">,
   options: { readonly costBudget?: boolean; readonly now?: () => Date } = {},
 ): UsageTracker {
   const { ws, project, events } = session;
   return createUsageTracker({
     events,
-    transcript: runTranscript(session, options.now ?? (() => new Date())),
+    transcript: runTranscript(session, options.now ?? session.now ?? (() => new Date())),
+    now: options.now ?? session.now ?? (() => new Date()),
     budget: project.config.models.token_budget,
     alreadyUsed: Number(ws.record.data["tokens"] ?? 0),
     alreadyCostUsd: Number(ws.record.data["costUsd"] ?? 0),

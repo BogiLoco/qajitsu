@@ -157,18 +157,18 @@ gateways know them; QAJitsu should ask instead of making the user copy them into
 
 ### REQ-LLM-11 · Cost per verified ticket
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: 2
 - Related: REQ-LLM-07, REQ-LLM-09, REQ-PLAN-16
-- Note: TO BE REVIEWED: the original said prices come only from configuration, never hard-coded; REQ-LLM-09 (accepted 2026-10-21) built in Claude prices with config overrides, so AC3 was adapted to that. Confirm.
+- Note: TO BE REVIEWED: the original said prices come only from configuration, never hard-coded; REQ-LLM-09 (accepted 2026-10-21) built in Claude prices with config overrides, so AC3 was adapted to that. Confirm. TO BE REVIEWED (2026-10-22): AC4's web console view moves to REQ-WEB-01, which does not exist yet; a verified ticket is a ticket with a GO or NO-GO decision (REQ-SCALE-10/AC1), and the cost per verified ticket counts every run, also those that decided nothing.
 
 **Acceptance criteria**
 
-- [ ] AC1: Tokens (input, cached input, output), model and cost are recorded per agent step and role.
-- [ ] AC2: Per run and per project: cost per verified ticket, cost per role, runner minutes per ticket and the share of steps done without a model.
-- [ ] AC3: A price declared in the project config (which wins over the built-in one, REQ-LLM-09/AC2) can carry the date it applies from; costs are computed with the price valid on the day of the call.
-- [ ] AC4: Trends over time are shown in `qj status`, `qj metrics` and the web console; numbers are computed from run records.
+- [x] AC1: Tokens (input, cached input, output), model and cost are recorded per agent step and role.
+- [x] AC2: Per run and per project: cost per verified ticket, cost per role, runner minutes per ticket and the share of steps done without a model.
+- [x] AC3: A price declared in the project config (which wins over the built-in one, REQ-LLM-09/AC2) can carry the date it applies from; costs are computed with the price valid on the day of the call.
+- [x] AC4: Trends over time are shown in `qj status` and `qj metrics` (in the web console with REQ-WEB-01); numbers are computed from run records.
 
 ### REQ-LLM-12 · Provider cost features: prompt caching and batches
 
@@ -197,3 +197,23 @@ gateways know them; QAJitsu should ask instead of making the user copy them into
 - [ ] AC1: Periodically, recorded costs and benchmark results are compared per role and model (for example the healer on a smaller model with the same success rate).
 - [ ] AC2: A cheaper model for a role is proposed only if plan acceptance, coverage and mutation score on the frozen benchmark are not worse.
 - [ ] AC3: Proposals are shown with expected savings and the evidence; a person applies them; nothing changes `models.roles` automatically.
+
+### REQ-LLM-14 · Agent scorecard
+
+- Status: accepted
+- Priority: should
+- Stage: 7
+- Related: REQ-LLM-06, REQ-LLM-11, REQ-PLAN-16, REQ-NFR-11, REQ-VER-16, REQ-SKILL-04, INV-1, INV-6
+- Note: accepted by the owner on 2026-10-22. Deterministic first: every number comes from recorded data
+  (`journal/agents.jsonl`, the journal, gate and review records); an LLM judge is used only offline in benchmarks and
+  never affects a status or a reported number.
+
+How well each agent does its job, per role and model, from what every run already records.
+
+**Acceptance criteria**
+
+- [ ] AC1: Per role and model, from the agent transcript and the journal: calls, tokens, cost, latency (p50, p95), repair rounds of invalid output, guard denials, and the share of calls that needed no repair.
+- [ ] AC2: Role outcomes computed by code: the author's share of specs that passed the static checks and the quality gate on the first try, quality findings per rule, review send-backs (REQ-VER-24); the planner's coverage gaps and flagged expectations (REQ-PLAN-14); the healer's healed specs accepted by the assertion lock.
+- [ ] AC3: `qj metrics` exports the scorecard (Prometheus and JSON) and `qj status` shows it per project; numbers are computed from run records, never estimated by a model.
+- [ ] AC4: `qj bench` adds the scorecard of each model to its report, with ground truth from the demo shop (seeded bug found, plan covers the bug's criterion), and compares it with the previous result of the same model.
+- [ ] AC5: Recorded agent answers from benchmark runs can be replayed as scripted models in tests, so changes to parsers and checks are tested against real model output without calling a model.

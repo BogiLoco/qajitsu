@@ -1,11 +1,60 @@
 import type { Actor, EventLog, ModelExchange, TranscriptRecorder } from "@qajitsu/core";
-import type { ModelProfile } from "@qajitsu/models";
+import { priceOn, type ModelProfile } from "@qajitsu/models";
 import { TokenBudgetExceededError } from "./errors.js";
 
 /** Token usage of one model call. */
 export interface CallUsage {
+  /** All input tokens, cached ones included. */
   readonly inputTokens: number;
   readonly outputTokens: number;
+  /** Input tokens read from the provider's prompt cache (REQ-LLM-11/AC1). */
+  readonly cachedInputTokens?: number | undefined;
+  /** Input tokens written to the provider's prompt cache. */
+  readonly cacheWriteTokens?: number | undefined;
+  /** Wall time of the call in milliseconds (REQ-NFR-11/AC1). */
+  readonly durationMs?: number | undefined;
+}
+
+/** The usage of an AI SDK result, with the call's duration. */
+export function callUsage(
+  usage: {
+    readonly inputTokens?: number | undefined;
+    readonly outputTokens?: number | undefined;
+    readonly inputTokenDetails?: {
+      readonly cacheReadTokens?: number | undefined;
+      readonly cacheWriteTokens?: number | undefined;
+    };
+  },
+  startedAt?: number,
+): CallUsage {
+  const cached = usage.inputTokenDetails?.cacheReadTokens ?? 0;
+  const written = usage.inputTokenDetails?.cacheWriteTokens ?? 0;
+  return {
+    inputTokens: usage.inputTokens ?? 0,
+    outputTokens: usage.outputTokens ?? 0,
+    ...(cached > 0 ? { cachedInputTokens: cached } : {}),
+    ...(written > 0 ? { cacheWriteTokens: written } : {}),
+    ...(startedAt === undefined ? {} : { durationMs: Math.max(0, Date.now() - startedAt) }),
+  };
+}
+
+/**
+ * The cost of one call in USD, with the price valid on the day of the call (REQ-LLM-11/AC3). Cache reads and writes
+ * without a price of their own are charged as input, so a cost is never lower than it may be.
+ */
+export function callCost(profile: ModelProfile, usage: CallUsage, day: Date): number | undefined {
+  const price = priceOn(profile, day);
+  if (price === undefined) return undefined;
+  const cached = usage.cachedInputTokens ?? 0;
+  const written = usage.cacheWriteTokens ?? 0;
+  const plain = Math.max(0, usage.inputTokens - cached - written);
+  return (
+    (plain * price.input +
+      cached * (price.cachedInput ?? price.input) +
+      written * (price.cacheWrite ?? price.input) +
+      usage.outputTokens * price.output) /
+    1_000_000
+  );
 }
 
 /** Accumulates usage per run, journals it and enforces the token budget (REQ-LLM-07). */
@@ -47,6 +96,8 @@ export function createUsageTracker(options: {
   readonly costBudgetUsd?: number | undefined;
   /** Stores each model exchange (`journal/agents.jsonl`, REQ-VER-16/AC2). */
   readonly transcript?: TranscriptRecorder | undefined;
+  /** Clock for the day a price applies to (REQ-LLM-11/AC3); the system clock by default. */
+  readonly now?: (() => Date) | undefined;
 }): UsageTracker {
   let total = options.alreadyUsed ?? 0;
   let cost = options.alreadyCostUsd ?? 0;
@@ -63,12 +114,8 @@ export function createUsageTracker(options: {
     },
     record(stage, role, modelId, profile, usage, exchange) {
       total += usage.inputTokens + usage.outputTokens;
-      const price = profile.costPerMTok;
-      const callCost =
-        price === undefined
-          ? undefined
-          : (usage.inputTokens * price.input + usage.outputTokens * price.output) / 1_000_000;
-      if (callCost !== undefined) cost += callCost;
+      const callCostUsd = callCost(profile, usage, (options.now ?? (() => new Date()))());
+      if (callCostUsd !== undefined) cost += callCostUsd;
       else known = false;
       const actor: Actor = { kind: "agent", name: role };
       const stored = exchange && options.transcript ? options.transcript(exchange) : undefined;
@@ -77,7 +124,10 @@ export function createUsageTracker(options: {
         model: modelId,
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
-        ...(callCost === undefined ? {} : { costUsd: Number(callCost.toFixed(6)) }),
+        ...(usage.cachedInputTokens ? { cachedInputTokens: usage.cachedInputTokens } : {}),
+        ...(usage.cacheWriteTokens ? { cacheWriteTokens: usage.cacheWriteTokens } : {}),
+        ...(usage.durationMs === undefined ? {} : { durationMs: usage.durationMs }),
+        ...(callCostUsd === undefined ? {} : { costUsd: Number(callCostUsd.toFixed(6)) }),
         runTotalTokens: total,
         ...(stored ? { exchangeSha256: stored.sha256 } : {}),
       });
@@ -96,8 +146,8 @@ export function createUsageTracker(options: {
         );
       }
       const limit = options.costBudgetUsd;
-      if (limit !== undefined && callCost !== undefined && cost >= limit) {
-        const before = cost - callCost;
+      if (limit !== undefined && callCostUsd !== undefined && cost >= limit) {
+        const before = cost - callCostUsd;
         options.events.emit(stage, { kind: "system", name: "orchestrator" }, "budget.exceeded", {
           budgetUsd: limit,
           costUsd: Number(cost.toFixed(6)),

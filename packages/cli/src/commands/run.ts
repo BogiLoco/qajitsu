@@ -744,7 +744,13 @@ export async function runRun(
     await ws.update({
       status: "completed",
       stage: "run",
-      data: { ...ws.record.data, results: statuses, gatesOk: verdict.ok },
+      // REQ-LLM-11/AC2: the decision tells verified tickets (GO or NO-GO) from runs that decided nothing.
+      data: {
+        ...ws.record.data,
+        results: statuses,
+        gatesOk: verdict.ok,
+        decision: verdict.decision.decision,
+      },
       checkpoints: [...ws.record.checkpoints, { stage: "run", at: ports.now().toISOString() }],
     });
     events.emit("run", SYSTEM, "stage.end", { statuses, gatesOk: verdict.ok });

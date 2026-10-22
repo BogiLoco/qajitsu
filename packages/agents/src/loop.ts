@@ -14,7 +14,7 @@ import {
 import { z } from "zod";
 import { AgentOutputError } from "./errors.js";
 import { modelExchange } from "./exchange.js";
-import type { UsageTracker } from "./usage.js";
+import { callUsage, type UsageTracker } from "./usage.js";
 
 /** A tool an agent may call. Execution happens only after the guard allows it (REQ-VER-03/AC3). */
 export interface AgentTool {
@@ -181,6 +181,7 @@ export async function runStructuredAgent<T extends z.ZodType>(
   for (let attempt = 1; attempt <= MAX_OUTPUT_ATTEMPTS; attempt += 1) {
     const constrained = attempt > 1 && constrainedAvailable && run.retryWithTools !== true;
     let result;
+    const startedAt = Date.now();
     try {
       result = await generateText({
         model: run.model.model,
@@ -214,10 +215,7 @@ export async function runStructuredAgent<T extends z.ZodType>(
       run.role,
       run.model.id,
       run.model.profile,
-      {
-        inputTokens: result.usage.inputTokens ?? 0,
-        outputTokens: result.usage.outputTokens ?? 0,
-      },
+      callUsage(result.usage, startedAt),
       modelExchange(run.stage, run.role, run.model, { system: run.system, messages }, result),
     );
     let errors: string[];
