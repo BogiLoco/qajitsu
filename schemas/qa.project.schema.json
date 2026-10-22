@@ -596,6 +596,90 @@
       },
       "additionalProperties": false
     },
+    "workflow": {
+      "type": "object",
+      "properties": {
+        "statuses": {
+          "type": "object",
+          "properties": {
+            "start": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in_testing": {
+              "type": "string",
+              "minLength": 1
+            },
+            "waiting_for_approval": {
+              "type": "string",
+              "minLength": 1
+            },
+            "needs_info": {
+              "type": "string",
+              "minLength": 1
+            },
+            "passed": {
+              "type": "string",
+              "minLength": 1
+            },
+            "failed": {
+              "type": "string",
+              "minLength": 1
+            },
+            "needs_review": {
+              "type": "string",
+              "minLength": 1
+            },
+            "done": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "start",
+            "in_testing",
+            "needs_info",
+            "passed",
+            "failed",
+            "needs_review"
+          ],
+          "additionalProperties": false
+        },
+        "passed_to_done": {
+          "default": false,
+          "type": "boolean"
+        },
+        "qa_assignee": {
+          "type": "string",
+          "minLength": 1
+        },
+        "authors": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "attention_label": {
+          "default": "qa-needs-attention",
+          "type": "string",
+          "pattern": "^\\S+$"
+        },
+        "max_runs_per_day": {
+          "default": 5,
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "statuses"
+      ],
+      "additionalProperties": false
+    },
     "mobile": {
       "type": "object",
       "properties": {

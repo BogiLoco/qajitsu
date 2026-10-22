@@ -39,6 +39,7 @@ import { explorationLines } from "./explore-review.js";
 import { approvalCommenter, recordReviewApproval, runApprovalFlow } from "./approval-flow.js";
 import { publisherFor } from "./publish.js";
 import { recordReadinessOverride, runReadinessGate } from "./readiness.js";
+import { moveToRole, runWorkflow } from "./workflow.js";
 import { createMasker } from "@qajitsu/steps";
 import { runUsage, saveRunUsage } from "../run-usage.js";
 import { exportRunTelemetry } from "./telemetry.js";
@@ -393,6 +394,17 @@ export async function runPlan(
           io.write(
             `No plan for ${ws.ticket}: answer the questions in the ticket and run qajitsu plan ${ws.ticket} again in a new run, or plan anyway with --override-readiness "<reason>".\n`,
           );
+          // REQ-PLAN-13/AC2: in the team's workflow the ticket waits for its author in "needs info".
+          const workflow = runWorkflow(session, ports);
+          if (workflow)
+            await moveToRole(
+              session,
+              io,
+              workflow,
+              publisherFor(session, ports),
+              "needs_info",
+              `readiness ${readiness.result}`,
+            );
           return 2;
         }
         await recordReadinessOverride(session, {

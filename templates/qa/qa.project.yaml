@@ -176,6 +176,18 @@ test_types: [api, web]
 # result is posted to the ticket (always | not_ready | never)
 # readiness: { comment: always, risk_rules: [{ pattern: "^api/payments/", level: high, reason: "payments API" }] }
 #
+# The team's Jira workflow (REQ-FLOW-02, REQ-FLOW-04): status names per role. After `qj publish` the ticket moves by
+# the computed statuses only: all PASSED -> passed (done only with passed_to_done), FAILED -> failed and the change's
+# author (authors maps code host user -> Jira account), anything else stays in in_testing with attention_label and
+# qa_assignee. A missing transition leaves the ticket where it is and adds a comment. Checked by `qj doctor --online`.
+# workflow:
+#   statuses: { start: "Ready for QA", in_testing: "In QA", waiting_for_approval: "Plan review", needs_info: "Needs info", passed: "QA passed", failed: "In development", needs_review: "QA review", done: "Done" }
+#   passed_to_done: false
+#   qa_assignee: <jira-account-id>
+#   authors: { octocat: <jira-account-id> }
+#   attention_label: qa-needs-attention
+#   max_runs_per_day: 5
+#
 # Prompt cache and input limits (REQ-LLM-12), inside models: { ... }:
 #   cache_ttl: auto            # auto | 5m | 1h | off
 #   max_input_tokens: 150000   # stop calls that would send more

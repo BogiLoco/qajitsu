@@ -223,7 +223,7 @@ Before planning, code and the planner check that the ticket can be tested at all
 **Acceptance criteria**
 
 - [x] AC1: Checks: acceptance criteria present, scope understandable, linked change found (when code access is not `none`), target environment known.
-- [ ] AC2: A ticket that fails the gate gets a list of concrete questions instead of a plan; in the Jira workflow it moves to the configured "needs info" status (REQ-FLOW-02).
+- [x] AC2: A ticket that fails the gate gets a list of concrete questions instead of a plan; in the Jira workflow it moves to the configured "needs info" status (REQ-FLOW-02).
 - [x] AC3: The person can override the gate explicitly; the override is recorded in `run.json`.
 - [x] AC4: The result is READY, NEEDS_CLARIFICATION or NOT_TESTABLE, with a risk level (low, medium, high) and a list of requirement gaps, posted to the ticket as a structured comment.
 - [x] AC5: The risk level is computed by rules from the change (paths, components, migrations, security-relevant areas) where code access allows; the agent may add reasons but cannot lower a computed level.

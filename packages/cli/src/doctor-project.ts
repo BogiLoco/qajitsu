@@ -9,6 +9,7 @@ import { buildAdapters, createCliSecretResolver, type RuntimePorts } from "./ada
 import { secretFileCheck, type DoctorCheck } from "./doctor.js";
 import { createCliLogger } from "./logger.js";
 import type { LoadedProject } from "./project.js";
+import { workflowChecks, workflowFor } from "./commands/workflow.js";
 
 const exists = (path: string) =>
   access(path).then(
@@ -159,6 +160,19 @@ export async function projectChecks(
       const r = (await host.check?.()) ?? { ok: true, detail: "no check available" };
       checks.push({ name: `code host ${alias}`, ...r });
     }
+  }
+  // REQ-FLOW-02/AC2: mapped statuses exist and the account may move tickets (file tickets need no network).
+  if (project.config.workflow && (options.online || project.config.jira.type === "file")) {
+    const workflow = workflowFor(project, {
+      fetch: ports.fetch,
+      now: ports.now,
+      logger: createCliLogger({ file: devNull, mask: (v) => masker.maskJson(v) }),
+      resolveSecret,
+      registerSecret: (v) => {
+        masker.register(v);
+      },
+    });
+    if (workflow) checks.push(...(await workflowChecks(project, workflow)));
   }
   return checks.map((c) => ({ ...c, detail: masker.maskText(c.detail) }));
 }

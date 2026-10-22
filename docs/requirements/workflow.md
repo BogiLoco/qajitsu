@@ -20,16 +20,16 @@ Extends REQ-CI-02 (a Jira automation that dispatches a pipeline) with QAJitsu pi
 
 ### REQ-FLOW-02 · Status mapping per project
 
-- Status: proposed
+- Status: implemented
 - Priority: must
 - Stage: 10
 - Related: REQ-FLOW-01, REQ-CFG-01
 
 **Acceptance criteria**
 
-- [ ] AC1: The project config maps roles to the team's own status names: start, in testing, waiting for plan approval, needs info, passed, failed, needs human review.
-- [ ] AC2: `qj doctor` checks that the mapped statuses and transitions exist in the Jira project and that the service account may perform them.
-- [ ] AC3: A missing transition at run time leaves the ticket where it is and adds a comment; the run result is not lost.
+- [x] AC1: The project config maps roles to the team's own status names: start, in testing, waiting for plan approval, needs info, passed, failed, needs human review.
+- [x] AC2: `qj doctor` checks that the mapped statuses and transitions exist in the Jira project and that the service account may perform them.
+- [x] AC3: A missing transition at run time leaves the ticket where it is and adds a comment; the run result is not lost.
 
 ### REQ-FLOW-03 · Plan approval in the ticket
 
@@ -52,7 +52,7 @@ Implements REQ-PLAN-07/AC3 (approval in Jira by comment) inside the approval flo
 
 ### REQ-FLOW-04 · Transition policy from the verdict
 
-- Status: proposed
+- Status: implemented
 - Priority: must
 - Stage: 10
 - Related: REQ-VER-01, REQ-VER-07, REQ-PUB-01, REQ-PUB-05, INV-1
@@ -61,11 +61,11 @@ Implements REQ-PUB-05/AC3 (transition the ticket after a run).
 
 **Acceptance criteria**
 
-- [ ] AC1: All cases PASSED: the ticket moves to the "passed" status; moving it to Done is allowed only when the project enables it explicitly.
-- [ ] AC2: Confirmed FAILED (after retries, REQ-EXEC-08): the ticket moves back to development, assigned to the change's author, with reproduction steps and evidence links.
-- [ ] AC3: BLOCKED, NEEDS_REVIEW, FLAKY or NOT_RUN: the ticket stays in testing, gets a label and is assigned to the configured QA person; it never goes to Done or back to development.
-- [ ] AC4: The transition is decided by code from the computed matrix only; agents cannot trigger transitions.
-- [ ] AC5: The results comment is published before the transition (REQ-PUB-01).
+- [x] AC1: All cases PASSED: the ticket moves to the "passed" status; moving it to Done is allowed only when the project enables it explicitly.
+- [x] AC2: Confirmed FAILED (after retries, REQ-EXEC-08): the ticket moves back to development, assigned to the change's author, with reproduction steps and evidence links.
+- [x] AC3: BLOCKED, NEEDS_REVIEW, FLAKY or NOT_RUN: the ticket stays in testing, gets a label and is assigned to the configured QA person; it never goes to Done or back to development.
+- [x] AC4: The transition is decided by code from the computed matrix only; agents cannot trigger transitions.
+- [x] AC5: The results comment is published before the transition (REQ-PUB-01).
 
 ### REQ-FLOW-05 · One run per ticket and loop limits
 

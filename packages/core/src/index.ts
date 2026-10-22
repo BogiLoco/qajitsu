@@ -44,3 +44,4 @@ export * from "./plan/locale.js";
 export * from "./plan/depth.js";
 export * from "./plan/map-around.js";
 export * from "./explore/review.js";
+export * from "./workflow/move.js";

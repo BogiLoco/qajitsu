@@ -270,6 +270,38 @@ export const ProjectConfigSchema = z.strictObject({
         ctx.addIssue({ code: "custom", path: ["model"], message: "Required for a flow with a model step" });
     })
     .default({ flow: ["person"], model_only: "as-computed", jira: "off" }),
+  /**
+   * The team's ticket workflow (REQ-FLOW-02..05): the status names QAJitsu moves a ticket to, by role. Without this
+   * section QAJitsu never moves a ticket.
+   */
+  workflow: z
+    .strictObject({
+      statuses: z.strictObject({
+        start: z.string().min(1),
+        in_testing: z.string().min(1),
+        waiting_for_approval: z.string().min(1).optional(),
+        needs_info: z.string().min(1),
+        passed: z.string().min(1),
+        failed: z.string().min(1),
+        needs_review: z.string().min(1),
+        /** Used only with `passed_to_done` (REQ-FLOW-04/AC1). */
+        done: z.string().min(1).optional(),
+      }),
+      /** Move a ticket whose cases all PASSED on to `done` (REQ-FLOW-04/AC1); off by default. */
+      passed_to_done: z.boolean().default(false),
+      /** Account a ticket that needs a person goes to (REQ-FLOW-04/AC3). */
+      qa_assignee: z.string().min(1).optional(),
+      /**
+       * Jira accounts of the people who write changes, by code host login, so a FAILED ticket goes back to the change's
+       * author (REQ-FLOW-04/AC2).
+       */
+      authors: z.record(z.string(), z.string()).default({}),
+      /** Label of a ticket that needs a person's look (BLOCKED, NEEDS_REVIEW, FLAKY, NOT_RUN). */
+      attention_label: z.string().regex(/^\S+$/).default("qa-needs-attention"),
+      /** Most runs of one ticket per day; after it the ticket goes to `needs_review` (REQ-FLOW-05/AC2). */
+      max_runs_per_day: z.number().int().positive().default(5),
+    })
+    .optional(),
   /** Mobile runner, devices and app binaries (REQ-EXEC-06, REQ-ENV-06, REQ-EVD-03). */
   mobile: MobileSchema.optional(),
   /** Web runner (REQ-EXEC-05, REQ-EVD-06). */

@@ -26,6 +26,7 @@ export interface GitLabConfig {
 
 const MergeRequestSchema = z.object({
   iid: z.number(),
+  author: z.object({ username: z.string() }).optional(),
   title: z.string(),
   description: z.string().nullable().optional(),
   web_url: z.string(),
@@ -154,6 +155,7 @@ export function createGitLabCodeHost(
     targetBranch: mr.target_branch,
     headSha: mr.sha,
     url: mr.web_url,
+    ...(mr.author?.username ? { author: mr.author.username } : {}),
     ...(matchedBy ? { matchedBy } : {}),
   });
 
