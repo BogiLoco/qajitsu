@@ -1,4 +1,5 @@
 import { annotatedFirst } from "./annotated.js";
+import { sealProblems } from "./audit-trail.js";
 import { specReviewNotes } from "./spec-review.js";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -636,6 +637,7 @@ export async function computeVerdict(
   const unlisted = (await listEvidenceFiles(ws.path("evidence"))).filter(
     (p) => p !== "manifest.json" && !listed.has(p),
   );
+  const sealed = await sealProblems(session, journalText);
   const gates: GateResult[] = [
     ...evaluated.gates,
     secretGate,
@@ -651,6 +653,8 @@ export async function computeVerdict(
       ok: approvalCheck.problems.length === 0,
       problems: [...approvalCheck.problems],
     },
+    // REQ-VER-15/AC8: results, specs and the manifest are the ones the run sealed when it ended.
+    { gate: "run-sealed", ok: sealed.length === 0, problems: sealed },
     // REQ-OBS-05: the journal published with the results must be the one that was written.
     {
       gate: "journal-intact",

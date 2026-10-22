@@ -1185,7 +1185,7 @@ verification: { auditor: optional, canary: true, triage: on }
   a secret scan gate before publishing.
 - **Tool guard.** Agents cannot write results, evidence, the plan, the journal or `run.json`, cannot read generated
   secrets, and cannot reach hosts outside the allowlist; every decision is journaled.
-- **Tamper-evident journal.** Hash chain, anchors in `run.json`, `journal-intact` publish gate, `qj audit verify`,
+- **Tamper-evident journal.** Hash chain, anchors in `run.json`, `journal-intact` publish gate, a seal of results, specs and the evidence manifest when a run ends (`run-sealed` gate), `qj audit verify`,
   separate audit retention.
 - **Audit trail and signed certificate.** Every prompt, answer and tool call of every model is stored masked
   (`journal/agents.jsonl`); `qj audit trail` lists everything behind the verdict with hashes and the gaps;

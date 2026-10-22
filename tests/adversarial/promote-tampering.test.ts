@@ -89,7 +89,10 @@ describe("promotion cannot be faked (REQ-PUB-08/AC2, invariants 1, 3, 8)", () =>
     await writeFile(resultsFile, JSON.stringify(results));
     const r = await p.run(["promote", "DEMO-1", "--yes"]);
     expect(r.exitCode).toBe(3);
-    expect(r.err).toContain("[SPEC_CHANGED_SINCE_RUN]");
+    // Since the run-sealed gate (REQ-VER-15/AC8) the swap is refused before the spec check is even reached: both the
+    // spec and the result differ from the seal the run made when it ended.
+    expect(r.err).toContain("[PROMOTE_GATES_FAILED]");
+    expect(r.err).toContain("run-sealed");
     expect(await p.branches()).not.toContain("qajitsu/");
   }, 240_000);
 

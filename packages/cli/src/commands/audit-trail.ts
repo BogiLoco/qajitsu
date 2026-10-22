@@ -95,7 +95,7 @@ export async function loadAuditTrail(session: Pick<RunSession, "ws">): Promise<L
 export const SEAL_EVENT = "run.sealed";
 
 /** The hashes of the last seal in a journal, if any. */
-function lastSeal(events: string | undefined): Record<string, string> | undefined {
+export function lastSeal(events: string | undefined): Record<string, string> | undefined {
   let sealed: Record<string, string> | undefined;
   for (const line of (events ?? "").split("\n")) {
     if (!line.includes(`"${SEAL_EVENT}"`)) continue;
@@ -125,6 +125,35 @@ export async function sealRun(session: Pick<RunSession, "ws" | "events">): Promi
     files[p] = sha256(new Uint8Array(await readFile(join(ws.dir, p))));
   // Stage "certificate": bookkeeping after the verdict, kept out of the report timeline like the certificate itself.
   session.events.emit("certificate", { kind: "system", name: "orchestrator" }, SEAL_EVENT, { files });
+}
+
+/**
+ * What changed since the run sealed itself (REQ-VER-07, REQ-VER-15/AC8): results, specs and the evidence manifest
+ * edited, removed or added after the run ended. A run without a seal (still running, or from an older version) has
+ * nothing to compare and gives no problems here; the audit trail reports the missing seal.
+ *
+ * @param session - The run.
+ * @param journal - Content of its journal.
+ */
+export async function sealProblems(session: Pick<RunSession, "ws">, journal: string): Promise<string[]> {
+  const sealed = lastSeal(journal);
+  if (sealed === undefined) return [];
+  const { ws } = session;
+  const paths: string[] = [];
+  await walk(ws.dir, ws.dir, paths);
+  const now = new Map<string, string>();
+  for (const p of paths.filter((x) => /^(results|specs)\//.test(x) || x === "evidence/manifest.json"))
+    now.set(p, sha256(new Uint8Array(await readFile(join(ws.dir, p)))));
+  const problems: string[] = [];
+  for (const [path, sha] of Object.entries(sealed)) {
+    const current = now.get(path);
+    if (current === undefined) problems.push(`${path} was sealed when the run ended and is missing`);
+    else if (current !== sha) problems.push(`${path} changed after the run`);
+  }
+  for (const path of now.keys())
+    if (sealed[path] === undefined && path !== "evidence/manifest.json")
+      problems.push(`${path} was added after the run`);
+  return problems;
 }
 
 /** The `audit/trail.json` document: the trail plus the records that are not files. */

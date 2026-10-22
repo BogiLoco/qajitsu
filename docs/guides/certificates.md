@@ -37,8 +37,8 @@ A certificate does **not** prove:
 
 A certificate signs what is in the run folder when it is issued, so the time between the end of a run and its
 certificate matters. With a signing key the run is certified the moment it ends. Without one, the end of the run
-seals the SHA-256 of every file under `results/` and `specs/` in the journal (`run.sealed`); the audit trail reports
-any of them changed, missing or added later, and no certificate is issued over such a run. Statuses in the
+seals the SHA-256 of every file under `results/` and `specs/` and of the evidence manifest in the journal (`run.sealed`); the audit trail reports
+any of them changed, missing or added later, no certificate is issued over such a run, and the `run-sealed` publish gate stops it from being published or exported, with or without a key. Statuses in the
 certificate are computed from the files at issue time, never copied from `run.json`. Someone who can rewrite the
 whole journal and its anchor in `run.json` could still forge the seal; only signing closes that, which is why a run
 with a key is certified at once.

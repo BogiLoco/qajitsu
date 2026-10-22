@@ -73,6 +73,26 @@ describe("no window to certify better results than the run's (REQ-VER-15, REQ-VE
     expect(certify.out).toContain("evidence/manifest.json changed after the run");
   }, 180_000);
 
+  it("REQ-VER-07 + REQ-VER-15/AC8: a result rewritten to PASSED after the run is never published, with or without a key", async () => {
+    const { p } = await project(false);
+    const file = join(p.runDir, "results", "TC-01.json");
+    const result = JSON.parse(await readFile(file, "utf8")) as {
+      attempts: { outcome: string; assertions: { pass: boolean; actual: unknown; expected: unknown }[] }[];
+    };
+    for (const a of result.attempts) {
+      a.outcome = "passed";
+      for (const x of a.assertions) {
+        x.pass = true;
+        x.actual = x.expected;
+      }
+    }
+    await writeFile(file, JSON.stringify(result, null, 2));
+    const published = await p.run(["publish", "DEMO-1", "--auto-publish"]);
+    expect(published.exitCode).not.toBe(0);
+    expect(published.err).toContain("run-sealed");
+    expect(published.err).toContain("results/TC-01.json changed after the run");
+  }, 180_000);
+
   it("REQ-VER-15/AC1: the statuses in the certificate are computed from the files, never taken from run.json", async () => {
     const { p, setKey } = await project(false);
     const record = join(p.runDir, "run.json");
