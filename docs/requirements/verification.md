@@ -350,7 +350,7 @@ not depend on the application. Planned expectations without a `verify()` are alr
 
 ### REQ-VER-24 · Human review of test code on demand
 
-- Status: proposed
+- Status: implemented
 - Priority: could
 - Stage: 7
 - Related: REQ-VER-23, REQ-PLAN-04, REQ-EXEC-03, INV-1
@@ -359,8 +359,8 @@ For a new project, a QA lead can read the generated tests before they run until 
 
 **Acceptance criteria**
 
-- [ ] AC1: Turned on per project (for example for the first N runs or until switched off) or per run with a flag; off by default.
-- [ ] AC2: With it on, generated specs wait for a person after the automatic checks; the person sees each spec next to its planned steps and expectations, and accepts it or sends it back with a reason.
-- [ ] AC3: A spec sent back goes to the author once with the reason, then the case is BLOCKED; an unreviewed spec never runs.
-- [ ] AC4: Each decision is recorded with the reviewer, the spec's SHA-256 and the time, in the run record and the journal; the report shows which specs a person reviewed.
-- [ ] AC5: The review can only stop a spec; it never sets or changes a status.
+- [x] AC1: Turned on per project (for example for the first N runs or until switched off) or per run with a flag; off by default.
+- [x] AC2: With it on, generated specs wait for a person after the automatic checks; the person sees each spec next to its planned steps and expectations, and accepts it or sends it back with a reason.
+- [x] AC3: A spec sent back goes to the author once with the reason, then the case is BLOCKED; an unreviewed spec never runs.
+- [x] AC4: Each decision is recorded with the reviewer, the spec's SHA-256 and the time, in the run record and the journal; the report shows which specs a person reviewed.
+- [x] AC5: The review can only stop a spec; it never sets or changes a status.

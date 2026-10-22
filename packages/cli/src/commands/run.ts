@@ -52,6 +52,7 @@ import { auditRun, blockedRun, triageRun, runCanary } from "./checks.js";
 import { createManualPrompter } from "./manual.js";
 import { formatEstimate, readRunHistory } from "./estimate.js";
 import { rootOf } from "./runs.js";
+import { reviewSpecs, specReviewOn } from "./spec-review.js";
 import { runMessages, type MessagePorts, type RunMessages } from "./messages.js";
 import { approvalContext, changedParts, type ApprovalContext } from "./context-fingerprint.js";
 import { runRunHook, type HookExec } from "./hooks.js";
@@ -89,6 +90,8 @@ export interface RunOptions extends LiveOptions {
   readonly user?: string | undefined;
   /** One case at a time, in plan order, across every lane and device (REQ-EXEC-19/AC2). */
   readonly sequential?: boolean | undefined;
+  /** A person reviews every generated spec before it runs (REQ-VER-24/AC1). */
+  readonly reviewSpecs?: boolean | undefined;
 }
 
 /** Ports `run` needs beyond the common ones; the executor is replaceable in tests. */
@@ -613,6 +616,7 @@ export async function runRun(
           onDevice: (stop) => deviceStops.push(stop),
           live,
           sequential: options.sequential === true,
+          reviewSpecs: options.reviewSpecs === true,
         });
         if (pending.length > 0)
           io.write(`Rejected spec files (not in the approved plan or misplaced): ${pending.join(", ")}\n`);
@@ -707,6 +711,12 @@ export async function runRun(
     const code = exitCodeFor(verdict.cases.map((c) => c.status));
     return !verdict.ok && code === 0 ? 2 : code;
   } catch (error) {
+    // REQ-VER-24: specs that wait for a person stop the run before anything ran; it continues after the review.
+    if (error instanceof ConfigError && error.code === "SPEC_REVIEW_PENDING") {
+      io.write(`${error.message}\n`);
+      await stopOnInterrupt?.().catch(() => undefined);
+      return 2;
+    }
     const code = error instanceof QajitsuError ? ` [${error.code}]` : "";
     const issues =
       error instanceof QajitsuError && Array.isArray(error.context["issues"])
@@ -753,6 +763,8 @@ async function executeCases(
     readonly live?: LiveRun | undefined;
     /** One case at a time (REQ-EXEC-19/AC2). */
     readonly sequential?: boolean | undefined;
+    /** `--review-specs` (REQ-VER-24/AC1). */
+    readonly reviewSpecs?: boolean | undefined;
   } = {
     build: false,
     onDevice: () => undefined,
@@ -803,14 +815,8 @@ async function executeCases(
     budget.max_minutes !== undefined && ports.now().getTime() - startedAt >= budget.max_minutes * 60_000
       ? `the run's time budget (${String(budget.max_minutes)} min) was reached`
       : undefined;
-  // REQ-EXEC-17/AC1+AC2: a regression run calls no agent or model; a case without a verified spec is BLOCKED.
-  const regression = RegressionRunSchema.safeParse(ws.record.data["regression"]);
-  if (regression.success) {
-    for (const [caseId, reason] of Object.entries(regression.data.blocked)) blocked.set(caseId, reason);
-    for (const c of missing)
-      if (!blocked.has(c.id)) blocked.set(c.id, "regression pack has no spec for this case");
-  } else if (missing.length > 0) {
-    io.write(`Writing specs for ${missing.map((c) => c.id).join(", ")}…\n`);
+  // The author writes the specs of the given cases; `notes` are a reviewer's reasons (REQ-VER-24/AC3).
+  const writeSpecs = async (cases: Plan["cases"], notes?: ReadonlyMap<string, string>) => {
     const analysis = AnalysisSchema.parse(JSON.parse(await readFile(ws.path("analysis.json"), "utf8")));
     const usage = runUsage(session, { costBudget: false });
     const deps = {
@@ -830,15 +836,15 @@ async function executeCases(
       testIdAttribute: project.config.web.test_id_attribute,
     });
     // REQ-EXEC-22: the author sees what the running application shows, recorded by this trusted code.
-    const snapshot = await authorSnapshot(session, plan, missing, env, ports, {
+    const snapshot = await authorSnapshot(session, plan, cases, env, ports, {
       knownPages: context.ui?.pages ?? [],
-      device: missing.some((c) => c.type === "mobile") ? devices.get : undefined,
+      device: cases.some((c) => c.type === "mobile") ? devices.get : undefined,
       platform: mobilePlatform,
       io,
     });
     const authored = await runAuthor(
       deps,
-      { ...plan, cases: missing },
+      { ...plan, cases },
       { ...context, ...(snapshot.length > 0 ? { snapshot } : {}) },
       analysis,
       Object.keys(env.profile.accounts),
@@ -847,9 +853,20 @@ async function executeCases(
         (budget.max_cost_usd !== undefined && usage.costUsd >= budget.max_cost_usd
           ? `the run's cost budget ($${budget.max_cost_usd.toFixed(2)}) was reached`
           : undefined),
+      notes,
     );
     await saveRunUsage(ws, usage);
-    for (const a of authored)
+    return authored;
+  };
+  // REQ-EXEC-17/AC1+AC2: a regression run calls no agent or model; a case without a verified spec is BLOCKED.
+  const regression = RegressionRunSchema.safeParse(ws.record.data["regression"]);
+  if (regression.success) {
+    for (const [caseId, reason] of Object.entries(regression.data.blocked)) blocked.set(caseId, reason);
+    for (const c of missing)
+      if (!blocked.has(c.id)) blocked.set(c.id, "regression pack has no spec for this case");
+  } else if (missing.length > 0) {
+    io.write(`Writing specs for ${missing.map((c) => c.id).join(", ")}…\n`);
+    for (const a of await writeSpecs(missing))
       if (a.skipped !== undefined) notRun.set(a.caseId, a.skipped);
       else if (!a.file)
         blocked.set(a.caseId, `author could not produce a valid spec: ${formatSpecProblems(a.problems)}`);
@@ -867,6 +884,36 @@ async function executeCases(
     if (problems.length > 0)
       blocked.set(caseId, `spec failed static checks: ${formatSpecProblems(problems)}`);
     else specs.set(caseId, file);
+  }
+  // REQ-VER-24: a person reads each spec before it runs; a review can only stop a spec.
+  const reviewing =
+    !regression.success &&
+    specReviewOn(
+      project.config.spec_review,
+      run.reviewSpecs === true,
+      (await readRunHistory(rootOf(project, ports), ws.runId)).runs,
+    );
+  if (reviewing && specs.size > 0) {
+    const review = await reviewSpecs(session, plan, specs, io, {
+      user: run.user ?? "unknown",
+      now: ports.now,
+      rewrite: async (caseId, reason) => {
+        const planCase = plan.cases.find((c) => c.id === caseId);
+        if (!planCase) return undefined;
+        const [written] = await writeSpecs([planCase], new Map([[caseId, reason]]));
+        if (written?.file === undefined) return undefined;
+        const problems = await checkSpec(await readFile(written.file, "utf8"), caseId, plan, specChecks);
+        return problems.length === 0 ? written.file : undefined;
+      },
+    });
+    if (review.waiting.length > 0)
+      throw new ConfigError(
+        "SPEC_REVIEW_PENDING",
+        `${String(review.waiting.length)} spec(s) wait for a person's review: ${review.waiting.join(", ")}. Read them with qajitsu review-spec ${ws.ticket}, decide with qajitsu review-spec ${ws.ticket} --case <id> --accept (or --send-back "<reason>"), then run qajitsu run ${ws.ticket} again.`,
+        { waiting: review.waiting },
+      );
+    for (const caseId of [...specs.keys()]) if (!review.accepted.has(caseId)) specs.delete(caseId);
+    for (const [caseId, reason] of review.blocked) blocked.set(caseId, reason);
   }
   for (const [caseId, reason] of blocked) {
     events.emit("run", SYSTEM, "case.blocked", { caseId, reason: reason.slice(0, 500) });

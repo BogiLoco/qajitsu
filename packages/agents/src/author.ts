@@ -199,6 +199,8 @@ export async function runAuthor(
   accounts: readonly string[],
   /** Checked before each case; a reason stops writing further specs (REQ-PLAN-08/AC3). */
   stopReason?: () => string | undefined,
+  /** Why a person sent the previous spec of a case back (REQ-VER-24/AC3), by case id. */
+  reviewNotes?: ReadonlyMap<string, string>,
 ): Promise<AuthoredSpec[]> {
   const role = AGENT_ROLES.find((r) => r.role === "author");
   if (!role) throw new Error("author role missing");
@@ -256,6 +258,12 @@ export async function runAuthor(
           role: "user",
           content: [
             `Write the spec for ${planCase.id}.`,
+            ...(reviewNotes?.has(planCase.id)
+              ? [
+                  "## A reviewer sent your previous spec of this case back; fix exactly this",
+                  untrusted("review", reviewNotes.get(planCase.id) ?? ""),
+                ]
+              : []),
             `Account aliases available: ${accounts.length > 0 ? accounts.join(", ") : "(none: call api without as())"}.`,
             "## Approved case (from the plan; expectations are read with plan.expect)",
             untrusted(`plan.${planCase.id}`, describeCase(planCase)),

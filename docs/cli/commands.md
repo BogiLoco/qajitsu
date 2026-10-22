@@ -317,6 +317,10 @@ page or screen showed, masked), which the healer gets; mobile cases are healed t
   (REQ-EXEC-19/AC2); also `execution.sequential: true`. Without it the lanes run at the same time: API cases
   (`execution.workers.api`), web cases (`execution.workers.web`, with `execution.web_combinations` browser combinations
   at once) and mobile cases on every device; each case holds its own pool accounts while it runs (REQ-ENV-09)
+- `--review-specs`: a person reads every generated spec next to its planned steps before it runs (REQ-VER-24); also
+  `spec_review: { always: true }` or `{ first_runs: N }` for the project's first runs. In a terminal each spec is
+  accepted (`y`) or sent back with a reason; the author writes it again once, a second send-back makes the case
+  BLOCKED. Without a terminal the run stops before anything ran (exit `2`) and names `qj review-spec`.
 - `--fix-check`: with `--build`, verify a bug fix (REQ-VER-11): after this run, a sibling run builds the commit the
   change branched from and runs the same approved plan and specs; every case marked `reproduces` must be FAILED before
   the fix and PASSED with it. Both results appear side by side in the report and the Jira comment.
@@ -869,6 +873,20 @@ Makes real model calls; never in PR CI.
   BLOCKED and plans accepted without edits (REQ-KNOW-11)
 
 Exit codes: `0` the benchmark completed (whatever the scores), `3` configuration errors.
+
+### `qajitsu review-spec <ticket>`
+
+Reads and decides on the generated specs that wait for a person (REQ-VER-24). Without a decision it shows each spec
+next to its planned steps and expectations. A decision is recorded with the reviewer, the spec's SHA-256 and the time
+in `run.json` and the journal, and counts only for exactly that spec: a spec changed afterwards waits again. The
+report lists which specs a person reviewed. A review can only stop a spec, never set a status.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+- `--case <id>`: the case whose spec to show or decide on (needed for a decision)
+- `--accept`: accept the spec as it is now; `qj run` runs it
+- `--send-back <reason>`: the next `qj run` has the author write it again once with the reason
+
+Exit codes: `0` shown or decided, `2` no spec to review, `3` errors (also after the run was executed).
 
 ### `qajitsu audit verify [ticket]`
 

@@ -2227,6 +2227,26 @@
       },
       "additionalProperties": false
     },
+    "spec_review": {
+      "default": {
+        "first_runs": 0,
+        "always": false
+      },
+      "type": "object",
+      "properties": {
+        "first_runs": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "always": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
     "certificate": {
       "default": {
         "required": false

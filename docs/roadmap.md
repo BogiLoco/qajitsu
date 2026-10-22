@@ -196,7 +196,7 @@ and `qj bench` reports detection and false-FAILED rates per model.
 - [REQ-VER-06](requirements/verification.md#req-ver-06--independent-auditor) Independent auditor (must, implemented, AC 3/3)
 - [REQ-VER-09](requirements/verification.md#req-ver-09--canary-check) Canary check (could, implemented, AC 2/2)
 - [REQ-VER-23](requirements/verification.md#req-ver-23--test-code-quality-gate) Test code quality gate (must, implemented, AC 5/5)
-- [REQ-VER-24](requirements/verification.md#req-ver-24--human-review-of-test-code-on-demand) Human review of test code on demand (could, proposed, AC 0/5)
+- [REQ-VER-24](requirements/verification.md#req-ver-24--human-review-of-test-code-on-demand) Human review of test code on demand (could, implemented, AC 5/5)
 - [REQ-LLM-05](requirements/models.md#req-llm-05--local-models-used-honestly) Local models used honestly (should, implemented, AC 2/2)
 - [REQ-LLM-06](requirements/models.md#req-llm-06--model-benchmark) Model benchmark (should, implemented, AC 3/3)
 - [REQ-LLM-13](requirements/models.md#req-llm-13--model-routing-proposals-from-data) Model routing proposals from data (could, proposed, AC 0/3)

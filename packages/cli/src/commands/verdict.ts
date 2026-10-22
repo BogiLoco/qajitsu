@@ -1,4 +1,5 @@
 import { annotatedFirst } from "./annotated.js";
+import { specReviewNotes } from "./spec-review.js";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readManifest } from "@qajitsu/adapter-evidence-local";
@@ -358,6 +359,8 @@ export async function computeVerdict(
   const cases = combined.map((c, i) => ({ ...c, status: checked[i]?.status ?? c.status }));
   const checkNotes = [
     ...(approvalNote ? [approvalNote] : []),
+    // REQ-VER-24/AC4: which specs a person reviewed, by whom, on which version.
+    ...specReviewNotes(ws.record.data),
     ...approvalCheck.problems.map((p) => `Approval record problem: ${p}`),
     ...(audit?.status === "done"
       ? [
