@@ -897,6 +897,27 @@ changes a status, the results or the certificate. The note is masked before it i
 
 Exit codes: `0` recorded, `3` errors (a case that is not FAILED, an unknown kind, a run without results).
 
+### `qajitsu workflow sync <ticket>`
+
+The plan approval loop in the ticket (REQ-FLOW-03), for projects with a `workflow` section and
+`workflow.approvers_group`. Run it from a scheduler or a Jira automation; every call does what is due:
+
+- posts the plan version waiting for approval as a ticket comment (cases, exclusions, what no case covers, what code
+  cannot check, the change list against the version before) and moves the ticket to `waiting_for_approval`;
+- acts on new comments with `/qj approve v<N>` (freezes exactly that version; another version is refused),
+  `/qj revise <what to change>` (the planner writes and posts the next version; after `max_revisions` rounds a person
+  edits the plan directly) and `/qj reject <reason>` (no testing; the ticket moves to `needs_info`);
+- answers commands from people outside the approvers group and ignores them;
+- reminds after `remind_after_h` hours without an answer. Silence never approves.
+
+Every version, command, author and time is in the ticket, in `run.json` (`ticketFlow`) and in the journal. Comment
+text is untrusted: only an approver's revise instruction reaches the planner. QAJitsu's own comments start with
+"QAJitsu" and are never read as commands.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+
+Exit codes: `0` the loop ran, `2` no plan yet, `3` errors (no `workflow.approvers_group`, tracker errors).
+
 ### `qajitsu review-spec <ticket>`
 
 Reads and decides on the generated specs that wait for a person (REQ-VER-24). Without a decision it shows each spec

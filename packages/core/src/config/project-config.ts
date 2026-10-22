@@ -300,6 +300,15 @@ export const ProjectConfigSchema = z.strictObject({
       attention_label: z.string().regex(/^\S+$/).default("qa-needs-attention"),
       /** Most runs of one ticket per day; after it the ticket goes to `needs_review` (REQ-FLOW-05/AC2). */
       max_runs_per_day: z.number().int().positive().default(5),
+      /**
+       * Plan approval in the ticket (REQ-FLOW-03): the Jira group whose members may `/qj approve`, `/qj revise` and
+       * `/qj reject`; without it no comment approves anything.
+       */
+      approvers_group: z.string().min(1).optional(),
+      /** Hours a posted plan may wait before a reminder; silence never approves (REQ-FLOW-03/AC5). */
+      remind_after_h: z.number().positive().default(24),
+      /** Revision rounds by comment before a person must edit the plan directly (REQ-FLOW-03/AC6). */
+      max_revisions: z.number().int().nonnegative().default(3),
     })
     .optional(),
   /** Mobile runner, devices and app binaries (REQ-EXEC-06, REQ-ENV-06, REQ-EVD-03). */

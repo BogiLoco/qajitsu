@@ -39,6 +39,35 @@ const jira = (flavor: "cloud" | "datacenter", permitted = true) => {
       ]);
     if (u.pathname.endsWith("/mypermissions"))
       return ok({ permissions: { TRANSITION_ISSUES: { havePermission: permitted } } });
+    if (u.pathname.endsWith("/comment")) {
+      const start = Number(u.searchParams.get("startAt") ?? "0");
+      const all = [
+        {
+          id: "10",
+          author: { accountId: "acc-anna", displayName: "Anna" },
+          body:
+            flavor === "cloud"
+              ? {
+                  type: "doc",
+                  content: [
+                    { type: "paragraph", content: [{ type: "text", text: "Looks fine." }] },
+                    { type: "paragraph", content: [{ type: "text", text: "/qj approve v1" }] },
+                  ],
+                }
+              : "Looks fine.\n/qj approve v1",
+          created: "2026-10-03T10:00:00.000+0000",
+        },
+        {
+          id: "11",
+          author: { name: "bob", displayName: "Bob" },
+          body: "second page",
+          created: "2026-10-03T11:00:00.000+0000",
+        },
+      ];
+      return ok({ total: 2, comments: all.slice(start, start + 1) });
+    }
+    if (u.pathname.endsWith("/user/groups")) return ok([{ name: "qa-leads" }]);
+    if (u.pathname.endsWith("/user")) return ok({ groups: { items: [{ name: "developers" }] } });
     if (method === "PUT") return Promise.resolve(new Response(null, { status: 204 }));
     return ok({ fields: { status: { name: status } } });
   };
@@ -93,6 +122,32 @@ describe("ticket workflow (REQ-FLOW-02)", () => {
       },
     ]);
     await expect(cloud.wf.projectStatuses("bad key")).rejects.toThrow("Invalid Jira project key");
+  });
+
+  it("REQ-FLOW-03/AC2+AC3: comments as plain text with their authors, page by page; group membership on Cloud and Data Center", async () => {
+    const cloud = jira("cloud");
+    const comments = await cloud.wf.comments(KEY);
+    expect(comments).toEqual([
+      {
+        id: "10",
+        author: { account: "acc-anna", name: "Anna" },
+        body: "Looks fine.\n/qj approve v1\n",
+        created: "2026-10-03T10:00:00.000+0000",
+      },
+      {
+        id: "11",
+        author: { account: "bob", name: "Bob" },
+        body: "second page",
+        created: "2026-10-03T11:00:00.000+0000",
+      },
+    ]);
+    expect(await cloud.wf.inGroup("acc-anna", "qa-leads")).toBe(true);
+    expect(cloud.calls.at(-1)?.path).toBe("/rest/api/3/user/groups?accountId=acc-anna");
+    expect(await cloud.wf.inGroup("", "qa-leads")).toBe(false);
+    const dc = jira("datacenter");
+    expect((await dc.wf.comments(KEY))[0]?.body).toBe("Looks fine.\n/qj approve v1");
+    expect(await dc.wf.inGroup("bob", "qa-leads")).toBe(false);
+    expect(dc.calls.at(-1)?.path).toBe("/rest/api/2/user?username=bob&expand=groups");
   });
 
   it("REQ-FLOW-02/AC3: ticket files follow workflow.json when there is one, any mapped status otherwise", async () => {

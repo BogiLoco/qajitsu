@@ -57,6 +57,7 @@ import { runAuditExport, runAuditTrail } from "./commands/audit-trail.js";
 import { runCertify, runKeygen, runVerifyReport } from "./commands/certificate.js";
 import { runReviewSpec } from "./commands/spec-review.js";
 import { runFeedback } from "./commands/feedback.js";
+import { runWorkflowSync } from "./commands/ticket-approval.js";
 import { runReproduce } from "./commands/reproduce.js";
 import { runTelemetryExport } from "./commands/telemetry.js";
 import { runMetrics } from "./commands/metrics.js";
@@ -750,6 +751,19 @@ export function createProgram(version: string, io: ProgramIO): Command {
         ticket: string,
         options: { run?: string; case?: string; is?: string; escaped?: string; note?: string },
       ) => withPorts((ports) => runFeedback(ticket, options, commandIO, ports, io.user ?? "unknown"))(),
+    );
+
+  program
+    .command("workflow")
+    .description("The ticket's Jira workflow (REQ-FLOW)")
+    .command("sync")
+    .description(
+      "Post the plan waiting for approval to the ticket, act on /qj approve, revise and reject comments from the approvers group, and remind when nobody answered",
+    )
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .action((ticket: string, options: { run?: string }) =>
+      withPorts((ports) => runWorkflowSync(ticket, options, commandIO, ports, review))(),
     );
 
   program

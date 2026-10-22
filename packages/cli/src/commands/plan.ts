@@ -269,6 +269,31 @@ async function recordCoverageGaps(
 const gapLines = (gaps: readonly CoverageGap[]): string[] =>
   gaps.map((g) => (g.kind === "criterion" ? `${g.id} "${g.text ?? ""}"` : `${g.id} changed in the diff`));
 
+/**
+ * What a reviewer of a plan version must see besides its cases (REQ-FLOW-03/AC1): what no case covers (REQ-PLAN-14)
+ * and the expectations code cannot check as written (REQ-PLAN-09), one line each.
+ */
+export async function planRisks(
+  session: RunSession,
+  plan: Plan,
+): Promise<{ readonly gaps: string[]; readonly flags: string[] }> {
+  const context = await buildChangeContext(session.ws, [], {
+    indexCache: codeIndexCache(session.project),
+    testIdAttribute: session.project.config.web.test_id_attribute,
+  });
+  const flags = (await planFlagsOf(session, context))(plan);
+  const gaps = (await coverageOf(session, context))(plan);
+  return {
+    gaps: gapLines(gaps),
+    flags:
+      flags.length > 0
+        ? formatPlanFlags(flags)
+            .split("\n")
+            .filter((l) => l.trim() !== "")
+        : [],
+  };
+}
+
 /** Records what was approved although code could not check it (REQ-PLAN-09/AC4). */
 async function recordPlanFlags(
   session: RunSession,

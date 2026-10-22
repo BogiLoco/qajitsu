@@ -33,22 +33,23 @@ Extends REQ-CI-02 (a Jira automation that dispatches a pipeline) with QAJitsu pi
 
 ### REQ-FLOW-03 · Plan approval in the ticket
 
-- Status: proposed
+- Status: implemented
 - Priority: must
 - Stage: 10
 - Related: REQ-PLAN-04, REQ-PLAN-06, REQ-PLAN-07, REQ-PLAN-10, ADR-0010
+- Note: `qj workflow sync <TICKET>` runs the loop (from a scheduler or a Jira automation); approving with `/qj approve v<N>` confirms the coverage and check lists posted with that version. QAJitsu's own comments start with "QAJitsu" and are never commands.
 
 Implements REQ-PLAN-07/AC3 (approval in Jira by comment) inside the approval flow of REQ-PLAN-10.
 
 **Acceptance criteria**
 
-- [ ] AC1: The plan is posted as a ticket comment with version number, cases, exclusions and the coverage risk list (REQ-PLAN-14).
-- [ ] AC2: Commands in comments: `/qj approve`, `/qj revise <text>` (the planner posts the next version with a change list), `/qj reject <reason>` (no testing; the ticket goes to "needs info").
-- [ ] AC3: Only members of a configured Jira group may approve, revise or reject; commands from others are ignored with a reply.
-- [ ] AC4: An approval freezes exactly the version it answers; a command for an older version is rejected.
-- [ ] AC5: Silence is never approval: reminders after a configurable time; a plan is approved without a person only by the model steps the project configured (REQ-PLAN-10).
-- [ ] AC6: After a configurable number of revision rounds the planner stops and asks a person to edit the plan directly.
-- [ ] AC7: Every version, command, author and time stays in the ticket and in `run.json`.
+- [x] AC1: The plan is posted as a ticket comment with version number, cases, exclusions and the coverage risk list (REQ-PLAN-14).
+- [x] AC2: Commands in comments: `/qj approve`, `/qj revise <text>` (the planner posts the next version with a change list), `/qj reject <reason>` (no testing; the ticket goes to "needs info").
+- [x] AC3: Only members of a configured Jira group may approve, revise or reject; commands from others are ignored with a reply.
+- [x] AC4: An approval freezes exactly the version it answers; a command for an older version is rejected.
+- [x] AC5: Silence is never approval: reminders after a configurable time; a plan is approved without a person only by the model steps the project configured (REQ-PLAN-10).
+- [x] AC6: After a configurable number of revision rounds the planner stops and asks a person to edit the plan directly.
+- [x] AC7: Every version, command, author and time stays in the ticket and in `run.json`.
 
 ### REQ-FLOW-04 · Transition policy from the verdict
 

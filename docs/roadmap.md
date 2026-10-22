@@ -282,7 +282,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-CI-05](requirements/ci-cd.md#req-ci-05--gradual-rollout-and-cost-control) Gradual rollout and cost control (should, implemented, AC 3/3)
 - [REQ-FLOW-01](requirements/workflow.md#req-flow-01--start-from-a-jira-status) Start from a Jira status (should, proposed, AC 0/4)
 - [REQ-FLOW-02](requirements/workflow.md#req-flow-02--status-mapping-per-project) Status mapping per project (must, implemented, AC 3/3)
-- [REQ-FLOW-03](requirements/workflow.md#req-flow-03--plan-approval-in-the-ticket) Plan approval in the ticket (must, proposed, AC 0/7)
+- [REQ-FLOW-03](requirements/workflow.md#req-flow-03--plan-approval-in-the-ticket) Plan approval in the ticket (must, implemented, AC 7/7)
 - [REQ-FLOW-04](requirements/workflow.md#req-flow-04--transition-policy-from-the-verdict) Transition policy from the verdict (must, implemented, AC 5/5)
 - [REQ-FLOW-05](requirements/workflow.md#req-flow-05--one-run-per-ticket-and-loop-limits) One run per ticket and loop limits (must, implemented, AC 3/3)
 - [REQ-FLOW-06](requirements/workflow.md#req-flow-06--cost-budget-per-ticket-and-per-month) Cost budget per ticket and per month (should, proposed, AC 0/2)

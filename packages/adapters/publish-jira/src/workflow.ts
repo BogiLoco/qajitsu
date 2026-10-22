@@ -6,6 +6,7 @@ import {
   createHttpClient,
   type AdapterDeps,
   type TicketKey,
+  type TicketComment,
   type TicketTransition,
   type TicketWorkflow,
 } from "@qajitsu/core";
@@ -112,7 +113,76 @@ export function createJiraWorkflow(
       );
       return r.permissions["TRANSITION_ISSUES"]?.havePermission === true;
     },
+    async comments(ticket, signal): Promise<readonly TicketComment[]> {
+      const out: TicketComment[] = [];
+      for (let startAt = 0; out.length < 1000;) {
+        const query = new URLSearchParams({
+          startAt: String(startAt),
+          maxResults: "100",
+          orderBy: "created",
+        });
+        const r = await http.json(`${issue(ticket)}/comment?${query.toString()}`, CommentPage, { signal });
+        for (const c of r.comments)
+          out.push({
+            id: c.id,
+            author: {
+              account: c.author?.accountId ?? c.author?.name ?? "",
+              name: c.author?.displayName ?? "",
+            },
+            body: typeof c.body === "string" ? c.body : adfText(c.body),
+            created: c.created,
+          });
+        startAt += r.comments.length;
+        if (r.comments.length === 0 || startAt >= r.total) break;
+      }
+      return out;
+    },
+    async inGroup(account, group, signal) {
+      if (account === "") return false;
+      if (cloud) {
+        const r = await http.json(
+          `${api}/user/groups?${new URLSearchParams({ accountId: account }).toString()}`,
+          z.array(z.object({ name: z.string() })),
+          { signal },
+        );
+        return r.some((g) => g.name === group);
+      }
+      const r = await http.json(
+        `${api}/user?${new URLSearchParams({ username: account, expand: "groups" }).toString()}`,
+        z.object({ groups: z.object({ items: z.array(z.object({ name: z.string() })) }) }),
+        { signal },
+      );
+      return r.groups.items.some((g) => g.name === group);
+    },
   };
+}
+
+const CommentPage = z.object({
+  total: z.number().int().nonnegative(),
+  comments: z.array(
+    z.object({
+      id: z.string(),
+      author: z
+        .object({
+          accountId: z.string().optional(),
+          name: z.string().optional(),
+          displayName: z.string().optional(),
+        })
+        .optional(),
+      body: z.unknown(),
+      created: z.string(),
+    }),
+  ),
+});
+
+/** The plain text of an Atlassian document (a Cloud comment body); paragraphs on their own lines. */
+export function adfText(node: unknown, depth = 0): string {
+  if (depth > 50 || node === null || typeof node !== "object") return "";
+  const n = node as { type?: unknown; text?: unknown; content?: unknown };
+  if (n.type === "text" && typeof n.text === "string") return n.text;
+  if (n.type === "hardBreak") return "\n";
+  const inner = Array.isArray(n.content) ? n.content.map((c) => adfText(c, depth + 1)).join("") : "";
+  return n.type === "paragraph" || n.type === "heading" || n.type === "codeBlock" ? `${inner}\n` : inner;
 }
 
 /**
@@ -183,5 +253,40 @@ export function createFileWorkflow(ticketsDir: string, statuses: readonly string
     canTransition() {
       return Promise.resolve(true);
     },
+    async comments(ticket) {
+      const t = await read(ticket);
+      const list = Array.isArray(t["comments"]) ? (t["comments"] as unknown[]) : [];
+      return list.flatMap((c, i): TicketComment[] => {
+        const r = FileComment.safeParse(c);
+        if (!r.success) return [];
+        return [
+          {
+            id: r.data.id ?? String(i + 1),
+            author: { account: r.data.account ?? r.data.author, name: r.data.author },
+            body: r.data.body,
+            created: r.data.created,
+          },
+        ];
+      });
+    },
+    async inGroup(account, group) {
+      try {
+        const w = JSON.parse(await readFile(join(ticketsDir, "workflow.json"), "utf8")) as {
+          groups?: Record<string, unknown>;
+        };
+        const members = w.groups?.[group];
+        return Array.isArray(members) && members.includes(account);
+      } catch {
+        return false;
+      }
+    },
   };
 }
+
+const FileComment = z.object({
+  id: z.string().optional(),
+  author: z.string(),
+  account: z.string().optional(),
+  body: z.string(),
+  created: z.string(),
+});

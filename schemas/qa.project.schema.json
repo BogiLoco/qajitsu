@@ -673,6 +673,21 @@
           "type": "integer",
           "exclusiveMinimum": 0,
           "maximum": 9007199254740991
+        },
+        "approvers_group": {
+          "type": "string",
+          "minLength": 1
+        },
+        "remind_after_h": {
+          "default": 24,
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_revisions": {
+          "default": 3,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
         }
       },
       "required": [
