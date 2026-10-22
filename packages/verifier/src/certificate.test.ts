@@ -206,6 +206,9 @@ describe("test certificate (REQ-VER-15)", () => {
       "excluded",
       "excluded",
     ]);
+    // Checked-out code is not covered; the change records and the diff next to it are.
+    expect(certificateScope("repos/shop/cart.ts")).toBe("excluded");
+    expect(certificateScope("repos/shop.diff")).toBe("exact");
   });
 
   it("REQ-VER-15/AC3: a forged certificate cannot make the checker read outside the run folder", () => {

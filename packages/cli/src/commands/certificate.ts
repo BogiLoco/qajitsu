@@ -20,6 +20,7 @@ import {
   certificateScope,
   certificateStatement,
   certificateSubject,
+  certificateCoverage,
   checkCertificate,
   keyIdOf,
   keySigner,
@@ -38,12 +39,15 @@ import { computeVerdict, writeReports } from "./verdict.js";
 const KEYS_DIR = "keys";
 
 /** Reads every `*.pub` file of a folder as a public key; unreadable files are skipped. */
-async function publicKeysIn(dir: string): Promise<KeyObject[]> {
-  const keys: KeyObject[] = [];
+async function publicKeysIn(dir: string): Promise<{ key: KeyObject; source: string }[]> {
+  const keys: { key: KeyObject; source: string }[] = [];
   for (const name of await readdir(dir).catch(() => [] as string[]))
     if (name.endsWith(".pub"))
       try {
-        keys.push(createPublicKey(await readFile(join(dir, name), "utf8")));
+        keys.push({
+          key: createPublicKey(await readFile(join(dir, name), "utf8")),
+          source: `.qa/keys/${name}`,
+        });
       } catch {
         // Not a key: ignored, the check names the key it needs.
       }
@@ -75,6 +79,23 @@ async function signingKey(session: RunSession): Promise<KeyObject | undefined> {
   return key;
 }
 
+/** What the certificate states about the outcome, computed from the run's files. */
+export interface CertifiedVerdict {
+  readonly decision: string;
+  readonly statuses: Readonly<Record<string, string>>;
+}
+
+/** The certified outcome of a computed verdict. */
+export function certifiedVerdict(verdict: {
+  readonly decision: Parameters<typeof formatDecision>[0];
+  readonly cases: readonly { readonly caseId: string; readonly status: string }[];
+}): CertifiedVerdict {
+  return {
+    decision: formatDecision(verdict.decision),
+    statuses: Object.fromEntries(verdict.cases.map((c) => [c.caseId, c.status])),
+  };
+}
+
 /** The outcome of issuing a certificate. */
 export type IssueOutcome =
   | { readonly status: "off" }
@@ -93,12 +114,13 @@ const readRunFile = (dir: string) => async (path: string) =>
  *
  * @param session - The run.
  * @param now - Clock.
- * @param decision - The GO / NO-GO line of the run.
+ * @param verdict - The GO / NO-GO line and the status of each case, computed from the files now (REQ-VER-15/AC8):
+ *   never the statuses recorded in `run.json`, which the certificate does not cover.
  */
 export async function issueCertificate(
   session: RunSession,
   now: () => Date,
-  decision?: string,
+  verdict: CertifiedVerdict,
 ): Promise<IssueOutcome> {
   const key = await signingKey(session);
   if (key === undefined) return { status: "off" };
@@ -161,8 +183,8 @@ export async function issueCertificate(
     manifestSha256: digest("evidence/manifest.json"),
     matrixSha256: digest("report/matrix.md"),
     reportSha256: digest("report/report.html"),
-    statuses: data["results"],
-    ...(decision ? { decision } : {}),
+    statuses: verdict.statuses,
+    decision: verdict.decision,
     versions: data["versions"],
     images: build["images"] ?? [],
     environment: data["environment"],
@@ -226,9 +248,9 @@ export async function certificateForPublish(
   session: RunSession,
   io: CommandIO,
   now: () => Date,
-  decision: string,
+  verdict: CertifiedVerdict,
 ): Promise<string[]> {
-  const outcome = await issueCertificate(session, now, decision);
+  const outcome = await issueCertificate(session, now, verdict);
   if (outcome.status === "off") return [];
   if (outcome.status === "gaps") {
     if (session.project.config.certificate.required)
@@ -271,7 +293,7 @@ export async function runCertify(
     // The reports are rendered by code from the run's files first, so a hand-edited report is never certified.
     const verdict = await computeVerdict(session, ports.now);
     await writeReports(session, verdict);
-    const outcome = await issueCertificate(session, ports.now, formatDecision(verdict.decision));
+    const outcome = await issueCertificate(session, ports.now, certifiedVerdict(verdict));
     if (outcome.status === "off")
       throw new ConfigError(
         "CERTIFICATE_KEY_MISSING",
@@ -341,44 +363,70 @@ export async function runKeygen(io: CommandIO, ports: RuntimePorts): Promise<num
   }
 }
 
-/** Reads a run folder or an audit export (zip) as run-relative files. */
-async function openRunFiles(path: string): Promise<(p: string) => Uint8Array | undefined> {
+/** A run folder or an audit export (zip) as run-relative files. */
+interface RunFiles {
+  readonly read: (path: string) => Uint8Array | undefined;
+  readonly paths: readonly string[];
+  /** Names an archive holds twice: what a tool unpacks may differ from what was checked. */
+  readonly duplicates: readonly string[];
+  readonly archive: boolean;
+}
+
+async function openRunFiles(path: string): Promise<RunFiles> {
   if ((await stat(path)).isDirectory()) {
     const files = new Map<string, Uint8Array>();
     const walk = async (dir: string, prefix: string): Promise<void> => {
       for (const entry of await readdir(dir, { withFileTypes: true })) {
         const rel = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
+        // Symbolic links are not followed: a covered file replaced by a link counts as missing.
         if (entry.isDirectory()) await walk(join(dir, entry.name), rel);
         else if (entry.isFile()) files.set(rel, new Uint8Array(await readFile(join(dir, entry.name))));
       }
     };
     await walk(path, "");
-    return (p) => files.get(p);
+    return { read: (p) => files.get(p), paths: [...files.keys()], duplicates: [], archive: false };
   }
   const entries = unzip(new Uint8Array(await readFile(path)), { maxEntries: 100_000 });
-  const files = new Map(entries.map((e) => [e.name, e.data]));
-  return (p) => files.get(p);
+  const files = new Map<string, Uint8Array>();
+  const duplicates: string[] = [];
+  for (const e of entries) {
+    if (files.has(e.name)) duplicates.push(e.name);
+    files.set(e.name, e.data);
+  }
+  return { read: (p) => files.get(p), paths: [...files.keys()], duplicates, archive: true };
 }
 
-/** Prints a certificate check; returns whether it passed. */
-function reportCheck(io: CommandIO, check: CertificateCheck): boolean {
-  const ok = check.problems.length === 0 && check.changed.length === 0 && check.missing.length === 0;
+/** Prints a certificate check with what else the folder holds; returns whether it passed. */
+function reportCheck(
+  io: CommandIO,
+  check: CertificateCheck,
+  extra: {
+    readonly added: readonly string[];
+    readonly grown: readonly { name: string; bytes: number }[];
+    readonly problems: readonly string[];
+    readonly keySource?: string | undefined;
+  },
+): boolean {
+  const failures = [
+    ...check.problems,
+    ...extra.problems,
+    ...check.changed.map((f) => `changed: ${f}`),
+    ...check.missing.map((f) => `missing: ${f}`),
+    ...extra.added.map((f) => `added after the certificate: ${f}`),
+  ];
   const p = check.statement?.predicate;
   const what = p ? `${p.ticket} run ${p.runId}, issued ${p.issuedAt}` : "";
-  if (ok) {
+  const grown = extra.grown.map(
+    (g) => `  ${g.name}: ${String(g.bytes)} byte(s) written after the certificate (not covered)\n`,
+  );
+  if (failures.length === 0) {
     io.write(
-      `✔ Certificate ${check.id ?? ""} is valid: ${what}\n  ${String(check.statement?.subject.length ?? 0)} files unchanged, Merkle root ${p?.merkleRoot ?? ""}\n  signed with trusted key ${(check.keyId ?? "").slice(0, 16)}\n${p?.decision === undefined ? "" : `  ${p.decision}\n`}`,
+      `✔ Certificate ${check.id ?? ""} is valid: ${what}\n  ${String(check.statement?.subject.length ?? 0)} files unchanged, Merkle root ${p?.merkleRoot ?? ""}\n  signed with trusted key ${(check.keyId ?? "").slice(0, 16)}${extra.keySource ? ` (from ${extra.keySource})` : ""}\n${p?.decision === undefined ? "" : `  ${p.decision}\n`}${grown.join("")}`,
     );
     return true;
   }
   io.write(
-    `✘ Certificate ${check.id ?? ""} does NOT verify${what ? ` (${what})` : ""}:\n${[
-      ...check.problems,
-      ...check.changed.map((f) => `changed: ${f}`),
-      ...check.missing.map((f) => `missing: ${f}`),
-    ]
-      .map((l) => `  - ${l}`)
-      .join("\n")}\n`,
+    `✘ Certificate ${check.id ?? ""} does NOT verify${what ? ` (${what})` : ""}:\n${failures.map((l) => `  - ${l}`).join("\n")}\n${grown.join("")}`,
   );
   return false;
 }
@@ -397,7 +445,8 @@ export async function runVerifyReport(
   ports: RuntimePorts,
 ): Promise<number> {
   try {
-    const read = await openRunFiles(resolve(io.cwd, path));
+    const files = await openRunFiles(resolve(io.cwd, path));
+    const { read } = files;
     const raw = read(CERTIFICATE_FILE);
     if (raw === undefined)
       throw new ConfigError("CERTIFICATE_NOT_FOUND", `No ${CERTIFICATE_FILE} in ${path}.`, {});
@@ -407,10 +456,12 @@ export async function runVerifyReport(
     } catch {
       throw new ConfigError("CERTIFICATE_INVALID", `${CERTIFICATE_FILE} is not JSON.`, {});
     }
-    const keys: KeyObject[] = [];
+    // Where the trust in each key comes from is shown with the result (REQ-VER-15/AC9): whoever can write to
+    // .qa/keys/ can add a key, so an outside auditor passes the key they got from the project with --key.
+    const keys: { key: KeyObject; source: string }[] = [];
     for (const k of options.key ?? []) {
       try {
-        keys.push(createPublicKey(await readFile(resolve(io.cwd, k), "utf8")));
+        keys.push({ key: createPublicKey(await readFile(resolve(io.cwd, k), "utf8")), source: `--key ${k}` });
       } catch {
         throw new ConfigError("CERTIFICATE_KEY_INVALID", `${k} is not a public key in PEM.`, {});
       }
@@ -419,7 +470,36 @@ export async function runVerifyReport(
       ? await loadProject(io.cwd, ports.project).catch(() => undefined)
       : undefined;
     if (project) keys.push(...(await publicKeysIn(join(project.qaDir, KEYS_DIR))));
-    return reportCheck(io, checkCertificate(envelope, keys, read)) ? 0 : 1;
+    const check = checkCertificate(
+      envelope,
+      keys.map((k) => k.key),
+      read,
+    );
+    const problems = files.duplicates.map((d) => `the archive has two entries named ${d}`);
+    // run.json is not covered, but it names the run: a certificate shown with another run's folder is refused.
+    const p = check.statement?.predicate;
+    const runRecord = read("run.json");
+    if (p && runRecord) {
+      try {
+        const r = JSON.parse(new TextDecoder().decode(runRecord)) as { ticket?: unknown; runId?: unknown };
+        if (r.ticket !== p.ticket || r.runId !== p.runId)
+          problems.push(
+            `the certificate is for ${p.ticket} run ${p.runId}, the folder is ${String(r.ticket)} run ${String(r.runId)}`,
+          );
+      } catch {
+        problems.push("run.json is not JSON");
+      }
+    }
+    const coverage = check.statement
+      ? certificateCoverage(
+          check.statement,
+          files.paths,
+          read,
+          files.archive ? new Set(["SHA256SUMS", "README.txt"]) : new Set(),
+        )
+      : { added: [], grown: [] };
+    const keySource = keys.find((k) => keyIdOf(k.key) === check.keyId)?.source;
+    return reportCheck(io, check, { ...coverage, problems, keySource }) ? 0 : 1;
   } catch (error) {
     const code = error instanceof QajitsuError ? ` [${error.code}]` : "";
     io.writeError(`Error${code}: ${error instanceof Error ? error.message : String(error)}\n`);

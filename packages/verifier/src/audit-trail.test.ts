@@ -59,6 +59,7 @@ const complete = (): AuditTrailInput => {
     transcript: stored.join(""),
     manifest: [{ path: "TC-01/attempt-1/S1-01.json", sha256: sha256("e") }],
     results: [{ caseId: "TC-01", spec: "/runs/r/specs/TC-01.spec.ts" }, { caseId: "TC-02" }],
+    sealed: { "results/TC-01.json": sha256("r"), "specs/TC-01.spec.ts": sha256("spec") },
   };
 };
 
@@ -120,6 +121,7 @@ describe("audit trail (REQ-VER-16)", () => {
       "no plan version in plan/",
       "plan/plan.approved.yaml does not have the SHA-256 recorded at approval",
       "the approval (who, when, which version) is not recorded",
+      "specs/TC-01.spec.ts was sealed when the run ended and is missing",
       "TC-01: generated test specs/TC-01.spec.ts is missing",
       "runner and tool versions are not recorded",
       "container image digests are not recorded",
@@ -177,6 +179,20 @@ describe("audit trail (REQ-VER-16)", () => {
     }).gaps;
     expect(gaps.length).toBeGreaterThan(0);
     expect(gaps.every((g) => g.startsWith("approval: "))).toBe(true);
+  });
+
+  it("REQ-VER-15/AC8 + REQ-VER-16/AC4: results and specs are checked against the seal the run made when it ended", () => {
+    const base = complete();
+    const files = new Map(base.files);
+    files.set("results/TC-01.json", sha256("edited"));
+    files.set("results/TC-09.json", sha256("planted"));
+    expect(buildAuditTrail({ ...base, files }).gaps).toEqual([
+      "results/TC-01.json changed after the run",
+      "results/TC-09.json was added after the run",
+    ]);
+    expect(buildAuditTrail({ ...base, sealed: undefined }).gaps).toEqual([
+      "the run did not seal its results and specs when it ended (interrupted, or an older version)",
+    ]);
   });
 
   it("REQ-VER-16/AC4: a run that never ran, was never approved, or has no journal and no manifest is incomplete", () => {

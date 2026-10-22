@@ -54,6 +54,11 @@ export interface AuditTrailInput {
   readonly transcript?: string | undefined;
   /** Entries of `evidence/manifest.json`, when it parsed. */
   readonly manifest?: readonly { readonly path: string; readonly sha256: string }[] | undefined;
+  /**
+   * Hashes of `results/` and `specs/` the run sealed in its journal when it ended (`run.sealed`), when it did.
+   * Without them a result edited before the certificate could not be told apart from the runner's (REQ-VER-15/AC8).
+   */
+  readonly sealed?: Readonly<Record<string, string>> | undefined;
   /** Case results: the case id and the spec the runner ran, when it ran one. */
   readonly results: readonly { readonly caseId: string; readonly spec?: string | undefined }[];
 }
@@ -122,6 +127,19 @@ export function buildAuditTrail(input: AuditTrailInput): AuditTrail {
     gaps.push("the approval (who, when, which version) is not recorded");
 
   if (input.results.length === 0) gaps.push("no case results: the run was not executed");
+  else if (input.sealed === undefined)
+    gaps.push("the run did not seal its results and specs when it ended (interrupted, or an older version)");
+  else {
+    const sealed = input.sealed;
+    for (const [path, sha] of Object.entries(sealed)) {
+      const now = files.get(path);
+      if (now === undefined) gaps.push(`${path} was sealed when the run ended and is missing`);
+      else if (now !== sha) gaps.push(`${path} changed after the run`);
+    }
+    for (const path of files.keys())
+      if (/^(results|specs)\//.test(path) && sealed[path] === undefined)
+        gaps.push(`${path} was added after the run`);
+  }
   for (const r of input.results) {
     if (r.spec === undefined) continue;
     const name = r.spec.split(/[\\/]/).at(-1) ?? "";

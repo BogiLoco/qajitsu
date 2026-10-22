@@ -73,11 +73,13 @@ export async function loadAuditTrail(session: Pick<RunSession, "ws">): Promise<L
       // An unreadable result shows up as a gap of its case's spec only if the case had one.
     }
   }
+  const events = await text("journal/events.jsonl");
   const trail = buildAuditTrail({
     files,
     repos: ws.record.repos as Record<string, { sha?: string; change?: string }>,
     data: ws.record.data,
-    events: await text("journal/events.jsonl"),
+    events,
+    sealed: lastSeal(events),
     transcript: await text(AGENT_TRANSCRIPT_FILE),
     manifest,
     results,
@@ -87,6 +89,41 @@ export async function loadAuditTrail(session: Pick<RunSession, "ws">): Promise<L
     read: async (p) => new Uint8Array(await readFile(join(ws.dir, p))),
     record: { ticket: ws.ticket, runId: ws.runId, repos: ws.record.repos, data: ws.record.data },
   };
+}
+
+/** Event of the journal that holds the hashes of the run's results and specs when it ended (REQ-VER-15/AC8). */
+export const SEAL_EVENT = "run.sealed";
+
+/** The hashes of the last seal in a journal, if any. */
+function lastSeal(events: string | undefined): Record<string, string> | undefined {
+  let sealed: Record<string, string> | undefined;
+  for (const line of (events ?? "").split("\n")) {
+    if (!line.includes(`"${SEAL_EVENT}"`)) continue;
+    try {
+      const e = JSON.parse(line) as { event?: string; details?: { files?: Record<string, string> } };
+      if (e.event === SEAL_EVENT && e.details?.files) sealed = e.details.files;
+    } catch {
+      // A broken line is reported by the hash chain check.
+    }
+  }
+  return sealed;
+}
+
+/**
+ * Seals the run when it ends (REQ-VER-15/AC8, REQ-VER-16/AC4): the SHA-256 of every file under `results/` and `specs/`
+ * goes into the journal, so a result or spec edited before the certificate is issued is a gap of the audit trail.
+ *
+ * @param session - The run.
+ */
+export async function sealRun(session: Pick<RunSession, "ws" | "events">): Promise<void> {
+  const { ws } = session;
+  const paths: string[] = [];
+  await walk(ws.dir, ws.dir, paths);
+  const files: Record<string, string> = {};
+  for (const p of paths.filter((x) => /^(results|specs)\//.test(x)).sort())
+    files[p] = sha256(new Uint8Array(await readFile(join(ws.dir, p))));
+  // Stage "certificate": bookkeeping after the verdict, kept out of the report timeline like the certificate itself.
+  session.events.emit("certificate", { kind: "system", name: "orchestrator" }, SEAL_EVENT, { files });
 }
 
 /** The `audit/trail.json` document: the trail plus the records that are not files. */

@@ -33,6 +33,8 @@ export function certificateScope(path: string): "exact" | "prefix" | "excluded" 
   if (
     path === "run.json" ||
     /^(env|audit|certificate)\//.test(path) ||
+    // Checked-out code of a repository: the change is covered by its records and the diff in repos/.
+    /^repos\/[^/]+\//.test(path) ||
     path.startsWith("report/published/") ||
     path.startsWith("report/media/")
   )
@@ -168,6 +170,33 @@ export function signStatement(statement: CertificateStatement, signer: Certifica
 /** Id of a certificate: `qjc-` and the first 20 hex digits of the SHA-256 of its payload. */
 export function certificateId(envelope: DsseEnvelope): string {
   return `qjc-${hash(Buffer.from(envelope.payload, "base64")).toString("hex").slice(0, 20)}`;
+}
+
+/**
+ * What a folder or archive holds beyond its certificate (REQ-VER-15/AC9): files the certificate would cover but does
+ * not list (added after it), and append-only files that grew after it (reported, not failed: journals keep going).
+ *
+ * @param statement - The checked statement.
+ * @param paths - Every run-relative file of the folder or archive.
+ * @param read - Reads a file.
+ * @param ignore - Paths that belong to the container, not the run (an export's `SHA256SUMS` and `README.txt`).
+ */
+export function certificateCoverage(
+  statement: CertificateStatement,
+  paths: readonly string[],
+  read: (path: string) => Uint8Array | undefined,
+  ignore: ReadonlySet<string> = new Set(),
+): { readonly added: readonly string[]; readonly grown: readonly { name: string; bytes: number }[] } {
+  const listed = new Map(statement.subject.map((s) => [s.name, s]));
+  const added = paths
+    .filter((p) => !ignore.has(p) && !listed.has(p) && certificateScope(p) !== "excluded")
+    .sort();
+  const grown = statement.subject.flatMap((s) => {
+    if (s.annotations.prefix !== true) return [];
+    const size = read(s.name)?.byteLength ?? 0;
+    return size > s.annotations.bytes ? [{ name: s.name, bytes: size - s.annotations.bytes }] : [];
+  });
+  return { added, grown };
 }
 
 /** A run-relative path with no `..` segment, no absolute start and no backslash or NUL. */

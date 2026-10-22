@@ -91,7 +91,10 @@ describe("signed test certificate (REQ-VER-15)", () => {
     expect(tampered.out).toContain("changed: results/TC-01.json");
     const again = await p.run(["audit", "certify", "DEMO-1"]);
     expect(again.exitCode).toBe(1);
-    expect(again.out).toMatch(/results\/TC-01.json changed after certificate qjc-[0-9a-f]{20} was issued/);
+    // Since REQ-VER-15/AC8 the seal of the run's end catches it before the certificate is even looked at.
+    expect(again.out).toMatch(
+      /results\/TC-01.json changed after (the run|certificate qjc-[0-9a-f]{20} was issued)/,
+    );
   }, 180_000);
 
   it("REQ-VER-15/AC4 + REQ-VER-16/AC4: an incomplete trail gets no certificate; with certificate.required the run is not published", async () => {
@@ -109,6 +112,7 @@ describe("signed test certificate (REQ-VER-15)", () => {
     expect(await readdir(join(p.runDir, "report", "published")).catch(() => [])).not.toContain(
       "jira-comment.wiki.txt",
     );
-    expect((await p.run(["verify-report", p.runDir])).err).toContain("CERTIFICATE_NOT_FOUND");
+    // The run was certified when it ended (REQ-VER-15/AC8): the emptied transcript shows as a change.
+    expect((await p.run(["verify-report", p.runDir])).out).toContain("changed: journal/agents.jsonl");
   }, 180_000);
 });

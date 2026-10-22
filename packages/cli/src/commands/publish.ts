@@ -25,7 +25,7 @@ import { openSession, type ModelPorts, type RunSession } from "../session.js";
 import { annotatedFirst } from "./annotated.js";
 import type { CommandIO } from "./fetch.js";
 import { exportRunTelemetry } from "./telemetry.js";
-import { certificateForPublish } from "./certificate.js";
+import { certificateForPublish, certifiedVerdict } from "./certificate.js";
 import { anchorJournal, codeAccessNote, computeVerdict, writeReports, type RunVerdict } from "./verdict.js";
 
 /** Options of `qajitsu publish`. */
@@ -208,7 +208,7 @@ export async function runPublish(
       );
     }
     // REQ-VER-15: the certificate is issued before anything leaves the run, so the comment can name it.
-    const certificate = await certificateForPublish(session, io, ports.now, formatDecision(verdict.decision));
+    const certificate = await certificateForPublish(session, io, ports.now, certifiedVerdict(verdict));
     const evidenceZip = await buildEvidenceZip(session, verdict);
     // Failure screenshots and videos are attached individually so they show without unzipping (REQ-PUB-02/AC2).
     const failing = new Set(

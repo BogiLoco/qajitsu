@@ -52,6 +52,8 @@ import { auditRun, blockedRun, triageRun, runCanary } from "./checks.js";
 import { createManualPrompter } from "./manual.js";
 import { formatEstimate, readRunHistory } from "./estimate.js";
 import { rootOf } from "./runs.js";
+import { sealRun } from "./audit-trail.js";
+import { certificateLines, certifiedVerdict, issueCertificate } from "./certificate.js";
 import { reviewSpecs, specReviewOn, specReviewPending, waitingForPerson } from "./spec-review.js";
 import { runMessages, type MessagePorts, type RunMessages } from "./messages.js";
 import { approvalContext, changedParts, type ApprovalContext } from "./context-fingerprint.js";
@@ -729,6 +731,23 @@ export async function runRun(
       checkpoints: [...ws.record.checkpoints, { stage: "run", at: ports.now().toISOString() }],
     });
     events.emit("run", SYSTEM, "stage.end", { statuses, gatesOk: verdict.ok });
+    // REQ-VER-15/AC8: seal the results and specs, and with a signing key certify the run right away, so nothing can
+    // be changed between the end of the run and its certificate. The reports are rendered once more with the run's
+    // own time (its checkpoint), as every later rendering will.
+    verdict = await computeVerdict(session, ports.now);
+    await writeReports(session, verdict);
+    await sealRun(session);
+    if (ws.record.data["bench"] === undefined) {
+      const certified = await issueCertificate(session, ports.now, certifiedVerdict(verdict));
+      if (certified.status === "issued") io.write(`${certificateLines(certified.certificate).join("\n")}\n`);
+      if (certified.status === "gaps")
+        io.writeError(
+          `Warning: no certificate, the audit trail has ${String(certified.gaps.length)} gap(s):\n${certified.gaps
+            .slice(0, 5)
+            .map((g) => `  - ${g}\n`)
+            .join("")}`,
+        );
+    }
     // REQ-OBS-03: export what this command added to the journal; telemetry never changes the result.
     await anchorJournal(session);
     const telemetry = await exportRunTelemetry(session, ports.fetch);

@@ -244,7 +244,7 @@ documentation site and the Claude Code plugin are available.
 - [REQ-EXEC-31](requirements/execution.md#req-exec-31--judge-calibration-and-drift-control) Judge calibration and drift control (should, proposed, AC 0/4)
 - [REQ-EXEC-32](requirements/execution.md#req-exec-32--evaluation-of-retrieval-augmented-answers) Evaluation of retrieval-augmented answers (could, proposed, AC 0/3)
 - [REQ-EXEC-33](requirements/execution.md#req-exec-33--behaviour-regression-after-model-or-prompt-changes) Behaviour regression after model or prompt changes (should, proposed, AC 0/3)
-- [REQ-VER-15](requirements/verification.md#req-ver-15--verifiable-test-certificate) Verifiable test certificate (should, implemented, AC 7/7)
+- [REQ-VER-15](requirements/verification.md#req-ver-15--verifiable-test-certificate) Verifiable test certificate (should, implemented, AC 9/9)
 - [REQ-VER-17](requirements/verification.md#req-ver-17--trusted-timestamps) Trusted timestamps (should, proposed, AC 0/5)
 - [REQ-VER-19](requirements/verification.md#req-ver-19--immutable-evidence-storage) Immutable evidence storage (should, proposed, AC 0/3)
 - [REQ-VER-20](requirements/verification.md#req-ver-20--reproduce-a-run-from-its-certificate) Reproduce a run from its certificate (should, proposed, AC 0/3)

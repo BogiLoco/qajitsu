@@ -58,6 +58,10 @@ describe("open verifier (REQ-VER-21)", () => {
     const bad = await reference(p.runDir, publicKey);
     expect(bad.code).toBe(1);
     expect(bad.out).toContain("  - changed: report/matrix.md");
+    await writeFile(join(p.runDir, "evidence", "planted.json"), "{}");
+    expect((await reference(p.runDir, publicKey)).out).toContain(
+      "  - added after the certificate: evidence/planted.json",
+    );
   }, 180_000);
 
   it("REQ-VER-21/AC1: qj verify-report works outside any project, offline, with only the public key", async () => {

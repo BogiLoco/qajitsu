@@ -229,6 +229,8 @@ Every run ends with one signed statement that ties together everything the run u
 - [x] AC5: The certificate uses a standard attestation format (an in-toto statement in a DSSE envelope) with a published schema.
 - [x] AC6: Signing keys come from the secret provider or a KMS/HSM; keys can be rotated and old certificates stay verifiable with the public key that signed them.
 - [x] AC7: The Jira comment and `report.html` show the certificate id, the root hash and how to verify it.
+- [x] AC8: With a signing key, a run is certified when it ends; without one, the run seals the hashes of its results and specs in the journal, and the audit trail reports any later change, so no result can be edited before the certificate is issued. The statuses in the certificate are computed from the files at issue time, never copied from the run record.
+- [x] AC9: `qj verify-report` also fails on files added after the certificate, on a certificate shown with another run's folder and on an archive with two entries of the same name; it reports bytes appended to journals and logs after the certificate, and where its trust in the signing key comes from (`--key` or `.qa/keys/`).
 
 ### REQ-VER-16 · Complete audit trail
 

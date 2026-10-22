@@ -29,6 +29,19 @@ A certificate does **not** prove:
 - anything about files it does not list. Check the subject list; `run.json` itself, `env/` (secrets), `audit/` and the
   copies made when publishing (`report/published/`, `report/media/`) are not covered;
 - that the signing key was kept secret. Keep it in the secret provider and rotate it if in doubt.
+- that the key is the project's. `verify-report` says where its trust in the key comes from: `--key` (a key you got
+  from the project through another channel) or `.qa/keys/` (anyone who can write to the repository can add a key
+  there, so an outside auditor should pass `--key`).
+
+### Closing the window before the certificate (REQ-VER-15/AC8)
+
+A certificate signs what is in the run folder when it is issued, so the time between the end of a run and its
+certificate matters. With a signing key the run is certified the moment it ends. Without one, the end of the run
+seals the SHA-256 of every file under `results/` and `specs/` in the journal (`run.sealed`); the audit trail reports
+any of them changed, missing or added later, and no certificate is issued over such a run. Statuses in the
+certificate are computed from the files at issue time, never copied from `run.json`. Someone who can rewrite the
+whole journal and its anchor in `run.json` could still forge the seal; only signing closes that, which is why a run
+with a key is certified at once.
 
 ## Producing one
 
@@ -117,7 +130,13 @@ One changed byte in any covered file changes its leaf and so the root.
 3. Decode the statement; check `_type`, `predicateType` and the schema.
 4. Recompute the Merkle root from `subject` and compare it with `predicate.merkleRoot`.
 5. For each subject, hash the file (the whole file, the first `bytes` bytes, or the report with its section emptied)
-   and compare size and digest. Report every changed and missing file.
+   and compare size and digest. Report every changed and missing file; refuse names with `..`, an absolute start, a
+   backslash or NUL.
+6. Report every file the certificate would cover but does not list as added after it. Not covered by design:
+   `run.json`, `env/`, `audit/`, `certificate/`, `report/published/`, `report/media/`, checked-out code under
+   `repos/<alias>/`, and an export's `SHA256SUMS` and `README.txt`. Bytes appended to a journal or log after the
+   certificate are not covered and are reported, not failed.
+7. Compare `ticket` and `runId` with `run.json` of the folder; refuse an archive with two entries of the same name.
 
 `qj verify-report` does all of this and also reads an audit export zip directly; inside a project it trusts
 `.qa/keys/*.pub` as well as `--key`.

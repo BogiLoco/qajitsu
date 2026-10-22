@@ -4,7 +4,7 @@
 // and write their own. Usage: node verify-certificate.mjs <run folder> <public-key.pem> [<public-key.pem>...]
 // The run folder is a QAJitsu run or an unpacked `qj audit export` zip. Exit code 0 valid, 1 not valid, 2 usage.
 import { createHash, createPublicKey, verify } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const [folder, ...keyFiles] = process.argv.slice(2);
@@ -97,6 +97,26 @@ for (const s of statement.subject) {
   const part = prefix ? data.subarray(0, s.annotations.bytes) : data;
   if (!sizeOk || sha256(part).toString("hex") !== s.digest.sha256) problems.push(`changed: ${s.name}`);
 }
+
+// 5. Files the certificate would cover but does not list were added after it. Not covered by design: run.json, env/,
+// audit/, certificate/, report/published/, report/media/, checked-out code under repos/<alias>/, and an export's
+// SHA256SUMS and README.txt.
+const listed = new Set(statement.subject.map((s) => s.name));
+const excluded = (p) =>
+  p === "run.json" ||
+  p === "SHA256SUMS" ||
+  p === "README.txt" ||
+  /^(env|audit|certificate)\//.test(p) ||
+  /^report\/(published|media)\//.test(p) ||
+  /^repos\/[^/]+\//.test(p);
+const walk = (dir, prefix) =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const rel = prefix === "" ? e.name : `${prefix}/${e.name}`;
+    if (e.isDirectory()) return walk(join(dir, e.name), rel);
+    return e.isFile() ? [rel] : [];
+  });
+for (const p of walk(folder, ""))
+  if (!listed.has(p) && !excluded(p)) problems.push(`added after the certificate: ${p}`);
 
 const id = `qjc-${sha256(payload).toString("hex").slice(0, 20)}`;
 if (problems.length === 0) {
