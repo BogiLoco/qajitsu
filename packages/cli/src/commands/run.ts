@@ -335,6 +335,28 @@ async function writeBlocked(
   }
 }
 
+/** Writes NOT_RUN results with the reason (REQ-EXEC-16/AC1): never executed, never PASSED. */
+async function writeNotRun(
+  session: RunSession,
+  caseIds: readonly string[],
+  reason: string,
+  results: Map<string, CaseResultFile>,
+): Promise<void> {
+  for (const caseId of caseIds) {
+    session.events.emit("run", SYSTEM, "case.not_run", { caseId, reason });
+    const result = CaseResultFileSchema.parse({
+      schema: 1,
+      caseId,
+      runner: "api",
+      attempts: [{ attempt: 1, outcome: "skipped", assertions: [], error: reason, steps: [], evidence: [] }],
+    });
+    await writeFile(session.ws.path("results", `${caseId}.json`), `${JSON.stringify(result, null, 2)}\n`, {
+      flag: "wx",
+    });
+    results.set(caseId, result);
+  }
+}
+
 /**
  * The environment of a command: `--env`, else `environments.default`; interactive sessions are asked when neither
  * is set (REQ-ENV-07).
@@ -567,26 +589,28 @@ export async function runRun(
     });
 
     let teardownDue = false;
+    // REQ-EXEC-16/AC1: cases not chosen with --cases are NOT_RUN, also when the environment fails (exploratory E6).
+    const chosenIds = plan.cases.map((c) => c.id).filter((id) => live.selected?.has(id) ?? true);
+    const notChosen = async (): Promise<void> => {
+      await writeNotRun(
+        session,
+        plan.cases.map((c) => c.id).filter((id) => !chosenIds.includes(id)),
+        "not selected (--cases)",
+        results,
+      );
+    };
     if (prepared.failure) {
       // REQ-ENV-04/AC3: the application did not start; every case is BLOCKED with the service logs.
       io.writeError(
         `The environment did not start (${masker.maskText(prepared.failure.message)}); every case is BLOCKED.\n`,
       );
-      await blockAfterStartFailure(
-        session,
-        plan.cases.map((c) => c.id),
-        prepared.failure,
-        results,
-      );
+      await blockAfterStartFailure(session, chosenIds, prepared.failure, results);
+      await notChosen();
     } else if (!health.ok) {
       // REQ-ENV-01/AC1: an unreachable environment makes every case BLOCKED.
       io.writeError(`Environment ${env.name} is not healthy (${health.detail}); every case is BLOCKED.\n`);
-      await writeBlocked(
-        session,
-        plan.cases.map((c) => c.id),
-        `environment not healthy: ${health.detail}`,
-        results,
-      );
+      await writeBlocked(session, chosenIds, `environment not healthy: ${health.detail}`, results);
+      await notChosen();
     } else {
       if (versionCheck === "mismatch") {
         const message = `Environment runs ${String(deployedSha)}, the change is ${analysed.map((s) => s.slice(0, 12)).join(", ")}.`;
@@ -610,10 +634,11 @@ export async function runRun(
         );
         await blockAfterStartFailure(
           session,
-          plan.cases.map((c) => c.id),
+          chosenIds,
           { message: `setup hook ${setup.script ?? ""} failed`, logs: setup.log ? [setup.log] : [] },
           results,
         );
+        await notChosen();
       } else {
         // REQ-OBS-10/AC1: the versions of every tool and model this run uses, recorded before anything runs.
         await ws.update({
@@ -930,17 +955,7 @@ async function executeCases(
     await writeBlocked(session, [caseId], reason, results);
   }
   for (const [caseId, reason] of notRun) {
-    events.emit("run", SYSTEM, "case.not_run", { caseId, reason });
-    const result = CaseResultFileSchema.parse({
-      schema: 1,
-      caseId,
-      runner: "api",
-      attempts: [{ attempt: 1, outcome: "skipped", assertions: [], error: reason, steps: [], evidence: [] }],
-    });
-    await writeFile(ws.path("results", `${caseId}.json`), `${JSON.stringify(result, null, 2)}\n`, {
-      flag: "wx",
-    });
-    results.set(caseId, result);
+    await writeNotRun(session, [caseId], reason, results);
     // Excluded from every execution below, like a blocked case, but recorded as NOT_RUN.
     blocked.set(caseId, reason);
   }
