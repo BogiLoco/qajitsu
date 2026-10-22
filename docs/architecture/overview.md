@@ -74,7 +74,11 @@ Zod and repaired up to three times, then the stage fails (REQ-LLM-04). Models ar
   specs/                             generated tests (author, healer)
   results/                           runner output only            (agents denied, INV-2)
   evidence/  manifest.json           screenshots, video, req/resp  (agents denied, INV-7)
-  journal/events.jsonl               every tool call, step, human action (REQ-OBS-01)
+  journal/events.jsonl               every tool call, step, human action; hash chain (REQ-OBS-01, REQ-OBS-05)
+  journal/agents.jsonl               every model call: prompt, answer, tool calls, model, tokens; masked; its hash
+                                     is in the model.usage event of events.jsonl (REQ-VER-16)
+  audit/trail.json                   the audit trail: every file with its SHA-256 and the gaps (REQ-VER-16)
+  certificate/certificate.dsse.json  signed in-toto statement over the run, Merkle root (REQ-VER-15)
   logs/                              environment and service logs
   report/                            matrix.md, matrix.csv, report.html, jira-comment.json
   env/                               generated .env files          (never read by agents)

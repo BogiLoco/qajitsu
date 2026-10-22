@@ -366,7 +366,16 @@ qj run SHOP-482 --build                               # start the app from the f
 qj run SHOP-482 --build --set api.FEATURE_X=1         # with an overridable variable changed for this run
 qj run SHOP-482 --env staging --sequential            # one case after another instead of API, web and mobile at once
 qj run SHOP-482 --env staging --cases TC-02           # one case only (add --headed --step to watch it)
+qj run SHOP-482 --env staging --review-specs          # a person accepts each generated test before it runs
 ```
+
+Before anything runs, every generated spec passes the static checks and the **test code quality gate**: no
+assertion that cannot fail (a constant or the planned value as actual), none that can be skipped (inside an `if`,
+loop, `try`, callback, after an early `return`), no empty `catch`, no `.skip`/`.only`, no check of the whole page. A
+spec that fails goes back to the author once, then the case is BLOCKED with the findings. With `--review-specs` (or
+`spec_review` in the project config, e.g. for the first runs of a new project) a person reads each spec next to its
+planned steps and accepts it or sends it back with a reason; without a terminal the run stops before anything starts
+and `qj review-spec` shows and decides.
 
 **When:** after approval; for every new environment or build.
 **What it does:**
@@ -474,6 +483,13 @@ journal intact, approved plan unchanged, ...). Then it shows a **preview** of th
 `Publish this to SHOP-482? [y/N]`. On `y` it posts the matrix with failures and reproduction hints, the failure
 hints in their own section, attaches the evidence zip and media; running it again updates the same comment.
 
+With `certificate.signing_key` set (`qj audit keygen` creates the key), publishing first issues a **signed
+certificate** over the run's complete audit trail: every file of the run, every prompt and answer of every model,
+approvals, versions and image digests under one Merkle root, signed in an in-toto statement. Its id and how to check
+it are in the comment and `report.html`; `qj verify-report` (or `tools/verify-certificate.mjs`, no QAJitsu needed)
+names any file changed afterwards. `qj audit export` gives an auditor everything in one zip.
+[docs/guides/certificates.md](docs/guides/certificates.md)
+
 ### Optional: report the failures as bugs
 
 ```sh
@@ -540,7 +556,8 @@ qj fetch SHOP-482 && qj plan SHOP-482     # review: a   (--depth smoke for a qui
 # optional, before the plan: qj explore SHOP-482 --goal "..." && qj explore review SHOP-482
 qj run SHOP-482 --env staging              # API, web and mobile at once (--sequential: one by one)
 qj evidence SHOP-482 --failed              # FAILED cases with their hint (product bug, test bug, environment, data)
-qj publish SHOP-482
+qj publish SHOP-482                        # with a signing key: also the signed certificate
+qj verify-report <run folder or audit zip> # anyone: nothing changed since? (offline)
 qj bug SHOP-482                            # optional: FAILED cases as bugs (similar open bugs shown first)
 qj promote SHOP-482                        # optional: PASSED cases as a PR/MR to the tests repository
 qj regression --env staging                # optional: the promoted packs again, no models involved

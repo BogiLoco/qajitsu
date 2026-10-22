@@ -100,5 +100,10 @@ tests; point `mobile.appium.url` at a device farm or a machine with an emulator 
   the pipeline (e.g. `aws-actions/configure-aws-credentials`, `google-github-actions/auth`, GitLab ID tokens) to
   read the values into the job environment; QAJitsu then reads them like any other env secret.
 - Run folders move between steps through artifacts or caches (`QAJITSU_WORKSPACE` points at them).
+- Signed certificates (REQ-VER-15): store the private key from `qj audit keygen` as a masked CI secret in base64
+  (`base64 -w0 key` on Linux, `base64 -i key` on macOS) and point `certificate.signing_key` at it, e.g.
+  `secret://env/QAJITSU_SIGNING_KEY`; commit only the public key in `.qa/keys/`. With `certificate.required: true` a
+  run whose audit trail has gaps is not published. Upload `qj audit export` as an artifact for auditors; anyone can
+  check it later with `qj verify-report audit.zip --key .qa/keys/<id>.pub`.
 - Mobile: Android emulators need KVM on Linux runners (`/dev/kvm`, e.g. GitHub larger runners) or macOS
   runners; iOS needs macOS runners with Xcode or a device farm.
