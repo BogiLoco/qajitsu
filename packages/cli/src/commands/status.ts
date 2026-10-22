@@ -26,7 +26,15 @@ import { registerConfiguredSecrets } from "../session.js";
 import type { CommandIO } from "./fetch.js";
 import { nextStage, rootOf } from "./runs.js";
 import { readRunDigests } from "./metrics.js";
-import { costInsights, formatDuration, timeInsights, weeklyCosts, type RunDigest } from "@qajitsu/report";
+import {
+  agentScorecard,
+  costInsights,
+  formatDuration,
+  planInsights,
+  timeInsights,
+  weeklyCosts,
+  type RunDigest,
+} from "@qajitsu/report";
 
 /** One ticket with unfinished work (REQ-PRJ-05/AC2). */
 export interface OpenWork {
@@ -216,6 +224,43 @@ export function timeLines(digests: readonly RunDigest[]): string[] {
   ];
 }
 
+const pct = (share: number): string => `${String(Math.round(share * 100))}%`;
+
+/** Plan and test quality and the agent scorecard of a project (REQ-PLAN-16/AC3, REQ-LLM-14/AC3). */
+export function qualityLines(digests: readonly RunDigest[]): string[] {
+  const q = planInsights(digests);
+  const card = agentScorecard(digests);
+  const lines: string[] = [];
+  if (q.approvedPlans > 0)
+    lines.push(
+      `Plans: ${String(q.approvedPlans)} approved, ${pct(q.approvedUnchangedShare)} without changes, ${q.averageRevisionRounds.toFixed(1)} revision round(s) on average${q.readinessChecked > 0 ? `; the readiness gate stopped ${pct(q.readinessStoppedShare)} of ${String(q.readinessChecked)} ticket(s)` : ""}`,
+    );
+  if (q.failedCases > 0 || q.auditorDowngrades > 0 || q.escapedDefects > 0)
+    lines.push(
+      `Tests: ${String(q.failedCases)} FAILED, ${String(q.falseFailed)} found to be no product bug (${pct(q.falseFailedShare)}, qj feedback); auditor downgraded ${String(q.auditorDowngrades)} PASSED; ${String(q.escapedDefects)} escaped defect(s)`,
+    );
+  if (card.roles.length > 0) {
+    lines.push("Agents (calls, p95, steps without repair, guard denials):");
+    for (const r of card.roles)
+      lines.push(
+        `  ${r.role} ${r.model}: ${String(r.calls)} call(s), p95 ${formatDuration(r.p95Ms)}, ${pct(r.noRepairShare)} without repair${r.guardDenials > 0 ? `, ${String(r.guardDenials)} denied` : ""}`,
+      );
+    const rules = Object.entries(card.author.rules)
+      .sort(([, a], [, b]) => b - a)
+      .map(([rule, n]) => `${rule} ${String(n)}`)
+      .join(", ");
+    if (card.author.cases > 0)
+      lines.push(
+        `  author: ${pct(card.author.firstTryShare)} of ${String(card.author.cases)} spec(s) right on the first try${rules ? `; quality gate: ${rules}` : ""}${card.author.reviewSentBack > 0 ? `; ${String(card.author.reviewSentBack)} sent back by a reviewer` : ""}`,
+      );
+    if (card.planner.plans > 0)
+      lines.push(
+        `  planner: ${card.planner.averageFlags.toFixed(1)} flagged expectation(s) and ${card.planner.averageGaps.toFixed(1)} coverage gap(s) per plan`,
+      );
+  }
+  return lines;
+}
+
 /** Status lines of one project and its index for `context.json` (REQ-PRJ-05/AC1+AC3). */
 async function projectStatus(project: LoadedProject, ports: RuntimePorts): Promise<string[]> {
   const problems = (await projectChecks(project, ports, { online: false })).filter((c) => !c.ok);
@@ -255,6 +300,7 @@ async function projectStatus(project: LoadedProject, ports: RuntimePorts): Promi
     ...environments,
     ...costLines(digests),
     ...timeLines(digests),
+    ...qualityLines(digests),
   ];
 }
 

@@ -246,3 +246,26 @@ JSON in `bench-results/<date>-<model>.json`) lists per case the plan acceptance 
 Benchmark runs are marked `bench` in `run.json`, approved as `bench:<user>` (not as a person) and refused by
 `qajitsu publish`. The benchmark makes real model calls: it never runs in PR CI (a contract test checks the workflows); run it
 nightly or on demand.
+
+## Agent scorecard and plan quality (REQ-LLM-14, REQ-PLAN-16)
+
+How well each agent does its job is measured by code from what every run records (`journal/agents.jsonl`, the
+journal, gates and reviews), never by asking a model. `qj status` and `qj metrics` show, per role and model: calls,
+cost, latency (p50, p95), the share of agent steps that needed no repair of invalid output, and tool calls the guard
+denied; the author's share of specs right on the first try and what the checks and the quality gate rejected, by
+rule; review send-backs; the planner's flagged expectations and coverage gaps per plan; the healer's accepted heals.
+
+Plan and test quality per project: plans approved without changes, revision rounds, tickets the readiness gate
+stopped, FAILED cases a person found to be no product bug, PASSED cases the auditor downgraded, and defects that
+escaped. The last two need a person's word, recorded after the run, which never changes a status:
+
+```sh
+qj feedback SHOP-482 --case TC-03 --is test-bug --note "the plan expected the old rounding"
+qj feedback SHOP-482 --escaped SHOP-512        # a defect found later on a ticket the run passed
+```
+
+`qj bench` adds the scorecard to its report, with the demo shop's ground truth (the seeded bug was found, the plan
+has a case for the criterion the bug breaks, `criterion` in `.qa/bench.yaml`), and compares it with the previous
+report of the same model. Answers of real models recorded in `journal/agents.jsonl` can be replayed as scripted models
+in tests (`tests/support/replay.ts`): `tests/golden/replay-gemma.test.ts` plays gemma4:e2b's analysis and plan for
+DEMO-1, invalid answers included, through today's parsers and checks.

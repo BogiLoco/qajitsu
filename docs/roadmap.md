@@ -192,7 +192,7 @@ and `qj bench` reports detection and false-FAILED rates per model.
 <!-- prettier-ignore-start -->
 <!-- req-stage:7 -->
 - [REQ-PLAN-15](requirements/plan.md#req-plan-15--project-lessons-from-revisions) Project lessons from revisions (should, proposed, AC 0/4)
-- [REQ-PLAN-16](requirements/plan.md#req-plan-16--plan-quality-metrics) Plan quality metrics (should, proposed, AC 0/4)
+- [REQ-PLAN-16](requirements/plan.md#req-plan-16--plan-quality-metrics) Plan quality metrics (should, implemented, AC 4/4)
 - [REQ-VER-06](requirements/verification.md#req-ver-06--independent-auditor) Independent auditor (must, implemented, AC 3/3)
 - [REQ-VER-09](requirements/verification.md#req-ver-09--canary-check) Canary check (could, implemented, AC 2/2)
 - [REQ-VER-23](requirements/verification.md#req-ver-23--test-code-quality-gate) Test code quality gate (must, implemented, AC 5/5)
@@ -200,7 +200,7 @@ and `qj bench` reports detection and false-FAILED rates per model.
 - [REQ-LLM-05](requirements/models.md#req-llm-05--local-models-used-honestly) Local models used honestly (should, implemented, AC 2/2)
 - [REQ-LLM-06](requirements/models.md#req-llm-06--model-benchmark) Model benchmark (should, implemented, AC 3/3)
 - [REQ-LLM-13](requirements/models.md#req-llm-13--model-routing-proposals-from-data) Model routing proposals from data (could, proposed, AC 0/3)
-- [REQ-LLM-14](requirements/models.md#req-llm-14--agent-scorecard) Agent scorecard (should, accepted, AC 0/5)
+- [REQ-LLM-14](requirements/models.md#req-llm-14--agent-scorecard) Agent scorecard (should, implemented, AC 5/5)
 - [REQ-KNOW-01](requirements/knowledge.md#req-know-01--knowledge-base-per-project-created-on-demand) Knowledge base per project, created on demand (should, implemented, AC 4/4)
 - [REQ-KNOW-02](requirements/knowledge.md#req-know-02--add-documents-from-files-and-folders) Add documents from files and folders (should, implemented, AC 5/5)
 - [REQ-KNOW-03](requirements/knowledge.md#req-know-03--remove-documents-and-reset) Remove documents and reset (should, implemented, AC 2/2)

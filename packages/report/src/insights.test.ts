@@ -1,6 +1,8 @@
 import type { RunEvent } from "@qajitsu/core";
 import { describe, expect, it } from "vitest";
 import {
+  agentScorecard,
+  planInsights,
   costInsights,
   digestRun,
   formatDuration,
@@ -58,7 +60,8 @@ describe("cost per verified ticket (REQ-LLM-11)", () => {
       day: "2026-10-22",
     });
     expect(d.costUsd).toBeCloseTo(0.6, 9);
-    expect(d.roles["analyst"]).toEqual({
+    // The role digest grew with the scorecard (REQ-LLM-14); its cost fields are checked here.
+    expect(d.roles["analyst"]).toMatchObject({
       calls: 1,
       inputTokens: 1000,
       cachedInputTokens: 800,
@@ -229,5 +232,116 @@ describe("where the time of a run went (REQ-NFR-11)", () => {
     expect(insights.byVersion).toEqual({ "0.1.0": { plan: 50_000 }, "0.2.0": { plan: 20_000 } });
     expect(insights.byWeek).toEqual({ "2026-W43": { plan: 50_000 }, "2026-W44": { plan: 20_000 } });
     expect(timeInsights([]).perRun.activeMs).toBe(0);
+  });
+});
+
+describe("plan quality and the agent scorecard (REQ-PLAN-16, REQ-LLM-14)", () => {
+  const agent = (stage: string, name: string, role: string, details?: Record<string, unknown>): RunEvent => ({
+    ...event(stage, name, details),
+    actor: { kind: "agent", name: role },
+  });
+  const runWith = (ticket: string, data: Record<string, unknown>, events: RunEvent[]) =>
+    digestRun({ ticket, runId: ticket, createdAt: "2026-10-22T09:00:00Z", data, events, attemptsMs: [] });
+
+  const first = runWith(
+    "DEMO-1",
+    {
+      approval: { version: 1 },
+      results: { "TC-01": "FAILED", "TC-02": "FAILED", "TC-03": "PASSED" },
+      feedback: {
+        cases: { "TC-01": { is: "test-bug" }, "TC-02": { is: "product-bug" } },
+        escaped: [{ bug: "DEMO-9" }],
+      },
+    },
+    [
+      event("plan", "readiness.result", { result: "READY" }),
+      usage("analyze", "analyst", 0.1, { model: "m/a", durationMs: 1000 }),
+      event("analyze", "stage.end", { attempts: 2 }),
+      usage("plan", "planner", 0.2, { model: "m/a", durationMs: 3000 }),
+      event("plan", "stage.end", { attempts: 1 }),
+      event("plan", "plan.coverage", { version: 1, flags: 2, gaps: 1 }),
+      usage("author", "author", 0.1, { model: "m/b", durationMs: 2000 }),
+      agent("author", "tool_denied", "author", { tool: "write_file", code: "PROTECTED_PATH" }),
+      event("author", "case.end", { caseId: "TC-01", attempts: 1, ok: true, problems: 0 }),
+      event("author", "case.end", {
+        caseId: "TC-02",
+        attempts: 2,
+        ok: true,
+        problems: 0,
+        findings: { quality: 2, coverage: 1 },
+        rules: { "skippable-verify": 1, "constant-actual": 1 },
+      }),
+      event("author", "case.end", {
+        caseId: "TC-03",
+        attempts: 2,
+        ok: false,
+        problems: 3,
+        findings: { lint: 1 },
+      }),
+      event("run", "spec.review", { caseId: "TC-01", decision: "accept" }),
+      event("run", "spec.review", { caseId: "TC-02", decision: "send_back" }),
+      event("heal", "heal.end", { caseId: "TC-03", ok: true }),
+      event("heal", "heal.end", { caseId: "TC-03", ok: false }),
+      event("audit", "audit.done", { cases: 1, weak: 1 }),
+    ],
+  );
+  const second = runWith("DEMO-2", { approval: { version: 3 }, results: { "TC-01": "PASSED" } }, [
+    event("plan", "readiness.result", { result: "NEEDS_CLARIFICATION" }),
+    usage("plan", "planner", 0.4, { model: "m/a", durationMs: 5000 }),
+    event("plan", "stage.end", { attempts: 1 }),
+    event("plan", "plan.coverage", { version: 3, flags: 0, gaps: 0 }),
+  ]);
+
+  it("REQ-PLAN-16/AC1+AC2+AC4: approvals without changes, revision rounds, readiness stops, false FAILED, auditor downgrades and escaped defects", () => {
+    expect(planInsights([first, second])).toEqual({
+      approvedPlans: 2,
+      approvedUnchangedShare: 0.5,
+      averageRevisionRounds: 1,
+      readinessChecked: 2,
+      readinessStoppedShare: 0.5,
+      failedCases: 2,
+      falseFailed: 1,
+      falseFailedShare: 0.5,
+      auditorDowngrades: 1,
+      escapedDefects: 1,
+    });
+    expect(planInsights([])).toMatchObject({
+      approvedPlans: 0,
+      approvedUnchangedShare: 0,
+      falseFailedShare: 0,
+    });
+  });
+
+  it("REQ-LLM-14/AC1+AC2: per role and model the calls, latency, repairs and denials; the author's first try and findings; planner and healer outcomes", () => {
+    const card = agentScorecard([first, second]);
+    expect(
+      card.roles.map((r) => [r.role, r.model, r.calls, r.steps, r.noRepairShare, r.guardDenials]),
+    ).toEqual([
+      ["analyst", "m/a", 1, 1, 0, 0],
+      ["author", "m/b", 1, 3, 0.333333, 1],
+      ["planner", "m/a", 2, 2, 1, 0],
+    ]);
+    expect(card.roles.find((r) => r.role === "planner")).toMatchObject({
+      p50Ms: 3000,
+      p95Ms: 5000,
+      costUsd: 0.6,
+      runs: 2,
+    });
+    expect(card.author).toEqual({
+      cases: 3,
+      firstTryShare: 0.333333,
+      failed: 1,
+      findings: { quality: 2, coverage: 1, lint: 1 },
+      rules: { "skippable-verify": 1, "constant-actual": 1 },
+      reviewAccepted: 1,
+      reviewSentBack: 1,
+    });
+    expect(card.planner).toEqual({ plans: 2, averageFlags: 1, averageGaps: 0.5 });
+    expect(card.healer).toEqual({ heals: 2, acceptedShare: 0.5 });
+    expect(agentScorecard([])).toMatchObject({
+      roles: [],
+      author: { cases: 0, firstTryShare: 0 },
+      healer: { acceptedShare: 0 },
+    });
   });
 });

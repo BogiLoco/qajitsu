@@ -874,6 +874,19 @@ Makes real model calls; never in PR CI.
 
 Exit codes: `0` the benchmark completed (whatever the scores), `3` configuration errors.
 
+### `qajitsu feedback <ticket>`
+
+Records what a person found after a run (REQ-PLAN-16): what a FAILED case really was, or a defect found later on a
+ticket the run passed. It feeds the project's plan and test quality metrics (`qj status`, `qj metrics`) and never
+changes a status, the results or the certificate. The note is masked before it is stored.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+- `--case <id>` with `--is <kind>`: a FAILED case is a `product-bug`, `test-bug`, `environment` or `data` problem
+- `--escaped <bug>`: a defect found later, e.g. `SHOP-512`
+- `--note <text>`: why
+
+Exit codes: `0` recorded, `3` errors (a case that is not FAILED, an unknown kind, a run without results).
+
 ### `qajitsu review-spec <ticket>`
 
 Reads and decides on the generated specs that wait for a person (REQ-VER-24). Without a decision it shows each spec

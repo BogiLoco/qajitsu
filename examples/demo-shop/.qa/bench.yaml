@@ -5,21 +5,21 @@ cases:
   - id: bench-cart-rounding
     ticket: DEMO-1
     flags: [BUG_CART_TOTAL_ROUNDING]
-    expect: { detects: BUG-01 }
+    expect: { detects: BUG-01, criterion: AC1 }
   - id: bench-discount-stacking
     ticket: DEMO-1
     flags: [BUG_DISCOUNT_STACKS]
-    expect: { detects: BUG-04 }
+    expect: { detects: BUG-04, criterion: AC3 }
   - id: bench-negative-quantity
     ticket: DEMO-2
     ref: shop=main
     flags: [BUG_ORDER_ACCEPTS_NEGATIVE_QTY]
-    expect: { detects: BUG-02 }
+    expect: { detects: BUG-02, criterion: AC1 }
   - id: bench-expired-token
     ticket: DEMO-3
     ref: shop=main
     flags: [BUG_AUTH_EXPIRED_TOKEN_OK]
-    expect: { detects: BUG-03 }
+    expect: { detects: BUG-03, criterion: AC2 }
   - id: bench-clean-cart
     ticket: DEMO-1
     flags: []

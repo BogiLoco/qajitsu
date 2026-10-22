@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import {
   ConfigError,
@@ -11,6 +11,7 @@ import {
   readRunIndex,
   resolveWorkspaceRoot,
 } from "@qajitsu/core";
+import { agentScorecard, digestRun, type AgentScorecard, type RunDigest } from "@qajitsu/report";
 import { parse } from "yaml";
 import { z } from "zod";
 import type { RuntimePorts } from "../adapters.js";
@@ -33,7 +34,14 @@ export const BenchCasesSchema = z.strictObject({
         /** `--ref` for fetch when the ticket has no change of its own, e.g. `shop=main`. */
         ref: z.string().optional(),
         expect: z.union([
-          z.strictObject({ detects: z.string().min(1) }),
+          z.strictObject({
+            detects: z.string().min(1),
+            /** The ticket's acceptance criterion the bug breaks: the plan must have a case for it (REQ-LLM-14/AC4). */
+            criterion: z
+              .string()
+              .regex(/^AC\d+$/)
+              .optional(),
+          }),
           z.strictObject({ all_passed: z.literal(true) }),
         ]),
       }),
@@ -60,6 +68,8 @@ export interface BenchCaseResult {
   readonly error?: string;
   /** Whether the analyst and planner had the project's knowledge base (REQ-KNOW-11). */
   readonly knowledge?: boolean;
+  /** The approved plan has a case whose source is the bug's acceptance criterion (REQ-LLM-14/AC4). */
+  readonly criterionCovered?: boolean;
 }
 
 type Rate = "detectionRate" | "falseFailedRate" | "blockedRate" | "planAcceptanceRate";
@@ -73,6 +83,8 @@ export interface BenchSummary {
   readonly durationMs: number;
   readonly tokens: number;
   readonly costUsd?: number | undefined;
+  /** Share of bug cases whose approved plan covers the bug's criterion, when the cases name one. */
+  readonly criterionCoverageRate?: number | undefined;
 }
 
 /** Benchmark report written to `<out>/<date>-<model>.json`. */
@@ -84,11 +96,64 @@ export interface BenchReport {
   readonly knowledge?: "on" | "off" | "compare";
   readonly cases: readonly BenchCaseResult[];
   readonly summary: BenchSummary;
+  /** The agent scorecard of the benchmark's runs (REQ-LLM-14/AC4). */
+  readonly scorecard?: AgentScorecard;
+  /** Changes since the previous report of the same model and role, when there is one. */
+  readonly sincePrevious?: BenchChanges;
   /** With `compare`: each case without and with the knowledge base, and the difference (with − without). */
   readonly comparison?: {
     readonly without: BenchSummary;
     readonly with: BenchSummary;
     readonly delta: Pick<BenchSummary, Rate>;
+  };
+}
+
+/** What changed since the previous benchmark of the same model (REQ-LLM-14/AC4): later minus earlier. */
+export interface BenchChanges {
+  readonly previousAt: string;
+  readonly detectionRate: number;
+  readonly falseFailedRate: number;
+  readonly blockedRate: number;
+  readonly planAcceptanceRate: number;
+  readonly criterionCoverageRate?: number;
+  readonly authorFirstTryShare?: number;
+  readonly plannerAverageFlags?: number;
+  readonly plannerAverageGaps?: number;
+}
+
+/**
+ * The changes between two benchmark reports of the same model (REQ-LLM-14/AC4).
+ *
+ * @param previous - The earlier report.
+ * @param current - The new one.
+ */
+export function benchChanges(previous: BenchReport, current: BenchReport): BenchChanges {
+  const d = (a: number | undefined, b: number | undefined): number | undefined =>
+    a === undefined || b === undefined ? undefined : Number((b - a).toFixed(3));
+  const optional = (k: string, v: number | undefined): Record<string, number> =>
+    v === undefined ? {} : { [k]: v };
+  return {
+    previousAt: previous.at,
+    detectionRate: d(previous.summary.detectionRate, current.summary.detectionRate) ?? 0,
+    falseFailedRate: d(previous.summary.falseFailedRate, current.summary.falseFailedRate) ?? 0,
+    blockedRate: d(previous.summary.blockedRate, current.summary.blockedRate) ?? 0,
+    planAcceptanceRate: d(previous.summary.planAcceptanceRate, current.summary.planAcceptanceRate) ?? 0,
+    ...optional(
+      "criterionCoverageRate",
+      d(previous.summary.criterionCoverageRate, current.summary.criterionCoverageRate),
+    ),
+    ...optional(
+      "authorFirstTryShare",
+      d(previous.scorecard?.author.firstTryShare, current.scorecard?.author.firstTryShare),
+    ),
+    ...optional(
+      "plannerAverageFlags",
+      d(previous.scorecard?.planner.averageFlags, current.scorecard?.planner.averageFlags),
+    ),
+    ...optional(
+      "plannerAverageGaps",
+      d(previous.scorecard?.planner.averageGaps, current.scorecard?.planner.averageGaps),
+    ),
   };
 }
 
@@ -125,6 +190,7 @@ export function summariseBench(cases: readonly BenchCaseResult[]): BenchSummary 
   const clean = cases.filter((c) => c.expect === "all_passed");
   const tests = cases.reduce((n, c) => n + Object.keys(c.statuses).length, 0);
   const priced = cases.filter((c) => c.costUsd !== undefined);
+  const withCriterion = cases.filter((c) => c.criterionCovered !== undefined);
   return {
     detectionRate: ratio(bugs.filter((c) => c.detected === true).length, bugs.length),
     falseFailedRate: ratio(clean.filter((c) => c.falseFailed > 0).length, clean.length),
@@ -137,6 +203,14 @@ export function summariseBench(cases: readonly BenchCaseResult[]): BenchSummary 
     tokens: cases.reduce((n, c) => n + c.tokens, 0),
     ...(priced.length > 0
       ? { costUsd: Number(priced.reduce((n, c) => n + (c.costUsd ?? 0), 0).toFixed(4)) }
+      : {}),
+    ...(withCriterion.length > 0
+      ? {
+          criterionCoverageRate: ratio(
+            withCriterion.filter((c) => c.criterionCovered === true).length,
+            withCriterion.length,
+          ),
+        }
       : {}),
   };
 }
@@ -160,8 +234,48 @@ export function formatBench(report: BenchReport): string {
     ),
     "",
     `Detection ${pct(s.detectionRate)} · false FAILED ${pct(s.falseFailedRate)} · BLOCKED ${pct(s.blockedRate)} · plan acceptance ${pct(s.planAcceptanceRate)} · ${String(Math.round(s.durationMs / 1000))} s · ${String(s.tokens)} tokens${s.costUsd === undefined ? "" : ` · $${s.costUsd.toFixed(4)}`}`,
+    ...(s.criterionCoverageRate === undefined
+      ? []
+      : [`Plans covering the bug's criterion ${pct(s.criterionCoverageRate)}`]),
+    ...(report.scorecard ? ["", ...formatScorecard(report.scorecard)] : []),
+    ...(report.sincePrevious ? ["", formatChanges(report.sincePrevious)] : []),
     ...(report.comparison ? ["", formatComparison(report.comparison)] : []),
   ].join("\n");
+}
+
+/** The agent scorecard as lines (REQ-LLM-14/AC4). */
+function formatScorecard(card: AgentScorecard): string[] {
+  const pct = (x: number): string => `${(x * 100).toFixed(0)}%`;
+  return [
+    "| Role | Model | Calls | p95 | Steps without repair | Guard denials |",
+    "|---|---|---|---|---|---|",
+    ...card.roles.map(
+      (r) =>
+        `| ${r.role} | ${r.model} | ${String(r.calls)} | ${(r.p95Ms / 1000).toFixed(1)} s | ${pct(r.noRepairShare)} | ${String(r.guardDenials)} |`,
+    ),
+    `Author right on the first try ${pct(card.author.firstTryShare)} · planner ${card.planner.averageFlags.toFixed(1)} flags and ${card.planner.averageGaps.toFixed(1)} coverage gaps per plan`,
+  ];
+}
+
+/** Changes since the previous benchmark of the same model (REQ-LLM-14/AC4). */
+function formatChanges(c: BenchChanges): string {
+  const parts = [
+    `detection ${signedPct(c.detectionRate)}`,
+    `false FAILED ${signedPct(c.falseFailedRate)}`,
+    `BLOCKED ${signedPct(c.blockedRate)}`,
+    `plan acceptance ${signedPct(c.planAcceptanceRate)}`,
+    ...(c.criterionCoverageRate === undefined
+      ? []
+      : [`criterion coverage ${signedPct(c.criterionCoverageRate)}`]),
+    ...(c.authorFirstTryShare === undefined ? [] : [`author first try ${signedPct(c.authorFirstTryShare)}`]),
+    ...(c.plannerAverageFlags === undefined
+      ? []
+      : [`planner flags ${c.plannerAverageFlags >= 0 ? "+" : ""}${c.plannerAverageFlags.toFixed(1)}`]),
+    ...(c.plannerAverageGaps === undefined
+      ? []
+      : [`coverage gaps ${c.plannerAverageGaps >= 0 ? "+" : ""}${c.plannerAverageGaps.toFixed(1)}`]),
+  ];
+  return `Since ${c.previousAt.slice(0, 10)}: ${parts.join(" · ")}`;
 }
 
 const signedPct = (x: number): string => `${x > 0 ? "+" : ""}${(x * 100).toFixed(0)} pp`;
@@ -181,6 +295,22 @@ function formatComparison(c: NonNullable<BenchReport["comparison"]>): string {
     row("BLOCKED", "blockedRate"),
     row("Plan accepted without edits", "planAcceptanceRate"),
   ].join("\n");
+}
+
+/** The latest earlier report of the same model and role in a folder, if any. */
+async function previousReport(dir: string, current: BenchReport): Promise<BenchReport | undefined> {
+  let latest: BenchReport | undefined;
+  for (const name of await readdir(dir).catch(() => [] as string[])) {
+    if (!name.endsWith(".json")) continue;
+    try {
+      const r = JSON.parse(await readFile(join(dir, name), "utf8")) as BenchReport;
+      if (r.model !== current.model || r.role !== current.role || r.at >= current.at) continue;
+      if (latest === undefined || r.at > latest.at) latest = r;
+    } catch {
+      // Not a report.
+    }
+  }
+  return latest;
 }
 
 /** Output of a sub-command, kept out of the benchmark's own output. */
@@ -249,6 +379,7 @@ export async function runBench(
     const passes: (boolean | undefined)[] =
       mode === "compare" ? [false, true] : [mode === "off" ? false : undefined];
     const results: BenchCaseResult[] = [];
+    const digests: RunDigest[] = [];
     for (const withDocs of passes)
       for (const c of parsed.data.cases) {
         const benchPorts = {
@@ -315,6 +446,31 @@ export async function runBench(
           .map((e) => (e.details ?? {}) as Record<string, unknown>);
         const costs = usage.map((u) => u["costUsd"]).filter((x): x is number => typeof x === "number");
         const values = Object.values(statuses ?? {});
+        if (record.success)
+          digests.push(
+            digestRun({
+              ticket: c.ticket,
+              runId: record.data.runId,
+              createdAt: record.data.createdAt,
+              data: record.data.data,
+              events,
+              attemptsMs: [],
+            }),
+          );
+        // REQ-LLM-14/AC4: ground truth of the demo shop: the plan has a case for the criterion the bug breaks.
+        const criterion = "detects" in c.expect ? c.expect.criterion : undefined;
+        const covered =
+          criterion === undefined
+            ? undefined
+            : await readFile(join(dir, "plan", "plan.approved.yaml"), "utf8").then(
+                (text) => {
+                  const plan = parse(text) as { cases?: { source?: { kind?: string; id?: string }[] }[] };
+                  return (plan.cases ?? []).some((pc) =>
+                    (pc.source ?? []).some((src) => src.kind === "ac" && src.id === criterion),
+                  );
+                },
+                () => false,
+              );
         results.push({
           id: c.id,
           ticket: c.ticket,
@@ -332,6 +488,7 @@ export async function runBench(
           ),
           ...(costs.length > 0 ? { costUsd: costs.reduce((a, b) => a + b, 0) } : {}),
           ...(withDocs === undefined ? {} : { knowledge: withDocs }),
+          ...(covered === undefined ? {} : { criterionCovered: covered }),
           ...(statuses === undefined
             ? {
                 error: (sub.log.filter((l) => l.startsWith("Error")).at(-1) ?? "did not finish")
@@ -341,21 +498,27 @@ export async function runBench(
             : {}),
         });
       }
-    const report: BenchReport = {
-      model: options.model,
-      role: options.role ?? "all",
-      at: ports.now().toISOString(),
-      knowledge: mode,
-      cases: results,
-      summary: summariseBench(results),
-      ...(mode === "compare" ? { comparison: compareKnowledge(results) } : {}),
-    };
     const outDir = options.out
       ? isAbsolute(options.out)
         ? options.out
         : resolve(io.cwd, options.out)
       : join(project.project?.paths.exports ?? project.projectDir, "bench-results");
     await mkdir(outDir, { recursive: true });
+    const current: BenchReport = {
+      model: options.model,
+      role: options.role ?? "all",
+      at: ports.now().toISOString(),
+      knowledge: mode,
+      cases: results,
+      summary: summariseBench(results),
+      scorecard: agentScorecard(digests),
+      ...(mode === "compare" ? { comparison: compareKnowledge(results) } : {}),
+    };
+    // REQ-LLM-14/AC4: the previous report of the same model and role, to see what changed.
+    const previous = await previousReport(outDir, current);
+    const report: BenchReport = previous
+      ? { ...current, sincePrevious: benchChanges(previous, current) }
+      : current;
     const file = join(
       outDir,
       `${report.at.slice(0, 10)}-${options.model.replace(/[^a-zA-Z0-9.-]+/g, "_")}.json`,

@@ -200,7 +200,7 @@ gateways know them; QAJitsu should ask instead of making the user copy them into
 
 ### REQ-LLM-14 · Agent scorecard
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: 7
 - Related: REQ-LLM-06, REQ-LLM-11, REQ-PLAN-16, REQ-NFR-11, REQ-VER-16, REQ-SKILL-04, INV-1, INV-6
@@ -212,8 +212,8 @@ How well each agent does its job, per role and model, from what every run alread
 
 **Acceptance criteria**
 
-- [ ] AC1: Per role and model, from the agent transcript and the journal: calls, tokens, cost, latency (p50, p95), repair rounds of invalid output, guard denials, and the share of calls that needed no repair.
-- [ ] AC2: Role outcomes computed by code: the author's share of specs that passed the static checks and the quality gate on the first try, quality findings per rule, review send-backs (REQ-VER-24); the planner's coverage gaps and flagged expectations (REQ-PLAN-14); the healer's healed specs accepted by the assertion lock.
-- [ ] AC3: `qj metrics` exports the scorecard (Prometheus and JSON) and `qj status` shows it per project; numbers are computed from run records, never estimated by a model.
-- [ ] AC4: `qj bench` adds the scorecard of each model to its report, with ground truth from the demo shop (seeded bug found, plan covers the bug's criterion), and compares it with the previous result of the same model.
-- [ ] AC5: Recorded agent answers from benchmark runs can be replayed as scripted models in tests, so changes to parsers and checks are tested against real model output without calling a model.
+- [x] AC1: Per role and model, from the agent transcript and the journal: calls, tokens, cost, latency (p50, p95), repair rounds of invalid output, guard denials, and the share of calls that needed no repair.
+- [x] AC2: Role outcomes computed by code: the author's share of specs that passed the static checks and the quality gate on the first try, quality findings per rule, review send-backs (REQ-VER-24); the planner's coverage gaps and flagged expectations (REQ-PLAN-14); the healer's healed specs accepted by the assertion lock.
+- [x] AC3: `qj metrics` exports the scorecard (Prometheus and JSON) and `qj status` shows it per project; numbers are computed from run records, never estimated by a model.
+- [x] AC4: `qj bench` adds the scorecard of each model to its report, with ground truth from the demo shop (seeded bug found, plan covers the bug's criterion), and compares it with the previous result of the same model.
+- [x] AC5: Recorded agent answers from benchmark runs can be replayed as scripted models in tests, so changes to parsers and checks are tested against real model output without calling a model.

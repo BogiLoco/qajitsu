@@ -103,6 +103,11 @@ export async function auditRun(session: RunSession, now: () => Date): Promise<Au
       { plan: verdict.plan, cases, texts, images },
     );
     record = AuditRecordSchema.parse({ schema: 1, status: "done", mode, ...result });
+    // REQ-PLAN-16/AC4: how many PASSED the auditor downgraded, for the project's metrics.
+    events.emit("audit", SYSTEM, "audit.done", {
+      cases: result.findings.length,
+      weak: result.findings.filter((f) => f.weak).length,
+    });
   } catch (error) {
     record = {
       schema: 1,

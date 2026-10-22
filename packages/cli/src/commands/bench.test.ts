@@ -7,6 +7,7 @@ import { promptOf, type Turn } from "../../../../tests/support/mock-model.js";
 import { mkdir } from "node:fs/promises";
 import { apiService } from "../../../../tests/support/cli-build.js";
 import {
+  benchChanges,
   compareKnowledge,
   formatBench,
   summariseBench,
@@ -32,7 +33,7 @@ describe("qajitsu bench (REQ-LLM-06)", () => {
       [
         "version: 1",
         "cases:",
-        "  - { id: bench-cart-rounding, ticket: DEMO-1, flags: [BUG_CART_TOTAL_ROUNDING], expect: { detects: BUG-01 } }",
+        "  - { id: bench-cart-rounding, ticket: DEMO-1, flags: [BUG_CART_TOTAL_ROUNDING], expect: { detects: BUG-01, criterion: AC1 } }",
         "  - { id: bench-clean-cart, ticket: DEMO-1, flags: [], expect: { all_passed: true } }",
       ].join("\n"),
     );
@@ -54,6 +55,13 @@ describe("qajitsu bench (REQ-LLM-06)", () => {
       "| bench-clean-cart | DEMO-1 | – | accepted | TC-01 PASSED, TC-02 PASSED | clean |",
     );
     expect(result.out).toContain("Detection 100% · false FAILED 0% · BLOCKED 0% · plan acceptance 100%");
+    // REQ-LLM-14/AC4: ground truth (the plan covers the bug's criterion) and the agent scorecard.
+    expect(result.out).toContain("Plans covering the bug's criterion 100%");
+    expect(result.out).toContain("| Role | Model | Calls | p95 | Steps without repair | Guard denials |");
+    expect(result.out).toMatch(/\| planner \| mock\/scripted \| 2 \|/);
+    expect(result.out).toMatch(
+      /Author right on the first try 100% · planner 0\.0 flags and 0\.0 coverage gaps per plan/,
+    );
     const [file] = await readdir(join(p.home, ".qajitsu", "projects", "demo", "exports", "bench-results"));
     const report = JSON.parse(
       await readFile(
@@ -233,5 +241,68 @@ describe("qajitsu bench (REQ-LLM-06)", () => {
       blockedRate: 0,
       planAcceptanceRate: 0.5,
     });
+  });
+
+  it("REQ-LLM-14/AC4: a benchmark is compared with the previous one of the same model", () => {
+    const summary = {
+      detectionRate: 0.5,
+      falseFailedRate: 0.2,
+      blockedRate: 0.1,
+      planAcceptanceRate: 0.5,
+      durationMs: 1,
+      tokens: 1,
+    };
+    const card = (firstTry: number, flags: number) => ({
+      roles: [],
+      author: {
+        cases: 1,
+        firstTryShare: firstTry,
+        failed: 0,
+        findings: {},
+        rules: {},
+        reviewAccepted: 0,
+        reviewSentBack: 0,
+      },
+      planner: { plans: 1, averageFlags: flags, averageGaps: 1 },
+      healer: { heals: 0, acceptedShare: 0 },
+    });
+    const before: BenchReport = {
+      model: "m/a",
+      role: "all",
+      at: "2026-10-01T00:00:00Z",
+      cases: [],
+      summary: { ...summary, criterionCoverageRate: 0.5 },
+      scorecard: card(0.5, 2),
+    };
+    const after: BenchReport = {
+      ...before,
+      at: "2026-10-22T00:00:00Z",
+      summary: { ...summary, detectionRate: 1, criterionCoverageRate: 1 },
+      scorecard: card(0.75, 1),
+    };
+    const changes = benchChanges(before, after);
+    expect(changes).toEqual({
+      previousAt: "2026-10-01T00:00:00Z",
+      detectionRate: 0.5,
+      falseFailedRate: 0,
+      blockedRate: 0,
+      planAcceptanceRate: 0,
+      criterionCoverageRate: 0.5,
+      authorFirstTryShare: 0.25,
+      plannerAverageFlags: -1,
+      plannerAverageGaps: 0,
+    });
+    expect(formatBench({ ...after, sincePrevious: changes })).toContain(
+      "Since 2026-10-01: detection +50 pp · false FAILED 0 pp · BLOCKED 0 pp · plan acceptance 0 pp · criterion coverage +50 pp · author first try +25 pp · planner flags -1.0 · coverage gaps +0.0",
+    );
+    // Reports without a scorecard (older ones) compare on what they have.
+    const older: BenchReport = {
+      model: before.model,
+      role: before.role,
+      at: before.at,
+      cases: [],
+      summary: before.summary,
+    };
+    expect(benchChanges(older, after).authorFirstTryShare).toBeUndefined();
   });
 });

@@ -262,14 +262,14 @@ Each human correction makes the next plan better.
 
 ### REQ-PLAN-16 · Plan quality metrics
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: 7
 - Related: REQ-PLAN-04, REQ-LLM-07, REQ-OBS-04, INV-6
 
 **Acceptance criteria**
 
-- [ ] AC1: Per project: share of plans approved without changes, average number of revision rounds, share of tickets stopped by the readiness gate (REQ-PLAN-13).
-- [ ] AC2: Defects reported later on a ticket marked as passed can be linked to the run (escaped defects).
-- [ ] AC3: The metrics are shown in `qj status`, `qj metrics` and the web console; numbers are computed from run records.
-- [ ] AC4: Per project also: false FAILED (FAILED cases later triaged as a test or environment problem), auditor downgrades of PASSED, and escaped defects (AC2), so a team sees whether tests check enough.
+- [x] AC1: Per project: share of plans approved without changes, average number of revision rounds, share of tickets stopped by the readiness gate (REQ-PLAN-13).
+- [x] AC2: Defects reported later on a ticket marked as passed can be linked to the run (escaped defects).
+- [x] AC3: The metrics are shown in `qj status` and `qj metrics` (in the web console with REQ-WEB-01); numbers are computed from run records.
+- [x] AC4: Per project also: false FAILED (FAILED cases later triaged as a test or environment problem), auditor downgrades of PASSED, and escaped defects (AC2), so a team sees whether tests check enough.

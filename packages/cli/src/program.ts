@@ -56,6 +56,7 @@ import { runAuditVerify } from "./commands/audit.js";
 import { runAuditExport, runAuditTrail } from "./commands/audit-trail.js";
 import { runCertify, runKeygen, runVerifyReport } from "./commands/certificate.js";
 import { runReviewSpec } from "./commands/spec-review.js";
+import { runFeedback } from "./commands/feedback.js";
 import { runTelemetryExport } from "./commands/telemetry.js";
 import { runMetrics } from "./commands/metrics.js";
 import { runExport } from "./commands/export.js";
@@ -725,6 +726,24 @@ export function createProgram(version: string, io: ProgramIO): Command {
             : runRun(ticket, { ...runOptions, user: io.user }, commandIO, ports),
         )();
       },
+    );
+
+  program
+    .command("feedback")
+    .description(
+      "Record what a person found after a run: what a FAILED case really was, or a defect that escaped it",
+    )
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .option("--case <id>", "a FAILED case of the run")
+    .option("--is <kind>", "with --case: product-bug, test-bug, environment or data")
+    .option("--escaped <bug>", "a defect found later on this ticket, e.g. SHOP-512")
+    .option("--note <text>", "why (masked before it is stored)")
+    .action(
+      (
+        ticket: string,
+        options: { run?: string; case?: string; is?: string; escaped?: string; note?: string },
+      ) => withPorts((ports) => runFeedback(ticket, options, commandIO, ports, io.user ?? "unknown"))(),
     );
 
   program

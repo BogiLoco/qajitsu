@@ -9,7 +9,15 @@ import {
   readRunIndex,
   resolveWorkspaceRoot,
 } from "@qajitsu/core";
-import { costInsights, digestRun, timeInsights, weeklyCosts, type RunDigest } from "@qajitsu/report";
+import {
+  agentScorecard,
+  costInsights,
+  digestRun,
+  planInsights,
+  timeInsights,
+  weeklyCosts,
+  type RunDigest,
+} from "@qajitsu/report";
 import type { RuntimePorts } from "../adapters.js";
 import { loadProject } from "../project.js";
 import type { CommandIO } from "./fetch.js";
@@ -155,6 +163,114 @@ export function timeSamples(digests: readonly RunDigest[]): Sample[] {
   ];
 }
 
+const gauge = (name: string, help: string, labels: Record<string, string>, value: number): Sample => ({
+  name,
+  help,
+  type: "gauge",
+  labels,
+  value,
+});
+
+/** Plan and test quality of a project (REQ-PLAN-16/AC3). */
+export function qualitySamples(digests: readonly RunDigest[]): Sample[] {
+  const q = planInsights(digests);
+  return [
+    gauge(
+      "qajitsu_plan_accepted_unchanged_ratio",
+      "Approved runs whose first plan version was approved.",
+      {},
+      Number(q.approvedUnchangedShare.toFixed(3)),
+    ),
+    gauge(
+      "qajitsu_plan_revision_rounds_avg",
+      "Average revision rounds before approval.",
+      {},
+      q.averageRevisionRounds,
+    ),
+    gauge(
+      "qajitsu_readiness_stopped_ratio",
+      "Share of checked tickets the readiness gate did not find READY.",
+      {},
+      q.readinessStoppedShare,
+    ),
+    gauge(
+      "qajitsu_false_failed_recorded_ratio",
+      "FAILED cases a person recorded as no product bug (qj feedback), over all FAILED cases.",
+      {},
+      q.falseFailedShare,
+    ),
+    gauge("qajitsu_auditor_downgrades", "PASSED cases the auditor downgraded.", {}, q.auditorDowngrades),
+    gauge(
+      "qajitsu_escaped_defects",
+      "Defects found later and linked to a run (qj feedback --escaped).",
+      {},
+      q.escapedDefects,
+    ),
+  ];
+}
+
+/** The agent scorecard (REQ-LLM-14/AC3), per role and model. */
+export function scorecardSamples(digests: readonly RunDigest[]): Sample[] {
+  const card = agentScorecard(digests);
+  return [
+    ...card.roles.flatMap((r) => {
+      const labels = { role: r.role, model: r.model };
+      return [
+        gauge("qajitsu_agent_calls", "Model calls per role and model.", labels, r.calls),
+        gauge("qajitsu_agent_cost_usd", "Model cost per role and model.", labels, r.costUsd),
+        gauge(
+          "qajitsu_agent_latency_p95_seconds",
+          "95th percentile of call duration.",
+          labels,
+          r.p95Ms / 1000,
+        ),
+        gauge(
+          "qajitsu_agent_no_repair_ratio",
+          "Share of agent steps that needed no repair.",
+          labels,
+          r.noRepairShare,
+        ),
+        gauge("qajitsu_agent_guard_denials", "Tool calls the guard denied.", labels, r.guardDenials),
+      ];
+    }),
+    gauge(
+      "qajitsu_author_first_try_ratio",
+      "Share of specs that passed every check on the first answer.",
+      {},
+      card.author.firstTryShare,
+    ),
+    ...Object.entries(card.author.findings).map(([check, n]) =>
+      gauge(
+        "qajitsu_author_findings",
+        "Problems the checks found in rejected specs, by check.",
+        { check },
+        n,
+      ),
+    ),
+    ...Object.entries(card.author.rules).map(([rule, n]) =>
+      gauge("qajitsu_author_quality_rule", "Quality gate findings in rejected specs, by rule.", { rule }, n),
+    ),
+    gauge(
+      "qajitsu_planner_flags_avg",
+      "Average flagged expectations in a plan's last version.",
+      {},
+      card.planner.averageFlags,
+    ),
+    gauge(
+      "qajitsu_planner_gaps_avg",
+      "Average coverage gaps in a plan's last version.",
+      {},
+      card.planner.averageGaps,
+    ),
+    gauge(
+      "qajitsu_healer_accepted_ratio",
+      "Share of heals the assertion lock accepted.",
+      {},
+      card.healer.acceptedShare,
+    ),
+  ];
+}
+
 /** Groups BLOCKED reasons into a few stable categories (labels must stay low-cardinality). */
 export function blockedReason(error: string | undefined): string {
   const e = error ?? "";
@@ -193,8 +309,6 @@ export async function collectMetrics(root: string, now: Date): Promise<Sample[]>
       if (s) samples[existing] = { ...s, value: s.value + value };
     } else samples.push({ name, help, type, labels, value });
   };
-  let approved = 0;
-  let unchanged = 0;
   let cleanBench = 0;
   let cleanBenchWithFailed = 0;
   for (const ticket of await listTickets(root)) {
@@ -277,11 +391,6 @@ export async function collectMetrics(root: string, now: Date): Promise<Sample[]>
         { ticket },
         Number(cost.toFixed(6)),
       );
-      const approval = record.data["approval"] as { version?: number } | undefined;
-      if (approval?.version !== undefined) {
-        approved += 1;
-        if (approval.version === 1) unchanged += 1;
-      }
       const bench = record.data["bench"] as { flags?: string[] } | undefined;
       if (bench && (bench.flags ?? []).length === 0 && Object.keys(results).length > 0) {
         cleanBench += 1;
@@ -290,14 +399,12 @@ export async function collectMetrics(root: string, now: Date): Promise<Sample[]>
     }
   }
   const digests = await readRunDigests(root);
-  samples.push(...costSamples(digests), ...timeSamples(digests));
-  samples.push({
-    name: "qajitsu_plan_accepted_unchanged_ratio",
-    help: "Approved runs whose first plan version was approved.",
-    type: "gauge",
-    labels: {},
-    value: approved === 0 ? 0 : Number((unchanged / approved).toFixed(3)),
-  });
+  samples.push(
+    ...costSamples(digests),
+    ...timeSamples(digests),
+    ...qualitySamples(digests),
+    ...scorecardSamples(digests),
+  );
   samples.push({
     name: "qajitsu_false_failed_ratio",
     help: "Clean benchmark runs (no bug flag) with a FAILED case.",

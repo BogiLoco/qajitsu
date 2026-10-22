@@ -138,7 +138,7 @@ const FixCheckDataSchema = z.object({
 });
 
 /** Stages that act on a finished run; their journal events stay out of the report's timeline. */
-const AFTER_VERDICT = new Set(["publish", "certificate", "promote", "ci"]);
+const AFTER_VERDICT = new Set(["publish", "certificate", "promote", "ci", "feedback", "timing"]);
 
 /** The certificate recorded for the run (REQ-VER-15/AC7), when one was issued. */
 export function certificateOf(data: Readonly<Record<string, unknown>>): CertificateSummary | undefined {

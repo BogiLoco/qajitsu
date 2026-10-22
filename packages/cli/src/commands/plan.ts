@@ -440,6 +440,12 @@ export async function runPlan(
         io.write(`Cannot be checked as written (${String(flags.length)}):\n${formatPlanFlags(flags)}\n`);
       // REQ-PLAN-14/AC3: what of the ticket and the change no case covers, next to the plan.
       const gaps = gapsOf(current);
+      // REQ-PLAN-16, REQ-LLM-14/AC2: what code found in this version, for the plan and agent metrics.
+      session.events.emit("plan", { kind: "system", name: "orchestrator" }, "plan.coverage", {
+        version: current.version,
+        flags: flags.length,
+        gaps: gaps.length,
+      });
       if (gaps.length > 0)
         io.write(`Not covered by any case (${String(gaps.length)}):\n${formatCoverageGaps(gaps)}\n`);
       // REQ-NFR-11/AC3: a stage over its time budget is a warning, never a status.

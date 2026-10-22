@@ -9,6 +9,7 @@ fixtures/
   github/            PRs, files, reviews (REQ-CTX-02)
   gitlab/            MRs, diffs, notes, self-hosted variants
   models/            recorded model outputs for agent tests (no real calls in tests)
+  transcripts/       answers of real models from journal/agents.jsonl, replayed in tests (REQ-LLM-14/AC5)
 ```
 
 Rules (see `.claude/rules/security.md`):
