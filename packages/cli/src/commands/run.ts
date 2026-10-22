@@ -29,6 +29,8 @@ import {
   QajitsuError,
   exitCodeFor,
   loadApprovedPlan,
+  parseEventLines,
+  type ApprovalStep,
   resolveEnvironment,
   selectExecutableSpecs,
   planForLocale,
@@ -42,7 +44,7 @@ import {
   type WebCombination,
 } from "@qajitsu/core";
 import { createMasker } from "@qajitsu/steps";
-import { formatSpecProblems } from "@qajitsu/verifier";
+import { checkApprovalRecords, formatSpecProblems } from "@qajitsu/verifier";
 import { buildAdapters, type RuntimePorts } from "../adapters.js";
 import { codeIndexCache, openSession, type ModelPorts, type RunSession } from "../session.js";
 import { runningBuild } from "./env-up-reuse.js";
@@ -463,6 +465,21 @@ export async function runRun(
       };
     }
     const { plan, approval } = await loadApprovedPlan(ws);
+    // Invariant 3, REQ-PLAN-10/AC6: the approved plan must be the one the journal says was approved. The file and the
+    // hash in run.json can be edited together; the journal's approval records cannot without breaking its chain.
+    const journalText = await readFile(ws.path("journal", "events.jsonl"), "utf8").catch(() => "");
+    const steps = ws.record.data["approvals"];
+    const approvalCheck = checkApprovalRecords(
+      approval,
+      Array.isArray(steps) ? (steps as ApprovalStep[]) : [],
+      parseEventLines(journalText).events,
+    );
+    if (approvalCheck.problems.length > 0)
+      throw new ConfigError(
+        "APPROVAL_RECORD_MISMATCH",
+        `The approved plan does not match its approval records; nothing was run: ${approvalCheck.problems.join("; ")}`,
+        { problems: approvalCheck.problems },
+      );
     // REQ-EXEC-16: chosen cases, a visible browser or emulator and step pauses are checked before anything runs.
     const live = prepareLiveRun(options, plan, io, events, {
       platform: ports.platform ?? process.platform,

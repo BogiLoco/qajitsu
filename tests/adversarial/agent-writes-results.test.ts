@@ -77,6 +77,10 @@ describe("invariant 2: agents never write results or evidence (REQ-VER-03)", () 
       { tool: "write_file", input: { path: "journal/agents.jsonl", content: '{"response":{"text":"ok"}}' } },
     ],
     [
+      "replaces the run's certificate with one it forged (REQ-VER-15)",
+      { tool: "write_file", input: { path: "certificate/certificate.dsse.json", content: "{}" } },
+    ],
+    [
       "marks its own audit trail complete (REQ-VER-16/AC4)",
       { tool: "write_file", input: { path: "audit/trail.json", content: '{"complete":true,"gaps":[]}' } },
     ],

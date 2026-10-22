@@ -44,6 +44,8 @@ export const DEFAULT_PROTECTED_PATHS: readonly string[] = [
   "journal/",
   // The audit trail of the run (REQ-VER-16), computed by code from the files above.
   "audit/",
+  // The signed certificate of the run (REQ-VER-15), issued by code with the project key.
+  "certificate/",
   // Auditor and canary records: written by the orchestrator, they can only downgrade (REQ-VER-06, REQ-VER-09).
   "checks/",
   // Exploratory sessions: actions, observations and recordings are written by the trusted parent (REQ-EXEC-15/AC2).
