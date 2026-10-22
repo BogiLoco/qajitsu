@@ -293,18 +293,20 @@ Everything that influenced the verdict is recorded and hashed, not only the resu
 
 ### REQ-VER-20 · Reproduce a run from its certificate
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: 9
 - Related: REQ-VER-15, REQ-PLAN-06, REQ-EXEC-01
+
+- Note: TO BE REVIEWED (2026-10-22): tool versions and container image digests that differ from the certificate are named in the comparison, not forced: images built from the code at the certified commits get new digests, and installed tools are those of the machine.
 
 Anyone with access can run again exactly what was approved and compare.
 
 **Acceptance criteria**
 
-- [ ] AC1: `qj reproduce <certificate>` runs the frozen plan again with the same generated tests, runner versions and image digests against a chosen environment, without any agent step.
-- [ ] AC2: The new run produces its own certificate and a comparison with the original: same, different or not reproducible per case.
-- [ ] AC3: Differences are never merged into the original run; the original certificate stays unchanged.
+- [x] AC1: `qj reproduce <certificate>` runs the frozen plan again with the same generated tests, runner versions and image digests against a chosen environment, without any agent step.
+- [x] AC2: The new run produces its own certificate and a comparison with the original: same, different or not reproducible per case.
+- [x] AC3: Differences are never merged into the original run; the original certificate stays unchanged.
 
 ### REQ-VER-21 · Open verifier and audit documentation
 

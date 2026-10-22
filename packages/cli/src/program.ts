@@ -57,6 +57,7 @@ import { runAuditExport, runAuditTrail } from "./commands/audit-trail.js";
 import { runCertify, runKeygen, runVerifyReport } from "./commands/certificate.js";
 import { runReviewSpec } from "./commands/spec-review.js";
 import { runFeedback } from "./commands/feedback.js";
+import { runReproduce } from "./commands/reproduce.js";
 import { runTelemetryExport } from "./commands/telemetry.js";
 import { runMetrics } from "./commands/metrics.js";
 import { runExport } from "./commands/export.js";
@@ -1052,6 +1053,24 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .command("keygen")
     .description("Create an Ed25519 key for signing certificates; the public key goes to .qa/keys/")
     .action(() => withPorts((ports) => runKeygen(commandIO, ports))());
+
+  program
+    .command("reproduce")
+    .description(
+      "Run a certified run again without agents and compare every case (same, different, not reproducible)",
+    )
+    .argument("<path>", "certified run folder or audit export zip")
+    .option("--env <profile|url>", "environment to run against (default: environments.default)")
+    .option("--build", "build the application from the code at the certified commits")
+    .option(
+      "--key <file>",
+      "trusted public key (PEM); repeat for rotated keys",
+      (v: string, all: string[]) => [...all, v],
+      [] as string[],
+    )
+    .action((path: string, options: { env?: string; build?: boolean; key: string[] }) =>
+      withPorts((ports) => runReproduce(path, { ...options, user: io.user }, commandIO, ports))(),
+    );
 
   program
     .command("verify-report")

@@ -62,6 +62,14 @@ certifying, so a hand-edited report is never certified, and rendering them again
 
 Keys rotate: create a new key, keep the old `*.pub` files in `.qa/keys/`, and old certificates still verify.
 
+## Reproducing a certified run (REQ-VER-20)
+
+`qj reproduce <run folder or audit zip> [--env <env> | --build]` runs again exactly what was certified: the certificate
+is checked, the frozen plan (same SHA-256), the generated tests and the ticket snapshot go into a new run that runs
+them without any agent, against the chosen environment or the code at the certified commits. It reports per case
+`same`, `different` or `not reproducible`, and names tool versions and container images that differ. The new run has
+its own certificate; the original never changes.
+
 ## Format (REQ-VER-15/AC5, REQ-VER-21/AC2)
 
 Everything below is enough to write a verifier; [`tools/verify-certificate.mjs`](../../tools/verify-certificate.mjs)

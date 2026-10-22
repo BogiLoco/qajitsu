@@ -36,10 +36,10 @@ import type { CommandIO } from "./fetch.js";
 import { computeVerdict, writeReports } from "./verdict.js";
 
 /** Folder of the project's trusted public keys (REQ-VER-15/AC6). */
-const KEYS_DIR = "keys";
+export const KEYS_DIR = "keys";
 
-/** Reads every `*.pub` file of a folder as a public key; unreadable files are skipped. */
-async function publicKeysIn(dir: string): Promise<{ key: KeyObject; source: string }[]> {
+/** Reads every `*.pub` file of a folder as a public key with where it came from; unreadable files are skipped. */
+export async function publicKeysIn(dir: string): Promise<{ key: KeyObject; source: string }[]> {
   const keys: { key: KeyObject; source: string }[] = [];
   for (const name of await readdir(dir).catch(() => [] as string[]))
     if (name.endsWith(".pub"))
@@ -364,7 +364,7 @@ export async function runKeygen(io: CommandIO, ports: RuntimePorts): Promise<num
 }
 
 /** A run folder or an audit export (zip) as run-relative files. */
-interface RunFiles {
+export interface RunFiles {
   readonly read: (path: string) => Uint8Array | undefined;
   readonly paths: readonly string[];
   /** Names an archive holds twice: what a tool unpacks may differ from what was checked. */
@@ -372,7 +372,7 @@ interface RunFiles {
   readonly archive: boolean;
 }
 
-async function openRunFiles(path: string): Promise<RunFiles> {
+export async function openRunFiles(path: string): Promise<RunFiles> {
   if ((await stat(path)).isDirectory()) {
     const files = new Map<string, Uint8Array>();
     const walk = async (dir: string, prefix: string): Promise<void> => {

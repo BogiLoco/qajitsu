@@ -966,6 +966,22 @@ certificates they signed keep verifying.
 
 Exit codes: `0` created, `3` errors.
 
+### `qajitsu reproduce <path>`
+
+Runs a certified run again and compares (REQ-VER-20). The certificate of the run folder or audit export is checked
+first: only a run whose certificate verifies, with no file changed, is reproduced. A new run of the ticket gets the
+certified ticket snapshot, the frozen plan byte for byte (the same SHA-256) and the generated tests, and runs them
+without any agent; it gets its own certificate. Each case is `same`, `different` or `not reproducible` (BLOCKED or
+NOT_RUN now); tool versions and container images that differ from the certificate are named. The comparison is kept in
+the new run (`run.json`, `reproduction`); the original run never changes.
+
+- `--env <profile|url>`: environment to run against (default: `environments.default`)
+- `--build`: build the application from the code at the certified commits
+- `--key <file>`: trusted public key in PEM, repeatable; inside a project `.qa/keys/*.pub` are trusted too
+
+Exit codes: `0` every case the same, `1` a case differs, `2` a case could not be reproduced, `3` errors (no
+certificate, a certificate that does not verify).
+
 ### `qajitsu verify-report <path>`
 
 Checks the certificate of a run folder or of an audit export zip (REQ-VER-15/AC3): the signature with a trusted public
