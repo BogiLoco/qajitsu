@@ -35,6 +35,7 @@ const run = async (
   args: string[],
   answers?: string[],
   env: Readonly<Record<string, string>> = {},
+  versionExec?: (cmd: string, args: readonly string[]) => Promise<string | undefined>,
 ) => {
   let out = "";
   let err = "";
@@ -54,6 +55,7 @@ const run = async (
       random: () => 0,
       fetch: globalThis.fetch,
       gitExec: () => Promise.resolve({ stdout: "", stderr: "" }),
+      ...(versionExec ? { versionExec } : {}),
     },
   })
     .exitOverride()
@@ -62,6 +64,30 @@ const run = async (
 };
 
 describe("qajitsu init (REQ-GEN-03/AC3)", () => {
+  it("REQ-GEN-08/AC1 + REQ-PRJ-02/AC3: init names the same missing tools as doctor (Docker without its Compose plugin)", async () => {
+    const repo = await otherProject();
+    const noCompose = (cmd: string, args: readonly string[]) =>
+      Promise.resolve(
+        cmd === "docker" && args[0] === "compose"
+          ? undefined
+          : cmd === "docker"
+            ? "Docker version 24.0.6"
+            : "1.0.0",
+      );
+    const r = await run(
+      repo,
+      ["init", "pet-clinic", "--yes", "--env-url", "http://localhost:8080"],
+      undefined,
+      {},
+      noCompose,
+    );
+    expect(r.out).toMatch(
+      /NOT READY:[\s\S]*✘ compose: not found \(needed for --build with compose services\); install: qj setup --only docker/,
+    );
+    const doctor = await run(repo, ["doctor"], undefined, {}, noCompose);
+    expect(doctor.out).toContain("✘ compose: not found (needed for --build with compose services)");
+  });
+
   it("REQ-GEN-03/AC3 + REQ-PRJ-02/AC2+AC3+AC5: onboards an unrelated project interactively, detecting host, compose, OpenAPI and test types", async () => {
     const repo = await otherProject();
     const r = await run(

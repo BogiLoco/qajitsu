@@ -63,7 +63,7 @@ import { runMap } from "./commands/map.js";
 import { runCiComment, runCiDetect, runCiPublishPlan } from "./commands/ci.js";
 import { loadProject, type LoadedProject } from "./project.js";
 import type { ModelPorts } from "./session.js";
-import { formatDoctor, reportedBy, runDoctor } from "./doctor.js";
+import { formatDoctor, missingToolChecks, reportedBy, runDoctor } from "./doctor.js";
 import { projectChecks } from "./doctor-project.js";
 import { appVersions, formatAppVersions } from "./app-versions.js";
 import { formatToolVersions, toolVersions } from "./versions.js";
@@ -541,18 +541,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
         ...(io.ports?.playwright ? { playwright: io.ports.playwright } : {}),
       });
       // docker and appium are already checks of their own above; the others fail here when needed and missing.
-      for (const t of tools)
-        if (
-          t.needed &&
-          t.version === undefined &&
-          !checks.some((c) => c.name === t.name) &&
-          reportedBy(t.name, checks) === undefined
-        )
-          checks.push({
-            name: t.name,
-            ok: false,
-            detail: `not found (needed for ${t.why ?? "this project"})${t.install ? `; install: ${t.install}` : ""}`,
-          });
+      checks.push(...missingToolChecks(tools, checks));
       const app =
         loaded && io.ports
           ? await appVersions(

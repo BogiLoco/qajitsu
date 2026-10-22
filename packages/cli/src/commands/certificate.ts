@@ -237,14 +237,19 @@ export async function certificateForPublish(
         `No certificate: the audit trail has ${String(outcome.gaps.length)} gap(s): ${outcome.gaps.slice(0, 3).join("; ")}. Run qj audit trail for all of them.`,
         { gates: ["certificate"] },
       );
+    // The reasons themselves, not a pointer: a file changed after an earlier certificate is not a gap of the trail.
     io.writeError(
-      `Warning: no certificate, the audit trail has ${String(outcome.gaps.length)} gap(s); qj audit trail ${session.ws.ticket} lists them.\n`,
+      `Warning: no certificate, the audit trail has ${String(outcome.gaps.length)} gap(s):\n${outcome.gaps
+        .slice(0, 5)
+        .map((g) => `  - ${g}\n`)
+        .join(
+          "",
+        )}${outcome.gaps.length > 5 ? `  … qj audit trail ${session.ws.ticket} lists all of them.\n` : ""}`,
     );
     return [`No certificate: the audit trail has ${String(outcome.gaps.length)} gap(s).`];
   }
-  const lines = certificateLines(outcome.certificate);
-  io.write(`${lines.join("\n")}\n`);
-  return lines;
+  // The lines go into the comment, whose preview is printed; printing them here too repeated them.
+  return certificateLines(outcome.certificate);
 }
 
 /**

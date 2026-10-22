@@ -52,7 +52,7 @@ import { auditRun, blockedRun, triageRun, runCanary } from "./checks.js";
 import { createManualPrompter } from "./manual.js";
 import { formatEstimate, readRunHistory } from "./estimate.js";
 import { rootOf } from "./runs.js";
-import { reviewSpecs, specReviewOn } from "./spec-review.js";
+import { reviewSpecs, specReviewOn, specReviewPending, waitingForPerson } from "./spec-review.js";
 import { runMessages, type MessagePorts, type RunMessages } from "./messages.js";
 import { approvalContext, changedParts, type ApprovalContext } from "./context-fingerprint.js";
 import { runRunHook, type HookExec } from "./hooks.js";
@@ -468,6 +468,20 @@ export async function runRun(
         events.emit("run", { kind: "user", name: "cli" }, "approval.context_reconfirmed", { changed });
         await ws.update({ data: { ...ws.record.data, approvalContext: await approvalContext(session) } });
       }
+    }
+    // REQ-VER-24: when the specs only wait for a person, stop before an environment is built for nothing.
+    if (
+      !io.ask &&
+      ws.record.data["regression"] === undefined &&
+      specReviewOn(
+        project.config.spec_review,
+        options.reviewSpecs === true,
+        (await readRunHistory(rootOf(project, ports), ws.runId)).runs,
+      )
+    ) {
+      const chosen = plan.cases.map((c) => c.id).filter((id) => live.selected?.has(id) ?? true);
+      const waiting = await waitingForPerson(ws, chosen);
+      if (waiting.length > 0) throw specReviewPending(ws.ticket, waiting);
     }
     events.emit("run", SYSTEM, "stage.start", { planVersion: approval.version });
     const results = new Map<string, CaseResultFile>();
@@ -907,11 +921,7 @@ async function executeCases(
       },
     });
     if (review.waiting.length > 0)
-      throw new ConfigError(
-        "SPEC_REVIEW_PENDING",
-        `${String(review.waiting.length)} spec(s) wait for a person's review: ${review.waiting.join(", ")}. Read them with qajitsu review-spec ${ws.ticket}, decide with qajitsu review-spec ${ws.ticket} --case <id> --accept (or --send-back "<reason>"), then run qajitsu run ${ws.ticket} again.`,
-        { waiting: review.waiting },
-      );
+      throw specReviewPending(ws.ticket, review.waiting, new Map([...blocked, ...review.blocked]));
     for (const caseId of [...specs.keys()]) if (!review.accepted.has(caseId)) specs.delete(caseId);
     for (const [caseId, reason] of review.blocked) blocked.set(caseId, reason);
   }

@@ -8,8 +8,11 @@ import type { CommandIO } from "./fetch.js";
 
 /** One decision of a person about a generated spec (REQ-VER-24/AC4). */
 export interface SpecReviewDecision {
-  /** `rewritten`: the author wrote the spec again after a send-back; a person decides next. */
-  readonly decision: "accept" | "send_back" | "rewritten";
+  /**
+   * `rewritten`: the author wrote the spec again after a send-back, a person decides next; `rewrite_failed`: the
+   * author could not, and the case stays BLOCKED (the author gets one try per send-back, REQ-VER-24/AC3).
+   */
+  readonly decision: "accept" | "send_back" | "rewritten" | "rewrite_failed";
   readonly reviewer: string;
   /** SHA-256 of the spec the decision is about. */
   readonly sha256: string;
@@ -50,7 +53,7 @@ export async function recordSpecReview(
     data: { ...ws.record.data, specReviews: { ...all, [caseId]: [...(all[caseId] ?? []), decision] } },
   });
   const actor =
-    decision.decision === "rewritten"
+    decision.decision === "rewritten" || decision.decision === "rewrite_failed"
       ? ({ kind: "agent", name: "author" } as const)
       : ({ kind: "user", name: decision.reviewer } as const);
   events.emit("run", actor, "spec.review", { caseId, ...decision });
@@ -112,9 +115,17 @@ export async function reviewSpecs(
   const waiting: string[] = [];
   /** Writes a spec again once and records it, so the next decision is a person's even for identical code. */
   const rewrite = async (caseId: string, reason: string): Promise<string | undefined> => {
+    const before = await readFile(specs.get(caseId) ?? "", "utf8").catch(() => "");
     const file = await options.rewrite(caseId, reason);
     if (file === undefined) {
       blocked.set(caseId, `the spec a reviewer sent back could not be written again: ${reason}`);
+      await recordSpecReview(session, caseId, {
+        decision: "rewrite_failed",
+        reviewer: "author",
+        sha256: sha256(before),
+        at: options.now().toISOString(),
+        reason,
+      });
       return undefined;
     }
     await recordSpecReview(session, caseId, {
@@ -135,6 +146,10 @@ export async function reviewSpecs(
       const last = decisions.at(-1);
       if (last?.decision === "accept" && last.sha256 === sha) {
         accepted.set(caseId, file);
+        break;
+      }
+      if (last?.decision === "rewrite_failed") {
+        blocked.set(caseId, `the spec a reviewer sent back could not be written again: ${last.reason ?? ""}`);
         break;
       }
       if (sentBack.length >= 2) {
@@ -175,10 +190,54 @@ export async function reviewSpecs(
   return { accepted, blocked, waiting };
 }
 
+/** The error that stops a run whose specs wait for a person; the run continues after the review. */
+export function specReviewPending(
+  ticket: string,
+  waiting: readonly string[],
+  notRun: ReadonlyMap<string, string> = new Map(),
+): ConfigError {
+  // Cases that will not run are named too, so the person reviewing knows the whole picture (exploratory pass E5).
+  const short = (reason: string): string => {
+    const line = reason.split("\n")[0] ?? "";
+    return line.length > 200 ? `${line.slice(0, 200)}…` : line;
+  };
+  const others = [...notRun].map(([caseId, reason]) => `\nNot run: ${caseId}: ${short(reason)}`).join("");
+  return new ConfigError(
+    "SPEC_REVIEW_PENDING",
+    `${String(waiting.length)} spec(s) wait for a person's review: ${waiting.join(", ")}. Read them with qajitsu review-spec ${ticket}, decide with qajitsu review-spec ${ticket} --case <id> --accept (or --send-back "<reason>"), then run qajitsu run ${ticket} again.${others}`,
+    { waiting },
+  );
+}
+
+/**
+ * Specs that wait only for a person (REQ-VER-24): every chosen case has a spec, none needs the author again, and some
+ * have no decision on their current version. Such a run can stop before it builds an environment.
+ *
+ * @param ws - The run.
+ * @param caseIds - The cases the run would execute.
+ * @returns The waiting cases; empty when the run has to go on (a spec is missing, sent back, or all are accepted).
+ */
+export async function waitingForPerson(
+  ws: Pick<RunSession["ws"], "record" | "path">,
+  caseIds: readonly string[],
+): Promise<string[]> {
+  const waiting: string[] = [];
+  for (const caseId of caseIds) {
+    const code = await readFile(ws.path("specs", `${caseId}.spec.ts`), "utf8").catch(() => undefined);
+    if (code === undefined) return [];
+    const sha = sha256(code);
+    const last = (reviewsOf(ws.record.data)[caseId] ?? []).at(-1);
+    if (last?.decision === "send_back" && last.sha256 === sha) return [];
+    if (last?.decision === "rewrite_failed") continue;
+    if (!(last?.decision === "accept" && last.sha256 === sha)) waiting.push(caseId);
+  }
+  return waiting;
+}
+
 /** Lines for the report (REQ-VER-24/AC4): which specs a person reviewed, by whom, on which version. */
 export function specReviewNotes(data: Readonly<Record<string, unknown>>): string[] {
   return Object.entries(reviewsOf(data)).flatMap(([caseId, all]) => {
-    const decisions = all.filter((d) => d.decision !== "rewritten");
+    const decisions = all.filter((d) => d.decision === "accept" || d.decision === "send_back");
     const last = decisions.at(-1);
     if (last === undefined) return [];
     const back = decisions.filter((d) => d.decision === "send_back").length;

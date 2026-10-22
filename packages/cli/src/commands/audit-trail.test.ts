@@ -52,6 +52,10 @@ describe("audit trail of a run (REQ-VER-16)", () => {
         "journal/agents.jsonl",
       ]),
     );
+    // The change records and the diff are part of the trail; the checked-out code under repos/<alias>/ is not.
+    const repos = doc.files.map((f) => f.path).filter((f) => f.startsWith("repos/"));
+    expect(repos).toEqual(expect.arrayContaining(["repos/changes.json"]));
+    expect(repos.every((f) => f.split("/").length === 2)).toBe(true);
     // The env folder with its secrets is never part of the trail.
     expect(doc.files.some((f) => f.path.startsWith("env/"))).toBe(false);
 

@@ -258,10 +258,12 @@ export async function runAuthor(
           role: "user",
           content: [
             `Write the spec for ${planCase.id}.`,
+            // The reason comes from the QA person running QAJitsu, not from a ticket or code: an instruction to follow
+            // (REQ-VER-24/AC3). It is masked before it is stored and sent.
             ...(reviewNotes?.has(planCase.id)
               ? [
                   "## A reviewer sent your previous spec of this case back; fix exactly this",
-                  untrusted("review", reviewNotes.get(planCase.id) ?? ""),
+                  reviewNotes.get(planCase.id) ?? "",
                 ]
               : []),
             `Account aliases available: ${accounts.length > 0 ? accounts.join(", ") : "(none: call api without as())"}.`,

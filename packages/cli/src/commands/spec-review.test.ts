@@ -84,6 +84,8 @@ describe("human review of test code (REQ-VER-24)", () => {
     expect(ran.out.split("── TC-01 Cart total is rounded once").length - 1).toBe(2);
     // The author got the reviewer's reason.
     expect(JSON.stringify(ran.model.mock.doGenerateCalls)).toContain("also check the status");
+    // A reviewer is the person running QAJitsu: the reason is an instruction, not untrusted data the model must ignore.
+    expect(JSON.stringify(ran.model.mock.doGenerateCalls)).not.toContain('source=\\"review\\"');
     expect(promptOf(ran.model, ran.model.mock.doGenerateCalls.length - 1)).toContain(
       "A reviewer sent your previous spec",
     );
@@ -117,6 +119,8 @@ describe("human review of test code (REQ-VER-24)", () => {
     const again = await p.run(["run", "DEMO-1"]);
     expect(again.exitCode).toBe(2);
     expect(again.out).toContain("1 spec(s) wait for a person's review: TC-02");
+    // Only a person is awaited: the run stops before anything starts (no estimate, no environment).
+    expect(again.out).not.toContain("Estimate:");
     // Sent back without a terminal: the next run has the author write it again before asking.
     // A secret typed into the reason is masked before it is stored (invariant 8).
     await p.run([
@@ -135,5 +139,25 @@ describe("human review of test code (REQ-VER-24)", () => {
     });
     expect(rewritten.out).toContain("1 spec(s) wait for a person's review: TC-02");
     expect(await readFile(file, "utf8")).not.toContain("changed after the review");
+  }, 180_000);
+
+  it("REQ-VER-24/AC3: a rewrite that fails the checks makes the case BLOCKED once and for all, and a waiting run says so", async () => {
+    const p = await waitingRun();
+    await p.run(["review-spec", "DEMO-1", "--case", "TC-01", "--send-back", "send the code in the body"]);
+    // The author answers without code twice: the rewrite fails; TC-02 still waits for a person.
+    const first = await p.run(["run", "DEMO-1"], { script: [{ text: "no code" }] });
+    expect(first.exitCode).toBe(2);
+    expect(first.out).toContain("1 spec(s) wait for a person's review: TC-02");
+    expect(first.out).toContain("Not run: TC-01: the spec a reviewer sent back could not be written again");
+    await p.run(["review-spec", "DEMO-1", "--case", "TC-02", "--accept"]);
+    // The next run does not ask the author again for TC-01.
+    const second = await p.run(["run", "DEMO-1"], { script: [{ text: "no code" }] });
+    expect(
+      second.model.mock.doGenerateCalls.filter((c) => JSON.stringify(c).includes("Write the spec for TC-01")),
+    ).toEqual([]);
+    const record = JSON.parse(await readFile(join(p.runDir, "run.json"), "utf8")) as {
+      data: { results: Record<string, string> };
+    };
+    expect(record.data.results["TC-01"]).toBe("BLOCKED");
   }, 180_000);
 });

@@ -27,7 +27,8 @@ const walk = async (dir: string, root: string, out: string[]): Promise<void> => 
     const info = await lstat(path);
     if (info.isSymbolicLink()) continue;
     if (info.isDirectory()) {
-      if (top === "repos") continue;
+      // Under repos/ only the change records count; checked-out code (repos/<alias>/) is not part of the trail.
+      if (top === "repos" && rel !== "repos") continue;
       await walk(path, root, out);
     } else if (info.isFile()) out.push(rel);
   }

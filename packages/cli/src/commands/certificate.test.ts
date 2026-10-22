@@ -34,6 +34,8 @@ describe("signed test certificate (REQ-VER-15)", () => {
     const published = await p.run(["publish", "DEMO-1", "--auto-publish"]);
     expect(published.err).toBe("");
     const id = /Certificate (qjc-[0-9a-f]{20}), Merkle root ([0-9a-f]{64})/.exec(published.out);
+    // Shown once, in the comment's preview.
+    expect(published.out.split("Merkle root").length - 1).toBe(1);
     expect(id).not.toBeNull();
     const [, certId = "", root = ""] = id ?? [];
     expect(await readFile(join(p.runDir, "report", "report.html"), "utf8")).toContain(certId);
@@ -102,6 +104,8 @@ describe("signed test certificate (REQ-VER-15)", () => {
     const published = await p.run(["publish", "DEMO-1", "--auto-publish"]);
     expect(published.exitCode).not.toBe(0);
     expect(published.err).toContain("No certificate: the audit trail has");
+    // The reasons are named, not only counted.
+    expect(published.err).toMatch(/- journal\/agents\.jsonl is missing|model exchange/);
     expect(await readdir(join(p.runDir, "report", "published")).catch(() => [])).not.toContain(
       "jira-comment.wiki.txt",
     );
