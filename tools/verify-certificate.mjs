@@ -72,7 +72,17 @@ if (tree(leaves).toString("hex") !== statement.predicate.merkleRoot)
 // report/report.html is hashed with its certificate section emptied.
 const SECTION = /<!--qajitsu:certificate-->([\s\S]*?)<!--\/qajitsu:certificate-->/;
 for (const s of statement.subject) {
-  const path = join(folder, ...s.name.split("/"));
+  // Names come from the certificate, which may be forged: never read outside the run folder.
+  const parts = String(s.name).split("/");
+  if (
+    s.name === "" ||
+    /^[A-Za-z]:|^\/|[\\\0]/.test(s.name) ||
+    parts.some((p) => p === ".." || p === "." || p === "")
+  ) {
+    problems.push(`unsafe file name: ${JSON.stringify(s.name)}`);
+    continue;
+  }
+  const path = join(folder, ...parts);
   if (!existsSync(path)) {
     problems.push(`missing: ${s.name}`);
     continue;

@@ -38,11 +38,13 @@ export function specReviewOn(
 
 /** Records one decision in `run.json` and the journal (REQ-VER-24/AC4). */
 export async function recordSpecReview(
-  session: Pick<RunSession, "ws" | "events">,
+  session: Pick<RunSession, "ws" | "events" | "masker">,
   caseId: string,
-  decision: SpecReviewDecision,
+  raw: SpecReviewDecision,
 ): Promise<void> {
   const { ws, events } = session;
+  // A reviewer's reason is free text: masked before it is stored, like everything else (invariant 8).
+  const decision = raw.reason === undefined ? raw : { ...raw, reason: session.masker.maskText(raw.reason) };
   const all = reviewsOf(ws.record.data);
   await ws.update({
     data: { ...ws.record.data, specReviews: { ...all, [caseId]: [...(all[caseId] ?? []), decision] } },
@@ -94,7 +96,7 @@ export interface SpecReviewOutcome {
  * @param options - Reviewer, clock, and how to write a spec again with a reviewer's reason.
  */
 export async function reviewSpecs(
-  session: Pick<RunSession, "ws" | "events">,
+  session: Pick<RunSession, "ws" | "events" | "masker">,
   plan: Plan,
   specs: ReadonlyMap<string, string>,
   io: CommandIO,

@@ -14,6 +14,7 @@ import {
   checkCertificate,
   keyIdOf,
   keySigner,
+  safeRunPath,
   merkleRoot,
   signStatement,
 } from "./certificate.js";
@@ -205,5 +206,29 @@ describe("test certificate (REQ-VER-15)", () => {
       "excluded",
       "excluded",
     ]);
+  });
+
+  it("REQ-VER-15/AC3: a forged certificate cannot make the checker read outside the run folder", () => {
+    for (const name of ["../secret", "/etc/passwd", "a/../../b", "C:/x", "a\\b", "", "./a", "a//b", "a\0b"])
+      expect(safeRunPath(name), name).toBe(false);
+    expect(safeRunPath("report/report.html")).toBe(true);
+    const key = keyPair();
+    const subject = certificateSubject("report/matrix.md", enc("x"));
+    const statement = certificateStatement([{ ...subject, name: "../../etc/passwd" }], {
+      ticket: "DEMO-1",
+      runId: "r",
+      issuedAt: "t",
+    });
+    const read: string[] = [];
+    const check = checkCertificate(
+      signStatement(statement, keySigner(key.privateKey)),
+      [key.publicKey],
+      (p) => {
+        read.push(p);
+        return enc("x");
+      },
+    );
+    expect(read).toEqual([]);
+    expect(check.problems).toEqual(['unsafe file name in the certificate: "../../etc/passwd"']);
   });
 });

@@ -118,7 +118,18 @@ describe("human review of test code (REQ-VER-24)", () => {
     expect(again.exitCode).toBe(2);
     expect(again.out).toContain("1 spec(s) wait for a person's review: TC-02");
     // Sent back without a terminal: the next run has the author write it again before asking.
-    await p.run(["review-spec", "DEMO-1", "--case", "TC-02", "--send-back", "remove the comment"]);
+    // A secret typed into the reason is masked before it is stored (invariant 8).
+    await p.run([
+      "review-spec",
+      "DEMO-1",
+      "--case",
+      "TC-02",
+      "--send-back",
+      "remove the comment, fictional-demo-password",
+    ]);
+    const stored = await readFile(join(p.runDir, "run.json"), "utf8");
+    expect(stored).toContain("remove the comment");
+    expect(stored).not.toContain("fictional-demo-password");
     const rewritten = await p.run(["run", "DEMO-1"], {
       script: [{ text: "```ts\n" + (await fixture("TC-02")) + "```" }],
     });

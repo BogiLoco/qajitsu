@@ -5,6 +5,9 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { generateKeyPairSync } from "node:crypto";
+import { mkdir } from "node:fs/promises";
+import { certificateStatement, certificateSubject, keySigner, signStatement } from "@qajitsu/verifier";
 import { createProgram } from "../../packages/cli/src/program.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { createDemoPipeline } from "../support/cli-pipeline.js";
@@ -85,4 +88,26 @@ describe("open verifier (REQ-VER-21)", () => {
     expect(out).toContain("is valid");
     expect(exitCode).toBe(0);
   }, 180_000);
+
+  it("REQ-VER-21/AC1: a forged certificate cannot make the reference verifier read outside the folder", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "qj-forged-"));
+    cleanups.push(() => rm(dir, { recursive: true, force: true }));
+    const run = join(dir, "run");
+    await mkdir(join(run, "certificate"), { recursive: true });
+    await writeFile(join(dir, "outside.txt"), "x");
+    const key = generateKeyPairSync("ed25519");
+    const subject = {
+      ...certificateSubject("outside.txt", new TextEncoder().encode("x")),
+      name: "../outside.txt",
+    };
+    const envelope = signStatement(
+      certificateStatement([subject], { ticket: "DEMO-1", runId: "r", issuedAt: "t" }),
+      keySigner(key.privateKey),
+    );
+    await writeFile(join(run, "certificate", "certificate.dsse.json"), JSON.stringify(envelope));
+    await writeFile(join(dir, "key.pem"), key.publicKey.export({ type: "spki", format: "pem" }).toString());
+    const r = await reference(run, join(dir, "key.pem"));
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('unsafe file name: "../outside.txt"');
+  });
 });

@@ -170,6 +170,17 @@ export function certificateId(envelope: DsseEnvelope): string {
   return `qjc-${hash(Buffer.from(envelope.payload, "base64")).toString("hex").slice(0, 20)}`;
 }
 
+/** A run-relative path with no `..` segment, no absolute start and no backslash or NUL. */
+export function safeRunPath(name: string): boolean {
+  return (
+    name !== "" &&
+    !name.startsWith("/") &&
+    !/^[A-Za-z]:/.test(name) &&
+    !/[\\\0]/.test(name) &&
+    name.split("/").every((part) => part !== ".." && part !== "." && part !== "")
+  );
+}
+
 /** The outcome of checking a certificate. */
 export interface CertificateCheck {
   readonly id?: string;
@@ -240,6 +251,11 @@ export function checkCertificate(
   const changed: string[] = [];
   const missing: string[] = [];
   for (const s of statement.subject) {
+    // Names come from the certificate, which may be forged: never a path outside the run folder.
+    if (!safeRunPath(s.name)) {
+      problems.push(`unsafe file name in the certificate: ${JSON.stringify(s.name)}`);
+      continue;
+    }
     const data = read(s.name);
     if (data === undefined) {
       missing.push(s.name);
