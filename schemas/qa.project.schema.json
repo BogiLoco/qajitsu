@@ -2227,6 +2227,23 @@
       },
       "additionalProperties": false
     },
+    "certificate": {
+      "default": {
+        "required": false
+      },
+      "type": "object",
+      "properties": {
+        "signing_key": {
+          "type": "string",
+          "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+        },
+        "required": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
     "visual": {
       "default": {
         "threshold": 0.001,

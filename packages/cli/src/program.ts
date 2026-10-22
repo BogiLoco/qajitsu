@@ -54,6 +54,7 @@ import { runExploreReview } from "./commands/explore-review.js";
 import { runBench } from "./commands/bench.js";
 import { runAuditVerify } from "./commands/audit.js";
 import { runAuditExport, runAuditTrail } from "./commands/audit-trail.js";
+import { runCertify, runKeygen, runVerifyReport } from "./commands/certificate.js";
 import { runTelemetryExport } from "./commands/telemetry.js";
 import { runMetrics } from "./commands/metrics.js";
 import { runExport } from "./commands/export.js";
@@ -1006,6 +1007,32 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--out <file>", "zip to write (default: the project's exports folder)")
     .action((ticket: string, options: { run?: string; out?: string }) =>
       withPorts((ports) => runAuditExport(ticket, options, commandIO, ports))(),
+    );
+  audit
+    .command("certify")
+    .description("Issue the signed certificate of a run from its complete audit trail, without publishing")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .action((ticket: string, options: { run?: string }) =>
+      withPorts((ports) => runCertify(ticket, options, commandIO, ports))(),
+    );
+  audit
+    .command("keygen")
+    .description("Create an Ed25519 key for signing certificates; the public key goes to .qa/keys/")
+    .action(() => withPorts((ports) => runKeygen(commandIO, ports))());
+
+  program
+    .command("verify-report")
+    .description("Check the certificate of a run folder or audit export: signature, Merkle root, every file")
+    .argument("<path>", "run folder or audit export zip")
+    .option(
+      "--key <file>",
+      "trusted public key (PEM); repeat for rotated keys",
+      (v: string, all: string[]) => [...all, v],
+      [] as string[],
+    )
+    .action((path: string, options: { key: string[] }) =>
+      withPorts((ports) => runVerifyReport(path, options, commandIO, ports))(),
     );
 
   program

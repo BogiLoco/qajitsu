@@ -84,8 +84,15 @@ describe("audit trail (REQ-VER-16)", () => {
     ]);
     expect(trail.items.every((i) => /^[0-9a-f]{64}$/.test(i.sha256))).toBe(true);
     expect(
-      ["analysis.json", "map/around.json", "logs/api.log", "explore/S01/a.json", "x.txt"].map(trailCategory),
-    ).toEqual(["context", "context", "runner", "explore", "other"]);
+      [
+        "analysis.json",
+        "map/around.json",
+        "logs/api.log",
+        "explore/S01/a.json",
+        "certificate/c.json",
+        "x.txt",
+      ].map(trailCategory),
+    ).toEqual(["context", "context", "runner", "explore", "certificate", "other"]);
   });
 
   it("REQ-VER-16/AC4: every missing part of the trail is a gap with its reason", () => {

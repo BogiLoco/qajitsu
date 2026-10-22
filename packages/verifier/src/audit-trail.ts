@@ -23,6 +23,7 @@ export type TrailCategory =
   | "agents"
   | "explore"
   | "run"
+  | "certificate"
   | "other";
 
 /** One file of the trail with its SHA-256. */
@@ -74,6 +75,7 @@ const CATEGORIES: readonly [string, TrailCategory][] = [
   ["journal/", "journal"],
   ["explore/", "explore"],
   ["run.json", "run"],
+  ["certificate/", "certificate"],
 ];
 
 /** The category of a run-relative path. */

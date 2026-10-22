@@ -1,5 +1,12 @@
 import { formatVersions } from "./versions.js";
-import type { AssertionRecord, Plan, RunObservation, TestStatus } from "@qajitsu/core";
+import {
+  renderCertificateBlock,
+  type AssertionRecord,
+  type CertificateSummary,
+  type Plan,
+  type RunObservation,
+  type TestStatus,
+} from "@qajitsu/core";
 import { countStatuses, type MatrixRow } from "./matrix.js";
 
 /** One evidence file shown in the report, referenced by hash (REQ-VER-05/AC2). */
@@ -29,6 +36,8 @@ export interface ReportInput {
   readonly summary: string;
   readonly runId: string;
   readonly generatedAt: string;
+  /** The run's certificate, stamped into its section (REQ-VER-15/AC7); the section is empty without one. */
+  readonly certificate?: CertificateSummary | undefined;
   readonly plan: Plan;
   readonly planSha256: string;
   /** Set when no person approved the plan (REQ-PLAN-10/AC5). */
@@ -219,6 +228,7 @@ section{border-top:1px solid #d0d7de;margin-top:16px}img,video{max-width:100%}
 </style></head><body>
 <h1>${esc(input.ticket)} test report</h1>
 <p class="muted">Run ${esc(input.runId)} · ${esc(input.generatedAt)} · environment ${esc(input.environment.name)} (${esc(input.environment.baseUrl)})${input.environment.deployedSha ? ` · deployed <code>${esc(input.environment.deployedSha)}</code>` : ""}${input.environment.stubs?.length ? ` · <strong>stubbed (not real):</strong> ${esc(input.environment.stubs.join(", "))}` : ""}<br>Code: ${repos || "–"}${input.codeAccess ? ` (${esc(input.codeAccess)})` : ""}${app} · plan sha256 <code>${esc(input.planSha256.slice(0, 16))}…</code>${input.approvalNote ? `<br><strong>${esc(input.approvalNote)}</strong>` : ""}${input.versions ? `<br>Tools: ${esc(formatVersions(input.versions))}` : ""}</p>
+${renderCertificateBlock(input.certificate)}
 <div class="tiles">${tiles}</div>
 ${input.decision ? `<h2 class="${input.decision.startsWith("Decision: GO") ? "ok" : "bad"}">${esc(input.decision)}</h2>` : ""}
 <h2>Summary</h2><p>${esc(input.summary).replace(/\n/g, "<br>")}</p>

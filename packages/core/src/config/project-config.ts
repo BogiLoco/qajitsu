@@ -561,6 +561,18 @@ export const ProjectConfigSchema = z.strictObject({
     })
     .default({ version: "1", tolerate: { medium: [], low: [] } }),
   /**
+   * Signed test certificates (REQ-VER-15): with `signing_key` (an Ed25519 private key in PEM, or its base64, from the
+   * secret provider) every published run gets a certificate over its audit trail. Public keys that verify them live
+   * in `.qa/keys/*.pub`, old ones stay there after a rotation. With `required`, a run whose audit trail has gaps is
+   * not published.
+   */
+  certificate: z
+    .strictObject({
+      signing_key: SecretRef.optional(),
+      required: z.boolean().default(false),
+    })
+    .default({ required: false }),
+  /**
    * Visual regression (REQ-EXEC-12): baselines live in `.qa/baselines/`; `threshold` is the default share of differing
    * pixels that still passes, `color_threshold` the per-pixel sensitivity (0 exact, 1 anything).
    */

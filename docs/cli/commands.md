@@ -904,6 +904,38 @@ value stops the export. `env/` is never included; Playwright traces stay with th
 
 Exit codes: `0` written from a complete trail, `1` written but the trail has gaps, `3` errors.
 
+### `qajitsu audit certify <ticket>`
+
+Issues the signed certificate of a run without publishing it (REQ-VER-15). The reports are rendered again by code
+first, so a hand-edited report is never certified. A run whose audit trail has gaps gets no certificate; neither does a
+run whose results, evidence, plan or journal changed after its certificate was issued. A valid certificate of the same
+files and key is kept, so its id stays the same. `qj publish` issues the certificate the same way whenever
+`certificate.signing_key` is set.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+
+Exit codes: `0` issued (or still valid), `1` no certificate (gaps listed), `3` errors or no signing key.
+
+### `qajitsu audit keygen`
+
+Creates an Ed25519 signing key. The private key is written with mode 0600 into the project home and never printed; put
+it into the secret provider (`certificate.signing_key: secret://...`, PEM or base64 PEM) and delete the file. The
+public key goes to `.qa/keys/<id>.pub` to be committed; keep older public keys there after a rotation so the
+certificates they signed keep verifying.
+
+Exit codes: `0` created, `3` errors.
+
+### `qajitsu verify-report <path>`
+
+Checks the certificate of a run folder or of an audit export zip (REQ-VER-15/AC3): the signature with a trusted public
+key, the format, the Merkle root, and every covered file (journals and logs up to the size they had). Lists every
+changed or missing file. Works offline, without the run's project.
+
+- `--key <file>`: trusted public key in PEM; repeat for rotated keys. Inside a project `.qa/keys/*.pub` are trusted too.
+
+Exit codes: `0` valid, `1` a file changed or is missing, or the key is not trusted, `3` no certificate or an
+unreadable path.
+
 ## Observability
 
 ### `qajitsu telemetry export <ticket>`

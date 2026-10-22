@@ -1,6 +1,7 @@
 import {
   AnalysisSchema,
   CaseResultFileSchema,
+  CertificateStatementSchema,
   EnvProfileSchema,
   PlanSchema,
   ProjectConfigSchema,
@@ -41,5 +42,11 @@ describe("published JSON Schemas", () => {
     await expect(
       publish(CaseResultFileSchema, "https://qajitsu.dev/schemas/results.schema.json"),
     ).toMatchFileSnapshot("../../schemas/results.schema.json");
+  });
+
+  it("REQ-VER-15/AC5: test-certificate.v1.schema.json matches the certificate statement", async () => {
+    await expect(
+      publish(CertificateStatementSchema, "https://qajitsu.dev/schemas/test-certificate.v1.schema.json"),
+    ).toMatchFileSnapshot("../../schemas/test-certificate.v1.schema.json");
   });
 });

@@ -213,7 +213,7 @@ ticket's statuses.
 
 ### REQ-VER-15 · Verifiable test certificate
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: 9
 - Related: REQ-VER-05, REQ-OBS-05, REQ-VER-16
@@ -222,17 +222,17 @@ Every run ends with one signed statement that ties together everything the run u
 
 **Acceptance criteria**
 
-- [ ] AC1: Each published report includes a certificate: hash of the frozen plan, evidence manifest hash, matrix hash, tool versions, deployed version, time.
-- [ ] AC2: The certificate is signed with a project key.
-- [ ] AC3: `qj verify-report <path>` checks the signature and all hashes and reports any changed file.
-- [ ] AC4: All files of the audit trail (REQ-VER-16) form a Merkle tree; the certificate holds its root hash, so one changed byte anywhere changes the root.
-- [ ] AC5: The certificate uses a standard attestation format (an in-toto statement in a DSSE envelope) with a published schema.
-- [ ] AC6: Signing keys come from the secret provider or a KMS/HSM; keys can be rotated and old certificates stay verifiable with the public key that signed them.
-- [ ] AC7: The Jira comment and `report.html` show the certificate id, the root hash and how to verify it.
+- [x] AC1: Each published report includes a certificate: hash of the frozen plan, evidence manifest hash, matrix hash, tool versions, deployed version, time.
+- [x] AC2: The certificate is signed with a project key.
+- [x] AC3: `qj verify-report <path>` checks the signature and all hashes and reports any changed file.
+- [x] AC4: All files of the audit trail (REQ-VER-16) form a Merkle tree; the certificate holds its root hash, so one changed byte anywhere changes the root.
+- [x] AC5: The certificate uses a standard attestation format (an in-toto statement in a DSSE envelope) with a published schema.
+- [x] AC6: Signing keys come from the secret provider or a KMS/HSM; keys can be rotated and old certificates stay verifiable with the public key that signed them.
+- [x] AC7: The Jira comment and `report.html` show the certificate id, the root hash and how to verify it.
 
 ### REQ-VER-16 · Complete audit trail
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 3
 - Related: REQ-VER-04, REQ-VER-05, REQ-OBS-05, REQ-PLAN-06, INV-7
@@ -244,7 +244,7 @@ Everything that influenced the verdict is recorded and hashed, not only the resu
 - [x] AC1: The trail covers: ticket snapshot at the start, commit SHA and diff reference, every plan version with its approval (who, when, which version), generated test code, runner and tool versions, container image digests, deployed environment version, raw runner output, all evidence, matrix and report.
 - [x] AC2: The agent journal is part of the trail: prompts, model responses, tool calls with arguments and results, provider, model name and version, token counts.
 - [x] AC3: Secrets are masked before hashing (REQ-CFG-06); the hash covers exactly the stored, masked content.
-- [ ] AC4: A run whose trail is incomplete (missing file, hash mismatch) cannot publish a certificate; the gap is reported.
+- [x] AC4: A run whose trail is incomplete (missing file, hash mismatch) cannot publish a certificate; the gap is reported.
 - [x] AC5: The trail can be exported as one archive for an external auditor, readable without QAJitsu.
 
 ### REQ-VER-17 · Trusted timestamps
