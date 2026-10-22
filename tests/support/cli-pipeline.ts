@@ -86,6 +86,8 @@ export async function createDemoPipeline(
     config?: readonly string[];
     /** Answers of the model approver when the approval flow has a model step. */
     approveScript?: Turn[];
+    /** Extra environment variables, read at every command (secrets such as a signing key). */
+    env?: Record<string, string>;
   } = {},
 ) {
   const ticket = options.ticket ?? "DEMO-1";
@@ -141,7 +143,7 @@ export async function createDemoPipeline(
       ...(opts.ask ? { ask: () => Promise.resolve(answers.shift() ?? "") } : {}),
       ...(opts.compressVideo ? { compressVideo: opts.compressVideo } : {}),
       ports: {
-        env: { DEMO_USER_PASSWORD: DEMO_PASSWORD },
+        env: { DEMO_USER_PASSWORD: DEMO_PASSWORD, ...options.env },
         home,
         now: () => new Date("2026-10-03T10:46:00Z"),
         random: () => 0,

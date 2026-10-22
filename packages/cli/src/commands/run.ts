@@ -29,6 +29,8 @@ import {
   QajitsuError,
   exitCodeFor,
   loadApprovedPlan,
+  parseEventLines,
+  type ApprovalStep,
   resolveEnvironment,
   selectExecutableSpecs,
   planForLocale,
@@ -42,7 +44,7 @@ import {
   type WebCombination,
 } from "@qajitsu/core";
 import { createMasker } from "@qajitsu/steps";
-import { formatSpecProblems } from "@qajitsu/verifier";
+import { checkApprovalRecords, formatSpecProblems } from "@qajitsu/verifier";
 import { buildAdapters, type RuntimePorts } from "../adapters.js";
 import { codeIndexCache, openSession, type ModelPorts, type RunSession } from "../session.js";
 import { runningBuild } from "./env-up-reuse.js";
@@ -52,6 +54,9 @@ import { auditRun, blockedRun, triageRun, runCanary } from "./checks.js";
 import { createManualPrompter } from "./manual.js";
 import { formatEstimate, readRunHistory } from "./estimate.js";
 import { rootOf } from "./runs.js";
+import { sealRun } from "./audit-trail.js";
+import { certificateLines, certifiedVerdict, issueCertificate } from "./certificate.js";
+import { reviewSpecs, specReviewOn, specReviewPending, waitingForPerson } from "./spec-review.js";
 import { runMessages, type MessagePorts, type RunMessages } from "./messages.js";
 import { approvalContext, changedParts, type ApprovalContext } from "./context-fingerprint.js";
 import { runRunHook, type HookExec } from "./hooks.js";
@@ -89,6 +94,8 @@ export interface RunOptions extends LiveOptions {
   readonly user?: string | undefined;
   /** One case at a time, in plan order, across every lane and device (REQ-EXEC-19/AC2). */
   readonly sequential?: boolean | undefined;
+  /** A person reviews every generated spec before it runs (REQ-VER-24/AC1). */
+  readonly reviewSpecs?: boolean | undefined;
 }
 
 /** Ports `run` needs beyond the common ones; the executor is replaceable in tests. */
@@ -332,6 +339,28 @@ async function writeBlocked(
   }
 }
 
+/** Writes NOT_RUN results with the reason (REQ-EXEC-16/AC1): never executed, never PASSED. */
+async function writeNotRun(
+  session: RunSession,
+  caseIds: readonly string[],
+  reason: string,
+  results: Map<string, CaseResultFile>,
+): Promise<void> {
+  for (const caseId of caseIds) {
+    session.events.emit("run", SYSTEM, "case.not_run", { caseId, reason });
+    const result = CaseResultFileSchema.parse({
+      schema: 1,
+      caseId,
+      runner: "api",
+      attempts: [{ attempt: 1, outcome: "skipped", assertions: [], error: reason, steps: [], evidence: [] }],
+    });
+    await writeFile(session.ws.path("results", `${caseId}.json`), `${JSON.stringify(result, null, 2)}\n`, {
+      flag: "wx",
+    });
+    results.set(caseId, result);
+  }
+}
+
 /**
  * The environment of a command: `--env`, else `environments.default`; interactive sessions are asked when neither
  * is set (REQ-ENV-07).
@@ -436,6 +465,21 @@ export async function runRun(
       };
     }
     const { plan, approval } = await loadApprovedPlan(ws);
+    // Invariant 3, REQ-PLAN-10/AC6: the approved plan must be the one the journal says was approved. The file and the
+    // hash in run.json can be edited together; the journal's approval records cannot without breaking its chain.
+    const journalText = await readFile(ws.path("journal", "events.jsonl"), "utf8").catch(() => "");
+    const steps = ws.record.data["approvals"];
+    const approvalCheck = checkApprovalRecords(
+      approval,
+      Array.isArray(steps) ? (steps as ApprovalStep[]) : [],
+      parseEventLines(journalText).events,
+    );
+    if (approvalCheck.problems.length > 0)
+      throw new ConfigError(
+        "APPROVAL_RECORD_MISMATCH",
+        `The approved plan does not match its approval records; nothing was run: ${approvalCheck.problems.join("; ")}`,
+        { problems: approvalCheck.problems },
+      );
     // REQ-EXEC-16: chosen cases, a visible browser or emulator and step pauses are checked before anything runs.
     const live = prepareLiveRun(options, plan, io, events, {
       platform: ports.platform ?? process.platform,
@@ -465,6 +509,20 @@ export async function runRun(
         events.emit("run", { kind: "user", name: "cli" }, "approval.context_reconfirmed", { changed });
         await ws.update({ data: { ...ws.record.data, approvalContext: await approvalContext(session) } });
       }
+    }
+    // REQ-VER-24: when the specs only wait for a person, stop before an environment is built for nothing.
+    if (
+      !io.ask &&
+      ws.record.data["regression"] === undefined &&
+      specReviewOn(
+        project.config.spec_review,
+        options.reviewSpecs === true,
+        (await readRunHistory(rootOf(project, ports), ws.runId)).runs,
+      )
+    ) {
+      const chosen = plan.cases.map((c) => c.id).filter((id) => live.selected?.has(id) ?? true);
+      const waiting = await waitingForPerson(ws, chosen);
+      if (waiting.length > 0) throw specReviewPending(ws.ticket, waiting);
     }
     events.emit("run", SYSTEM, "stage.start", { planVersion: approval.version });
     const results = new Map<string, CaseResultFile>();
@@ -536,31 +594,42 @@ export async function runRun(
         },
         // REQ-CFG-01/AC2: the effective configuration, secrets masked.
         config: effectiveConfig(session, env, overrides),
-        ...(built ? { build: { project: built.project, ports: built.ports, services: built.services } } : {}),
+        ...(built
+          ? {
+              build: {
+                project: built.project,
+                ports: built.ports,
+                services: built.services,
+                ...(built.images ? { images: built.images } : {}),
+              },
+            }
+          : {}),
       },
     });
 
     let teardownDue = false;
+    // REQ-EXEC-16/AC1: cases not chosen with --cases are NOT_RUN, also when the environment fails (exploratory E6).
+    const chosenIds = plan.cases.map((c) => c.id).filter((id) => live.selected?.has(id) ?? true);
+    const notChosen = async (): Promise<void> => {
+      await writeNotRun(
+        session,
+        plan.cases.map((c) => c.id).filter((id) => !chosenIds.includes(id)),
+        "not selected (--cases)",
+        results,
+      );
+    };
     if (prepared.failure) {
       // REQ-ENV-04/AC3: the application did not start; every case is BLOCKED with the service logs.
       io.writeError(
         `The environment did not start (${masker.maskText(prepared.failure.message)}); every case is BLOCKED.\n`,
       );
-      await blockAfterStartFailure(
-        session,
-        plan.cases.map((c) => c.id),
-        prepared.failure,
-        results,
-      );
+      await blockAfterStartFailure(session, chosenIds, prepared.failure, results);
+      await notChosen();
     } else if (!health.ok) {
       // REQ-ENV-01/AC1: an unreachable environment makes every case BLOCKED.
       io.writeError(`Environment ${env.name} is not healthy (${health.detail}); every case is BLOCKED.\n`);
-      await writeBlocked(
-        session,
-        plan.cases.map((c) => c.id),
-        `environment not healthy: ${health.detail}`,
-        results,
-      );
+      await writeBlocked(session, chosenIds, `environment not healthy: ${health.detail}`, results);
+      await notChosen();
     } else {
       if (versionCheck === "mismatch") {
         const message = `Environment runs ${String(deployedSha)}, the change is ${analysed.map((s) => s.slice(0, 12)).join(", ")}.`;
@@ -584,10 +653,11 @@ export async function runRun(
         );
         await blockAfterStartFailure(
           session,
-          plan.cases.map((c) => c.id),
+          chosenIds,
           { message: `setup hook ${setup.script ?? ""} failed`, logs: setup.log ? [setup.log] : [] },
           results,
         );
+        await notChosen();
       } else {
         // REQ-OBS-10/AC1: the versions of every tool and model this run uses, recorded before anything runs.
         await ws.update({
@@ -604,6 +674,7 @@ export async function runRun(
           onDevice: (stop) => deviceStops.push(stop),
           live,
           sequential: options.sequential === true,
+          reviewSpecs: options.reviewSpecs === true,
         });
         if (pending.length > 0)
           io.write(`Rejected spec files (not in the approved plan or misplaced): ${pending.join(", ")}\n`);
@@ -677,6 +748,23 @@ export async function runRun(
       checkpoints: [...ws.record.checkpoints, { stage: "run", at: ports.now().toISOString() }],
     });
     events.emit("run", SYSTEM, "stage.end", { statuses, gatesOk: verdict.ok });
+    // REQ-VER-15/AC8: seal the results and specs, and with a signing key certify the run right away, so nothing can
+    // be changed between the end of the run and its certificate. The reports are rendered once more with the run's
+    // own time (its checkpoint), as every later rendering will.
+    verdict = await computeVerdict(session, ports.now);
+    await writeReports(session, verdict);
+    await sealRun(session);
+    if (ws.record.data["bench"] === undefined) {
+      const certified = await issueCertificate(session, ports.now, certifiedVerdict(verdict));
+      if (certified.status === "issued") io.write(`${certificateLines(certified.certificate).join("\n")}\n`);
+      if (certified.status === "gaps")
+        io.writeError(
+          `Warning: no certificate, the audit trail has ${String(certified.gaps.length)} gap(s):\n${certified.gaps
+            .slice(0, 5)
+            .map((g) => `  - ${g}\n`)
+            .join("")}`,
+        );
+    }
     // REQ-OBS-03: export what this command added to the journal; telemetry never changes the result.
     await anchorJournal(session);
     const telemetry = await exportRunTelemetry(session, ports.fetch);
@@ -698,6 +786,12 @@ export async function runRun(
     const code = exitCodeFor(verdict.cases.map((c) => c.status));
     return !verdict.ok && code === 0 ? 2 : code;
   } catch (error) {
+    // REQ-VER-24: specs that wait for a person stop the run before anything ran; it continues after the review.
+    if (error instanceof ConfigError && error.code === "SPEC_REVIEW_PENDING") {
+      io.write(`${error.message}\n`);
+      await stopOnInterrupt?.().catch(() => undefined);
+      return 2;
+    }
     const code = error instanceof QajitsuError ? ` [${error.code}]` : "";
     const issues =
       error instanceof QajitsuError && Array.isArray(error.context["issues"])
@@ -744,6 +838,8 @@ async function executeCases(
     readonly live?: LiveRun | undefined;
     /** One case at a time (REQ-EXEC-19/AC2). */
     readonly sequential?: boolean | undefined;
+    /** `--review-specs` (REQ-VER-24/AC1). */
+    readonly reviewSpecs?: boolean | undefined;
   } = {
     build: false,
     onDevice: () => undefined,
@@ -794,16 +890,10 @@ async function executeCases(
     budget.max_minutes !== undefined && ports.now().getTime() - startedAt >= budget.max_minutes * 60_000
       ? `the run's time budget (${String(budget.max_minutes)} min) was reached`
       : undefined;
-  // REQ-EXEC-17/AC1+AC2: a regression run calls no agent or model; a case without a verified spec is BLOCKED.
-  const regression = RegressionRunSchema.safeParse(ws.record.data["regression"]);
-  if (regression.success) {
-    for (const [caseId, reason] of Object.entries(regression.data.blocked)) blocked.set(caseId, reason);
-    for (const c of missing)
-      if (!blocked.has(c.id)) blocked.set(c.id, "regression pack has no spec for this case");
-  } else if (missing.length > 0) {
-    io.write(`Writing specs for ${missing.map((c) => c.id).join(", ")}…\n`);
+  // The author writes the specs of the given cases; `notes` are a reviewer's reasons (REQ-VER-24/AC3).
+  const writeSpecs = async (cases: Plan["cases"], notes?: ReadonlyMap<string, string>) => {
     const analysis = AnalysisSchema.parse(JSON.parse(await readFile(ws.path("analysis.json"), "utf8")));
-    const usage = runUsage(ws, project, events, { costBudget: false });
+    const usage = runUsage(session, { costBudget: false });
     const deps = {
       ws,
       models: session.models,
@@ -821,15 +911,15 @@ async function executeCases(
       testIdAttribute: project.config.web.test_id_attribute,
     });
     // REQ-EXEC-22: the author sees what the running application shows, recorded by this trusted code.
-    const snapshot = await authorSnapshot(session, plan, missing, env, ports, {
+    const snapshot = await authorSnapshot(session, plan, cases, env, ports, {
       knownPages: context.ui?.pages ?? [],
-      device: missing.some((c) => c.type === "mobile") ? devices.get : undefined,
+      device: cases.some((c) => c.type === "mobile") ? devices.get : undefined,
       platform: mobilePlatform,
       io,
     });
     const authored = await runAuthor(
       deps,
-      { ...plan, cases: missing },
+      { ...plan, cases },
       { ...context, ...(snapshot.length > 0 ? { snapshot } : {}) },
       analysis,
       Object.keys(env.profile.accounts),
@@ -838,9 +928,20 @@ async function executeCases(
         (budget.max_cost_usd !== undefined && usage.costUsd >= budget.max_cost_usd
           ? `the run's cost budget ($${budget.max_cost_usd.toFixed(2)}) was reached`
           : undefined),
+      notes,
     );
     await saveRunUsage(ws, usage);
-    for (const a of authored)
+    return authored;
+  };
+  // REQ-EXEC-17/AC1+AC2: a regression run calls no agent or model; a case without a verified spec is BLOCKED.
+  const regression = RegressionRunSchema.safeParse(ws.record.data["regression"]);
+  if (regression.success) {
+    for (const [caseId, reason] of Object.entries(regression.data.blocked)) blocked.set(caseId, reason);
+    for (const c of missing)
+      if (!blocked.has(c.id)) blocked.set(c.id, "regression pack has no spec for this case");
+  } else if (missing.length > 0) {
+    io.write(`Writing specs for ${missing.map((c) => c.id).join(", ")}…\n`);
+    for (const a of await writeSpecs(missing))
       if (a.skipped !== undefined) notRun.set(a.caseId, a.skipped);
       else if (!a.file)
         blocked.set(a.caseId, `author could not produce a valid spec: ${formatSpecProblems(a.problems)}`);
@@ -859,22 +960,38 @@ async function executeCases(
       blocked.set(caseId, `spec failed static checks: ${formatSpecProblems(problems)}`);
     else specs.set(caseId, file);
   }
+  // REQ-VER-24: a person reads each spec before it runs; a review can only stop a spec.
+  const reviewing =
+    !regression.success &&
+    specReviewOn(
+      project.config.spec_review,
+      run.reviewSpecs === true,
+      (await readRunHistory(rootOf(project, ports), ws.runId)).runs,
+    );
+  if (reviewing && specs.size > 0) {
+    const review = await reviewSpecs(session, plan, specs, io, {
+      user: run.user ?? "unknown",
+      now: ports.now,
+      rewrite: async (caseId, reason) => {
+        const planCase = plan.cases.find((c) => c.id === caseId);
+        if (!planCase) return undefined;
+        const [written] = await writeSpecs([planCase], new Map([[caseId, reason]]));
+        if (written?.file === undefined) return undefined;
+        const problems = await checkSpec(await readFile(written.file, "utf8"), caseId, plan, specChecks);
+        return problems.length === 0 ? written.file : undefined;
+      },
+    });
+    if (review.waiting.length > 0)
+      throw specReviewPending(ws.ticket, review.waiting, new Map([...blocked, ...review.blocked]));
+    for (const caseId of [...specs.keys()]) if (!review.accepted.has(caseId)) specs.delete(caseId);
+    for (const [caseId, reason] of review.blocked) blocked.set(caseId, reason);
+  }
   for (const [caseId, reason] of blocked) {
     events.emit("run", SYSTEM, "case.blocked", { caseId, reason: reason.slice(0, 500) });
     await writeBlocked(session, [caseId], reason, results);
   }
   for (const [caseId, reason] of notRun) {
-    events.emit("run", SYSTEM, "case.not_run", { caseId, reason });
-    const result = CaseResultFileSchema.parse({
-      schema: 1,
-      caseId,
-      runner: "api",
-      attempts: [{ attempt: 1, outcome: "skipped", assertions: [], error: reason, steps: [], evidence: [] }],
-    });
-    await writeFile(ws.path("results", `${caseId}.json`), `${JSON.stringify(result, null, 2)}\n`, {
-      flag: "wx",
-    });
-    results.set(caseId, result);
+    await writeNotRun(session, [caseId], reason, results);
     // Excluded from every execution below, like a blocked case, but recorded as NOT_RUN.
     blocked.set(caseId, reason);
   }
@@ -976,7 +1093,7 @@ async function executeCases(
     // REQ-EXEC-09 + REQ-EXEC-22/AC4: web and mobile cases are healed; API cases have no selectors.
     const type = plan.cases.find((c) => c.id === caseId)?.type;
     if (regression.success || (type !== "web" && type !== "mobile")) return undefined;
-    const usage = runUsage(ws, project, events, { costBudget: false });
+    const usage = runUsage(session, { costBudget: false });
     const dom = failed.evidence.find((e) => e.name === "failure.html")?.content;
     const recorded = failed.evidence.find((e) => e.name === "failure-elements.json")?.content;
     let elements: UiElementFact[] | undefined;

@@ -101,7 +101,7 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 - [REQ-VER-05](requirements/verification.md#req-ver-05--evidence-manifest-with-hashes) Evidence manifest with hashes (must, implemented, AC 3/3)
 - [REQ-VER-07](requirements/verification.md#req-ver-07--publish-gates) Publish gates (must, implemented, AC 7/7)
 - [REQ-VER-08](requirements/verification.md#req-ver-08--computed-numbers-and-validated-summary) Computed numbers and validated summary (must, implemented, AC 2/2)
-- [REQ-VER-16](requirements/verification.md#req-ver-16--complete-audit-trail) Complete audit trail (must, proposed, AC 0/5)
+- [REQ-VER-16](requirements/verification.md#req-ver-16--complete-audit-trail) Complete audit trail (must, implemented, AC 5/5)
 - [REQ-EVD-01](requirements/evidence.md#req-evd-01--api-evidence) API evidence (must, implemented, AC 3/3)
 - [REQ-EVD-04](requirements/evidence.md#req-evd-04--test-matrix) Test matrix (must, implemented, AC 3/3)
 - [REQ-EVD-05](requirements/evidence.md#req-evd-05--report-formats) Report formats (must, implemented, AC 3/3)
@@ -192,9 +192,11 @@ and `qj bench` reports detection and false-FAILED rates per model.
 <!-- prettier-ignore-start -->
 <!-- req-stage:7 -->
 - [REQ-PLAN-15](requirements/plan.md#req-plan-15--project-lessons-from-revisions) Project lessons from revisions (should, proposed, AC 0/4)
-- [REQ-PLAN-16](requirements/plan.md#req-plan-16--plan-quality-metrics) Plan quality metrics (should, proposed, AC 0/3)
+- [REQ-PLAN-16](requirements/plan.md#req-plan-16--plan-quality-metrics) Plan quality metrics (should, proposed, AC 0/4)
 - [REQ-VER-06](requirements/verification.md#req-ver-06--independent-auditor) Independent auditor (must, implemented, AC 3/3)
 - [REQ-VER-09](requirements/verification.md#req-ver-09--canary-check) Canary check (could, implemented, AC 2/2)
+- [REQ-VER-23](requirements/verification.md#req-ver-23--test-code-quality-gate) Test code quality gate (must, implemented, AC 5/5)
+- [REQ-VER-24](requirements/verification.md#req-ver-24--human-review-of-test-code-on-demand) Human review of test code on demand (could, implemented, AC 5/5)
 - [REQ-LLM-05](requirements/models.md#req-llm-05--local-models-used-honestly) Local models used honestly (should, implemented, AC 2/2)
 - [REQ-LLM-06](requirements/models.md#req-llm-06--model-benchmark) Model benchmark (should, implemented, AC 3/3)
 - [REQ-LLM-13](requirements/models.md#req-llm-13--model-routing-proposals-from-data) Model routing proposals from data (could, proposed, AC 0/3)
@@ -212,7 +214,7 @@ and `qj bench` reports detection and false-FAILED rates per model.
 - [REQ-WEB-08](requirements/web.md#req-web-08--contextual-chat) Contextual chat (could, proposed, AC 0/5)
 - [REQ-WEB-09](requirements/web.md#req-web-09--chat-actions-are-proposals) Chat actions are proposals (must, proposed, AC 0/3)
 - [REQ-SKILL-01](requirements/skills.md#req-skill-01--skill-format-and-progressive-loading) Skill format and progressive loading (should, proposed, AC 0/4)
-- [REQ-SKILL-02](requirements/skills.md#req-skill-02--general-and-project-skill-libraries) General and project skill libraries (should, proposed, AC 0/3)
+- [REQ-SKILL-02](requirements/skills.md#req-skill-02--general-and-project-skill-libraries) General and project skill libraries (should, proposed, AC 0/6)
 - [REQ-SKILL-06](requirements/skills.md#req-skill-06--skill-review-signing-and-traceability) Skill review, signing and traceability (must, proposed, AC 0/3)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->
@@ -242,11 +244,11 @@ documentation site and the Claude Code plugin are available.
 - [REQ-EXEC-31](requirements/execution.md#req-exec-31--judge-calibration-and-drift-control) Judge calibration and drift control (should, proposed, AC 0/4)
 - [REQ-EXEC-32](requirements/execution.md#req-exec-32--evaluation-of-retrieval-augmented-answers) Evaluation of retrieval-augmented answers (could, proposed, AC 0/3)
 - [REQ-EXEC-33](requirements/execution.md#req-exec-33--behaviour-regression-after-model-or-prompt-changes) Behaviour regression after model or prompt changes (should, proposed, AC 0/3)
-- [REQ-VER-15](requirements/verification.md#req-ver-15--verifiable-test-certificate) Verifiable test certificate (should, proposed, AC 0/7)
+- [REQ-VER-15](requirements/verification.md#req-ver-15--verifiable-test-certificate) Verifiable test certificate (should, implemented, AC 9/9)
 - [REQ-VER-17](requirements/verification.md#req-ver-17--trusted-timestamps) Trusted timestamps (should, proposed, AC 0/5)
 - [REQ-VER-19](requirements/verification.md#req-ver-19--immutable-evidence-storage) Immutable evidence storage (should, proposed, AC 0/3)
 - [REQ-VER-20](requirements/verification.md#req-ver-20--reproduce-a-run-from-its-certificate) Reproduce a run from its certificate (should, proposed, AC 0/3)
-- [REQ-VER-21](requirements/verification.md#req-ver-21--open-verifier-and-audit-documentation) Open verifier and audit documentation (should, proposed, AC 0/3)
+- [REQ-VER-21](requirements/verification.md#req-ver-21--open-verifier-and-audit-documentation) Open verifier and audit documentation (should, implemented, AC 3/3)
 - [REQ-OBS-03](requirements/observability.md#req-obs-03--opentelemetry-export) OpenTelemetry export (should, implemented, AC 2/2)
 - [REQ-OBS-04](requirements/observability.md#req-obs-04--metrics-dashboards-and-alerts) Metrics, dashboards and alerts (could, implemented, AC 3/3)
 - [REQ-OBS-05](requirements/observability.md#req-obs-05--tamper-evident-audit-log) Tamper-evident audit log (should, implemented, AC 2/2)
@@ -346,6 +348,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-OBS-11](requirements/observability.md#req-obs-11--run-replay) Run replay (could, proposed, AC 0/2)
 - [REQ-CI-06](requirements/ci-cd.md#req-ci-06--toolchain-in-pipelines) Toolchain in pipelines (could, in-progress, AC 1/2)
 - [REQ-CI-07](requirements/ci-cd.md#req-ci-07--thin-ci-client) Thin CI client (should, proposed, AC 0/5)
+- [REQ-CI-08](requirements/ci-cd.md#req-ci-08--job-matrix-generated-from-the-plan) Job matrix generated from the plan (should, proposed, AC 0/5)
 - [REQ-GEN-06](requirements/generic.md#req-gen-06--toolchain-setup) Toolchain setup (should, implemented, AC 9/9)
 - [REQ-GEN-07](requirements/generic.md#req-gen-07--external-agent-mode-claude-code-subagents-do-the-agents-work) External agent mode: Claude Code subagents do the agents' work (should, proposed, AC 0/6)
 - [REQ-GEN-08](requirements/generic.md#req-gen-08--consistent-doctor-output-and-exit-codes) Consistent `doctor` output and exit codes (should, implemented, AC 3/3)
@@ -377,5 +380,8 @@ the evidence bundle as pipeline artifacts.
 - [REQ-SCALE-05](requirements/scale.md#req-scale-05--bring-your-own-key) Bring your own key (should, proposed, AC 0/2)
 - [REQ-SCALE-06](requirements/scale.md#req-scale-06--metering-and-cost-limits) Metering and cost limits (should, proposed, AC 0/2)
 - [REQ-SCALE-07](requirements/scale.md#req-scale-07--specialist-planners) Specialist planners (could, proposed, AC 0/3)
+- [REQ-SCALE-08](requirements/scale.md#req-scale-08--execution-targets-chosen-per-case-type) Execution targets chosen per case type (should, proposed, AC 0/5)
+- [REQ-SCALE-09](requirements/scale.md#req-scale-09--kubernetes-deployment) Kubernetes deployment (could, proposed, AC 0/6)
+- [REQ-SCALE-10](requirements/scale.md#req-scale-10--billing-units-plans-and-licences) Billing units, plans and licences (could, proposed, AC 0/8)
 <!-- /req-stage -->
 <!-- prettier-ignore-end -->

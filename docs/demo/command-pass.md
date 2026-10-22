@@ -9,6 +9,65 @@ regression suite; and the CI helpers with a recorded GitHub event).
 How to repeat it: copy `examples/demo-shop` into a scratch folder, run `qj init` there with `HOME` pointing at a
 scratch folder, and go through the table top to bottom. Record the date, the commit and every result below.
 
+## Pass of 2026-10-22 (second): attacks on the certificate flow
+
+A deeper review tried to obtain or show a certificate for more than a run produced, first as tests, then live in the
+lab with `local/gemma4:e2b` and Docker. Each attack, what stopped it, and what was fixed:
+
+| ID  | Attack                                                                               | Before                                                       | Now                                                                                                                                                                                |
+| --- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1  | edit a result between the end of the run and `publish` / `audit certify`             | certified, the edit included                                 | a run with a key is certified when it ends; every run seals results and specs                                                                                                      |
+| A1b | flip the assertions of a result to pass, then publish without `certificate.required` | published with a warning                                     | `run-sealed` publish gate refuses it, with or without a key                                                                                                                        |
+| A2  | change the statuses in `run.json` before certifying                                  | the certificate stated the edited statuses                   | statuses are computed from the files when the certificate is issued                                                                                                                |
+| A3  | plant an evidence file after the certificate                                         | `verify-report` did not look at files it does not list       | reported as `added after the certificate` (both verifiers)                                                                                                                         |
+| A4  | show a certificate with another run's folder                                         | not compared                                                 | `ticket` and `runId` compared with `run.json`                                                                                                                                      |
+| A5  | edit `plan.approved.yaml` and its hash in `run.json` together before the run         | the edited plan ran; only the gate and certificate caught it | `qj run` checks the approval records against the journal first: nothing runs                                                                                                       |
+| A6  | replace evidence together with a matching manifest, no key                           | not caught                                                   | the seal covers the manifest                                                                                                                                                       |
+| A7  | zip with two entries of the same name                                                | the last one was checked                                     | refused                                                                                                                                                                            |
+| A8  | a certificate signed with a key planted in `.qa/keys/`                               | trusted inside the project                                   | still trusted there (whoever can write the repository is trusted); the result says `from .qa/keys/<file>`, and with the project's key from another channel (`--key`) it is refused |
+| A9  | an agent writes `certificate/`                                                       | not in the guard's protected paths                           | denied                                                                                                                                                                             |
+| A10 | forged names with `..` in a certificate                                              | fixed in the first pass                                      | refused                                                                                                                                                                            |
+
+Also found: in `explore --cli` a stop (Ctrl+C or the time box) that came while a command was being started, before it
+listened for the stop, was missed, and the command ran to its own 20 s timeout; it is checked again once the listener
+is attached. This was the cause of a test that failed only under load. Bytes appended to journals after the
+certificate are reported, not failed. Rendering a certified run's reports with a newer QAJitsu can change them (a new
+gate, for example); the certificate names the versions that rendered them.
+
+## Pass of 2026-10-22: audit trail, certificate, quality gate, spec review
+
+Commit `c3107c9`; model `local/gemma4:e2b` for every role; Docker 24.0.6 (Compose 2.23.0); macOS 14.5 arm64; a fresh
+lab (`examples/demo-shop` copied, its own `HOME`, the signing key in base64 in the lab's `.env.local`).
+
+| Command                                         | Checked                                                                                                        | Result                                             |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `audit keygen`                                  | key created twice (rotation); private key 0600 in a 0700 folder, never printed; public keys in `.qa/keys/`     | ok                                                 |
+| `run --build --review-specs` (no terminal)      | gemma writes 4 specs; the run stops before anything ran; containers and env files gone; 8 model calls stored   | ok; stops before building the environment now (E2) |
+| `review-spec`, `--accept`, `--send-back`        | spec shown next to its plan; TC-04 sent back twice ends BLOCKED with the reviewer's reason                     | ok after B2, E5; the reason is an instruction now  |
+| `audit trail`                                   | complete trail with image digest, versions, environment and the change records                                 | ok after B1                                        |
+| `audit certify`, `publish`                      | certificate issued, reused on publish, stamped into `report.html` and the comment                              | ok after E3                                        |
+| `verify-report` (project, zip outside, rotated) | valid in the project, on the zip in another `HOME` with `--key`, the old export after a key rotation           | ok                                                 |
+| `audit export`, `tools/verify-certificate.mjs`  | `shasum -a 256 -c SHA256SUMS` all OK; a result edited in the export: `changed: results/TC-01.json` from both   | ok                                                 |
+| tampering in the run folder                     | `verify-report` names the file; `audit certify` refuses; `publish` names the reason; re-rendered reports match | ok after E4                                        |
+| quality gate on a hand-written spec             | empty catch, conditional verify, constant actual: BLOCKED with all three findings                              | ok; NOT_RUN of the other cases fixed (E6)          |
+
+### Defects found and fixed
+
+| ID  | Command                    | Defect                                                                                                       | Fix                                                                 |
+| --- | -------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| B1  | `audit trail`              | the walk skipped `repos/` entirely: the diff and change records were neither in the trail nor certified      | only checked-out code under `repos/<alias>/` is left out            |
+| B2  | `run --review-specs`       | a rewrite that failed its checks was not recorded, so the next run asked the author again                    | recorded as `rewrite_failed`; the case stays BLOCKED                |
+| B3  | `run --review-specs`       | the reviewer's reason reached the author as untrusted data, which the model is told to ignore                | passed as an instruction (it comes from the person running QAJitsu) |
+| E1  | `init`                     | NOT READY listed Android and Appium but not a missing Compose plugin or browser, unlike `doctor`             | both use the same missing-tool checks                               |
+| E2  | `run --review-specs`       | built the Docker environment (about 20 s) only to stop for the review                                        | stops before the environment when only a person is awaited          |
+| E3  | `publish`                  | printed the certificate lines twice                                                                          | once, in the comment preview                                        |
+| E4  | `publish`                  | without a certificate it pointed to `qj audit trail`, which does not show a file changed after a certificate | names the reasons                                                   |
+| E5  | `run --review-specs`       | the waiting message did not name cases that will not run (author failed, rewrite failed)                     | names them with the reason                                          |
+| E6  | `run --cases` (env failed) | an unhealthy or failed environment made unchosen cases BLOCKED instead of NOT_RUN                            | only the chosen cases are BLOCKED                                   |
+
+Security review of the new code: names in a forged certificate could point outside the run folder (`../..`); both
+verifiers refuse them now. A reviewer's free-text reason is masked before `run.json` stores it.
+
 ## Pass of 2026-10-21
 
 Commit `ae9a935` plus the fixes listed below; models: `local/gemma4:e2b` (planner, author), `local/qwen3:14b`

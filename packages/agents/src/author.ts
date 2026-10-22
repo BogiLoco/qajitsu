@@ -21,6 +21,7 @@ import { generateText, stepCountIs, type ModelMessage } from "ai";
 import { guardTools } from "./loop.js";
 import { openMcpTools } from "./mcp.js";
 import { renderTestsRepo } from "./tests-repo.js";
+import { modelExchange } from "./exchange.js";
 import { untrusted, UNTRUSTED_DATA_RULES, type ChangeContext } from "./context.js";
 import { modelForRole, stageGuard, type AgentStageDeps } from "./roles-run.js";
 import { AGENT_ROLES } from "./roles.js";
@@ -198,6 +199,8 @@ export async function runAuthor(
   accounts: readonly string[],
   /** Checked before each case; a reason stops writing further specs (REQ-PLAN-08/AC3). */
   stopReason?: () => string | undefined,
+  /** Why a person sent the previous spec of a case back (REQ-VER-24/AC3), by case id. */
+  reviewNotes?: ReadonlyMap<string, string>,
 ): Promise<AuthoredSpec[]> {
   const role = AGENT_ROLES.find((r) => r.role === "author");
   if (!role) throw new Error("author role missing");
@@ -255,6 +258,14 @@ export async function runAuthor(
           role: "user",
           content: [
             `Write the spec for ${planCase.id}.`,
+            // The reason comes from the QA person running QAJitsu, not from a ticket or code: an instruction to follow
+            // (REQ-VER-24/AC3). It is masked before it is stored and sent.
+            ...(reviewNotes?.has(planCase.id)
+              ? [
+                  "## A reviewer sent your previous spec of this case back; fix exactly this",
+                  reviewNotes.get(planCase.id) ?? "",
+                ]
+              : []),
             `Account aliases available: ${accounts.length > 0 ? accounts.join(", ") : "(none: call api without as())"}.`,
             "## Approved case (from the plan; expectations are read with plan.expect)",
             untrusted(`plan.${planCase.id}`, describeCase(planCase)),
@@ -291,10 +302,17 @@ export async function runAuthor(
           ...(deps.signal ? { abortSignal: deps.signal } : {}),
           maxRetries: 2,
         });
-        deps.usage.record("author", "author", model.id, model.profile, {
-          inputTokens: result.usage.inputTokens ?? 0,
-          outputTokens: result.usage.outputTokens ?? 0,
-        });
+        deps.usage.record(
+          "author",
+          "author",
+          model.id,
+          model.profile,
+          {
+            inputTokens: result.usage.inputTokens ?? 0,
+            outputTokens: result.usage.outputTokens ?? 0,
+          },
+          modelExchange("author", "author", model, { system: AUTHOR_SYSTEM, messages }, result),
+        );
         const code = extractCode(result.text);
         problems =
           code === undefined

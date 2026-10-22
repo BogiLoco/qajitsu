@@ -22,3 +22,6 @@ export * from "./blocked.js";
 export * from "./approval.js";
 export * from "./decision.js";
 export * from "./coverage.js";
+export * from "./audit-trail.js";
+export * from "./certificate.js";
+export * from "./spec-quality.js";

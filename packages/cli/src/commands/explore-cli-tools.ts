@@ -42,6 +42,9 @@ export interface CliExploreRecorder {
 const tail = (text: string): string =>
   text.length > SHOWN ? `… (${String(text.length - SHOWN)} earlier characters)\n${text.slice(-SHOWN)}` : text;
 
+/** Whether the session was stopped; read at the moment of the call, the signal can change between awaits. */
+const stopped = (signal: AbortSignal | undefined): boolean => signal?.aborted === true;
+
 /**
  * Builds the tools of a command-line exploratory session (REQ-EXEC-24). The agent only asks: the trusted parent runs
  * the configured program with an argument array in the sandbox, stores the masked output in the session's evidence
@@ -136,6 +139,8 @@ export function createCliExploreTools(ctx: {
   const begin = async (id: string, label: string, paced: boolean): Promise<void> => {
     if (paced && ctx.slowMoMs) await pause(ctx.slowMoMs);
     ctx.terminal?.begin(id, label);
+    // When an action starts, not only when it ends: a live view and a stop can be timed to it.
+    ctx.events.emit("explore", ORCHESTRATOR, "explore.action_started", { id, command: ctx.mask(label) });
   };
   const BUDGET =
     "STEP BUDGET USED: stop exploring now and answer with the JSON answer: the checklist, findings and summary.";
@@ -258,6 +263,9 @@ export function createCliExploreTools(ctx: {
           void c.kill();
         };
         signal?.addEventListener("abort", stop, { once: true });
+        // A stop that came after the queue let this call start (while the files were snapshotted) fired its "abort"
+        // before the listener existed: an aborted signal fires no event, and the command would run to its timeout.
+        if (stopped(signal)) stop();
         const end = (await c.wait(ctx.timeoutMs + 6000).finally(() => {
           signal?.removeEventListener("abort", stop);
         })) ?? { timedOut: true };

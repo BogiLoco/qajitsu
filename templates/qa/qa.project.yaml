@@ -172,6 +172,12 @@ test_types: [api, web]
 # GO / NO-GO policy (REQ-PUB-10): GO only if every case PASSED; statuses of medium and low cases may be tolerated
 # decision: { version: "1", tolerate: { medium: [], low: [NOT_RUN] } }
 #
+# A person reviews generated specs before they run (REQ-VER-24): for the first runs of a new project, or always
+# spec_review: { first_runs: 5, always: false }
+#
+# Signed test certificates (REQ-VER-15): `qj audit keygen`, then the private key in the secret provider
+# certificate: { signing_key: secret://env/QAJITSU_SIGNING_KEY, required: false }
+#
 # Android and iOS (REQ-ENV-06, docs/guides/mobile.md)
 # mobile: { recording: retain-on-failure, android: { app: { source: build, repo: app, command: [./gradlew, assembleDebug], output: app/build/outputs/apk/debug/app-debug.apk }, app_id: com.example.app } }
 # Without the app's code (REQ-EXEC-23): app: { source: file, path: app.apk } | { source: url, url: https://..., sha256: <hex> } | { source: installed }

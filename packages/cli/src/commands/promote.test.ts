@@ -164,7 +164,9 @@ describe("qj promote (REQ-PUB-08, REQ-CTX-06/AC4)", () => {
       `${await readFile(join(p.dir, "specs", "TC-02.spec.ts"), "utf8")}\n// edited\n`,
     );
     const changed = await p.run(["promote", "DEMO-1", "--yes"]);
-    expect(changed.err).toContain("[SPEC_CHANGED_SINCE_RUN]");
+    // Refused by the run-sealed gate (REQ-VER-15/AC8) before the spec check of promote is reached.
+    expect(changed.err).toContain("[PROMOTE_GATES_FAILED]");
+    expect(changed.err).toContain("run-sealed");
     expect(await p.branches()).not.toContain("qajitsu/");
   }, 240_000);
 

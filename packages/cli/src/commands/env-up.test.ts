@@ -56,9 +56,16 @@ describe("qajitsu env up (REQ-GEN-05/AC2)", () => {
     const dir = await p.prepare();
     const running = p.run(["env", "up", "DEMO-1"]);
     await startedBuild(dir);
-    // The run lock is free for commands that use the running environment (qj explore takes it).
-    const release = await acquireRunLock(join(dir, "run.lock"));
-    await release();
+    // The run lock is free for commands that use the running environment (qj explore takes it). It is handed back
+    // right after the environment is recorded, so wait for that moment instead of racing it under load.
+    let release: (() => Promise<void>) | undefined;
+    for (let i = 0; i < 100 && release === undefined; i++)
+      release = await acquireRunLock(join(dir, "run.lock")).catch(async () => {
+        await new Promise((r) => setTimeout(r, 50));
+        return undefined;
+      });
+    expect(release).toBeDefined();
+    await release?.();
     // A second environment for the same run would clash with the running one.
     const build = await p.run(["run", "DEMO-1", "--build"]);
     expect(build.exitCode).toBe(3);

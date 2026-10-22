@@ -1,3 +1,4 @@
+import type { ToolVersion } from "./versions.js";
 /** Result of one environment check (REQ-GEN-03). */
 export interface DoctorCheck {
   readonly name: string;
@@ -31,6 +32,32 @@ export function reportedBy(tool: string, checks: readonly DoctorCheck[]): string
   if (failed(tool)) return tool;
   const cover = COVERED_BY[tool];
   return failed(cover) ? cover : undefined;
+}
+
+/**
+ * Checks for the tools a project needs and does not have (REQ-GEN-08/AC1), skipping those an earlier check already
+ * reports. `qj doctor` and `qj init` use the same list, so both name the same problems.
+ *
+ * @param tools - Versions of the tools, with whether the project needs each.
+ * @param checks - Checks so far.
+ */
+export function missingToolChecks(
+  tools: readonly ToolVersion[],
+  checks: readonly DoctorCheck[],
+): DoctorCheck[] {
+  return tools
+    .filter(
+      (t) =>
+        t.needed &&
+        t.version === undefined &&
+        !checks.some((c) => c.name === t.name) &&
+        reportedBy(t.name, checks) === undefined,
+    )
+    .map((t) => ({
+      name: t.name,
+      ok: false,
+      detail: `not found (needed for ${t.why ?? "this project"})${t.install ? `; install: ${t.install}` : ""}`,
+    }));
 }
 
 /**

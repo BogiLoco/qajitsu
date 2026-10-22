@@ -1,0 +1,157 @@
+{
+  "$id": "https://qajitsu.dev/schemas/test-certificate.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "_type": {
+      "type": "string",
+      "const": "https://in-toto.io/Statement/v1"
+    },
+    "subject": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "object",
+            "properties": {
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "sha256"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "prefix": {
+                "type": "boolean",
+                "const": true
+              }
+            },
+            "required": [
+              "bytes"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "name",
+          "digest",
+          "annotations"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "predicateType": {
+      "type": "string",
+      "const": "https://qajitsu.dev/attestation/test-certificate/v1"
+    },
+    "predicate": {
+      "type": "object",
+      "properties": {
+        "ticket": {
+          "type": "string"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "issuedAt": {
+          "type": "string"
+        },
+        "files": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "merkleRoot": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "repos": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "plan": {},
+        "approvals": {
+          "type": "array",
+          "items": {}
+        },
+        "planSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "manifestSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "matrixSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "reportSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "statuses": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "decision": {
+          "type": "string"
+        },
+        "versions": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "images": {
+          "type": "array",
+          "items": {}
+        },
+        "environment": {},
+        "codeAccess": {}
+      },
+      "required": [
+        "ticket",
+        "runId",
+        "issuedAt",
+        "files",
+        "merkleRoot"
+      ],
+      "additionalProperties": {}
+    }
+  },
+  "required": [
+    "_type",
+    "subject",
+    "predicateType",
+    "predicate"
+  ],
+  "additionalProperties": false
+}

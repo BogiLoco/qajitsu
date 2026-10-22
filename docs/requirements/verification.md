@@ -213,7 +213,7 @@ ticket's statuses.
 
 ### REQ-VER-15 · Verifiable test certificate
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: 9
 - Related: REQ-VER-05, REQ-OBS-05, REQ-VER-16
@@ -222,17 +222,19 @@ Every run ends with one signed statement that ties together everything the run u
 
 **Acceptance criteria**
 
-- [ ] AC1: Each published report includes a certificate: hash of the frozen plan, evidence manifest hash, matrix hash, tool versions, deployed version, time.
-- [ ] AC2: The certificate is signed with a project key.
-- [ ] AC3: `qj verify-report <path>` checks the signature and all hashes and reports any changed file.
-- [ ] AC4: All files of the audit trail (REQ-VER-16) form a Merkle tree; the certificate holds its root hash, so one changed byte anywhere changes the root.
-- [ ] AC5: The certificate uses a standard attestation format (an in-toto statement in a DSSE envelope) with a published schema.
-- [ ] AC6: Signing keys come from the secret provider or a KMS/HSM; keys can be rotated and old certificates stay verifiable with the public key that signed them.
-- [ ] AC7: The Jira comment and `report.html` show the certificate id, the root hash and how to verify it.
+- [x] AC1: Each published report includes a certificate: hash of the frozen plan, evidence manifest hash, matrix hash, tool versions, deployed version, time.
+- [x] AC2: The certificate is signed with a project key.
+- [x] AC3: `qj verify-report <path>` checks the signature and all hashes and reports any changed file.
+- [x] AC4: All files of the audit trail (REQ-VER-16) form a Merkle tree; the certificate holds its root hash, so one changed byte anywhere changes the root.
+- [x] AC5: The certificate uses a standard attestation format (an in-toto statement in a DSSE envelope) with a published schema.
+- [x] AC6: Signing keys come from the secret provider or a KMS/HSM; keys can be rotated and old certificates stay verifiable with the public key that signed them.
+- [x] AC7: The Jira comment and `report.html` show the certificate id, the root hash and how to verify it.
+- [x] AC8: With a signing key, a run is certified when it ends; without one, the run seals the hashes of its results and specs in the journal, and the audit trail reports any later change, so no result can be edited before the certificate is issued. The statuses in the certificate are computed from the files at issue time, never copied from the run record.
+- [x] AC9: `qj verify-report` also fails on files added after the certificate, on a certificate shown with another run's folder and on an archive with two entries of the same name; it reports bytes appended to journals and logs after the certificate, and where its trust in the signing key comes from (`--key` or `.qa/keys/`).
 
 ### REQ-VER-16 · Complete audit trail
 
-- Status: proposed
+- Status: implemented
 - Priority: must
 - Stage: 3
 - Related: REQ-VER-04, REQ-VER-05, REQ-OBS-05, REQ-PLAN-06, INV-7
@@ -241,11 +243,11 @@ Everything that influenced the verdict is recorded and hashed, not only the resu
 
 **Acceptance criteria**
 
-- [ ] AC1: The trail covers: ticket snapshot at the start, commit SHA and diff reference, every plan version with its approval (who, when, which version), generated test code, runner and tool versions, container image digests, deployed environment version, raw runner output, all evidence, matrix and report.
-- [ ] AC2: The agent journal is part of the trail: prompts, model responses, tool calls with arguments and results, provider, model name and version, token counts.
-- [ ] AC3: Secrets are masked before hashing (REQ-CFG-06); the hash covers exactly the stored, masked content.
-- [ ] AC4: A run whose trail is incomplete (missing file, hash mismatch) cannot publish a certificate; the gap is reported.
-- [ ] AC5: The trail can be exported as one archive for an external auditor, readable without QAJitsu.
+- [x] AC1: The trail covers: ticket snapshot at the start, commit SHA and diff reference, every plan version with its approval (who, when, which version), generated test code, runner and tool versions, container image digests, deployed environment version, raw runner output, all evidence, matrix and report.
+- [x] AC2: The agent journal is part of the trail: prompts, model responses, tool calls with arguments and results, provider, model name and version, token counts.
+- [x] AC3: Secrets are masked before hashing (REQ-CFG-06); the hash covers exactly the stored, masked content.
+- [x] AC4: A run whose trail is incomplete (missing file, hash mismatch) cannot publish a certificate; the gap is reported.
+- [x] AC5: The trail can be exported as one archive for an external auditor, readable without QAJitsu.
 
 ### REQ-VER-17 · Trusted timestamps
 
@@ -306,16 +308,16 @@ Anyone with access can run again exactly what was approved and compare.
 
 ### REQ-VER-21 · Open verifier and audit documentation
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: 9
 - Related: REQ-VER-15, REQ-NFR-06
 
 **Acceptance criteria**
 
-- [ ] AC1: The verifier is open source, works offline and needs no QAJitsu account or server.
-- [ ] AC2: The certificate and manifest formats are documented so a third party can write its own verifier.
-- [ ] AC3: The documentation states what a valid certificate proves (nothing was changed after the run, who approved what, what ran) and what it does not prove (that the plan covered every risk).
+- [x] AC1: The verifier is open source, works offline and needs no QAJitsu account or server.
+- [x] AC2: The certificate and manifest formats are documented so a third party can write its own verifier.
+- [x] AC3: The documentation states what a valid certificate proves (nothing was changed after the run, who approved what, what ran) and what it does not prove (that the plan covered every risk).
 
 ### REQ-VER-22 · Cross-layer consistency checks
 
@@ -329,3 +331,38 @@ Anyone with access can run again exactly what was approved and compare.
 - [ ] AC1: A case can assert that a value shown in the UI equals the API response and the stored record.
 - [ ] AC2: Database reads are read-only, use a configured test connection and are limited to allowlisted tables.
 - [ ] AC3: A layer that cannot be read makes the case BLOCKED, never PASSED.
+
+### REQ-VER-23 · Test code quality gate
+
+- Status: implemented
+- Priority: must
+- Stage: 7
+- Related: REQ-EXEC-03, REQ-VER-06, REQ-VER-09, REQ-VER-14, INV-1, INV-4
+
+An agent can write a bad test, like a person. The gate catches before the run the generated tests whose assertions do
+not depend on the application. Planned expectations without a `verify()` are already rejected (REQ-EXEC-03/AC2).
+
+**Acceptance criteria**
+
+- [x] AC1: Assertions whose result does not depend on the application are rejected: comparing constants, a value with itself, or the checked response with itself or a value derived from it (tautology).
+- [x] AC2: Code that can skip or swallow an assertion is rejected: an empty or swallowing `catch` around a `verify()`, a condition or an early `return` that lets a `verify()` be skipped, and skipped or disabled cases (`test.skip`, `test.fixme`, `.only`).
+- [x] AC3: An assertion on a too general target is rejected: the whole page, body or response where the plan names a specific field or element.
+- [x] AC4: A spec that fails the gate is not run; it goes back to the author with the findings once (as REQ-EXEC-03/AC4), then the case is BLOCKED with the findings, never PASSED.
+- [x] AC5: Every rule has a lying-agent test in the adversarial suite; the findings of the gate are listed in the case's record and in the report.
+
+### REQ-VER-24 · Human review of test code on demand
+
+- Status: implemented
+- Priority: could
+- Stage: 7
+- Related: REQ-VER-23, REQ-PLAN-04, REQ-EXEC-03, INV-1
+
+For a new project, a QA lead can read the generated tests before they run until the team trusts them.
+
+**Acceptance criteria**
+
+- [x] AC1: Turned on per project (for example for the first N runs or until switched off) or per run with a flag; off by default.
+- [x] AC2: With it on, generated specs wait for a person after the automatic checks; the person sees each spec next to its planned steps and expectations, and accepts it or sends it back with a reason.
+- [x] AC3: A spec sent back goes to the author once with the reason, then the case is BLOCKED; an unreviewed spec never runs.
+- [x] AC4: Each decision is recorded with the reviewer, the spec's SHA-256 and the time, in the run record and the journal; the report shows which specs a person reviewed.
+- [x] AC5: The review can only stop a spec; it never sets or changes a status.

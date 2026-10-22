@@ -1,6 +1,9 @@
 import { execFile } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { readFile, writeFile, mkdtemp, rm, mkdir, stat } from "node:fs/promises";
+import { createSandbox } from "./cli-sandbox.js";
+import { createCliExploreTools } from "./explore-cli-tools.js";
+import { createEventLog } from "@qajitsu/core";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -176,7 +179,7 @@ describe("qajitsu explore --cli (REQ-EXEC-24)", () => {
     expect(manifest.map((m) => m.path)).toEqual(expect.arrayContaining(session.recordings));
     const transcript = await readFile(join(dir, "evidence", "recordings", "terminal.txt"), "utf8");
     expect(transcript).toContain("$ tool hello $(whoami)\nhello $(whoami)\n→ exit code 0");
-    expect(transcript).toContain("[B1] listening; press Ctrl+C to stop\n");
+    expect(transcript).toMatch(/\[B1\] listening \(pid \d+\); press Ctrl\+C to stop\n/);
     expect(transcript).toContain("(Ctrl+C → B1)\n[B1] stopped\n");
     expect(transcript).not.toContain(DEMO_PASSWORD);
     const cast = (await readFile(join(dir, "evidence", "recordings", "terminal.cast"), "utf8")).split("\n");
@@ -525,6 +528,44 @@ describe("qajitsu explore --cli (REQ-EXEC-24)", () => {
     ]);
   }, 120_000);
 
+  it("REQ-EXEC-24/AC5: a stop that comes while a command is being started still stops it, not its own timeout", async () => {
+    // Found in the second exploratory pass: the queue let the call start, then Ctrl+C came while the files were
+    // snapshotted, before the command listened for it; an aborted signal fires no "abort" event, so serve ran until
+    // its 20 s timeout. Here the stop comes exactly then: when the action is announced, just before the command starts.
+    const sandbox = await createSandbox(undefined);
+    cleanups.push(() => rm(sandbox.root, { recursive: true, force: true }));
+    const stop = new AbortController();
+    const recorder = createCliExploreTools({
+      program: process.execPath,
+      baseArgs: [fileURLToPath(new URL("../../../../fixtures/cli-tool/tool.mjs", import.meta.url))],
+      sandbox,
+      store: {
+        put: (e) => Promise.resolve({ ...e, sha256: "0".repeat(64), bytes: 0 }),
+        manifest: () => Promise.resolve([]),
+      },
+      env: {},
+      timeoutMs: 20_000,
+      mask: (t) => t,
+      events: createEventLog({
+        ticket: "DEMO-4",
+        run: "r",
+        write: (line) => {
+          if (line.includes('"explore.action_started"')) stop.abort();
+        },
+        now: () => new Date(0),
+        mask: (v) => v,
+      }),
+      maxSteps: 10,
+      now: () => new Date(),
+    });
+    const started = Date.now();
+    await recorder.tools.find((t) => t.name === "cli_run")?.execute({ args: ["serve"] }, stop.signal);
+    expect(Date.now() - started).toBeLessThan(10_000);
+    expect(recorder.actions.map((a) => [a.id, a.timedOut, a.endedBy !== undefined])).toEqual([
+      ["A01", false, true],
+    ]);
+  }, 60_000);
+
   it("REQ-EXEC-24/AC5: Ctrl+C stops the session, and what it started and its sandbox are gone afterwards", async () => {
     const p = await project();
     const signals = new EventEmitter();
@@ -533,7 +574,8 @@ describe("qajitsu explore --cli (REQ-EXEC-24)", () => {
       void readFile(journal, "utf8")
         .catch(() => "")
         .then((text) => {
-          if (text.includes('"event":"explore.action"')) {
+          // Ctrl+C while the second command (A02, serve) runs.
+          if (/"event":"explore\.action_started".*"id":"A02"/.test(text)) {
             clearInterval(press);
             signals.emit("SIGINT");
           }
@@ -552,14 +594,19 @@ describe("qajitsu explore --cli (REQ-EXEC-24)", () => {
     const session = CliExploreSessionSchema.parse(
       JSON.parse(await readFile(join(p.runDir, "explore", "S01", "session.json"), "utf8")),
     );
-    // B1 is reported as left running or as cleaned up (under load it can end between the two scans), and its process
-    // does not outlive the session either way.
+    // B1's process does not outlive the session. Its pid comes from its own output in the terminal recording: under load
+    // it can end between the session's two scans and then is listed neither as left running nor as cleaned up.
+    const recording = await readFile(
+      join(p.runDir, "explore", "S01", "evidence", "recordings", "terminal.txt"),
+      "utf8",
+    );
+    const pid = Number(/\[B1\] listening \(pid (\d+)\)/.exec(recording)?.[1]);
+    expect(pid).toBeGreaterThan(0);
+    expect(() => process.kill(pid, 0)).toThrow();
     const b1 = [...session.leftovers.processes, ...session.cleaned.processes].find((c) =>
       c.startsWith("B1 "),
     );
-    expect(b1).toMatch(/^B1 \(pid \d+\)/);
-    const pid = Number(/pid (\d+)/.exec(b1 ?? "")?.[1]);
-    expect(() => process.kill(pid, 0)).toThrow();
+    if (b1 !== undefined) expect(b1).toMatch(/^B1 \(pid \d+\)/);
     // The running serve was stopped by Ctrl+C, not by its own 20 s timeout.
     expect(session.actions.map((a) => [a.id, a.timedOut, a.endedBy !== undefined])).toEqual([
       ["A01", false, false],

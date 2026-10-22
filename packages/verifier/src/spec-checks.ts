@@ -1,5 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import { plannedFields } from "./expectations.js";
+import { checkSpecQuality } from "./spec-quality.js";
 import { dirname, join } from "node:path";
 import type { Plan } from "@qajitsu/core";
 import ts from "typescript";
@@ -7,7 +8,7 @@ import ts from "typescript";
 /** One problem found in a generated spec. */
 export interface SpecProblem {
   /** `review` findings are reported but do not block execution (e.g. CSS selectors, REQ-EXEC-05/AC2). */
-  readonly check: "typecheck" | "lint" | "coverage" | "assertion-lock" | "review";
+  readonly check: "typecheck" | "lint" | "coverage" | "assertion-lock" | "quality" | "review";
   readonly message: string;
   readonly line?: number;
 }
@@ -475,6 +476,9 @@ export function checkSpecSource(
           `${runsAs} but step ${a.step} calls api.${a.verb} without logging in: use the client api.as("${account}") returns`,
         );
   }
+  // REQ-VER-23: the test code quality gate; its findings stop the spec like any other check.
+  for (const f of checkSpecQuality(source, caseId, plan))
+    problems.push({ check: "quality", message: `${f.rule}: ${f.message}`, line: f.line });
   return problems;
 }
 

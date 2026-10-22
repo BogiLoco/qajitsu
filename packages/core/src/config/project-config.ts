@@ -561,6 +561,29 @@ export const ProjectConfigSchema = z.strictObject({
     })
     .default({ version: "1", tolerate: { medium: [], low: [] } }),
   /**
+   * Human review of generated specs (REQ-VER-24): a person reads each spec next to its planned steps before it runs,
+   * for the project's first `first_runs` executed runs, or always. Off by default; `qj run --review-specs` turns it
+   * on for one run.
+   */
+  spec_review: z
+    .strictObject({
+      first_runs: z.number().int().min(0).default(0),
+      always: z.boolean().default(false),
+    })
+    .default({ first_runs: 0, always: false }),
+  /**
+   * Signed test certificates (REQ-VER-15): with `signing_key` (an Ed25519 private key in PEM, or its base64, from the
+   * secret provider) every published run gets a certificate over its audit trail. Public keys that verify them live
+   * in `.qa/keys/*.pub`, old ones stay there after a rotation. With `required`, a run whose audit trail has gaps is
+   * not published.
+   */
+  certificate: z
+    .strictObject({
+      signing_key: SecretRef.optional(),
+      required: z.boolean().default(false),
+    })
+    .default({ required: false }),
+  /**
    * Visual regression (REQ-EXEC-12): baselines live in `.qa/baselines/`; `threshold` is the default share of differing
    * pixels that still passes, `color_threshold` the per-pixel sensitivity (0 exact, 1 anything).
    */

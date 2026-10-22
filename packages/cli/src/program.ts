@@ -53,6 +53,9 @@ import { runExplore, runExplorePromote } from "./commands/explore.js";
 import { runExploreReview } from "./commands/explore-review.js";
 import { runBench } from "./commands/bench.js";
 import { runAuditVerify } from "./commands/audit.js";
+import { runAuditExport, runAuditTrail } from "./commands/audit-trail.js";
+import { runCertify, runKeygen, runVerifyReport } from "./commands/certificate.js";
+import { runReviewSpec } from "./commands/spec-review.js";
 import { runTelemetryExport } from "./commands/telemetry.js";
 import { runMetrics } from "./commands/metrics.js";
 import { runExport } from "./commands/export.js";
@@ -60,7 +63,7 @@ import { runMap } from "./commands/map.js";
 import { runCiComment, runCiDetect, runCiPublishPlan } from "./commands/ci.js";
 import { loadProject, type LoadedProject } from "./project.js";
 import type { ModelPorts } from "./session.js";
-import { formatDoctor, reportedBy, runDoctor } from "./doctor.js";
+import { formatDoctor, missingToolChecks, reportedBy, runDoctor } from "./doctor.js";
 import { projectChecks } from "./doctor-project.js";
 import { appVersions, formatAppVersions } from "./app-versions.js";
 import { formatToolVersions, toolVersions } from "./versions.js";
@@ -131,6 +134,8 @@ export function createProgram(version: string, io: ProgramIO): Command {
   let projectError: unknown;
   const PROJECT_FREE = new Set([
     "init",
+    // An external auditor checks a certificate without any project (REQ-VER-21/AC1).
+    "verify-report",
     "use",
     "projects list",
     "projects current",
@@ -536,18 +541,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
         ...(io.ports?.playwright ? { playwright: io.ports.playwright } : {}),
       });
       // docker and appium are already checks of their own above; the others fail here when needed and missing.
-      for (const t of tools)
-        if (
-          t.needed &&
-          t.version === undefined &&
-          !checks.some((c) => c.name === t.name) &&
-          reportedBy(t.name, checks) === undefined
-        )
-          checks.push({
-            name: t.name,
-            ok: false,
-            detail: `not found (needed for ${t.why ?? "this project"})${t.install ? `; install: ${t.install}` : ""}`,
-          });
+      checks.push(...missingToolChecks(tools, checks));
       const app =
         loaded && io.ports
           ? await appVersions(
@@ -701,6 +695,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
       "--sequential",
       "one case at a time in plan order, across API, web and mobile (default: lanes run at the same time)",
     )
+    .option("--review-specs", "a person reviews every generated spec before it runs (REQ-VER-24)")
     .option(
       "--fix-check",
       "with --build: verify a bug fix: cases marked reproduces must FAIL before the fix and PASS with it",
@@ -720,6 +715,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
           slowMo?: string;
           step?: boolean;
           sequential?: boolean;
+          reviewSpecs?: boolean;
         },
       ) => {
         const { fixCheck, ...runOptions } = options;
@@ -729,6 +725,20 @@ export function createProgram(version: string, io: ProgramIO): Command {
             : runRun(ticket, { ...runOptions, user: io.user }, commandIO, ports),
         )();
       },
+    );
+
+  program
+    .command("review-spec")
+    .description(
+      "Read the generated specs that wait for a person, and accept one or send it back to the author",
+    )
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .option("--case <id>", "the case whose spec to show or decide on")
+    .option("--accept", "accept the spec as it is now; qj run runs it")
+    .option("--send-back <reason>", "send the spec back; the author writes it again once with this reason")
+    .action((ticket: string, options: { run?: string; case?: string; accept?: boolean; sendBack?: string }) =>
+      withPorts((ports) => runReviewSpec(ticket, options, commandIO, ports, io.user ?? "unknown"))(),
     );
 
   program
@@ -976,9 +986,8 @@ export function createProgram(version: string, io: ProgramIO): Command {
       withPorts((ports) => runBench(options, commandIO, ports, review))(),
     );
 
-  program
-    .command("audit")
-    .description("Audit log tools")
+  const audit = program.command("audit").description("Audit log and audit trail tools");
+  audit
     .command("verify")
     .description("Check the hash chain of run journals (also archived ones)")
     .argument("[ticket]", "Jira key, e.g. SHOP-482")
@@ -988,6 +997,59 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .action((ticket: string | undefined, options: { run?: string; all?: boolean; file?: string }) =>
       withPorts((ports) => runAuditVerify(ticket, options, commandIO, ports))(),
     );
+  audit
+    .command("trail")
+    .description("List everything that influenced the verdict of a run, with hashes, and what is missing")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .action((ticket: string, options: { run?: string }) =>
+      withPorts((ports) => runAuditTrail(ticket, options, commandIO, ports))(),
+    );
+  audit
+    .command("export")
+    .description(
+      "Export the audit trail of a run as one zip for an external auditor, readable without QAJitsu",
+    )
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .option("--out <file>", "zip to write (default: the project's exports folder)")
+    .action((ticket: string, options: { run?: string; out?: string }) =>
+      withPorts((ports) => runAuditExport(ticket, options, commandIO, ports))(),
+    );
+  audit
+    .command("certify")
+    .description("Issue the signed certificate of a run from its complete audit trail, without publishing")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .action((ticket: string, options: { run?: string }) =>
+      withPorts((ports) => runCertify(ticket, options, commandIO, ports))(),
+    );
+  audit
+    .command("keygen")
+    .description("Create an Ed25519 key for signing certificates; the public key goes to .qa/keys/")
+    .action(() => withPorts((ports) => runKeygen(commandIO, ports))());
+
+  program
+    .command("verify-report")
+    .description("Check the certificate of a run folder or audit export: signature, Merkle root, every file")
+    .argument("<path>", "run folder or audit export zip")
+    .option(
+      "--key <file>",
+      "trusted public key (PEM); repeat for rotated keys",
+      (v: string, all: string[]) => [...all, v],
+      [] as string[],
+    )
+    .action(async (path: string, options: { key: string[] }) => {
+      if (!io.ports) return withPorts(() => Promise.resolve(3))();
+      // Inside a project its .qa/keys are trusted too; outside one, only --key.
+      const project = await resolveProject(qajitsuHome(io.ports.env, io.ports.home), {
+        flag: program.opts<{ project?: string }>().project,
+        env: io.ports.env["QAJITSU_PROJECT"],
+      }).catch(() => undefined);
+      io.setExitCode(
+        await runVerifyReport(path, options, commandIO, { ...io.ports, ...(project ? { project } : {}) }),
+      );
+    });
 
   program
     .command("telemetry")

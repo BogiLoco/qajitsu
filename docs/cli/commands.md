@@ -7,12 +7,12 @@ Every `qajitsu` (alias `qj`) command with its options and exit codes. The guides
 
 Exit codes follow one scheme (REQ-CI-04):
 
-| Code | Meaning                                                                                        |
-| ---- | ---------------------------------------------------------------------------------------------- |
-| `0`  | success; for commands that report test results: every case PASSED                              |
-| `1`  | at least one case FAILED (or, for `audit verify`, a broken journal)                            |
-| `2`  | nothing failed, but not everything passed or the command stopped at a human decision           |
-| `3`  | configuration or framework error: nothing was decided, fix the setup and run the command again |
+| Code | Meaning                                                                                                   |
+| ---- | --------------------------------------------------------------------------------------------------------- |
+| `0`  | success; for commands that report test results: every case PASSED                                         |
+| `1`  | at least one case FAILED (or, for `audit verify`, a broken journal; for `audit trail` and `export`, gaps) |
+| `2`  | nothing failed, but not everything passed or the command stopped at a human decision                      |
+| `3`  | configuration or framework error: nothing was decided, fix the setup and run the command again            |
 
 `--help` on any command prints its options; `--version` prints the version.
 
@@ -317,6 +317,10 @@ page or screen showed, masked), which the healer gets; mobile cases are healed t
   (REQ-EXEC-19/AC2); also `execution.sequential: true`. Without it the lanes run at the same time: API cases
   (`execution.workers.api`), web cases (`execution.workers.web`, with `execution.web_combinations` browser combinations
   at once) and mobile cases on every device; each case holds its own pool accounts while it runs (REQ-ENV-09)
+- `--review-specs`: a person reads every generated spec next to its planned steps before it runs (REQ-VER-24); also
+  `spec_review: { always: true }` or `{ first_runs: N }` for the project's first runs. In a terminal each spec is
+  accepted (`y`) or sent back with a reason; the author writes it again once, a second send-back makes the case
+  BLOCKED. Without a terminal the run stops before anything ran (exit `2`) and names `qj review-spec`.
 - `--fix-check`: with `--build`, verify a bug fix (REQ-VER-11): after this run, a sibling run builds the commit the
   change branched from and runs the same approved plan and specs; every case marked `reproduces` must be FAILED before
   the fix and PASSED with it. Both results appear side by side in the report and the Jira comment.
@@ -870,6 +874,20 @@ Makes real model calls; never in PR CI.
 
 Exit codes: `0` the benchmark completed (whatever the scores), `3` configuration errors.
 
+### `qajitsu review-spec <ticket>`
+
+Reads and decides on the generated specs that wait for a person (REQ-VER-24). Without a decision it shows each spec
+next to its planned steps and expectations. A decision is recorded with the reviewer, the spec's SHA-256 and the time
+in `run.json` and the journal, and counts only for exactly that spec: a spec changed afterwards waits again. The
+report lists which specs a person reviewed. A review can only stop a spec, never set a status.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+- `--case <id>`: the case whose spec to show or decide on (needed for a decision)
+- `--accept`: accept the spec as it is now; `qj run` runs it
+- `--send-back <reason>`: the next `qj run` has the author write it again once with the reason
+
+Exit codes: `0` shown or decided, `2` no spec to review, `3` errors (also after the run was executed).
+
 ### `qajitsu audit verify [ticket]`
 
 Checks the hash chain of run journals, also archived ones.
@@ -879,6 +897,62 @@ Checks the hash chain of run journals, also archived ones.
 - `--file <journal>`: verify this journal file instead
 
 Exit codes: `0` every journal intact, `1` a chain is broken, `3` errors.
+
+### `qajitsu audit trail <ticket>`
+
+Lists everything that influenced the verdict of a run, with the SHA-256 of every file (REQ-VER-16): the ticket
+snapshot, commit and diff, every plan version and its approval, the generated tests, tool versions, container image
+digests, the tested environment, raw runner output, evidence, checks, reports, the event journal and the agent
+transcript (`journal/agents.jsonl`: every prompt, answer and tool call, masked). Writes `audit/trail.json` and lists
+the gaps: a missing file, a hash that does not match, a model call without its stored prompt and answer. The trail is
+always recomputed from the files; an edited `trail.json` changes nothing.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+
+Exit codes: `0` the trail is complete, `1` it has gaps, `3` errors.
+
+### `qajitsu audit export <ticket>`
+
+The audit trail of a run as one zip for an external auditor, readable without QAJitsu: the files, `audit/trail.json`,
+`SHA256SUMS` (check with `sha256sum -c SHA256SUMS`) and a `README.txt`. Every file is secret-scanned first; a secret
+value stops the export. `env/` is never included; Playwright traces stay with the run and are named in the README.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+- `--out <file>`: zip to write (default: the project's exports folder)
+
+Exit codes: `0` written from a complete trail, `1` written but the trail has gaps, `3` errors.
+
+### `qajitsu audit certify <ticket>`
+
+Issues the signed certificate of a run without publishing it (REQ-VER-15). The reports are rendered again by code
+first, so a hand-edited report is never certified. A run whose audit trail has gaps gets no certificate; neither does a
+run whose results, evidence, plan or journal changed after its certificate was issued. A valid certificate of the same
+files and key is kept, so its id stays the same. `qj publish` issues the certificate the same way whenever
+`certificate.signing_key` is set.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+
+Exit codes: `0` issued (or still valid), `1` no certificate (gaps listed), `3` errors or no signing key.
+
+### `qajitsu audit keygen`
+
+Creates an Ed25519 signing key. The private key is written with mode 0600 into the project home and never printed; put
+it into the secret provider (`certificate.signing_key: secret://...`, PEM or base64 PEM) and delete the file. The
+public key goes to `.qa/keys/<id>.pub` to be committed; keep older public keys there after a rotation so the
+certificates they signed keep verifying.
+
+Exit codes: `0` created, `3` errors.
+
+### `qajitsu verify-report <path>`
+
+Checks the certificate of a run folder or of an audit export zip (REQ-VER-15/AC3): the signature with a trusted public
+key, the format, the Merkle root, and every covered file (journals and logs up to the size they had). Lists every
+changed or missing file. Works offline, without the run's project.
+
+- `--key <file>`: trusted public key in PEM; repeat for rotated keys. Inside a project `.qa/keys/*.pub` are trusted too.
+
+Exit codes: `0` valid, `1` a file changed or is missing, or the key is not trusted, `3` no certificate or an
+unreadable path.
 
 ## Observability
 

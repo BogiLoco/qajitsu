@@ -25,6 +25,7 @@ import { openSession, type ModelPorts, type RunSession } from "../session.js";
 import { annotatedFirst } from "./annotated.js";
 import type { CommandIO } from "./fetch.js";
 import { exportRunTelemetry } from "./telemetry.js";
+import { certificateForPublish, certifiedVerdict } from "./certificate.js";
 import { anchorJournal, codeAccessNote, computeVerdict, writeReports, type RunVerdict } from "./verdict.js";
 
 /** Options of `qajitsu publish`. */
@@ -206,6 +207,8 @@ export async function runPublish(
         },
       );
     }
+    // REQ-VER-15: the certificate is issued before anything leaves the run, so the comment can name it.
+    const certificate = await certificateForPublish(session, io, ports.now, certifiedVerdict(verdict));
     const evidenceZip = await buildEvidenceZip(session, verdict);
     // Failure screenshots and videos are attached individually so they show without unzipping (REQ-PUB-02/AC2).
     const failing = new Set(
@@ -255,6 +258,7 @@ export async function runPublish(
           `${a.name} (${String(Math.ceil(a.bytes / 1e6))} MB) is larger than the ${String(project.config.publish.max_attachment_mb)} MB limit and stays in the run folder.`,
       );
     notes.push(`Evidence zip sha256 ${zipHash}; Playwright traces stay in the run folder.`);
+    notes.push(...certificate);
     const attachments = [evidenceZip, ...media];
     const model = commentModel(
       session,

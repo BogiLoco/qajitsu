@@ -13,6 +13,7 @@ import {
 } from "ai";
 import { z } from "zod";
 import { AgentOutputError } from "./errors.js";
+import { modelExchange } from "./exchange.js";
 import type { UsageTracker } from "./usage.js";
 
 /** A tool an agent may call. Execution happens only after the guard allows it (REQ-VER-03/AC3). */
@@ -208,10 +209,17 @@ export async function runStructuredAgent<T extends z.ZodType>(
       ];
       continue;
     }
-    run.usage.record(run.stage, run.role, run.model.id, run.model.profile, {
-      inputTokens: result.usage.inputTokens ?? 0,
-      outputTokens: result.usage.outputTokens ?? 0,
-    });
+    run.usage.record(
+      run.stage,
+      run.role,
+      run.model.id,
+      run.model.profile,
+      {
+        inputTokens: result.usage.inputTokens ?? 0,
+        outputTokens: result.usage.outputTokens ?? 0,
+      },
+      modelExchange(run.stage, run.role, run.model, { system: run.system, messages }, result),
+    );
     let errors: string[];
     try {
       const parsed = run.schema.safeParse(extractJson(result.text));

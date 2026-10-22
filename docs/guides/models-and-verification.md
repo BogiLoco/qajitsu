@@ -119,6 +119,26 @@ the check of the buggy field.
 A practical split: a cloud or LiteLLM model for `planner` and `author`, a local model for `summary` and as
 `auditor`. Measure before you decide (`qajitsu bench` below).
 
+## The test code quality gate (REQ-VER-23)
+
+An agent can write a bad test, like a person. Before a generated spec runs, code checks it for assertions that cannot
+fail or can be skipped; a finding sends the spec back to the author once with the finding, then the case is BLOCKED
+with it, never PASSED. The findings are in the case's record and in the report.
+
+| Rule               | What it stops                                                                                                      |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `constant-actual`  | a constant, a planned value (`plan.expect(...)`) or `x === x` passed as the actual value                           |
+| `skippable-verify` | a `verify()` inside an `if`, `?:`, `&&`/`\|\|`/`??`, `switch`, loop, `try`/`catch` block, callback or `?.()`       |
+| `early-return`     | a `return` before a `verify()` of the same step or of a later step                                                 |
+| `swallowed-error`  | an empty `catch {}` or `.catch(() => {})` anywhere in the spec                                                     |
+| `disabled-case`    | `.skip`, `.fixme`, `.only`, `.todo`, `xit`, `xdescribe`                                                            |
+| `general-target`   | an element check on the whole page (`css:body`, `css:html`, `role:main`, ...) or a planned text under 3 characters |
+
+The runtime never takes the actual value from the spec: it reads the response or the live page itself and the
+expected value from the frozen plan, so even a spec that slipped through would fail on a bug. The gate exists so bad
+test code is visible and fixed, not run. What it cannot see is a test that is correct but checks too little, for
+example only the status and not the amount: the plan's expectations decide that, so review them before you approve.
+
 ## The auditor (REQ-VER-06)
 
 After the runner, a separate agent with fresh context reviews every **PASSED** case: the approved plan,

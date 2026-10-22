@@ -13,6 +13,8 @@ export * from "./workspace/run-workspace.js";
 export * from "./workspace/locks.js";
 export * from "./workspace/maintenance.js";
 export * from "./events/event-log.js";
+export * from "./events/transcript.js";
+export * from "./certificate.js";
 export * from "./secrets/secret-resolver.js";
 export * from "./http/http-client.js";
 export * from "./git/git-repos.js";

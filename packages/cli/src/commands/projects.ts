@@ -18,6 +18,8 @@ import {
 } from "@qajitsu/core";
 import type { RuntimePorts } from "../adapters.js";
 import { projectChecks } from "../doctor-project.js";
+import { missingToolChecks } from "../doctor.js";
+import { qajitsuVersion, toolVersions } from "../versions.js";
 import { loadProject } from "../project.js";
 import type { CommandIO } from "./fetch.js";
 import { runInit } from "./init.js";
@@ -109,7 +111,15 @@ export async function runProjectInit(
       const project = await loadProject(dirname(qaDir));
       if (prefixes.length === 0 && project.config.jira.project_key)
         prefixes = [project.config.jira.project_key];
-      for (const check of await projectChecks(project, ports, { online: false }))
+      const checks = await projectChecks(project, ports, { online: false });
+      // REQ-GEN-08/AC1: the same missing tools doctor names (Compose, browsers), not only the project checks.
+      const tools = await toolVersions({
+        qajitsu: qajitsuVersion(),
+        node: process.version,
+        project,
+        ...(ports.versionExec ? { exec: ports.versionExec } : {}),
+      });
+      for (const check of [...checks, ...missingToolChecks(tools, checks)])
         if (!check.ok) problems.push(`${check.name}: ${check.detail}`);
     } catch (error) {
       problems.push(error instanceof Error ? error.message : String(error));

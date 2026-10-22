@@ -1,4 +1,4 @@
-import type { Actor, EventLog } from "@qajitsu/core";
+import type { Actor, EventLog, ModelExchange, TranscriptRecorder } from "@qajitsu/core";
 import type { ModelProfile } from "@qajitsu/models";
 import { TokenBudgetExceededError } from "./errors.js";
 
@@ -10,8 +10,18 @@ export interface CallUsage {
 
 /** Accumulates usage per run, journals it and enforces the token budget (REQ-LLM-07). */
 export interface UsageTracker {
-  /** Records one call; throws when the budget is exceeded. */
-  record(stage: string, role: string, modelId: string, profile: ModelProfile, usage: CallUsage): void;
+  /**
+   * Records one call; throws when the budget is exceeded. With `exchange`, the prompt and answer go to the transcript
+   * and the journal keeps their hash (REQ-VER-16/AC2).
+   */
+  record(
+    stage: string,
+    role: string,
+    modelId: string,
+    profile: ModelProfile,
+    usage: CallUsage,
+    exchange?: ModelExchange,
+  ): void;
   /** Total tokens so far (input + output). */
   readonly total: number;
   /** Estimated cost of the run so far in USD, earlier stages included (REQ-LLM-09/AC3). */
@@ -35,6 +45,8 @@ export function createUsageTracker(options: {
   readonly alreadyCostKnown?: boolean | undefined;
   /** `budget.max_cost_usd`: once the run's cost reaches it, further model calls stop (REQ-LLM-09/AC4). */
   readonly costBudgetUsd?: number | undefined;
+  /** Stores each model exchange (`journal/agents.jsonl`, REQ-VER-16/AC2). */
+  readonly transcript?: TranscriptRecorder | undefined;
 }): UsageTracker {
   let total = options.alreadyUsed ?? 0;
   let cost = options.alreadyCostUsd ?? 0;
@@ -49,7 +61,7 @@ export function createUsageTracker(options: {
     get costKnown() {
       return known;
     },
-    record(stage, role, modelId, profile, usage) {
+    record(stage, role, modelId, profile, usage, exchange) {
       total += usage.inputTokens + usage.outputTokens;
       const price = profile.costPerMTok;
       const callCost =
@@ -59,6 +71,7 @@ export function createUsageTracker(options: {
       if (callCost !== undefined) cost += callCost;
       else known = false;
       const actor: Actor = { kind: "agent", name: role };
+      const stored = exchange && options.transcript ? options.transcript(exchange) : undefined;
       options.events.emit(stage, actor, "model.usage", {
         role,
         model: modelId,
@@ -66,6 +79,7 @@ export function createUsageTracker(options: {
         outputTokens: usage.outputTokens,
         ...(callCost === undefined ? {} : { costUsd: Number(callCost.toFixed(6)) }),
         runTotalTokens: total,
+        ...(stored ? { exchangeSha256: stored.sha256 } : {}),
       });
       if (options.budget !== undefined && total > options.budget) {
         options.events.emit(stage, { kind: "system", name: "orchestrator" }, "budget.exceeded", {

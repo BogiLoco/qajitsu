@@ -12,6 +12,7 @@ import {
 } from "@qajitsu/verifier";
 import { generateText } from "ai";
 import { extractCode } from "./author.js";
+import { modelExchange } from "./exchange.js";
 import { untrusted, UNTRUSTED_DATA_RULES } from "./context.js";
 import { modelForRole, type AgentStageDeps } from "./roles-run.js";
 
@@ -59,36 +60,44 @@ export async function healSpec(
     attempt: request.attempt,
     model: model.id,
   });
+  const prompt = [
+    `Heal ${request.caseId}.`,
+    "## Spec",
+    "```ts",
+    original,
+    "```",
+    "## Error",
+    untrusted("error", request.error),
+    ...(request.screen
+      ? [
+          untrusted(
+            "ui/failure",
+            renderUiSnapshot([request.screen], 120, "What the page or screen showed at the failure"),
+          ),
+        ]
+      : []),
+    ...(request.dom
+      ? ["## Page DOM at the failure (truncated)", untrusted("dom", request.dom.slice(0, 20_000))]
+      : []),
+  ].join("\n");
   const result = await generateText({
     model: model.model,
     system: HEALER_SYSTEM,
-    prompt: [
-      `Heal ${request.caseId}.`,
-      "## Spec",
-      "```ts",
-      original,
-      "```",
-      "## Error",
-      untrusted("error", request.error),
-      ...(request.screen
-        ? [
-            untrusted(
-              "ui/failure",
-              renderUiSnapshot([request.screen], 120, "What the page or screen showed at the failure"),
-            ),
-          ]
-        : []),
-      ...(request.dom
-        ? ["## Page DOM at the failure (truncated)", untrusted("dom", request.dom.slice(0, 20_000))]
-        : []),
-    ].join("\n"),
+    prompt,
     ...(deps.signal ? { abortSignal: deps.signal } : {}),
     maxRetries: 2,
   });
-  deps.usage.record("heal", "healer", model.id, model.profile, {
-    inputTokens: result.usage.inputTokens ?? 0,
-    outputTokens: result.usage.outputTokens ?? 0,
-  });
+  deps.usage.record(
+    "heal",
+    "healer",
+    model.id,
+    model.profile,
+    {
+      inputTokens: result.usage.inputTokens ?? 0,
+      outputTokens: result.usage.outputTokens ?? 0,
+    },
+    modelExchange("heal", "healer", model, { system: HEALER_SYSTEM, prompt }, result),
+  );
   const code = extractCode(result.text);
   let problems: SpecProblem[] =
     code === undefined ? [{ check: "lint", message: "answer contained no ```ts code block" }] : [];

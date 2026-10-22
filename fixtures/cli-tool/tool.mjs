@@ -52,7 +52,7 @@ switch (command) {
     break;
   }
   case "serve": {
-    console.log("listening; press Ctrl+C to stop");
+    console.log(`listening (pid ${String(process.pid)}); press Ctrl+C to stop`);
     const keep = setInterval(() => undefined, 1 << 30);
     process.on("SIGINT", () => {
       console.log("stopped");

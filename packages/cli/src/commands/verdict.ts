@@ -1,4 +1,6 @@
 import { annotatedFirst } from "./annotated.js";
+import { sealProblems } from "./audit-trail.js";
+import { specReviewNotes } from "./spec-review.js";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readManifest } from "@qajitsu/adapter-evidence-local";
@@ -25,6 +27,7 @@ import {
   type Plan,
   type PlanApproval,
   type ApprovalStep,
+  type CertificateSummary,
 } from "@qajitsu/core";
 import {
   buildTransitionGraph,
@@ -133,6 +136,17 @@ const FixCheckDataSchema = z.object({
     }),
   ),
 });
+
+/** Stages that act on a finished run; their journal events stay out of the report's timeline. */
+const AFTER_VERDICT = new Set(["publish", "certificate", "promote", "ci"]);
+
+/** The certificate recorded for the run (REQ-VER-15/AC7), when one was issued. */
+export function certificateOf(data: Readonly<Record<string, unknown>>): CertificateSummary | undefined {
+  const c = data["certificate"] as Partial<CertificateSummary> | undefined;
+  return typeof c?.id === "string" && typeof c.merkleRoot === "string" && typeof c.keyId === "string"
+    ? { id: c.id, merkleRoot: c.merkleRoot, keyId: c.keyId }
+    : undefined;
+}
 
 /**
  * Re-reads results, evidence and the approved plan of a run and computes everything a report or a
@@ -346,6 +360,8 @@ export async function computeVerdict(
   const cases = combined.map((c, i) => ({ ...c, status: checked[i]?.status ?? c.status }));
   const checkNotes = [
     ...(approvalNote ? [approvalNote] : []),
+    // REQ-VER-24/AC4: which specs a person reviewed, by whom, on which version.
+    ...specReviewNotes(ws.record.data),
     ...approvalCheck.problems.map((p) => `Approval record problem: ${p}`),
     ...(audit?.status === "done"
       ? [
@@ -478,8 +494,10 @@ export async function computeVerdict(
     ws.record.data["journal"] as { lines: number; tail: string } | undefined,
   );
   const { events } = parseEventLines(journalText);
+  // Publishing, certifying and promoting come after the verdict and are not part of the run: rendering the report
+  // again after them gives the same report, so its certificate stays valid (REQ-VER-15).
   const timeline = events
-    .filter((e) => !["tool_result", "model.usage"].includes(e.event))
+    .filter((e) => !["tool_result", "model.usage"].includes(e.event) && !AFTER_VERDICT.has(e.stage))
     .map((e) => {
       const d = (e.details ?? {}) as Record<string, unknown>;
       const caseId = typeof d["caseId"] === "string" ? d["caseId"] : undefined;
@@ -574,7 +592,10 @@ export async function computeVerdict(
       ticket: ws.ticket,
       summary,
       runId: ws.runId,
-      generatedAt: now().toISOString(),
+      // The time the run finished, not the time of this rendering: rendering again gives the same report, so a
+      // certificate over it stays valid (REQ-VER-15).
+      generatedAt: ws.record.checkpoints.filter((c) => c.stage === "run").at(-1)?.at ?? now().toISOString(),
+      ...(certificateOf(ws.record.data) ? { certificate: certificateOf(ws.record.data) } : {}),
       plan,
       planSha256: approval.sha256,
       ...(approvalNote ? { approvalNote } : {}),
@@ -616,6 +637,7 @@ export async function computeVerdict(
   const unlisted = (await listEvidenceFiles(ws.path("evidence"))).filter(
     (p) => p !== "manifest.json" && !listed.has(p),
   );
+  const sealed = await sealProblems(session, journalText);
   const gates: GateResult[] = [
     ...evaluated.gates,
     secretGate,
@@ -631,6 +653,8 @@ export async function computeVerdict(
       ok: approvalCheck.problems.length === 0,
       problems: [...approvalCheck.problems],
     },
+    // REQ-VER-15/AC8: results, specs and the manifest are the ones the run sealed when it ended.
+    { gate: "run-sealed", ok: sealed.length === 0, problems: sealed },
     // REQ-OBS-05: the journal published with the results must be the one that was written.
     {
       gate: "journal-intact",

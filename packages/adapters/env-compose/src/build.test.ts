@@ -327,6 +327,19 @@ describe("--build environment (REQ-ENV-03, REQ-ENV-04, REQ-CFG-05, REQ-WS-02)", 
         return { stdout: `127.0.0.1:${String(args.includes("db") ? ports[0] : ports[1])}\n`, stderr: "" };
       if (args.includes("logs")) return { stdout: "service log line db-secret-123456\n", stderr: "" };
       if (args.includes("config")) return { stdout: JSON.stringify(composeModel), stderr: "" };
+      if (args.includes("images"))
+        return {
+          stdout: JSON.stringify([
+            {
+              ID: `sha256:${"a".repeat(64)}`,
+              ContainerName: "qj-demo-1-aaaa-db-1",
+              Repository: "postgres",
+              Tag: "16",
+              Size: 1,
+            },
+          ]),
+          stderr: "",
+        };
       return { stdout: "", stderr: "" };
     };
     const env = await startBuildEnvironment({
@@ -378,6 +391,10 @@ describe("--build environment (REQ-ENV-03, REQ-ENV-04, REQ-CFG-05, REQ-WS-02)", 
       expect(await readFile(join(ws.envDir, "compose.overlay.yml"), "utf8")).not.toContain("env_file");
       expect(JSON.stringify(overlay)).toContain("env_file");
       expect(env.stubs).toEqual(["payments (wiremock)"]);
+      // REQ-VER-16/AC1: the image digests of the started containers are part of the audit trail.
+      expect(env.images).toEqual([
+        { container: "qj-demo-1-aaaa-db-1", image: "postgres:16", id: `sha256:${"a".repeat(64)}` },
+      ]);
       expect(env.services["db"]?.url).toBe(`http://127.0.0.1:${String(ports[0])}`);
     } finally {
       await env.stop();
