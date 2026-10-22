@@ -284,7 +284,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-FLOW-02](requirements/workflow.md#req-flow-02--status-mapping-per-project) Status mapping per project (must, implemented, AC 3/3)
 - [REQ-FLOW-03](requirements/workflow.md#req-flow-03--plan-approval-in-the-ticket) Plan approval in the ticket (must, proposed, AC 0/7)
 - [REQ-FLOW-04](requirements/workflow.md#req-flow-04--transition-policy-from-the-verdict) Transition policy from the verdict (must, implemented, AC 5/5)
-- [REQ-FLOW-05](requirements/workflow.md#req-flow-05--one-run-per-ticket-and-loop-limits) One run per ticket and loop limits (must, proposed, AC 0/3)
+- [REQ-FLOW-05](requirements/workflow.md#req-flow-05--one-run-per-ticket-and-loop-limits) One run per ticket and loop limits (must, implemented, AC 3/3)
 - [REQ-FLOW-06](requirements/workflow.md#req-flow-06--cost-budget-per-ticket-and-per-month) Cost budget per ticket and per month (should, proposed, AC 0/2)
 - [REQ-FLOW-07](requirements/workflow.md#req-flow-07--run-commands-in-ticket-comments) Run commands in ticket comments (should, proposed, AC 0/4)
 - [REQ-FLOW-08](requirements/workflow.md#req-flow-08--qa-result-field-and-labels-in-jira) QA result field and labels in Jira (should, proposed, AC 0/3)

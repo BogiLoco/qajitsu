@@ -1,5 +1,6 @@
+import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createDemoPipeline } from "../../../../tests/support/cli-pipeline.js";
 import { verdictTarget } from "./workflow.js";
@@ -17,7 +18,12 @@ const FLOW = [
 ];
 
 const pipeline = async (flag?: string, config: readonly string[] = FLOW) => {
-  const p = await createDemoPipeline({ ...(flag ? { flag } : {}), config });
+  // The first run is 20261003-1046-aaaa; once it exists, later fetches get other run ids.
+  let runDir = "";
+  let n = 0;
+  const random = () => (runDir !== "" && existsSync(runDir) ? ((n++ * 0.37) % 0.98) + 0.01 : 0);
+  const p = await createDemoPipeline({ ...(flag ? { flag } : {}), config, ports: { random } });
+  runDir = p.runDir;
   cleanups.push(p.cleanup);
   return p;
 };
@@ -137,6 +143,45 @@ describe("ticket workflow (REQ-FLOW-02, REQ-FLOW-04)", () => {
     expect(t.status).toBe("In QA");
     expect(t.labels).toContain("qa-needs-attention");
     expect(t.assignee).toBe("qa-anna");
+  });
+
+  it("REQ-FLOW-05/AC1: while a run of the ticket is active a new event is ignored and logged", async () => {
+    const p = await pipeline();
+    await p.run(["fetch", "DEMO-1"]);
+    // A live process (this one) holds the run.
+    await writeFile(join(p.runDir, "run.lock"), `${String(process.pid)}\n`);
+    const again = await p.run(["fetch", "DEMO-1"]);
+    expect(again.exitCode).toBe(0);
+    expect(again.out).toContain("Run 20261003-1046-aaaa of DEMO-1 is still active; this event is ignored.");
+    const index = JSON.parse(await readFile(join(dirname(p.runDir), "index.json"), "utf8")) as {
+      runs: unknown[];
+    };
+    expect(index.runs).toHaveLength(1);
+    expect(await readFile(join(dirname(p.runDir), "flow.jsonl"), "utf8")).toContain('"reason":"active"');
+    // A dead holder does not block: the crashed run is not active.
+    await writeFile(join(p.runDir, "run.lock"), "999999\n");
+    expect((await p.run(["fetch", "DEMO-1"])).out).toContain("Run ");
+    const after = JSON.parse(await readFile(join(dirname(p.runDir), "index.json"), "utf8")) as {
+      runs: unknown[];
+    };
+    expect(after.runs).toHaveLength(2);
+  });
+
+  it("REQ-FLOW-05/AC2: after the daily limit the ticket goes to human review instead of another run", async () => {
+    const p = await pipeline(undefined, [...FLOW, "  max_runs_per_day: 2"]);
+    expect((await p.run(["fetch", "DEMO-1"])).exitCode).toBe(0);
+    expect((await p.run(["fetch", "DEMO-1"])).exitCode).toBe(0);
+    const third = await p.run(["fetch", "DEMO-1"]);
+    expect(third.exitCode).toBe(2);
+    expect(third.err).toContain("DEMO-1 had 2 runs today (limit 2): no new run; it needs a person.");
+    expect((await ticketIn(p.project)).status).toBe("QA review");
+  });
+
+  it("REQ-FLOW-05/AC1: without a workflow mapping parallel runs of a ticket stay allowed (REQ-WS-04/AC2)", async () => {
+    const p = await pipeline(undefined, []);
+    await p.run(["fetch", "DEMO-1"]);
+    await writeFile(join(p.runDir, "run.lock"), `${String(process.pid)}\n`);
+    expect((await p.run(["fetch", "DEMO-1"])).out).not.toContain("still active");
   });
 
   it("REQ-FLOW-04/AC4: only computed statuses decide where the ticket goes", () => {

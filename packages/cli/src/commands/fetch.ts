@@ -15,6 +15,9 @@ import { buildAdapters, createCliSecretResolver, type RuntimePorts } from "../ad
 import { createCliLogger } from "../logger.js";
 import { loadProject, resolveConfigPath } from "../project.js";
 import { importTestCases } from "./import-cases.js";
+import { publisherFor } from "./publish.js";
+import { admitNewRun, runWorkflow } from "./workflow.js";
+import { openSession } from "../session.js";
 
 /** Options of `qajitsu fetch`. */
 export interface FetchOptions {
@@ -56,6 +59,16 @@ export async function runFetch(
       home: ports.home,
       cwd: project.qaDir,
     });
+    // REQ-FLOW-05/AC1+AC2: in the team's workflow, one active run per ticket and a daily limit.
+    const refused = await admitNewRun(project, root, key.data, io, {
+      now: ports.now,
+      openRun: async (runId) => {
+        const session = await openSession(key.data, runId, io.cwd, ports, masker);
+        const workflow = runWorkflow(session, ports);
+        return { session, publisher: publisherFor(session, ports), ...(workflow ? { workflow } : {}) };
+      },
+    });
+    if (refused !== undefined) return refused;
     const ws = await createRunWorkspace({ root, ticket: key.data, now: ports.now, random: ports.random });
     const mask = (value: unknown): unknown => masker.maskJson(value);
     const logger = createCliLogger({ file: ws.path("logs", "qajitsu.log"), mask });

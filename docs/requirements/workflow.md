@@ -69,16 +69,17 @@ Implements REQ-PUB-05/AC3 (transition the ticket after a run).
 
 ### REQ-FLOW-05 · One run per ticket and loop limits
 
-- Status: proposed
+- Status: implemented
 - Priority: must
 - Stage: 10
-- Related: REQ-FLOW-01, REQ-PUB-04
+- Related: REQ-FLOW-01, REQ-PUB-04, REQ-WS-04
+- Note: applies to projects with a `workflow` section (the Jira flow); without it parallel runs of a ticket stay allowed (REQ-WS-04/AC2). A run is active while a live process holds its lock; AC3 is `qj approve --reuse-from latest` (REQ-CI-03/AC4).
 
 **Acceptance criteria**
 
-- [ ] AC1: At most one active run per ticket; duplicate events are ignored and logged.
-- [ ] AC2: A configurable maximum number of runs per ticket per day; after it the ticket goes to human review.
-- [ ] AC3: A new run after a fix reuses the approved plan when the ticket did not change; a changed ticket needs a new approval.
+- [x] AC1: At most one active run per ticket; duplicate events are ignored and logged.
+- [x] AC2: A configurable maximum number of runs per ticket per day; after it the ticket goes to human review.
+- [x] AC3: A new run after a fix reuses the approved plan when the ticket did not change; a changed ticket needs a new approval.
 
 ### REQ-FLOW-06 · Cost budget per ticket and per month
 

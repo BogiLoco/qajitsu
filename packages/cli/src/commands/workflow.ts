@@ -1,8 +1,14 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { appendFile, readFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { createFileWorkflow, createJiraWorkflow } from "@qajitsu/adapter-publish-jira";
 import {
+  admitRun,
   moveTicket,
+  processAlive,
+  readHolder,
+  readRunIndex,
+  type RunIndex,
+  type TicketKey,
   type ProjectConfig,
   type Publisher,
   type TestStatus,
@@ -213,4 +219,67 @@ export async function workflowChecks(
   } catch (error) {
     return [{ name: "workflow", ok: false, detail: error instanceof Error ? error.message : String(error) }];
   }
+}
+
+/**
+ * Admission of a new run in the team's workflow (REQ-FLOW-05/AC1+AC2), checked before `qj fetch` creates it: while
+ * another run of the ticket is active (a live process holds its lock) the new event is ignored and logged in
+ * `<ticket>/flow.jsonl`; after `max_runs_per_day` runs a day the ticket goes to human review instead of another run.
+ * Without `workflow` in the project, parallel runs of a ticket stay allowed (REQ-WS-04/AC2).
+ *
+ * @returns The exit code when the run must not start, otherwise undefined.
+ */
+export async function admitNewRun(
+  project: LoadedProject,
+  root: string,
+  ticket: TicketKey,
+  io: CommandIO,
+  deps: {
+    readonly now: () => Date;
+    /** Opens a finished run of the ticket, to move it and comment on it. */
+    readonly openRun: (
+      runId: string,
+    ) => Promise<{ session: RunSession; workflow?: TicketWorkflow; publisher: Publisher }>;
+  },
+): Promise<number | undefined> {
+  const flow = project.config.workflow;
+  if (!flow) return undefined;
+  const index = await readRunIndex(root, ticket).catch(() => ({ runs: [] as RunIndex["runs"] }));
+  const runs = await Promise.all(
+    index.runs.map(async (r) => {
+      const pid = await readHolder(join(root, ticket, r.runId, "run.lock"));
+      return { runId: r.runId, createdAt: r.createdAt, active: pid !== undefined && processAlive(pid) };
+    }),
+  );
+  const decision = admitRun(runs, deps.now(), flow.max_runs_per_day);
+  if (decision.admit) return undefined;
+  await appendFile(
+    join(root, ticket, "flow.jsonl"),
+    `${JSON.stringify({ ts: deps.now().toISOString(), event: "run.not_started", ...decision })}\n`,
+  );
+  if (decision.reason === "active") {
+    io.write(`Run ${decision.runId} of ${ticket} is still active; this event is ignored.\n`);
+    return 0;
+  }
+  io.writeError(
+    `${ticket} had ${String(decision.today)} runs today (limit ${String(decision.limit)}): no new run; it needs a person.\n`,
+  );
+  const latest = index.runs.at(-1);
+  if (latest) {
+    const { session, workflow, publisher } = await deps.openRun(latest.runId);
+    session.events.emit("fetch", { kind: "system", name: "orchestrator" }, "run.daily_limit", {
+      today: decision.today,
+      limit: decision.limit,
+    });
+    if (workflow)
+      await moveToRole(
+        session,
+        io,
+        workflow,
+        publisher,
+        "needs_review",
+        `${String(decision.today)} runs today`,
+      );
+  }
+  return 2;
 }
