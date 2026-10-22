@@ -1169,6 +1169,12 @@ verification: { auditor: optional, canary: true, triage: on }
   secrets, and cannot reach hosts outside the allowlist; every decision is journaled.
 - **Tamper-evident journal.** Hash chain, anchors in `run.json`, `journal-intact` publish gate, `qj audit verify`,
   separate audit retention.
+- **Audit trail and signed certificate.** Every prompt, answer and tool call of every model is stored masked
+  (`journal/agents.jsonl`); `qj audit trail` lists everything behind the verdict with hashes and the gaps;
+  `qj audit export` gives an auditor one zip with `SHA256SUMS`. A run with a complete trail gets a signed certificate
+  (in-toto statement in a DSSE envelope, Ed25519, Merkle root) shown in `report.html` and the Jira comment;
+  `qj verify-report` or the dependency-free `tools/verify-certificate.mjs` checks it offline and names any changed file.
+  [docs/guides/certificates.md](docs/guides/certificates.md)
 - **Reports.** `report.html` with a timeline and the transition graph, matrices (md/csv/xlsx), `junit.xml`, evidence zip.
 - **Observability.** OpenTelemetry traces, logs and metrics (`telemetry.otlp`); a ready Grafana stack with the
   QAJitsu dashboard (`ops/grafana`); `qj metrics` with Prometheus alert examples; the application map (`qj map`).

@@ -133,6 +133,8 @@ export function createProgram(version: string, io: ProgramIO): Command {
   let projectError: unknown;
   const PROJECT_FREE = new Set([
     "init",
+    // An external auditor checks a certificate without any project (REQ-VER-21/AC1).
+    "verify-report",
     "use",
     "projects list",
     "projects current",
@@ -1031,9 +1033,17 @@ export function createProgram(version: string, io: ProgramIO): Command {
       (v: string, all: string[]) => [...all, v],
       [] as string[],
     )
-    .action((path: string, options: { key: string[] }) =>
-      withPorts((ports) => runVerifyReport(path, options, commandIO, ports))(),
-    );
+    .action(async (path: string, options: { key: string[] }) => {
+      if (!io.ports) return withPorts(() => Promise.resolve(3))();
+      // Inside a project its .qa/keys are trusted too; outside one, only --key.
+      const project = await resolveProject(qajitsuHome(io.ports.env, io.ports.home), {
+        flag: program.opts<{ project?: string }>().project,
+        env: io.ports.env["QAJITSU_PROJECT"],
+      }).catch(() => undefined);
+      io.setExitCode(
+        await runVerifyReport(path, options, commandIO, { ...io.ports, ...(project ? { project } : {}) }),
+      );
+    });
 
   program
     .command("telemetry")

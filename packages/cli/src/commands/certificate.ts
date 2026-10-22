@@ -410,7 +410,9 @@ export async function runVerifyReport(
         throw new ConfigError("CERTIFICATE_KEY_INVALID", `${k} is not a public key in PEM.`, {});
       }
     }
-    const project = await loadProject(io.cwd, ports.project).catch(() => undefined);
+    const project = ports.project
+      ? await loadProject(io.cwd, ports.project).catch(() => undefined)
+      : undefined;
     if (project) keys.push(...(await publicKeysIn(join(project.qaDir, KEYS_DIR))));
     return reportCheck(io, checkCertificate(envelope, keys, read)) ? 0 : 1;
   } catch (error) {

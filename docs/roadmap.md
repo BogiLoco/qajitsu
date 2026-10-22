@@ -248,7 +248,7 @@ documentation site and the Claude Code plugin are available.
 - [REQ-VER-17](requirements/verification.md#req-ver-17--trusted-timestamps) Trusted timestamps (should, proposed, AC 0/5)
 - [REQ-VER-19](requirements/verification.md#req-ver-19--immutable-evidence-storage) Immutable evidence storage (should, proposed, AC 0/3)
 - [REQ-VER-20](requirements/verification.md#req-ver-20--reproduce-a-run-from-its-certificate) Reproduce a run from its certificate (should, proposed, AC 0/3)
-- [REQ-VER-21](requirements/verification.md#req-ver-21--open-verifier-and-audit-documentation) Open verifier and audit documentation (should, proposed, AC 0/3)
+- [REQ-VER-21](requirements/verification.md#req-ver-21--open-verifier-and-audit-documentation) Open verifier and audit documentation (should, implemented, AC 3/3)
 - [REQ-OBS-03](requirements/observability.md#req-obs-03--opentelemetry-export) OpenTelemetry export (should, implemented, AC 2/2)
 - [REQ-OBS-04](requirements/observability.md#req-obs-04--metrics-dashboards-and-alerts) Metrics, dashboards and alerts (could, implemented, AC 3/3)
 - [REQ-OBS-05](requirements/observability.md#req-obs-05--tamper-evident-audit-log) Tamper-evident audit log (should, implemented, AC 2/2)

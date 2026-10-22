@@ -306,16 +306,16 @@ Anyone with access can run again exactly what was approved and compare.
 
 ### REQ-VER-21 · Open verifier and audit documentation
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: 9
 - Related: REQ-VER-15, REQ-NFR-06
 
 **Acceptance criteria**
 
-- [ ] AC1: The verifier is open source, works offline and needs no QAJitsu account or server.
-- [ ] AC2: The certificate and manifest formats are documented so a third party can write its own verifier.
-- [ ] AC3: The documentation states what a valid certificate proves (nothing was changed after the run, who approved what, what ran) and what it does not prove (that the plan covered every risk).
+- [x] AC1: The verifier is open source, works offline and needs no QAJitsu account or server.
+- [x] AC2: The certificate and manifest formats are documented so a third party can write its own verifier.
+- [x] AC3: The documentation states what a valid certificate proves (nothing was changed after the run, who approved what, what ran) and what it does not prove (that the plan covered every risk).
 
 ### REQ-VER-22 · Cross-layer consistency checks
 
