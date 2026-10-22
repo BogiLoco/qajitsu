@@ -536,7 +536,16 @@ export async function runRun(
         },
         // REQ-CFG-01/AC2: the effective configuration, secrets masked.
         config: effectiveConfig(session, env, overrides),
-        ...(built ? { build: { project: built.project, ports: built.ports, services: built.services } } : {}),
+        ...(built
+          ? {
+              build: {
+                project: built.project,
+                ports: built.ports,
+                services: built.services,
+                ...(built.images ? { images: built.images } : {}),
+              },
+            }
+          : {}),
       },
     });
 
@@ -803,7 +812,7 @@ async function executeCases(
   } else if (missing.length > 0) {
     io.write(`Writing specs for ${missing.map((c) => c.id).join(", ")}…\n`);
     const analysis = AnalysisSchema.parse(JSON.parse(await readFile(ws.path("analysis.json"), "utf8")));
-    const usage = runUsage(ws, project, events, { costBudget: false });
+    const usage = runUsage(session, { costBudget: false });
     const deps = {
       ws,
       models: session.models,
@@ -976,7 +985,7 @@ async function executeCases(
     // REQ-EXEC-09 + REQ-EXEC-22/AC4: web and mobile cases are healed; API cases have no selectors.
     const type = plan.cases.find((c) => c.id === caseId)?.type;
     if (regression.success || (type !== "web" && type !== "mobile")) return undefined;
-    const usage = runUsage(ws, project, events, { costBudget: false });
+    const usage = runUsage(session, { costBudget: false });
     const dom = failed.evidence.find((e) => e.name === "failure.html")?.content;
     const recorded = failed.evidence.find((e) => e.name === "failure-elements.json")?.content;
     let elements: UiElementFact[] | undefined;

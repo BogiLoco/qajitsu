@@ -269,7 +269,7 @@ export async function runCliExplore(
       if (error === undefined && !aborted())
         try {
           modelId = (await session.models.forRole("explorer")).id;
-          const usage = runUsage(ws, project, events);
+          const usage = runUsage(session);
           const result = await runCliExplorer(
             {
               ws,

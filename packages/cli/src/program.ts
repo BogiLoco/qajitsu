@@ -53,6 +53,7 @@ import { runExplore, runExplorePromote } from "./commands/explore.js";
 import { runExploreReview } from "./commands/explore-review.js";
 import { runBench } from "./commands/bench.js";
 import { runAuditVerify } from "./commands/audit.js";
+import { runAuditExport, runAuditTrail } from "./commands/audit-trail.js";
 import { runTelemetryExport } from "./commands/telemetry.js";
 import { runMetrics } from "./commands/metrics.js";
 import { runExport } from "./commands/export.js";
@@ -976,9 +977,8 @@ export function createProgram(version: string, io: ProgramIO): Command {
       withPorts((ports) => runBench(options, commandIO, ports, review))(),
     );
 
-  program
-    .command("audit")
-    .description("Audit log tools")
+  const audit = program.command("audit").description("Audit log and audit trail tools");
+  audit
     .command("verify")
     .description("Check the hash chain of run journals (also archived ones)")
     .argument("[ticket]", "Jira key, e.g. SHOP-482")
@@ -987,6 +987,25 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--file <journal>", "verify this journal file instead")
     .action((ticket: string | undefined, options: { run?: string; all?: boolean; file?: string }) =>
       withPorts((ports) => runAuditVerify(ticket, options, commandIO, ports))(),
+    );
+  audit
+    .command("trail")
+    .description("List everything that influenced the verdict of a run, with hashes, and what is missing")
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .action((ticket: string, options: { run?: string }) =>
+      withPorts((ports) => runAuditTrail(ticket, options, commandIO, ports))(),
+    );
+  audit
+    .command("export")
+    .description(
+      "Export the audit trail of a run as one zip for an external auditor, readable without QAJitsu",
+    )
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .option("--out <file>", "zip to write (default: the project's exports folder)")
+    .action((ticket: string, options: { run?: string; out?: string }) =>
+      withPorts((ports) => runAuditExport(ticket, options, commandIO, ports))(),
     );
 
   program

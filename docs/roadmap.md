@@ -101,7 +101,7 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 - [REQ-VER-05](requirements/verification.md#req-ver-05--evidence-manifest-with-hashes) Evidence manifest with hashes (must, implemented, AC 3/3)
 - [REQ-VER-07](requirements/verification.md#req-ver-07--publish-gates) Publish gates (must, implemented, AC 7/7)
 - [REQ-VER-08](requirements/verification.md#req-ver-08--computed-numbers-and-validated-summary) Computed numbers and validated summary (must, implemented, AC 2/2)
-- [REQ-VER-16](requirements/verification.md#req-ver-16--complete-audit-trail) Complete audit trail (must, proposed, AC 0/5)
+- [REQ-VER-16](requirements/verification.md#req-ver-16--complete-audit-trail) Complete audit trail (must, in-progress, AC 4/5)
 - [REQ-EVD-01](requirements/evidence.md#req-evd-01--api-evidence) API evidence (must, implemented, AC 3/3)
 - [REQ-EVD-04](requirements/evidence.md#req-evd-04--test-matrix) Test matrix (must, implemented, AC 3/3)
 - [REQ-EVD-05](requirements/evidence.md#req-evd-05--report-formats) Report formats (must, implemented, AC 3/3)

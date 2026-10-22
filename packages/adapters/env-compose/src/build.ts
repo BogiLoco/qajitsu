@@ -134,10 +134,44 @@ export interface BuildEnvironment extends EnvironmentHandle {
   /** Stubbed services, listed in the report (REQ-ENV-05/AC2). */
   readonly stubs: readonly string[];
   /**
+   * Images of the started containers with their content digests (REQ-VER-16/AC1); missing when Docker did not list
+   * them, which the audit trail reports as a gap.
+   */
+  readonly images?: readonly ContainerImage[];
+  /**
    * Writes service logs to `logs/` and stops what this run started (REQ-WS-03). With `keep` the
    * containers stay up for debugging (`qajitsu clean` removes them later); managed processes always stop.
    */
   stop(options?: { readonly keep?: boolean }): Promise<{ readonly logs: readonly string[] }>;
+}
+
+/** One started container and the image it runs, by content digest. */
+export interface ContainerImage {
+  readonly container: string;
+  /** `repository:tag` as Docker names it. */
+  readonly image: string;
+  /** Image id (`sha256:...`), the digest of its content. */
+  readonly id: string;
+}
+
+/** Parses `docker compose images --format json`; anything unexpected gives nothing rather than a guess. */
+export function parseComposeImages(stdout: string): ContainerImage[] | undefined {
+  try {
+    const rows = JSON.parse(stdout) as unknown;
+    if (!Array.isArray(rows)) return undefined;
+    const images = rows.flatMap((r: unknown) => {
+      const row = r as Record<string, unknown>;
+      const id = typeof row["ID"] === "string" ? row["ID"] : "";
+      if (!/^sha256:[0-9a-f]{64}$/.test(id)) return [];
+      const repo = typeof row["Repository"] === "string" ? row["Repository"] : "<none>";
+      const tag = typeof row["Tag"] === "string" && row["Tag"] !== "" ? row["Tag"] : "latest";
+      const container = typeof row["ContainerName"] === "string" ? row["ContainerName"] : "";
+      return [{ container, image: `${repo}:${tag}`, id }];
+    });
+    return images.length === rows.length ? images : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Start failure with the service logs collected so far (REQ-ENV-04/AC3). */
@@ -298,6 +332,7 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
   const envFiles: string[] = [];
   const logs: string[] = [];
   let composeStarted = false;
+  let images: ContainerImage[] | undefined;
 
   const stop = async (stopOptions: { keep?: boolean } = {}): Promise<{ logs: readonly string[] }> => {
     if (composeStarted) {
@@ -454,6 +489,12 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
           throw new AdapterError("BUILD_PORT_UNKNOWN", `No published port for ${name}.`, { service: name });
         hostPorts.set(name, port);
       }
+      images = await exec("docker", composeArgs("images", "--format", "json"), {
+        cwd: options.worktree,
+      }).then(
+        (r) => parseComposeImages(r.stdout),
+        () => undefined,
+      );
     }
 
     // Endpoints as seen from the host (managed processes and the test runner).
@@ -577,6 +618,7 @@ export async function startBuildEnvironment(options: BuildOptions): Promise<Buil
       stubs: services
         .filter(([, s]) => s.kind === "stub")
         .map(([name, s]) => `${name} (${s.kind === "stub" ? s.engine : ""})`),
+      ...(images ? { images } : {}),
       stop,
     };
   } catch (error) {

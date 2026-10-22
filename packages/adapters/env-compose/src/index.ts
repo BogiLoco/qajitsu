@@ -19,6 +19,8 @@ export {
   type ComposeEnvProvider,
   type BuildOptions,
   type CommandExec,
+  type ContainerImage,
+  parseComposeImages,
 } from "./build.js";
 
 /** Adapter metadata used by `qajitsu doctor` and the adapter table in the docs. */

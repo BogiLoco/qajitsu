@@ -232,7 +232,7 @@ Every run ends with one signed statement that ties together everything the run u
 
 ### REQ-VER-16 · Complete audit trail
 
-- Status: proposed
+- Status: in-progress
 - Priority: must
 - Stage: 3
 - Related: REQ-VER-04, REQ-VER-05, REQ-OBS-05, REQ-PLAN-06, INV-7
@@ -241,11 +241,11 @@ Everything that influenced the verdict is recorded and hashed, not only the resu
 
 **Acceptance criteria**
 
-- [ ] AC1: The trail covers: ticket snapshot at the start, commit SHA and diff reference, every plan version with its approval (who, when, which version), generated test code, runner and tool versions, container image digests, deployed environment version, raw runner output, all evidence, matrix and report.
-- [ ] AC2: The agent journal is part of the trail: prompts, model responses, tool calls with arguments and results, provider, model name and version, token counts.
-- [ ] AC3: Secrets are masked before hashing (REQ-CFG-06); the hash covers exactly the stored, masked content.
+- [x] AC1: The trail covers: ticket snapshot at the start, commit SHA and diff reference, every plan version with its approval (who, when, which version), generated test code, runner and tool versions, container image digests, deployed environment version, raw runner output, all evidence, matrix and report.
+- [x] AC2: The agent journal is part of the trail: prompts, model responses, tool calls with arguments and results, provider, model name and version, token counts.
+- [x] AC3: Secrets are masked before hashing (REQ-CFG-06); the hash covers exactly the stored, masked content.
 - [ ] AC4: A run whose trail is incomplete (missing file, hash mismatch) cannot publish a certificate; the gap is reported.
-- [ ] AC5: The trail can be exported as one archive for an external auditor, readable without QAJitsu.
+- [x] AC5: The trail can be exported as one archive for an external auditor, readable without QAJitsu.
 
 ### REQ-VER-17 · Trusted timestamps
 

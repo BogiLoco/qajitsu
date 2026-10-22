@@ -42,6 +42,8 @@ export const DEFAULT_PROTECTED_PATHS: readonly string[] = [
   // Plan versions are written by QAJitsu from validated planner output, never by agent tools.
   "plan/",
   "journal/",
+  // The audit trail of the run (REQ-VER-16), computed by code from the files above.
+  "audit/",
   // Auditor and canary records: written by the orchestrator, they can only downgrade (REQ-VER-06, REQ-VER-09).
   "checks/",
   // Exploratory sessions: actions, observations and recordings are written by the trusted parent (REQ-EXEC-15/AC2).

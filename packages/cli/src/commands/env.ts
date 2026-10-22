@@ -217,7 +217,12 @@ export async function runEnvUp(
     await ws.update({
       data: {
         ...ws.record.data,
-        build: { project: built.project, ports: built.ports, services: built.services },
+        build: {
+          project: built.project,
+          ports: built.ports,
+          services: built.services,
+          ...(built.images ? { images: built.images } : {}),
+        },
       },
     });
     // REQ-EXEC-15/AC1: commands that use the running environment (qj explore) may take the run now.

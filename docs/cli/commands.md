@@ -7,12 +7,12 @@ Every `qajitsu` (alias `qj`) command with its options and exit codes. The guides
 
 Exit codes follow one scheme (REQ-CI-04):
 
-| Code | Meaning                                                                                        |
-| ---- | ---------------------------------------------------------------------------------------------- |
-| `0`  | success; for commands that report test results: every case PASSED                              |
-| `1`  | at least one case FAILED (or, for `audit verify`, a broken journal)                            |
-| `2`  | nothing failed, but not everything passed or the command stopped at a human decision           |
-| `3`  | configuration or framework error: nothing was decided, fix the setup and run the command again |
+| Code | Meaning                                                                                                   |
+| ---- | --------------------------------------------------------------------------------------------------------- |
+| `0`  | success; for commands that report test results: every case PASSED                                         |
+| `1`  | at least one case FAILED (or, for `audit verify`, a broken journal; for `audit trail` and `export`, gaps) |
+| `2`  | nothing failed, but not everything passed or the command stopped at a human decision                      |
+| `3`  | configuration or framework error: nothing was decided, fix the setup and run the command again            |
 
 `--help` on any command prints its options; `--version` prints the version.
 
@@ -879,6 +879,30 @@ Checks the hash chain of run journals, also archived ones.
 - `--file <journal>`: verify this journal file instead
 
 Exit codes: `0` every journal intact, `1` a chain is broken, `3` errors.
+
+### `qajitsu audit trail <ticket>`
+
+Lists everything that influenced the verdict of a run, with the SHA-256 of every file (REQ-VER-16): the ticket
+snapshot, commit and diff, every plan version and its approval, the generated tests, tool versions, container image
+digests, the tested environment, raw runner output, evidence, checks, reports, the event journal and the agent
+transcript (`journal/agents.jsonl`: every prompt, answer and tool call, masked). Writes `audit/trail.json` and lists
+the gaps: a missing file, a hash that does not match, a model call without its stored prompt and answer. The trail is
+always recomputed from the files; an edited `trail.json` changes nothing.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+
+Exit codes: `0` the trail is complete, `1` it has gaps, `3` errors.
+
+### `qajitsu audit export <ticket>`
+
+The audit trail of a run as one zip for an external auditor, readable without QAJitsu: the files, `audit/trail.json`,
+`SHA256SUMS` (check with `sha256sum -c SHA256SUMS`) and a `README.txt`. Every file is secret-scanned first; a secret
+value stops the export. `env/` is never included; Playwright traces stay with the run and are named in the README.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+- `--out <file>`: zip to write (default: the project's exports folder)
+
+Exit codes: `0` written from a complete trail, `1` written but the trail has gaps, `3` errors.
 
 ## Observability
 

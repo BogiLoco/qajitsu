@@ -87,7 +87,7 @@ export async function auditRun(session: RunSession, now: () => Date): Promise<Au
       texts[m.path] = masker.maskText((await readFile(ws.path("evidence", m.path), "utf8")).slice(0, 4000));
     }
   }
-  const usage = runUsage(ws, project, events);
+  const usage = runUsage(session);
   let record: AuditRecord;
   try {
     const result = await runAuditor(
@@ -250,7 +250,7 @@ export async function triageRun(session: RunSession, now: () => Date): Promise<T
     logs[name] = masker.maskText(
       (await readFile(ws.path("logs", name), "utf8").catch(() => "")).slice(-3000),
     );
-  const usage = runUsage(ws, project, events);
+  const usage = runUsage(session);
   let record: TriageRecord;
   try {
     const answer = await runTriage(
@@ -315,7 +315,7 @@ export async function blockedRun(session: RunSession, now: () => Date): Promise<
     logs[name] = masker.maskText(
       (await readFile(ws.path("logs", name), "utf8").catch(() => "")).slice(-3000),
     );
-  const usage = runUsage(ws, project, events);
+  const usage = runUsage(session);
   let record: BlockedRecord;
   try {
     const answer = await runBlockedHints(

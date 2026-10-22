@@ -21,6 +21,7 @@ import { generateText, stepCountIs, type ModelMessage } from "ai";
 import { guardTools } from "./loop.js";
 import { openMcpTools } from "./mcp.js";
 import { renderTestsRepo } from "./tests-repo.js";
+import { modelExchange } from "./exchange.js";
 import { untrusted, UNTRUSTED_DATA_RULES, type ChangeContext } from "./context.js";
 import { modelForRole, stageGuard, type AgentStageDeps } from "./roles-run.js";
 import { AGENT_ROLES } from "./roles.js";
@@ -291,10 +292,17 @@ export async function runAuthor(
           ...(deps.signal ? { abortSignal: deps.signal } : {}),
           maxRetries: 2,
         });
-        deps.usage.record("author", "author", model.id, model.profile, {
-          inputTokens: result.usage.inputTokens ?? 0,
-          outputTokens: result.usage.outputTokens ?? 0,
-        });
+        deps.usage.record(
+          "author",
+          "author",
+          model.id,
+          model.profile,
+          {
+            inputTokens: result.usage.inputTokens ?? 0,
+            outputTokens: result.usage.outputTokens ?? 0,
+          },
+          modelExchange("author", "author", model, { system: AUTHOR_SYSTEM, messages }, result),
+        );
         const code = extractCode(result.text);
         problems =
           code === undefined

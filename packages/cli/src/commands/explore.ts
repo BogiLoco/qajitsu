@@ -260,7 +260,7 @@ export async function runExplore(
     let modelId = "";
     try {
       modelId = (await session.models.forRole("explorer")).id;
-      const usage = runUsage(ws, project, events);
+      const usage = runUsage(session);
       const result = await runExplorer(
         {
           ws,

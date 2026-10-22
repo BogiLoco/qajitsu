@@ -105,7 +105,7 @@ const formatError = (error: unknown, mask: (t: string) => string): string => {
 const exitFor = (error: unknown): number => (error instanceof TokenBudgetExceededError ? 2 : 3);
 
 function stageDeps(session: RunSession, ports: RuntimePorts): AgentStageDeps & { save: () => Promise<void> } {
-  const usage = runUsage(session.ws, session.project, session.events);
+  const usage = runUsage(session);
   return {
     ws: session.ws,
     models: session.models,

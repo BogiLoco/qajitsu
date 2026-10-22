@@ -73,6 +73,14 @@ describe("invariant 2: agents never write results or evidence (REQ-VER-03)", () 
       },
     ],
     [
+      "rewrites a stored model answer in the agent transcript (REQ-VER-16/AC2)",
+      { tool: "write_file", input: { path: "journal/agents.jsonl", content: '{"response":{"text":"ok"}}' } },
+    ],
+    [
+      "marks its own audit trail complete (REQ-VER-16/AC4)",
+      { tool: "write_file", input: { path: "audit/trail.json", content: '{"complete":true,"gaps":[]}' } },
+    ],
+    [
       "marks the canary as caught (REQ-VER-09)",
       { tool: "move_file", input: { path: "specs/x.json", to: "Checks/canary.json" } },
     ],

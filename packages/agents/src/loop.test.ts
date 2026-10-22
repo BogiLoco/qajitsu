@@ -1,4 +1,4 @@
-import { createEventLog, parseEventLines } from "@qajitsu/core";
+import { checkTranscript, createEventLog, createTranscript, parseEventLines } from "@qajitsu/core";
 import { DEFAULT_PROTECTED_PATHS, createGuard, createJournal } from "@qajitsu/guard";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -92,6 +92,60 @@ describe("structured agent loop (REQ-LLM-04, REQ-VER-03/AC3)", () => {
     const decisions = journal.map((l) => (JSON.parse(l) as { event: string }).event);
     // Tool calls of one step run in parallel, so only the set of decisions is deterministic.
     expect([...decisions].sort()).toEqual(["tool_allowed", "tool_denied", "tool_result"]);
+  });
+
+  it("REQ-VER-16/AC2+AC3: each model call stores the prompt, the answer and the tool calls with arguments and results, masked, and the journal keeps its hash", async () => {
+    executed.length = 0;
+    const { guard, events, lines } = setup();
+    const stored: string[] = [];
+    const usage = createUsageTracker({
+      events,
+      transcript: createTranscript({
+        write: (l) => stored.push(l),
+        mask: (v) => JSON.parse(JSON.stringify(v).replaceAll("s3cret-token", "***")) as unknown,
+        now,
+      }),
+    });
+    const model = scriptedModel([
+      { tools: [{ name: "read_file", input: { path: "repos/web/a.ts" } }] },
+      { text: '{"answer": 42}' },
+    ]);
+    await runStructuredAgent({
+      stage: "analyze",
+      role: "analyst",
+      model,
+      system: "You analyse.",
+      prompt: "Ticket text with s3cret-token inside",
+      schema: Answer,
+      tools,
+      guard,
+      usage,
+    });
+    expect(stored).toHaveLength(1);
+    const exchange = JSON.parse(stored[0] ?? "{}") as Record<string, unknown>;
+    expect(exchange).toMatchObject({
+      seq: 1,
+      stage: "analyze",
+      role: "analyst",
+      model: model.id,
+      request: {
+        system: "You analyse.",
+        messages: [{ role: "user", content: "Ticket text with *** inside" }],
+      },
+      response: {
+        text: '{"answer": 42}',
+        steps: [
+          {
+            toolCalls: [{ tool: "read_file", input: { path: "repos/web/a.ts" } }],
+            toolResults: [{ tool: "read_file", output: "file content" }],
+          },
+          { toolCalls: [], toolResults: [] },
+        ],
+      },
+      usage: { inputTokens: 200, outputTokens: 40 },
+    });
+    expect(stored.join("")).not.toContain("s3cret-token");
+    expect(checkTranscript(lines.join(""), stored.join(""))).toEqual([]);
   });
 
   it("REQ-LLM-04/AC1+AC2: invalid output is returned with the validation errors and repaired", async () => {
