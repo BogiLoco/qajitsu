@@ -332,7 +332,7 @@ Anyone with access can run again exactly what was approved and compare.
 
 ### REQ-VER-23 · Test code quality gate
 
-- Status: proposed
+- Status: implemented
 - Priority: must
 - Stage: 7
 - Related: REQ-EXEC-03, REQ-VER-06, REQ-VER-09, REQ-VER-14, INV-1, INV-4
@@ -342,11 +342,11 @@ not depend on the application. Planned expectations without a `verify()` are alr
 
 **Acceptance criteria**
 
-- [ ] AC1: Assertions whose result does not depend on the application are rejected: comparing constants, a value with itself, or the checked response with itself or a value derived from it (tautology).
-- [ ] AC2: Code that can skip or swallow an assertion is rejected: an empty or swallowing `catch` around a `verify()`, a condition or an early `return` that lets a `verify()` be skipped, and skipped or disabled cases (`test.skip`, `test.fixme`, `.only`).
-- [ ] AC3: An assertion on a too general target is rejected: the whole page, body or response where the plan names a specific field or element.
-- [ ] AC4: A spec that fails the gate is not run; it goes back to the author with the findings once (as REQ-EXEC-03/AC4), then the case is BLOCKED with the findings, never PASSED.
-- [ ] AC5: Every rule has a lying-agent test in the adversarial suite; the findings of the gate are listed in the case's record and in the report.
+- [x] AC1: Assertions whose result does not depend on the application are rejected: comparing constants, a value with itself, or the checked response with itself or a value derived from it (tautology).
+- [x] AC2: Code that can skip or swallow an assertion is rejected: an empty or swallowing `catch` around a `verify()`, a condition or an early `return` that lets a `verify()` be skipped, and skipped or disabled cases (`test.skip`, `test.fixme`, `.only`).
+- [x] AC3: An assertion on a too general target is rejected: the whole page, body or response where the plan names a specific field or element.
+- [x] AC4: A spec that fails the gate is not run; it goes back to the author with the findings once (as REQ-EXEC-03/AC4), then the case is BLOCKED with the findings, never PASSED.
+- [x] AC5: Every rule has a lying-agent test in the adversarial suite; the findings of the gate are listed in the case's record and in the report.
 
 ### REQ-VER-24 · Human review of test code on demand
 

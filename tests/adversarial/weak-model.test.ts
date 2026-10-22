@@ -36,7 +36,8 @@ const runWithAuthor = async (author: Turn[]) => {
   const record = JSON.parse(await readFile(join(p.home, "runs", "DEMO-1", runId, "run.json"), "utf8")) as {
     data: { results: Record<string, string> };
   };
-  return { result, statuses: record.data.results };
+  const runDir = join(p.home, "runs", "DEMO-1", runId);
+  return { result, statuses: record.data.results, runDir };
 };
 
 describe("weak models (REQ-LLM-05/AC2)", () => {
@@ -46,10 +47,30 @@ describe("weak models (REQ-LLM-05/AC2)", () => {
     expect(result.exitCode).toBe(2);
   }, 180_000);
 
-  it("REQ-LLM-05/AC2: an author that hard-codes the expected value as actual still gets FAILED for the bug", async () => {
+  // Changed with REQ-VER-23: a hard-coded actual used to run (the runtime reads the real value, so the bug was still
+  // FAILED); the test code quality gate now sends it back to the author before anything runs.
+  it("REQ-LLM-05/AC2 + REQ-VER-23/AC1+AC4: an author that hard-codes the expected value as actual is sent back; fixed, the bug is FAILED", async () => {
     const lying = (await fixture("TC-01")).replace('res.json("total")', "1.01");
-    const { statuses } = await runWithAuthor([code(lying), code(await fixture("TC-02"))]);
+    const { statuses } = await runWithAuthor([
+      code(lying),
+      code(await fixture("TC-01")),
+      code(await fixture("TC-02")),
+    ]);
     expect(statuses["TC-01"]).toBe("FAILED");
+  }, 180_000);
+
+  it("REQ-LLM-05/AC2 + REQ-VER-23/AC1+AC4: an author that keeps the hard-coded actual gets BLOCKED with the finding, never PASSED", async () => {
+    const lying = (await fixture("TC-01")).replace('res.json("total")', "1.01");
+    const { result, statuses, runDir } = await runWithAuthor([
+      code(lying),
+      code(lying),
+      code(await fixture("TC-02")),
+    ]);
+    expect(statuses["TC-01"]).toBe("BLOCKED");
+    expect(result.out).toContain("constant-actual");
+    // REQ-VER-23/AC5: the findings are in the case's record and in the report.
+    expect(await readFile(join(runDir, "results", "TC-01.json"), "utf8")).toContain("constant-actual");
+    expect(await readFile(join(runDir, "report", "report.html"), "utf8")).toContain("constant-actual");
   }, 180_000);
 
   it("REQ-LLM-05/AC2: an author that leaves out the check of the buggy field never gets PASSED", async () => {
