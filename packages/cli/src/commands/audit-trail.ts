@@ -111,7 +111,7 @@ function lastSeal(events: string | undefined): Record<string, string> | undefine
 
 /**
  * Seals the run when it ends (REQ-VER-15/AC8, REQ-VER-16/AC4): the SHA-256 of every file under `results/` and `specs/`
- * goes into the journal, so a result or spec edited before the certificate is issued is a gap of the audit trail.
+ * and of the evidence manifest goes into the journal, so a result or spec edited before the certificate is issued is a gap of the audit trail.
  *
  * @param session - The run.
  */
@@ -120,7 +120,8 @@ export async function sealRun(session: Pick<RunSession, "ws" | "events">): Promi
   const paths: string[] = [];
   await walk(ws.dir, ws.dir, paths);
   const files: Record<string, string> = {};
-  for (const p of paths.filter((x) => /^(results|specs)\//.test(x)).sort())
+  // The manifest binds every evidence file by its hash, so sealing it seals the evidence too.
+  for (const p of paths.filter((x) => /^(results|specs)\//.test(x) || x === "evidence/manifest.json").sort())
     files[p] = sha256(new Uint8Array(await readFile(join(ws.dir, p))));
   // Stage "certificate": bookkeeping after the verdict, kept out of the report timeline like the certificate itself.
   session.events.emit("certificate", { kind: "system", name: "orchestrator" }, SEAL_EVENT, { files });

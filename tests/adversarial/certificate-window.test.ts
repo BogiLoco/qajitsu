@@ -56,6 +56,23 @@ describe("no window to certify better results than the run's (REQ-VER-15, REQ-VE
     expect(certify.out).toContain("specs/TC-02.spec.ts changed after the run");
   }, 180_000);
 
+  it("REQ-VER-15/AC8: without a key, evidence replaced together with its manifest is still caught by the seal", async () => {
+    const { p, setKey } = await project(false);
+    const manifestFile = join(p.runDir, "evidence", "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestFile, "utf8")) as { path: string; sha256: string }[];
+    const first = manifest[0];
+    expect(first).toBeDefined();
+    const fake = '{"status":200,"body":{"total":1.01}}';
+    await writeFile(join(p.runDir, "evidence", first?.path ?? ""), fake);
+    const { createHash } = await import("node:crypto");
+    if (first) first.sha256 = createHash("sha256").update(fake).digest("hex");
+    await writeFile(manifestFile, JSON.stringify(manifest, null, 2));
+    await setKey();
+    const certify = await p.run(["audit", "certify", "DEMO-1"]);
+    expect(certify.exitCode).toBe(1);
+    expect(certify.out).toContain("evidence/manifest.json changed after the run");
+  }, 180_000);
+
   it("REQ-VER-15/AC1: the statuses in the certificate are computed from the files, never taken from run.json", async () => {
     const { p, setKey } = await project(false);
     const record = join(p.runDir, "run.json");
