@@ -344,7 +344,7 @@ export async function runWorkflowSync(
         continue;
       }
       if (cmd.name === "reject") {
-        const reason = cmd.text || "no reason given";
+        const reason = masker.maskText(cmd.text) || "no reason given";
         await session.ws.update({
           data: {
             ...session.ws.record.data,

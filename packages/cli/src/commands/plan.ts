@@ -438,7 +438,11 @@ export async function runPlan(
           result: readiness.result,
           now: ports.now,
         });
-        io.write(`Planning although the ticket is ${readiness.result}: ${options.overrideReadiness}\n`);
+        io.write(
+          session.masker.maskText(
+            `Planning although the ticket is ${readiness.result}: ${options.overrideReadiness}\n`,
+          ),
+        );
       }
     } else if (!planned && options.overrideReadiness !== undefined) {
       const recorded = (ws.record.data["readiness"] as { result?: string } | undefined)?.result;

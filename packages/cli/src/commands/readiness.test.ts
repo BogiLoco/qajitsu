@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createDemoPipeline, flowScript } from "../../../../tests/support/cli-pipeline.js";
+import { createDemoPipeline, DEMO_PASSWORD, flowScript } from "../../../../tests/support/cli-pipeline.js";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -112,4 +112,32 @@ describe("ticket readiness gate in qj plan (REQ-PLAN-13)", () => {
       readFile(join(p.runDir, "report", "published", "jira-comment.readiness.wiki.txt"), "utf8"),
     ).rejects.toThrow();
   }, 180_000);
+
+  it("REQ-PLAN-13/AC3 + REQ-CFG-06: an override reason that quotes a secret is masked on the terminal too", async () => {
+    const p = await createDemoPipeline();
+    cleanups.push(p.cleanup);
+    const ticketFile = join(p.project, "tickets", "DEMO-1.json");
+    const ticket = JSON.parse(await readFile(ticketFile, "utf8")) as Record<string, unknown>;
+    await writeFile(ticketFile, JSON.stringify({ ...ticket, acceptanceCriteria: [] }));
+    await p.run(["fetch", "DEMO-1"]);
+    const quote = [{ kind: "quote", text: "Cart total with discount codes" }];
+    const analysis = {
+      text: JSON.stringify({
+        summary: "Cart total.",
+        change_type: ["api"],
+        endpoints: [{ method: "GET", path: "/cart", source: quote }],
+        confidence: "high",
+      }),
+    };
+    const draft = JSON.parse((flowScript("DEMO-1")[1] as { text: string }).text) as {
+      cases: { source: unknown }[];
+    };
+    for (const c of draft.cases) c.source = quote;
+    const r = await p.run(["plan", "DEMO-1", "--override-readiness", `the password is ${DEMO_PASSWORD}`], {
+      script: [analysis, { text: JSON.stringify(draft) }],
+    });
+    expect(r.out).toContain("Planning although the ticket is NEEDS_CLARIFICATION");
+    expect(r.out + r.err).not.toContain(DEMO_PASSWORD);
+    expect(await readFile(join(p.runDir, "run.json"), "utf8")).not.toContain(DEMO_PASSWORD);
+  });
 });

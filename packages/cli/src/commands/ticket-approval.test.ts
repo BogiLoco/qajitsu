@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createDemoPipeline, flowScript } from "../../../../tests/support/cli-pipeline.js";
+import { createDemoPipeline, DEMO_PASSWORD, flowScript } from "../../../../tests/support/cli-pipeline.js";
 import { parseQjCommand } from "./ticket-approval.js";
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -163,6 +163,20 @@ describe("plan approval in the ticket (REQ-FLOW-03)", () => {
       "ignored: already approved",
     ]);
     expect(await p.status()).not.toBe("Needs info");
+  });
+
+  it("REQ-FLOW-03/AC7 + REQ-CFG-06: a reason that quotes a secret is masked in run.json, the journal and the reply", async () => {
+    const p = await planned();
+    await p.run(["workflow", "sync", "DEMO-1"]);
+    await p.comment("c1", "anna", `/qj reject the password ${DEMO_PASSWORD} is in the ticket`);
+    await p.run(["workflow", "sync", "DEMO-1"]);
+    expect((await p.record()).data.ticketFlow.rejected?.reason).toContain("the password");
+    for (const file of [
+      "run.json",
+      join("journal", "events.jsonl"),
+      join("report", "published", "jira-comment.reply-c1.wiki.txt"),
+    ])
+      expect(await readFile(join(p.runDir, file), "utf8")).not.toContain(DEMO_PASSWORD);
   });
 
   it("REQ-FLOW-03/AC5: silence is never approval: a reminder after the configured time, the plan stays unapproved", async () => {
