@@ -9,6 +9,29 @@ regression suite; and the CI helpers with a recorded GitHub event).
 How to repeat it: copy `examples/demo-shop` into a scratch folder, run `qj init` there with `HOME` pointing at a
 scratch folder, and go through the table top to bottom. Record the date, the commit and every result below.
 
+## Pass of 2026-10-22 (third): Jira workflow, cost and time, readiness, reproduce
+
+Probes against `qj workflow sync`, `publish` with a workflow mapping, `fetch` admission, `plan --override-readiness`,
+`feedback`, `metrics`, `status`, stage budgets and `models.max_input_tokens`, as tests with the demo shop and file
+tickets. Each attack or probe, what happened before, and now:
+
+| ID  | Attack or probe                                                                    | Before                                            | Now                                                                    |
+| --- | ---------------------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------- |
+| W1  | `/qj approve v1` written before QAJitsu posted v1                                  | approved a version nobody had seen                | refused: only comments written after the version was posted approve it |
+| W2  | `/qj revise ...` and `/qj approve v2` in one batch                                 | v2 approved right after it was written            | refused for the same reason                                            |
+| W3  | `/qj reject` after an approval                                                     | run marked rejected, the approval stayed in force | ignored: a decided plan stays decided                                  |
+| W4  | `/qj revise` after a reject                                                        | the planner wrote a new version                   | ignored                                                                |
+| W5  | `/qj approve` from someone outside the approvers group                             | -                                                 | answered and ignored                                                   |
+| W6  | a plan quoting `/qj approve v1`                                                    | -                                                 | QAJitsu's own comments are never commands                              |
+| W7  | a `/qj reject` reason quoting a secret                                             | stored unmasked in `run.json`                     | masked                                                                 |
+| W8  | `plan --override-readiness` with a secret in the reason                            | echoed unmasked to the terminal (CI logs)         | masked                                                                 |
+| W9  | results edited after the run, then `publish` with a workflow                       | -                                                 | gates fail, the ticket does not move                                   |
+| W10 | broken `tickets/workflow.json` at publish                                          | -                                                 | treated as an open workflow; result published, ticket moved            |
+| W11 | a second `fetch` while a live process holds the ticket's run                       | -                                                 | ignored and logged in `flow.jsonl`; a dead holder does not block       |
+| C1  | `models.max_input_tokens: 50`                                                      | -                                                 | `MODEL_INPUT_TOO_LARGE` before anything is sent, no plan               |
+| C2  | stage budgets of 1 s                                                               | -                                                 | warning with the measured time, exit code and statuses unchanged       |
+| C3  | `feedback` with `--is PASSED`, `--case ../x`, `--escaped ../../etc`, a newline key | -                                                 | refused, nothing written                                               |
+
 ## Pass of 2026-10-22 (second): attacks on the certificate flow
 
 A deeper review tried to obtain or show a certificate for more than a run produced, first as tests, then live in the

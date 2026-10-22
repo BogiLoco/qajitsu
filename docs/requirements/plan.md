@@ -216,7 +216,7 @@ person has to ask for a revision by hand. When the API description leaves no dou
 - Stage: 2
 - Related: REQ-PLAN-05, REQ-CTX-01, REQ-FLOW-02
 
-- Note: TO BE REVIEWED (2026-10-22): an unknown environment is reported as a gap but does not stop planning: the plan does not need it and `qj run --env` names it later; asking the ticket's author would be the wrong person. AC2's move to "needs info" comes with REQ-FLOW-02, AC6's automatic re-check with REQ-FLOW-01.
+- Note: TO BE REVIEWED (2026-10-22): an unknown environment is reported as a gap but does not stop planning: the plan does not need it and `qj run --env` names it later; asking the ticket's author would be the wrong person. AC2's move to "needs info" works with a `workflow` mapping (REQ-FLOW-02); AC6's automatic re-check comes with REQ-FLOW-01.
 
 Before planning, code and the planner check that the ticket can be tested at all.
 
