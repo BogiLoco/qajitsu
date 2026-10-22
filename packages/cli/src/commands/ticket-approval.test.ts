@@ -135,6 +135,36 @@ describe("plan approval in the ticket (REQ-FLOW-03)", () => {
     ]);
   });
 
+  it("REQ-FLOW-03/AC4: nobody approves a version before it was posted; a decided plan stays decided", async () => {
+    const p = await planned();
+    // Written before QAJitsu posted v1: approving blind is refused.
+    await p.comment("c0", "anna", "/qj approve v1");
+    await p.run(["workflow", "sync", "DEMO-1"]);
+    expect(await p.published("reply-c0")).toContain("written before v1 was posted");
+    // A revise and an approval of the next version in one batch: the approval came before v2 existed.
+    const draft = JSON.parse(p.draft) as { cases: { id: string }[] };
+    await p.comment("c1", "anna", "/qj revise drop TC-02");
+    await p.comment("c2", "anna", "/qj approve v2");
+    await p.run(["workflow", "sync", "DEMO-1"], {
+      script: [{ text: JSON.stringify({ ...draft, cases: draft.cases.filter((c) => c.id !== "TC-02") }) }],
+    });
+    expect(await p.published("reply-c2")).toContain("written before v2 was posted");
+    expect((await p.record()).data.approval).toBeUndefined();
+    await p.comment("c3", "anna", "/qj approve v2");
+    await p.comment("c4", "anna", "/qj reject changed my mind");
+    await p.comment("c5", "anna", "/qj revise one more case");
+    await p.run(["workflow", "sync", "DEMO-1"]);
+    const r = await p.record();
+    expect(r.data.approval).toMatchObject({ version: 2 });
+    expect(r.data.ticketFlow.rejected).toBeUndefined();
+    expect(r.data.ticketFlow.commands.slice(-3).map((c) => c.outcome)).toEqual([
+      "approved v2",
+      "ignored: already approved",
+      "ignored: already approved",
+    ]);
+    expect(await p.status()).not.toBe("Needs info");
+  });
+
   it("REQ-FLOW-03/AC5: silence is never approval: a reminder after the configured time, the plan stays unapproved", async () => {
     const p = await planned();
     await p.run(["workflow", "sync", "DEMO-1"]);

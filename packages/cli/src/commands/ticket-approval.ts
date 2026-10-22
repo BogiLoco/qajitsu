@@ -53,7 +53,13 @@ interface CommandRecord {
 
 /** What the ticket approval loop keeps in `run.json` (`data.ticketFlow`). */
 interface TicketFlow {
-  readonly posted: readonly { readonly version: number; readonly commentId: string; readonly at: string }[];
+  readonly posted: readonly {
+    readonly version: number;
+    readonly commentId: string;
+    readonly at: string;
+    /** Comments the ticket had when this version was posted: none of them can approve it. */
+    readonly before: readonly string[];
+  }[];
   readonly seen: readonly string[];
   readonly commands: readonly CommandRecord[];
   readonly reminders: readonly { readonly version: number; readonly at: string }[];
@@ -92,7 +98,12 @@ function changeList(before: Plan | undefined, after: Plan): string[] {
  * Posts a plan version to the ticket (REQ-FLOW-03/AC1): version, cases, exclusions, what no case covers and what code
  * cannot check, the change list against the version before, and how to answer. Masked; numbers come from the plan.
  */
-async function postPlan(session: RunSession, publisher: Publisher, now: () => Date): Promise<string> {
+async function postPlan(
+  session: RunSession,
+  publisher: Publisher,
+  now: () => Date,
+  existing: readonly string[],
+): Promise<string> {
   const { ws, masker } = session;
   const { plan } = await readPlan(ws);
   const before =
@@ -128,7 +139,12 @@ async function postPlan(session: RunSession, publisher: Publisher, now: () => Da
         ...flow,
         posted: [
           ...flow.posted,
-          { version: plan.version, commentId: result.commentId, at: now().toISOString() },
+          {
+            version: plan.version,
+            commentId: result.commentId,
+            at: now().toISOString(),
+            before: [...existing],
+          },
         ],
       },
     },
@@ -191,7 +207,8 @@ export async function runWorkflowSync(
       const plan = await latest();
       if (!plan || approved() || flowOf(session).rejected) return;
       if (flowOf(session).posted.some((p) => p.version === plan.version)) return;
-      const v = await postPlan(session, publisher, ports.now);
+      const existing = (await workflow.comments(session.ws.ticket)).map((c) => c.id);
+      const v = await postPlan(session, publisher, ports.now, existing);
       io.write(`Posted plan ${v} to ${session.ws.ticket}.\n`);
       await moveToRole(session, io, workflow, publisher, "waiting_for_approval", `plan ${v} posted`);
     };
@@ -271,23 +288,28 @@ export async function runWorkflowSync(
       const plan = await latest();
       const current = plan?.version ?? 0;
       const flow = flowOf(session);
-      if (approved() && cmd.name !== "reject") {
+      // A decided plan stays decided: an approval is frozen (INV-3), a rejection ends the run's planning.
+      if (approved()) {
         await reply(c, [`/qj ${cmd.name} ignored: the plan is already approved.`]);
         await record(c, cmd, "ignored: already approved");
         continue;
       }
-      if (flow.rejected && cmd.name === "approve") {
-        await reply(c, [`/qj approve ignored: the plan was rejected; start a new run.`]);
+      if (flow.rejected) {
+        await reply(c, [`/qj ${cmd.name} ignored: the plan was rejected; start a new run.`]);
         await record(c, cmd, "ignored: rejected");
         continue;
       }
       if (cmd.name === "approve") {
         // REQ-FLOW-03/AC4: an approval freezes exactly the version it names, and only the one waiting.
-        if (cmd.version !== current) {
+        // Only a comment written after the version was posted can approve it: nobody approves what they have not seen.
+        const posted = flow.posted.find((x) => x.version === current);
+        if (cmd.version !== current || !posted || posted.before.includes(c.id)) {
           const why =
             cmd.version === undefined
               ? `name the version: /qj approve v${String(current)}`
-              : `v${String(cmd.version)} is not the version waiting for approval (v${String(current)})`;
+              : cmd.version !== current
+                ? `v${String(cmd.version)} is not the version waiting for approval (v${String(current)})`
+                : `the comment was written before v${String(current)} was posted to the ticket`;
           await reply(c, [`/qj approve refused: ${why}.`]);
           await record(c, cmd, `refused: ${why}`);
           continue;
