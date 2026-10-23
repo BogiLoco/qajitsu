@@ -31,6 +31,13 @@ workflow:
   approvers_group: qa-leads # who may answer plans in the ticket
   remind_after_h: 24
   max_revisions: 3
+  pickup:
+    jql: 'project = SHOP AND status = "Ready for QA" AND labels = qa-agent' # optional
+    interval_s: 300
+    batch: 5
+    secret: secret://env/QJ_WEBHOOK_SECRET # push mode
+    host: 127.0.0.1
+    port: 8787
 ```
 
 On Jira Cloud the accounts are account ids; on Data Center user names.
@@ -55,6 +62,21 @@ groups (`{ "groups": { "qa-leads": ["acc-anna"] } }`).
 The results comment is always published first. When the workflow offers no transition to the target status, or Jira
 fails, the ticket stays where it is, a comment says why, and the journal records `ticket.transition` with
 `moved: false`; the run's result is never lost over a status.
+
+## Picking tickets up
+
+QAJitsu can start by itself when a ticket enters the start status:
+
+- **Pull** (`qj workflow poll`, or `--once` from cron): finds the tickets in `statuses.start` (or your
+  `pickup.jql`) every `pickup.interval_s` seconds, at most `pickup.batch` at a time.
+- **Push** (`qj workflow serve`): a Jira Automation rule sends `{"ticket": "{{issue.key}}"}` to `POST /jira` with the
+  header `X-QAJitsu-Token: <secret>`, or a Jira webhook signs its body (`X-Hub-Signature`). The secret comes from
+  `pickup.secret` (`secret://...`); without it the server refuses to start. Refused requests are logged in
+  `<runs>/pickup.jsonl` without their body.
+
+Picking up means: a new run (with the one-active-run and daily limits below), the ticket moves to `in_testing` with a
+comment that the run started, the plan is written after the readiness gate, and posted for approval. A ticket that
+went to `needs_info` and comes back to the start status is checked again from scratch.
 
 ## Approving the plan in the ticket
 

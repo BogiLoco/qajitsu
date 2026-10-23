@@ -187,6 +187,8 @@ test_types: [api, web]
 #   authors: { octocat: <jira-account-id> }
 #   attention_label: qa-needs-attention
 #   max_runs_per_day: 5
+#   approvers_group: qa-leads   # plan approval by /qj comments (qj workflow sync)
+#   pickup: { interval_s: 300, batch: 5, secret: secret://env/QJ_WEBHOOK_SECRET }   # qj workflow poll | serve
 #
 # Prompt cache and input limits (REQ-LLM-12), inside models: { ... }:
 #   cache_ttl: auto            # auto | 5m | 1h | off

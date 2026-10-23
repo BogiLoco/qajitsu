@@ -897,6 +897,34 @@ changes a status, the results or the certificate. The note is masked before it i
 
 Exit codes: `0` recorded, `3` errors (a case that is not FAILED, an unknown kind, a run without results).
 
+### `qajitsu workflow poll`
+
+Pull mode of picking tickets up (REQ-FLOW-01), for workers behind a firewall. Every `workflow.pickup.interval_s`
+seconds (default 300) it finds the project's tickets in `workflow.statuses.start` (or runs `workflow.pickup.jql`) and
+picks up at most `workflow.pickup.batch` of them, one after the other: `qj fetch` (one active run per ticket, daily
+limit), the ticket moves to `in_testing` with a "QAJitsu started run ..." comment, `qj plan` with the readiness gate,
+and with `approvers_group` the plan is posted for approval (`qj workflow sync`). A ticket that comes back to the start
+status after "needs info" is checked again the same way. Every pick-up is logged in `<runs>/pickup.jsonl`.
+
+- `--once`: poll once and stop (for cron or a CI schedule)
+
+Exit codes: `0` polled (Ctrl+C stops the loop), `3` errors (no `workflow` section).
+
+### `qajitsu workflow serve`
+
+Push mode (REQ-FLOW-01): listens for `POST /jira` from a Jira Automation rule ("When: issue transitioned to Ready for
+QA" → "Send web request" with the body `{"ticket": "{{issue.key}}"}`) or a Jira webhook (`{"issue": {"key": ...}}`).
+Requests must carry the shared secret `workflow.pickup.secret` as the `X-QAJitsu-Token` header or an HMAC-SHA256 of
+the body as `X-Hub-Signature: sha256=<hex>`; without a configured secret the server does not start. Unauthenticated,
+oversized (over 64 KB), malformed or foreign-project requests are refused and logged in `<runs>/pickup.jsonl` without
+their body. Accepted tickets are picked up one after the other as in `poll`; the same ticket queued twice is picked up
+once. It listens on `127.0.0.1:8787` by default; put a TLS proxy in front to reach it from Jira Cloud.
+
+- `--host <host>`: address to listen on (default `workflow.pickup.host`)
+- `--port <port>`: port (default `workflow.pickup.port`)
+
+Exit codes: `0` stopped with Ctrl+C, `3` errors (no secret, port in use).
+
 ### `qajitsu workflow sync <ticket>`
 
 The plan approval loop in the ticket (REQ-FLOW-03), for projects with a `workflow` section and

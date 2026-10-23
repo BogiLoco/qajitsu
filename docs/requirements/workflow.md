@@ -4,7 +4,7 @@ QAJitsu works inside the team's Jira workflow like a human tester: a status chan
 
 ### REQ-FLOW-01 · Start from a Jira status
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: 10
 - Related: REQ-CI-02
@@ -13,10 +13,10 @@ Extends REQ-CI-02 (a Jira automation that dispatches a pipeline) with QAJitsu pi
 
 **Acceptance criteria**
 
-- [ ] AC1: Push mode: a Jira Automation rule or webhook calls QAJitsu when a ticket enters the configured start status (default "Ready for QA").
-- [ ] AC2: Pull mode for workers behind a firewall: a configurable JQL query is polled at a configurable interval.
-- [ ] AC3: Webhook requests are authenticated with a shared secret or a signature; unauthenticated requests are rejected and logged.
-- [ ] AC4: The ticket is picked up and moved to the "in testing" status with a comment saying a run started.
+- [x] AC1: Push mode: a Jira Automation rule or webhook calls QAJitsu when a ticket enters the configured start status (default "Ready for QA").
+- [x] AC2: Pull mode for workers behind a firewall: a configurable JQL query is polled at a configurable interval.
+- [x] AC3: Webhook requests are authenticated with a shared secret or a signature; unauthenticated requests are rejected and logged.
+- [x] AC4: The ticket is picked up and moved to the "in testing" status with a comment saying a run started.
 
 ### REQ-FLOW-02 · Status mapping per project
 

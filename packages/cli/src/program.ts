@@ -58,6 +58,7 @@ import { runCertify, runKeygen, runVerifyReport } from "./commands/certificate.j
 import { runReviewSpec } from "./commands/spec-review.js";
 import { runFeedback } from "./commands/feedback.js";
 import { runWorkflowSync } from "./commands/ticket-approval.js";
+import { runWorkflowPoll, runWorkflowServe } from "./commands/pickup.js";
 import { runReproduce } from "./commands/reproduce.js";
 import { runTelemetryExport } from "./commands/telemetry.js";
 import { runMetrics } from "./commands/metrics.js";
@@ -753,9 +754,25 @@ export function createProgram(version: string, io: ProgramIO): Command {
       ) => withPorts((ports) => runFeedback(ticket, options, commandIO, ports, io.user ?? "unknown"))(),
     );
 
-  program
-    .command("workflow")
-    .description("The ticket's Jira workflow (REQ-FLOW)")
+  const workflowCmd = program.command("workflow").description("The ticket's Jira workflow (REQ-FLOW)");
+  workflowCmd
+    .command("poll")
+    .description(
+      "Pick up the tickets waiting in the start status (pull mode; every workflow.pickup.interval_s)",
+    )
+    .option("--once", "poll once and stop")
+    .action((options: { once?: boolean }) =>
+      withPorts((ports) => runWorkflowPoll(options, commandIO, ports, review))(),
+    );
+  workflowCmd
+    .command("serve")
+    .description("Listen for Jira webhooks that start a ticket (push mode; needs workflow.pickup.secret)")
+    .option("--host <host>", "address to listen on (default: workflow.pickup.host, 127.0.0.1)")
+    .option("--port <port>", "port (default: workflow.pickup.port, 8787)")
+    .action((options: { host?: string; port?: string }) =>
+      withPorts((ports) => runWorkflowServe(options, commandIO, ports, review))(),
+    );
+  workflowCmd
     .command("sync")
     .description(
       "Post the plan waiting for approval to the ticket, act on /qj approve, revise and reject comments from the approvers group, and remind when nobody answered",
