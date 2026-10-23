@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   AdapterError,
@@ -137,6 +137,32 @@ export function createJiraWorkflow(
       }
       return out;
     },
+    async findInStatus(query, signal) {
+      const quoted = (v: string): string => `"${v.replace(/["\\]/g, (c) => `\\${c}`)}"`;
+      const jql =
+        query.jql ??
+        `project = ${project(query.projectKey)} AND status = ${quoted(query.status)} ORDER BY created ASC`;
+      const max = String(Math.min(Math.max(query.limit, 1), 100));
+      const Keys = z.object({ issues: z.array(z.object({ key: z.string() })) });
+      const r = cloud
+        ? await http.json(`${api}/search/jql`, Keys, {
+            method: "POST",
+            headers: json,
+            body: JSON.stringify({ jql, fields: ["key"], maxResults: Number(max) }),
+            signal,
+          })
+        : await http.json(
+            `${api}/search?${new URLSearchParams({ jql, fields: "key", maxResults: max }).toString()}`,
+            Keys,
+            { signal },
+          );
+      // Keys from the tracker are data: only valid keys of the project are picked up.
+      return r.issues
+        .map((i) => i.key)
+        .filter(
+          (k): k is TicketKey => TicketKeySchema.safeParse(k).success && k.startsWith(`${query.projectKey}-`),
+        );
+    },
     async inGroup(account, group, signal) {
       if (account === "") return false;
       if (cloud) {
@@ -268,6 +294,17 @@ export function createFileWorkflow(ticketsDir: string, statuses: readonly string
           },
         ];
       });
+    },
+    async findInStatus(query) {
+      const keys: TicketKey[] = [];
+      for (const name of (await readdir(ticketsDir).catch(() => [] as string[])).sort()) {
+        const key = name.replace(/\.json$/, "");
+        if (!name.endsWith(".json") || !TicketKeySchema.safeParse(key).success) continue;
+        if (!key.startsWith(`${query.projectKey}-`)) continue;
+        const t = await read(key as TicketKey).catch(() => undefined);
+        if (t && statusOf(t).toLowerCase() === query.status.toLowerCase()) keys.push(key as TicketKey);
+      }
+      return keys.slice(0, query.limit);
     },
     async inGroup(account, group) {
       try {

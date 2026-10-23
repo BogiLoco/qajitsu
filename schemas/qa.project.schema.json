@@ -688,6 +688,50 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
+        },
+        "pickup": {
+          "default": {
+            "interval_s": 300,
+            "batch": 5,
+            "host": "127.0.0.1",
+            "port": 8787
+          },
+          "type": "object",
+          "properties": {
+            "jql": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "interval_s": {
+              "default": 300,
+              "type": "integer",
+              "minimum": 30,
+              "maximum": 9007199254740991
+            },
+            "batch": {
+              "default": 5,
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 50
+            },
+            "secret": {
+              "type": "string",
+              "minLength": 1
+            },
+            "host": {
+              "default": "127.0.0.1",
+              "type": "string",
+              "minLength": 1
+            },
+            "port": {
+              "default": 8787,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            }
+          },
+          "additionalProperties": false
         }
       },
       "required": [

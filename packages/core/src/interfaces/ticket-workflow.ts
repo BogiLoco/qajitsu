@@ -37,6 +37,19 @@ export interface TicketWorkflow {
   canTransition(projectKey: string, signal?: AbortSignal): Promise<boolean>;
   /** The ticket's comments, oldest first (REQ-FLOW-03/AC2). Their text is untrusted data. */
   comments(ticket: TicketKey, signal?: AbortSignal): Promise<readonly TicketComment[]>;
+  /**
+   * Tickets of a project waiting in a status, for pull mode (REQ-FLOW-01/AC2): with `jql` that query as configured,
+   * otherwise the project's tickets in `status`. Oldest first, at most `limit`.
+   */
+  findInStatus(
+    query: {
+      readonly projectKey: string;
+      readonly status: string;
+      readonly jql?: string;
+      readonly limit: number;
+    },
+    signal?: AbortSignal,
+  ): Promise<readonly TicketKey[]>;
   /** Whether an account is a member of a group of the tracker (REQ-FLOW-03/AC3). */
   inGroup(account: string, group: string, signal?: AbortSignal): Promise<boolean>;
 }

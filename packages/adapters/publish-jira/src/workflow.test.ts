@@ -66,6 +66,8 @@ const jira = (flavor: "cloud" | "datacenter", permitted = true) => {
       ];
       return ok({ total: 2, comments: all.slice(start, start + 1) });
     }
+    if (u.pathname.endsWith("/search/jql") || u.pathname.endsWith("/search"))
+      return ok({ issues: [{ key: "DEMO-7" }, { key: "OTHER-1" }, { key: "not a key" }, { key: "DEMO-9" }] });
     if (u.pathname.endsWith("/user/groups")) return ok([{ name: "qa-leads" }]);
     if (u.pathname.endsWith("/user")) return ok({ groups: { items: [{ name: "developers" }] } });
     if (method === "PUT") return Promise.resolve(new Response(null, { status: 204 }));
@@ -150,6 +152,28 @@ describe("ticket workflow (REQ-FLOW-02)", () => {
     expect(dc.calls.at(-1)?.path).toBe("/rest/api/2/user?username=bob&expand=groups");
   });
 
+  it("REQ-FLOW-01/AC2: tickets waiting in the start status, by the default query or the configured JQL; only valid keys of the project", async () => {
+    const cloud = jira("cloud");
+    expect(await cloud.wf.findInStatus({ projectKey: "DEMO", status: 'Ready "for" QA', limit: 500 })).toEqual(
+      ["DEMO-7", "DEMO-9"],
+    );
+    expect(cloud.calls.at(-1)).toEqual({
+      method: "POST",
+      path: "/rest/api/3/search/jql",
+      body: {
+        jql: 'project = DEMO AND status = "Ready \\"for\\" QA" ORDER BY created ASC',
+        fields: ["key"],
+        maxResults: 100,
+      },
+    });
+    const dc = jira("datacenter");
+    await dc.wf.findInStatus({ projectKey: "DEMO", status: "Ready for QA", jql: "filter = 123", limit: 5 });
+    expect(dc.calls.at(-1)?.path).toBe("/rest/api/2/search?jql=filter+%3D+123&fields=key&maxResults=5");
+    await expect(cloud.wf.findInStatus({ projectKey: "x y", status: "S", limit: 1 })).rejects.toThrow(
+      "Invalid Jira project key",
+    );
+  });
+
   it("REQ-FLOW-02/AC3: ticket files follow workflow.json when there is one, any mapped status otherwise", async () => {
     const dir = await mkdtemp(join(tmpdir(), "qj-wf-"));
     dirs.push(dir);
@@ -175,5 +199,26 @@ describe("ticket workflow (REQ-FLOW-02)", () => {
     expect(await moveTicket(strict, KEY, "Passed")).toMatchObject({ moved: true });
     await expect(strict.transition(KEY, "to:Done")).rejects.toThrow('No transition from "Passed" to "Done".');
     expect(await strict.projectStatuses("DEMO")).toEqual(["In QA", "Passed"]);
+  });
+
+  it("REQ-FLOW-01/AC2: ticket files in the start status, oldest key first, other projects and odd files skipped", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "qj-wf-"));
+    dirs.push(dir);
+    const ticket = (key: string, status: string) =>
+      writeFile(join(dir, `${key}.json`), JSON.stringify({ key, status }));
+    await ticket("DEMO-2", "ready for qa");
+    await ticket("DEMO-1", "Ready for QA");
+    await ticket("DEMO-3", "In QA");
+    await ticket("SHOP-1", "Ready for QA");
+    await writeFile(join(dir, "workflow.json"), "{}");
+    await writeFile(join(dir, "notes.json"), "[]");
+    const wf = createFileWorkflow(dir);
+    expect(await wf.findInStatus({ projectKey: "DEMO", status: "Ready for QA", limit: 5 })).toEqual([
+      "DEMO-1",
+      "DEMO-2",
+    ]);
+    expect(await wf.findInStatus({ projectKey: "DEMO", status: "Ready for QA", limit: 1 })).toEqual([
+      "DEMO-1",
+    ]);
   });
 });

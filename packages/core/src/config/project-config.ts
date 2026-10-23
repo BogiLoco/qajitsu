@@ -309,6 +309,22 @@ export const ProjectConfigSchema = z.strictObject({
       remind_after_h: z.number().positive().default(24),
       /** Revision rounds by comment before a person must edit the plan directly (REQ-FLOW-03/AC6). */
       max_revisions: z.number().int().nonnegative().default(3),
+      /** Picking tickets up from the start status (REQ-FLOW-01). */
+      pickup: z
+        .strictObject({
+          /** Pull mode: the query polled; default the project's tickets in `statuses.start`. */
+          jql: z.string().min(1).max(2000).optional(),
+          /** Pull mode: seconds between polls. */
+          interval_s: z.number().int().min(30).default(300),
+          /** Most tickets picked up per poll. */
+          batch: z.number().int().positive().max(50).default(5),
+          /** Push mode: shared secret of the webhook (`secret://`), as a header or an HMAC-SHA256 signature. */
+          secret: z.string().min(1).optional(),
+          /** Push mode: address the webhook listens on; loopback unless a proxy in front needs more. */
+          host: z.string().min(1).default("127.0.0.1"),
+          port: z.number().int().min(1).max(65535).default(8787),
+        })
+        .default({ interval_s: 300, batch: 5, host: "127.0.0.1", port: 8787 }),
     })
     .optional(),
   /** Mobile runner, devices and app binaries (REQ-EXEC-06, REQ-ENV-06, REQ-EVD-03). */
