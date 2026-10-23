@@ -175,3 +175,22 @@ Besides a provided environment (REQ-ENV-01) and one built from the repositories 
 - [ ] AC2: The build under test is installed from the change's artifact and its version is checked before the tests, like REQ-ENV-02.
 - [ ] AC3: Each run starts from a clean snapshot of the machine; the snapshot id is recorded in the run's journal.
 - [ ] AC4: A machine that cannot be reached, restored or prepared makes the desktop cases BLOCKED with the reason.
+
+### REQ-ENV-13 · Environment readiness for the ticket
+
+- Status: accepted
+- Priority: must
+- Stage: later
+- Related: REQ-ENV-02, REQ-ENV-10, REQ-FLOW-01, REQ-PLAN-13, REQ-VER-15, INV-1, INV-10
+
+REQ-ENV-02 compares one SHA. Before testing a ticket, QAJitsu must be sure the environment runs exactly the change of
+the ticket, with everything it needs, so a result is never about the wrong version.
+
+**Acceptance criteria**
+
+- [ ] AC1: For every repository of the ticket's change, the deployed version of its service is read (version endpoint, deployment API of GitHub, GitLab or Argo CD, container image labels) and checked: the change's commit is the deployed commit or one of its ancestors (a merged change); a missing or older version is a named mismatch.
+- [ ] AC2: Configurable readiness checks run before the first case: health of every service, database migrations of the change applied, feature flags the ticket needs switched on, test accounts able to log in, dependencies reachable or mocked.
+- [ ] AC3: The result is one environment readiness report (ready or not, per check with the observed value) in `run.json`, the report, the certificate and, as configured, a comment on the ticket.
+- [ ] AC4: Not ready: no case runs; in the Jira workflow the ticket stays waiting with the reason, and QAJitsu can wait for the deployment by checking again at an interval up to a timeout before giving up as BLOCKED.
+- [ ] AC5: A person can run anyway with a recorded reason; every result of that run is marked "environment not confirmed" in the report and the comment, and never counts as verified for the release (REQ-PUB-09).
+- [ ] AC6: In pull mode (REQ-FLOW-01) a ticket is picked up only when its environment is ready, or picked up and parked until it is.

@@ -295,6 +295,9 @@ automated test, so known flows need no writing from scratch.
 - [ ] AC5: The recorded case goes through the normal review and approval of a plan version (frozen with its hash); a recording never runs as an approved case by itself.
 - [ ] AC6: From the approved case the author writes the spec with the recorded selectors; the recording, screenshots and network calls are kept as evidence of how the case was made.
 - [ ] AC7: A recording made against hosts outside the environment allowlist, or with an action QAJitsu cannot replay, is refused or marked with the step it cannot replay.
+- [ ] AC8: An approved recorded case can become an automated test in the team's tests repository (Playwright, Appium or Maestro, REQ-EXEC-52) through `qj promote` (REQ-PUB-08), after it passed a run; it then runs in `qj regression` without models.
+- [ ] AC9: Besides `qj record`, recordings can be imported: Playwright codegen scripts, Chrome DevTools Recorder exports and HAR files of API calls, treated as untrusted input and converted by code the same way.
+- [ ] AC10: Recording works for web, Android and iOS (taps, typing, gestures from the device), with the same masking and review.
 
 ### REQ-PLAN-18 · Mapping existing automated tests to cases and requirements
 

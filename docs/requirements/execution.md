@@ -901,3 +901,41 @@ benchmark on recorded examples.
 - [ ] AC4: The plan sets the threshold: at or above it the check passes, below a lower bound it fails, in between it is NEEDS_REVIEW; the reference sound is approved like a visual baseline and changes only through an explicit accept.
 - [ ] AC5: Deterministic checks need no model: plays at all or silence, duration, loudness, clipping, and the order and timing of sounds within a step.
 - [ ] AC6: No sound captured, a capture device missing or an unreadable file makes the check BLOCKED with the reason, never PASSED.
+
+### REQ-EXEC-59 · Contract testing
+
+- Status: accepted
+- Priority: should
+- Stage: later
+- Related: REQ-EXEC-04, REQ-EXEC-35, REQ-EXEC-48, REQ-EXEC-49, REQ-EXEC-51, REQ-PLAN-14, INV-1, INV-4
+
+Contract tests check that a provider and its consumers agree on an interface without starting the whole system. They are
+fast and catch breaking changes before end-to-end tests do, but they do not replace them.
+
+**Acceptance criteria**
+
+- [ ] AC1: Breaking changes: for a change that edits an API description (OpenAPI, GraphQL SDL, `.proto`, AsyncAPI, WSDL), code compares it with the version on the target branch and lists removed or renamed operations and fields, changed types, new required inputs and narrowed enums; each becomes a case or an open question in the plan.
+- [ ] AC2: Provider verification: the API of the change is checked against its own description and against the consumer contracts the project has (Pact files or a Pact Broker), with the verdict from the verification tool.
+- [ ] AC3: Consumer contracts: when the change is a consumer (a front-end or service calling an API), its expectations of the provider can be written as Pact contracts from the approved plan and published to the broker only after a person confirms.
+- [ ] AC4: `can-i-deploy` style checks against the broker can be part of a plan, with the environments from the project configuration.
+- [ ] AC5: The planner proposes contract cases when a change touches an API description, a client of an API or a message schema, and says in the plan why a contract case and not an end-to-end case covers an item.
+- [ ] AC6: Documentation explains when to use contract tests, API tests and end-to-end tests, where each runs (pull request, before deployment, after deployment) and how QAJitsu combines them, with a worked example on the demo shop.
+
+### REQ-EXEC-60 · Mocks on demand
+
+- Status: accepted
+- Priority: should
+- Stage: later
+- Related: REQ-ENV-05, REQ-EXEC-45, REQ-EXEC-46, REQ-PLAN-02, INV-1, INV-4, INV-10
+
+Stubs today are fixed per environment (REQ-ENV-05). Cases often need a dependency to answer differently: an error, a
+timeout, an empty list, a slow response.
+
+**Acceptance criteria**
+
+- [ ] AC1: A plan case can declare mocks for dependencies of the application under test: matching request, response (status, headers, body), delay, fault (connection reset, timeout) and how many times; code sets them up before the case and removes them after it.
+- [ ] AC2: Mocks work at the network level of a web or mobile case (the browser's or device's requests) and at the service level for back-ends (WireMock, Mockoon, Prism or the project's own mock server), chosen per dependency.
+- [ ] AC3: Mock responses can be generated from the dependency's API description (examples or schema) or replayed from recorded real traffic of a test environment, masked.
+- [ ] AC4: Every mocked call is evidence, and the report and Jira comment list per case which dependencies were mocked and how; a result that depends on a mock never reads as a test of the real dependency.
+- [ ] AC5: The application under test itself, or the dependency a case is meant to test, can never be mocked; such a plan is refused at approval.
+- [ ] AC6: A mock that was declared but never called, or a call that matched no mock where the plan required one, is reported and makes the case NEEDS_REVIEW.
