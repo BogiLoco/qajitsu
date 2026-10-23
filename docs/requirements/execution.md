@@ -559,7 +559,8 @@ For qualities code cannot check (helpfulness, policy compliance, groundedness, t
 
 ### REQ-EXEC-36 · Blockchain (EVM) application testing
 
-- Status: proposed
+- Status: deprecated
+- Deprecated: grown into its own area. Replaced by REQ-CHAIN-01..REQ-CHAIN-12 (docs/requirements/blockchain.md).
 - Priority: could
 - Stage: later
 - Related: REQ-GEN-02, REQ-ENV-03
@@ -876,3 +877,27 @@ Tests need predictable data; on a shared environment what is in the database cha
 - [ ] AC2: Findings come from the scanner's own report with their severity; thresholds per severity come from the frozen plan and decide FAILED or PASSED.
 - [ ] AC3: Active scanning needs an explicit project setting and is refused for any host not marked as a test environment.
 - [ ] AC4: Scanner reports are evidence, masked.
+
+### REQ-EXEC-58 · Comparing sounds by embeddings
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: REQ-EXEC-28, REQ-EXEC-12, REQ-EVD-02, INV-1, INV-4
+
+Applications play sounds (notifications, alerts, games, voice prompts, media) and take audio in (voice input,
+calls). Checking them by transcript (REQ-EXEC-28) misses everything that is not speech.
+
+Open topic (2026-10-23): analyse before implementation: which embedding models (for example CLAP, OpenL3, PANNs) and
+fingerprints (Chromaprint) separate "same sound" from "different sound" reliably, how stable they are across
+platforms and codecs, how to capture audio on web, Android and iOS, and what thresholds mean. Outcome: an ADR and a
+benchmark on recorded examples.
+
+**Acceptance criteria**
+
+- [ ] AC1: Audio input can be replaced by an embedded fixture: the browser's microphone fed from a file, the emulator's or simulator's audio input from a file, so voice and sound input is repeatable.
+- [ ] AC2: Audio output of a step is captured (browser tab audio, a virtual audio sink, the device's audio) and stored as evidence with its SHA-256.
+- [ ] AC3: Code turns the captured sound and an approved reference sound into vectors with a pinned embedding model and computes their similarity; the model, its version and the score are part of the result. No LLM decides.
+- [ ] AC4: The plan sets the threshold: at or above it the check passes, below a lower bound it fails, in between it is NEEDS_REVIEW; the reference sound is approved like a visual baseline and changes only through an explicit accept.
+- [ ] AC5: Deterministic checks need no model: plays at all or silence, duration, loudness, clipping, and the order and timing of sounds within a step.
+- [ ] AC6: No sound captured, a capture device missing or an unreadable file makes the check BLOCKED with the reason, never PASSED.
