@@ -372,6 +372,8 @@ the evidence bundle as pipeline artifacts.
 - [REQ-OBS-09](requirements/observability.md#req-obs-09--live-progress-of-a-run) Live progress of a run (should, implemented, AC 4/4)
 - [REQ-OBS-10](requirements/observability.md#req-obs-10--tool-versions-recorded-with-every-run) Tool versions recorded with every run (should, implemented, AC 4/4)
 - [REQ-OBS-11](requirements/observability.md#req-obs-11--run-replay) Run replay (could, proposed, AC 0/2)
+- [REQ-OBS-12](requirements/observability.md#req-obs-12--quality-metrics-and-their-analysis) Quality metrics and their analysis (should, proposed, AC 0/6)
+- [REQ-OBS-13](requirements/observability.md#req-obs-13--presenting-metrics) Presenting metrics (should, proposed, AC 0/5)
 - [REQ-CI-06](requirements/ci-cd.md#req-ci-06--toolchain-in-pipelines) Toolchain in pipelines (could, in-progress, AC 1/2)
 - [REQ-CI-07](requirements/ci-cd.md#req-ci-07--thin-ci-client) Thin CI client (should, proposed, AC 0/5)
 - [REQ-CI-08](requirements/ci-cd.md#req-ci-08--job-matrix-generated-from-the-plan) Job matrix generated from the plan (should, proposed, AC 0/5)

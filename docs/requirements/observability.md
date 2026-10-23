@@ -149,3 +149,41 @@ the tools that tested them, so a changed result cannot be told apart from a new 
 
 - [ ] AC1: A finished run can be replayed step by step in the web console: step, screenshot, network calls and logs on one timeline, in either display mode.
 - [ ] AC2: Replay uses only stored evidence; it never runs anything again.
+
+### REQ-OBS-12 · Quality metrics and their analysis
+
+- Status: proposed
+- Priority: should
+- Stage: later
+- Related: REQ-OBS-04, REQ-LLM-11, REQ-LLM-14, REQ-NFR-11, REQ-PLAN-14, REQ-PLAN-16, REQ-PUB-09, INV-6
+
+Today QAJitsu measures itself (runs, cost, time, agents). Teams also need to see the quality of what they ship and how
+testing helps it, across tickets, components, releases and time.
+
+Open topic (2026-10-23): which metrics matter to which reader (QA lead, engineering manager, auditor), how to define
+each so it cannot be gamed, and what needs data from outside QAJitsu. Outcome: a metrics catalogue with definitions
+before implementation.
+
+**Acceptance criteria**
+
+- [ ] AC1: QAJitsu collects, from its own structured records only, at least: defects found per ticket and per component (FAILED cases confirmed as product bugs), escaped defects (REQ-PLAN-16), requirement and acceptance criterion coverage, automation rate (cases promoted to the regression suite), flaky rate, BLOCKED reasons, time from "ready for QA" to a verified result, time waiting for an environment or an approval, re-test rounds per ticket, and cost per verified ticket.
+- [ ] AC2: Each metric has a written definition (formula, source records, what counts and what does not) in a metrics catalogue, and its value can be traced back to the runs and records it was computed from.
+- [ ] AC3: Metrics can be cut by project, component, label, release or sprint, team, test type (API, web, mobile), environment and model, and compared over time (week, release).
+- [ ] AC4: Analysis by code finds trends and outliers (a component whose failure rate rises, a test that became flaky, an environment that blocks more often) and lists them with the records behind them; an agent may summarise them, and its numbers are checked against the computed ones (INV-6).
+- [ ] AC5: Data from outside QAJitsu (bugs from Jira, incidents, deployments) is optional, read through plugins, and marked as such in every metric that uses it.
+- [ ] AC6: No metric changes a test status or a publish decision; metrics only describe.
+
+### REQ-OBS-13 · Presenting metrics
+
+- Status: proposed
+- Priority: should
+- Stage: later
+- Related: REQ-OBS-04, REQ-OBS-12, REQ-WEB-01, REQ-WEB-10, REQ-PUB-09
+
+**Acceptance criteria**
+
+- [ ] AC1: The web console (REQ-WEB-01) shows metric dashboards with the cuts of REQ-OBS-12/AC3, and every number links to the runs behind it.
+- [ ] AC2: `qj metrics report --release <v> | --sprint <s> | --since <date>` writes a report (HTML, Markdown, CSV, XLSX) for a release, sprint or period; it can be posted to Jira or Confluence after a preview.
+- [ ] AC3: Metrics are exported for existing tools: Prometheus and OpenTelemetry (REQ-OBS-04), and a provisioned Grafana dashboard for quality metrics.
+- [ ] AC4: Scheduled summaries (for example weekly) can be sent through publisher plugins (Jira, Confluence, Slack, Teams) with the same numbers as the dashboards.
+- [ ] AC5: Every presentation shows each metric's definition and the period and filters it was computed for, so two readers never compare different numbers by mistake.
