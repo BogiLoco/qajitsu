@@ -275,3 +275,41 @@ Each human correction makes the next plan better.
 - [x] AC2: Defects reported later on a ticket marked as passed can be linked to the run (escaped defects).
 - [x] AC3: The metrics are shown in `qj status` and `qj metrics` (in the web console with REQ-WEB-01); numbers are computed from run records.
 - [x] AC4: Per project also: false FAILED (FAILED cases later triaged as a test or environment problem), auditor downgrades of PASSED, and escaped defects (AC2), so a team sees whether tests check enough.
+
+### REQ-PLAN-17 · Test cases from recorded steps
+
+- Status: accepted
+- Priority: should
+- Stage: later
+- Related: REQ-PLAN-03, REQ-PLAN-11, REQ-CTX-08, REQ-EXEC-21, REQ-PUB-08, INV-3, INV-4, INV-8
+
+A tester clicks through a scenario once in a browser or on a device; QAJitsu turns the recording into a plan case and an
+automated test, so known flows need no writing from scratch.
+
+**Acceptance criteria**
+
+- [ ] AC1: `qj record <TICKET> [--env <profile>] [--web | --android | --ios]` opens a browser or the device with the environment and records every action (navigation, clicks, typing, selections, gestures, uploads) with a screenshot, the element's stable selectors (REQ-EXEC-21) and the network calls it caused.
+- [ ] AC2: The person marks checks while recording ("this text must be visible", "this field equals", "this request returns 201"); expectations come only from these marks or from values the person confirms afterwards, never invented by an agent.
+- [ ] AC3: Typed values are masked as they are recorded: a field of type password, a value equal to a known secret, or one the person marks as secret becomes a `secret://` reference or a test account alias; nothing unmasked is stored.
+- [ ] AC4: Code turns the recording into a plan case (steps, expectations, data, source `recording:<id>`); an agent may only name and group the steps and propose missing checks, each shown as a proposal for the person to accept.
+- [ ] AC5: The recorded case goes through the normal review and approval of a plan version (frozen with its hash); a recording never runs as an approved case by itself.
+- [ ] AC6: From the approved case the author writes the spec with the recorded selectors; the recording, screenshots and network calls are kept as evidence of how the case was made.
+- [ ] AC7: A recording made against hosts outside the environment allowlist, or with an action QAJitsu cannot replay, is refused or marked with the step it cannot replay.
+
+### REQ-PLAN-18 · Mapping existing automated tests to cases and requirements
+
+- Status: accepted
+- Priority: should
+- Stage: later
+- Related: REQ-PLAN-14, REQ-PLAN-17, REQ-CTX-08, REQ-PUB-08, REQ-EXEC-52
+
+Teams that already have automated tests (Playwright, Cypress, Selenium, Appium, Maestro, REST Assured, Postman) want them
+linked to tickets and acceptance criteria instead of written again.
+
+**Acceptance criteria**
+
+- [ ] AC1: QAJitsu reads the tests of the tests repository and builds a map: test file and title, the steps and assertions found by code, the pages, screens or endpoints they touch.
+- [ ] AC2: The planner proposes for each acceptance criterion of a ticket the existing tests that cover it, each link citing the test file and the assertion; links are checked by code against the real files and titles, and a person accepts them.
+- [ ] AC3: Accepted links appear in the coverage matrix (REQ-PLAN-14) as "covered by an existing test", with the test's last known result; a criterion covered only by a test that is not run in this run stays an open gap.
+- [ ] AC4: An existing test can be added to a run as a regression case, executed by its own runner with its own verdict; QAJitsu never rewrites its assertions.
+- [ ] AC5: A recording (REQ-PLAN-17) can be compared with existing tests: when one already covers the same flow, QAJitsu says so before a new case is created.

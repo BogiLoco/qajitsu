@@ -213,3 +213,21 @@ what makes the results trustworthy.
 - [ ] AC7: A plugin is marked "verified" in the registry only after it passed the dev kit's contract tests in CI and a review of its manifest.
 - [ ] AC8: Adapter interfaces follow semantic versioning; a breaking change gets a new major version and a documented transition period.
 - [ ] AC9: A template repository and the `/new-adapter` guide describe how to build, test and publish a plugin.
+
+### REQ-GEN-13 · Doctor recommends what to install from the application
+
+- Status: accepted
+- Priority: should
+- Stage: later
+- Related: REQ-GEN-03, REQ-GEN-06, REQ-PRJ-02, REQ-LLM-01, INV-11
+
+Installing every tool "just in case" costs gigabytes and time. QAJitsu looks at the application and proposes only what its tests need.
+
+**Acceptance criteria**
+
+- [ ] AC1: `qj doctor --recommend` detects by code from the repositories what the application is and how it can be tested: web front-ends, mobile projects (Gradle, Xcode, React Native, Flutter), API descriptions (OpenAPI, GraphQL SDL, `.proto`, WSDL, AsyncAPI), compose files and existing test suites (Playwright, Appium, Maestro).
+- [ ] AC2: An agent turns the findings into a recommendation of tools and `.qa` settings (browsers, Docker, Java and the Android SDK or not, Xcode or a farm, Appium or Maestro, runners per API type), each with the files it is based on; every cited file and finding is checked by code, and a recommendation without a found basis is dropped.
+- [ ] AC3: The recommendation lists what will not be installed and why, the download size and disk space of each tool, and the command for it (`qj setup --only ...`).
+- [ ] AC4: Nothing is installed or changed without the user's confirmation; with `--yes` in CI only the recommended set is installed.
+- [ ] AC5: Without a model (offline) the deterministic findings still give a recommendation, marked as such.
+- [ ] AC6: Repository content is untrusted data: it can never make the agent recommend tools outside QAJitsu's toolchain manifest or sources outside the configured mirrors.
