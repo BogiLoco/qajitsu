@@ -1006,6 +1006,17 @@ files and key is kept, so its id stays the same. `qj publish` issues the certifi
 
 Exit codes: `0` issued (or still valid), `1` no certificate (gaps listed), `3` errors or no signing key.
 
+### `qajitsu audit archive <ticket>`
+
+Keeps a certified run in the configured write-once storage (`archive`, S3 Object Lock, REQ-VER-19), for example after
+the storage was unreachable when the run ended. Stores the audit export and the certificate locked until the date the
+certificate states, and reads each object back to confirm the lock.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+
+Exit codes: `0` archived, `1` not archived (the reason is printed), `3` errors (no archive configured, no certificate
+stating storage).
+
 ### `qajitsu audit timestamp <ticket>`
 
 Timestamps the run's certificate at the configured time-stamping authority (`certificate.timestamp.url`, RFC 3161,

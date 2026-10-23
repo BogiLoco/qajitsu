@@ -95,6 +95,41 @@ certificate:
 
 Tested with DigiCert, Sectigo and FreeTSA (RSA tokens with intermediate certificates) and with ECDSA tokens.
 
+## Write-once storage (REQ-VER-19)
+
+A certificate shows that something changed; write-once storage stops it from being changed or deleted at all, by
+anyone, an administrator included, until the retention ends. Configure S3 Object Lock (AWS S3, MinIO or another
+S3-compatible store; the bucket must be created with Object Lock enabled):
+
+```yaml
+# .qa/qa.project.yaml
+archive:
+  type: s3
+  endpoint: https://s3.eu-central-1.amazonaws.com # or your MinIO
+  region: eu-central-1
+  bucket: qa-evidence
+  prefix: qajitsu/ # each run goes to <prefix><TICKET>/<run id>/
+  path_style: false # true for MinIO
+  access_key_id: secret://vault/qa/s3#key
+  secret_access_key: secret://vault/qa/s3#secret
+  mode: compliance # or governance
+  retention_days: 2555 # about 7 years
+```
+
+- The certificate states, inside what is signed, where the run is kept and until when (`predicate.storage`).
+- When the run is certified (and timestamped), its audit export (every file, the trail, `SHA256SUMS`, the certificate
+  and its timestamp) and the certificate go to `<prefix><TICKET>/<run id>/` with that lock, and each object is read back:
+  the storage must hold the lock and the same content, not just answer 200. The result is in
+  `certificate/archive.json` and the journal (`archive.stored`).
+- Storage that is unreachable, has no Object Lock, does not hold the lock, or refuses the keys never stops a run: the
+  run is "not archived" with the reason, and `qj audit archive <TICKET>` tries again.
+- `qj gc`, `qj work reset --delete` and `qj projects remove` keep locked runs on disk until their retention ends and
+  say so.
+- `qj verify-report` shows where the certificate says the run is kept and whether it was archived.
+
+Tested against a fake S3 that checks every signature and, exploratory, against moto with authentication on, where
+deleting a locked version was refused even for a user allowed everything.
+
 ## Reproducing a certified run (REQ-VER-20)
 
 `qj reproduce <run folder or audit zip> [--env <env> | --build]` runs again exactly what was certified: the certificate
@@ -116,6 +151,7 @@ is one in about 100 lines of Node.js built-ins, tested against real certificates
 | `certificate/<key id>.pub`          | the signer's public key, for convenience (trust only keys you were given)                                   |
 | `certificate/timestamp.tsr`         | RFC 3161 timestamp token over the SHA-256 of the envelope's payload (REQ-VER-17)                            |
 | `certificate/timestamp.json`        | the timestamp's time, TSA and trust, or why the certificate is not timestamped                              |
+| `certificate/archive.json`          | where the run is kept write-once, the objects with SHA-256 and version, or why it is not archived           |
 | `audit/trail.json`                  | the audit trail: every file with category and SHA-256, the gaps, records                                    |
 | `evidence/manifest.json`            | evidence files with SHA-256, kind, case and step (REQ-VER-05)                                               |
 | `journal/events.jsonl`              | event journal; each line's `prev` is the SHA-256 of the line before                                         |

@@ -60,6 +60,7 @@ import { runFeedback } from "./commands/feedback.js";
 import { runWorkflowSync } from "./commands/ticket-approval.js";
 import { runWorkflowPoll, runWorkflowServe } from "./commands/pickup.js";
 import { runAuditTimestamp } from "./commands/timestamp.js";
+import { runAuditArchive } from "./commands/archive.js";
 import { runReproduce } from "./commands/reproduce.js";
 import { runTelemetryExport } from "./commands/telemetry.js";
 import { runMetrics } from "./commands/metrics.js";
@@ -1080,6 +1081,16 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--run <id>", "run id (default: latest run of the ticket)")
     .action((ticket: string, options: { run?: string }) =>
       withPorts((ports) => runCertify(ticket, options, commandIO, ports))(),
+    );
+  audit
+    .command("archive")
+    .description(
+      "Keep a certified run in the configured write-once storage (S3 Object Lock), e.g. after it was unreachable",
+    )
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .action((ticket: string, options: { run?: string }) =>
+      withPorts((ports) => runAuditArchive(ticket, options, commandIO, ports))(),
     );
   audit
     .command("timestamp")

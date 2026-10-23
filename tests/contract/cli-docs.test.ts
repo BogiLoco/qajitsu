@@ -87,7 +87,7 @@ describe("reference documentation in sync with the code (REQ-NFR-03/AC3)", () =>
       .sort();
     const rows = (await read("packages/adapters/README.md"))
       .split("\n")
-      .map((l) => /^\| `([a-z-]+)`\s*\|.*\|\s*([a-z-]+)\s*\|$/.exec(l))
+      .map((l) => /^\| `([a-z0-9-]+)`\s*\|.*\|\s*([a-z-]+)\s*\|$/.exec(l))
       .filter((m): m is RegExpExecArray => m !== null);
     expect(rows.map((m) => m[1]).sort()).toEqual(packages);
     for (const m of rows) expect(m[2], m[1]).toBe("implemented");

@@ -205,6 +205,8 @@ test_types: [api, web]
 # certificate: { signing_key: secret://env/QAJITSU_SIGNING_KEY, required: false }
 # Trusted timestamps (RFC 3161): only the certificate's hash goes to the TSA; its CA in .qa/keys/tsa/
 # certificate: { signing_key: ..., timestamp: { url: http://timestamp.digicert.com, qualified: false } }
+# Write-once storage of certified runs (S3 Object Lock; bucket created with Object Lock):
+# archive: { type: s3, endpoint: https://s3.eu-central-1.amazonaws.com, region: eu-central-1, bucket: qa-evidence, access_key_id: secret://env/S3_KEY, secret_access_key: secret://env/S3_SECRET, mode: compliance, retention_days: 2555 }
 #
 # Android and iOS (REQ-ENV-06, docs/guides/mobile.md)
 # mobile: { recording: retain-on-failure, android: { app: { source: build, repo: app, command: [./gradlew, assembleDebug], output: app/build/outputs/apk/debug/app-debug.apk }, app_id: com.example.app } }

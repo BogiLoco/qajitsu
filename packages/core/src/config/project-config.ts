@@ -688,6 +688,32 @@ export const ProjectConfigSchema = z.strictObject({
     })
     .default({ first_runs: 0, always: false }),
   /**
+   * Write-once storage of evidence and certificates (REQ-VER-19): after a run is certified, its audit export and
+   * certificate go to S3 Object Lock (AWS, MinIO and other S3-compatible storage) locked for `retention_days`. The
+   * certificate states where and until when; runs locked there are never cleaned up locally before that date.
+   */
+  archive: z
+    .strictObject({
+      type: z.literal("s3"),
+      endpoint: z.url().refine((u) => /^https?:\/\//.test(u), "http(s) URL"),
+      region: z.string().min(1).default("us-east-1"),
+      bucket: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/, "S3 bucket name"),
+      /** Key prefix; each run goes to `<prefix><TICKET>/<run id>/`. */
+      prefix: z
+        .string()
+        .regex(/^([A-Za-z0-9_.-]+\/)*$/, "Path segments ending with /")
+        .default("qajitsu/"),
+      /** Path-style addressing, as MinIO needs. */
+      path_style: z.boolean().default(false),
+      access_key_id: SecretRef,
+      secret_access_key: SecretRef,
+      session_token: SecretRef.optional(),
+      /** `compliance`: nobody can delete before the date; `governance`: only with a special permission. */
+      mode: z.enum(["compliance", "governance"]).default("compliance"),
+      retention_days: z.number().int().min(1).max(36_500),
+    })
+    .optional(),
+  /**
    * Signed test certificates (REQ-VER-15): with `signing_key` (an Ed25519 private key in PEM, or its base64, from the
    * secret provider) every published run gets a certificate over its audit trail. Public keys that verify them live
    * in `.qa/keys/*.pub`, old ones stay there after a rotation. With `required`, a run whose audit trail has gaps is

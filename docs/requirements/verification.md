@@ -281,16 +281,17 @@ Everything that influenced the verdict is recorded and hashed, not only the resu
 
 ### REQ-VER-19 · Immutable evidence storage
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: 9
 - Related: REQ-VER-16, REQ-WS-03
+- Note: implemented as the plugin `@qajitsu/adapter-evidence-s3` (S3 Object Lock on AWS, MinIO and other S3-compatible storage; SigV4 on Node.js built-ins). The audit export and the certificate are stored once the run is certified; each object is read back to confirm its lock.
 
 **Acceptance criteria**
 
-- [ ] AC1: Evidence and certificates can be stored in write-once storage (for example S3 Object Lock in compliance mode) with a retention period per project.
-- [ ] AC2: During retention, cleanup (REQ-WS-03) skips locked runs and says so.
-- [ ] AC3: Storage location and retention are recorded in the certificate.
+- [x] AC1: Evidence and certificates can be stored in write-once storage (for example S3 Object Lock in compliance mode) with a retention period per project.
+- [x] AC2: During retention, cleanup (REQ-WS-03) skips locked runs and says so.
+- [x] AC3: Storage location and retention are recorded in the certificate.
 
 ### REQ-VER-20 · Reproduce a run from its certificate
 

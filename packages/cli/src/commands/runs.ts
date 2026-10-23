@@ -1,3 +1,4 @@
+import { lockedUntil } from "./archive.js";
 import { formatVersions } from "@qajitsu/report";
 import { readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -213,7 +214,15 @@ export async function removeRun(
   ticket: TicketKey,
   runId: string,
   exec: CommandExec | undefined,
+  now: Date = new Date(),
 ): Promise<string> {
+  // REQ-VER-19/AC2: a run kept write-once is not deleted here before its retention ends.
+  const until = await openRunWorkspace(root, ticket, runId).then(
+    (ws) => lockedUntil(ws.record.data, now),
+    () => undefined,
+  );
+  if (until !== undefined)
+    return `${ticket}/${runId}: kept, it is locked in write-once storage until ${until}`;
   const cleaned = await cleanOne(root, ticket, runId, exec, async () => {
     await archiveJournal(root, ticket, runId);
     await deleteRun(root, ticket, runId);
@@ -335,7 +344,7 @@ export async function runGc(
         }
         try {
           // REQ-OBS-05/AC2: the journal outlives the run under the audit retention; no archive, no delete.
-          io.write(`${await removeRun(root, ticket, runId, ports.buildExec)}\n`);
+          io.write(`${await removeRun(root, ticket, runId, ports.buildExec, ports.now())}\n`);
         } catch (error) {
           io.writeError(
             `${ticket}/${runId}: kept, its journal could not be archived (${error instanceof Error ? error.message : String(error)})\n`,
@@ -385,7 +394,7 @@ export async function runWorkReset(
           io.write(`${ticket}/${r.runId}: marked keep, kept\n`);
           continue;
         }
-        io.write(`${await removeRun(root, ticket, r.runId, ports.buildExec)}\n`);
+        io.write(`${await removeRun(root, ticket, r.runId, ports.buildExec, ports.now())}\n`);
       }
     }
     const latest = (await readRunIndex(root, ticket)).latest;

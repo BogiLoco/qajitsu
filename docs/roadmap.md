@@ -247,7 +247,7 @@ documentation site and the Claude Code plugin are available.
 - [REQ-EXEC-33](requirements/execution.md#req-exec-33--behaviour-regression-after-model-or-prompt-changes) Behaviour regression after model or prompt changes (should, proposed, AC 0/3)
 - [REQ-VER-15](requirements/verification.md#req-ver-15--verifiable-test-certificate) Verifiable test certificate (should, implemented, AC 9/9)
 - [REQ-VER-17](requirements/verification.md#req-ver-17--trusted-timestamps) Trusted timestamps (should, implemented, AC 5/5)
-- [REQ-VER-19](requirements/verification.md#req-ver-19--immutable-evidence-storage) Immutable evidence storage (should, proposed, AC 0/3)
+- [REQ-VER-19](requirements/verification.md#req-ver-19--immutable-evidence-storage) Immutable evidence storage (should, implemented, AC 3/3)
 - [REQ-VER-20](requirements/verification.md#req-ver-20--reproduce-a-run-from-its-certificate) Reproduce a run from its certificate (should, implemented, AC 3/3)
 - [REQ-VER-21](requirements/verification.md#req-ver-21--open-verifier-and-audit-documentation) Open verifier and audit documentation (should, implemented, AC 3/3)
 - [REQ-OBS-03](requirements/observability.md#req-obs-03--opentelemetry-export) OpenTelemetry export (should, implemented, AC 2/2)

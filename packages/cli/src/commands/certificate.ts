@@ -41,6 +41,7 @@ import { openSession, type ModelPorts, type RunSession } from "../session.js";
 import { loadAuditTrail } from "./audit-trail.js";
 import type { CommandIO } from "./fetch.js";
 import { TIMESTAMP_TOKEN, payloadDigest, stampCertificate, trustedTsaCertificates } from "./timestamp.js";
+import { archiveRun, plannedStorage } from "./archive.js";
 import { computeVerdict, writeReports } from "./verdict.js";
 
 /** Folder of the project's trusted public keys (REQ-VER-15/AC6). */
@@ -114,6 +115,8 @@ export type IssueOutcome =
       readonly reused: boolean;
       /** The timestamp line (REQ-VER-17), when a TSA is configured. */
       readonly timestamp?: string;
+      /** The write-once storage line (REQ-VER-19), when an archive is configured. */
+      readonly archived?: string;
     };
 
 const readRunFile = (dir: string) => async (path: string) =>
@@ -138,12 +141,16 @@ export async function issueCertificate(
   fetchImpl?: typeof globalThis.fetch,
 ): Promise<IssueOutcome> {
   const outcome = await issueOrReuse(session, now, verdict);
+  if (outcome.status !== "issued" || fetchImpl === undefined) return outcome;
   // REQ-VER-17: a configured TSA stamps the certificate; a TSA that cannot help never stops the run (AC5).
-  if (outcome.status === "issued" && fetchImpl !== undefined) {
-    const timestamp = await stampCertificate(session, fetchImpl, now);
-    if (timestamp !== undefined) return { ...outcome, timestamp };
-  }
-  return outcome;
+  const timestamp = await stampCertificate(session, fetchImpl, now);
+  // REQ-VER-19: then the run goes to write-once storage, timestamp included; an archive that cannot help never stops it.
+  const archived = await archiveRun(session, fetchImpl, now);
+  return {
+    ...outcome,
+    ...(timestamp === undefined ? {} : { timestamp }),
+    ...(archived === undefined ? {} : { archived }),
+  };
 }
 
 async function issueOrReuse(
@@ -198,12 +205,13 @@ async function issueOrReuse(
     if (certificateScope(i.path) !== "excluded")
       subjects.push(certificateSubject(i.path, await read(i.path)));
   const digest = (name: string): string | undefined => subjects.find((s) => s.name === name)?.digest.sha256;
+  const issuedAt = now().toISOString();
   const data = ws.record.data;
   const build = (data["build"] ?? {}) as Record<string, unknown>;
   const statement = certificateStatement(subjects, {
     ticket: ws.ticket,
     runId: ws.runId,
-    issuedAt: now().toISOString(),
+    issuedAt,
     files: subjects.length,
     repos: ws.record.repos,
     plan: data["approval"],
@@ -218,6 +226,7 @@ async function issueOrReuse(
     images: build["images"] ?? [],
     environment: data["environment"],
     ...(data["codeAccess"] ? { codeAccess: data["codeAccess"] } : {}),
+    ...storageOf(session, issuedAt),
   });
   const envelope = signStatement(statement, keySigner(key));
   await mkdir(ws.path(CERTIFICATE_DIR), { recursive: true });
@@ -243,6 +252,17 @@ async function issueOrReuse(
   await stampReport(session, certificate);
   return { status: "issued", certificate, reused: false };
 }
+
+/** The write-once storage a new certificate states (REQ-VER-19/AC3). */
+const storageOf = (session: RunSession, issuedAt: string): { storage?: unknown } => {
+  const storage = plannedStorage(
+    session.project.config.archive,
+    session.ws.ticket,
+    session.ws.runId,
+    issuedAt,
+  );
+  return storage === undefined ? {} : { storage };
+};
 
 /** Writes the certificate section into `report.html` (REQ-VER-15/AC7); the covered content stays the same. */
 async function stampReport(session: Pick<RunSession, "ws">, certificate: CertificateSummary): Promise<void> {
@@ -301,7 +321,11 @@ export async function certificateForPublish(
     return [`No certificate: the audit trail has ${String(outcome.gaps.length)} gap(s).`];
   }
   // The lines go into the comment, whose preview is printed; printing them here too repeated them.
-  return [...certificateLines(outcome.certificate), ...(outcome.timestamp ? [outcome.timestamp] : [])];
+  return [
+    ...certificateLines(outcome.certificate),
+    ...(outcome.timestamp ? [outcome.timestamp] : []),
+    ...(outcome.archived ? [outcome.archived] : []),
+  ];
 }
 
 /**
@@ -337,7 +361,7 @@ export async function runCertify(
       return 1;
     }
     io.write(
-      `${outcome.reused ? "The run's certificate is still valid" : "Issued"}: ${session.ws.path(...(CERTIFICATE_FILE.split("/") as [string, string]))}\n${[...certificateLines(outcome.certificate), ...(outcome.timestamp ? [outcome.timestamp] : [])].join("\n")}\n`,
+      `${outcome.reused ? "The run's certificate is still valid" : "Issued"}: ${session.ws.path(...(CERTIFICATE_FILE.split("/") as [string, string]))}\n${[...certificateLines(outcome.certificate), ...(outcome.timestamp ? [outcome.timestamp] : []), ...(outcome.archived ? [outcome.archived] : [])].join("\n")}\n`,
     );
     return 0;
   } catch (error) {
@@ -566,6 +590,24 @@ export async function runVerifyReport(
           `timestamped ${ts.genTime ?? ""} by ${ts.tsa ?? "a TSA"}${ts.trusted ? " (trusted TSA)" : "; the TSA is not trusted here (pass its CA with --tsa-ca)"}`,
         );
       }
+    }
+    // REQ-VER-19/AC3: where the certificate says the run is kept write-once, and what QAJitsu recorded about it.
+    const storage = check.statement?.predicate.storage;
+    if (storage) {
+      const record = read(`${CERTIFICATE_DIR}/archive.json`);
+      let status = "not archived yet";
+      try {
+        const r = record
+          ? (JSON.parse(new TextDecoder().decode(record)) as { status?: string; reason?: string })
+          : undefined;
+        if (r?.status === "archived") status = "archived";
+        else if (r?.status === "not_archived") status = `not archived: ${r.reason ?? ""}`;
+      } catch {
+        status = "archive record unreadable";
+      }
+      notes.push(
+        `kept write-once at ${storage.location} (${storage.mode}) until ${storage.retainUntil}; ${status}`,
+      );
     }
     return reportCheck(io, check, { ...coverage, problems, keySource, notes }) ? 0 : 1;
   } catch (error) {

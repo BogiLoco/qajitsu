@@ -765,7 +765,7 @@ export async function runRun(
       const certified = await issueCertificate(session, ports.now, certifiedVerdict(verdict), ports.fetch);
       if (certified.status === "issued")
         io.write(
-          `${[...certificateLines(certified.certificate), ...(certified.timestamp ? [certified.timestamp] : [])].join("\n")}\n`,
+          `${[...certificateLines(certified.certificate), ...(certified.timestamp ? [certified.timestamp] : []), ...(certified.archived ? [certified.archived] : [])].join("\n")}\n`,
         );
       if (certified.status === "gaps")
         io.writeError(
