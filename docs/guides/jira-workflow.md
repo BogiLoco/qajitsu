@@ -53,6 +53,7 @@ groups (`{ "groups": { "qa-leads": ["acc-anna"] } }`).
 | ------------------------------------------------------ | ------------------------------------------------------------------------ |
 | `qj plan` stops at the readiness gate                  | `needs_info` (unless `--override-readiness`)                             |
 | `qj workflow sync` posts a plan                        | `waiting_for_approval`, when mapped                                      |
+| `/qj approve v<N>` accepted                            | `in_testing`                                                             |
 | `/qj reject <reason>`                                  | `needs_info`                                                             |
 | `qj publish`: every case PASSED                        | `passed` (`done` only with `passed_to_done`)                             |
 | `qj publish`: a case FAILED                            | `failed`, assigned to the change's author when `authors` maps them       |
@@ -76,7 +77,9 @@ QAJitsu can start by itself when a ticket enters the start status:
 
 Picking up means: a new run (with the one-active-run and daily limits below), the ticket moves to `in_testing` with a
 comment that the run started, the plan is written after the readiness gate, and posted for approval. A ticket that
-went to `needs_info` and comes back to the start status is checked again from scratch.
+went to `needs_info` and comes back to the start status is checked again from scratch. Only the tracker's status
+counts (a webhook body is never trusted for it), and a ticket whose last run is still open is not picked up again;
+`qj work reset <TICKET>` closes that run.
 
 ## Approving the plan in the ticket
 

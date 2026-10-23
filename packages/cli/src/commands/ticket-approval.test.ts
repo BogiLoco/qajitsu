@@ -91,6 +91,7 @@ describe("plan approval in the ticket (REQ-FLOW-03)", () => {
     expect(await p.published("reply-c3")).toMatch(/Plan v1 approved; sha256 [0-9a-f]{64}/);
     const r = await p.record();
     expect(r.data.approval).toMatchObject({ version: 1, approver: "jira:Anna (acc-anna)" });
+    expect(await p.status()).toBe("In QA");
     expect(r.data.ticketFlow.commands.map((c) => [c.account, c.outcome])).toEqual([
       ["acc-mallory", "ignored: not in qa-leads"],
       ["acc-anna", "refused: v2 is not the version waiting for approval (v1)"],

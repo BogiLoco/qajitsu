@@ -158,6 +158,54 @@ describe("picking tickets up (REQ-FLOW-01)", () => {
     expect(log).not.toContain("Ready for QA");
   });
 
+  it("REQ-FLOW-01/AC1+AC4: a ticket stuck in the start status is not picked up again while its run is open; a reset frees it", async () => {
+    const p = await setup();
+    // The team's workflow offers no way out of "Ready for QA".
+    await writeFile(
+      join(p.project, "tickets", "workflow.json"),
+      JSON.stringify({ transitions: { "Ready for QA": [] }, groups: { "qa-leads": ["acc-anna"] } }),
+    );
+    expect((await p.run(["workflow", "poll", "--once"], { script: p.plan })).err).toContain(
+      "DEMO-1 stays where it is",
+    );
+    const again = await p.run(["workflow", "poll", "--once"], { script: p.plan });
+    expect(again.out).toContain(
+      "DEMO-1 not picked up: run 20261003-1046-aaaa is still open; finish it or close it with qajitsu work reset DEMO-1.",
+    );
+    expect(await p.runs()).toHaveLength(1);
+    expect((await p.run(["work", "reset", "DEMO-1"])).exitCode).toBe(0);
+    await p.run(["workflow", "poll", "--once"], { script: p.plan });
+    expect(await p.runs()).toHaveLength(2);
+  });
+
+  it("REQ-FLOW-01/AC1: a webhook for a ticket that is not in the start status starts nothing; the tracker decides, not the body", async () => {
+    const p = await setup();
+    await p.patch({ status: "Done" });
+    const port = await freePort();
+    const signals = new EventEmitter();
+    const serving = p.run(["workflow", "serve", "--port", String(port)], { signals: signals });
+    let res: Response | undefined;
+    for (let i = 0; i < 100 && !res; i += 1)
+      res = await fetch(`http://127.0.0.1:${String(port)}/jira`, {
+        method: "POST",
+        headers: { "x-qajitsu-token": SECRET },
+        body: JSON.stringify({ issue: { key: "DEMO-1", fields: { status: { name: "Ready for QA" } } } }),
+      }).catch(async () => {
+        await new Promise((d) => setTimeout(d, 50));
+        return undefined;
+      });
+    expect(res?.status).toBe(202);
+    for (let i = 0; i < 100; i += 1) {
+      const log = await readFile(join(p.home, "runs", "pickup.jsonl"), "utf8").catch(() => "");
+      if (log.includes("pickup.skipped")) break;
+      await new Promise((d) => setTimeout(d, 50));
+    }
+    signals.emit("SIGINT");
+    const r = await serving;
+    expect(r.out).toContain('DEMO-1 not picked up: it is in "Done", not "Ready for QA".');
+    expect(await p.runs()).toHaveLength(0);
+  });
+
   it("REQ-FLOW-01/AC3: the webhook never runs without a secret", async () => {
     const p = await createDemoPipeline({ config: FLOW.slice(0, 3) });
     cleanups.push(p.cleanup);

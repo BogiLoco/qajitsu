@@ -7,8 +7,10 @@ import {
   ConfigError,
   QajitsuError,
   TicketKeySchema,
+  openRunWorkspace,
   readRunIndex,
   resolveWorkspaceRoot,
+  type RunWorkspace,
   type TicketKey,
   type TicketWorkflow,
 } from "@qajitsu/core";
@@ -89,6 +91,22 @@ export async function pickUp(
 ): Promise<string | undefined> {
   const latest = async () => (await readRunIndex(ctx.root, ticket).catch(() => undefined))?.latest;
   const before = await latest();
+  const skip = async (reason: string): Promise<undefined> => {
+    io.write(`${ticket} not picked up: ${reason}.\n`);
+    await logPickup(ctx.root, ports.now, { event: "pickup.skipped", ticket, via, reason });
+    return undefined;
+  };
+  // The tracker decides, never a webhook body: only a ticket in the start status is picked up.
+  const start = ctx.project.config.workflow?.statuses.start ?? "";
+  const status = await ctx.workflow.status(ticket).catch(() => undefined);
+  if (status === undefined) return skip("its status could not be read");
+  if (status.toLowerCase() !== start.toLowerCase()) return skip(`it is in "${status}", not "${start}"`);
+  // A ticket whose move out of the start status failed would be picked up on every poll: one open run at a time.
+  if (before !== undefined) {
+    const open = await openRunWorkspace(ctx.root, ticket, before).then(runIsOpen, () => false);
+    if (open)
+      return skip(`run ${before} is still open; finish it or close it with qajitsu work reset ${ticket}`);
+  }
   // No terminal questions while picking up: nobody is there to answer.
   const quiet: CommandIO = { ...io, ask: undefined };
   const fetched = await runFetch(ticket, {}, quiet, ports);
@@ -125,6 +143,20 @@ export async function pickUp(
   if (planned === 0 && ctx.project.config.workflow?.approvers_group !== undefined)
     await runWorkflowSync(ticket, { run: runId }, quiet, ports, review);
   return runId;
+}
+
+/**
+ * Whether a run of a ticket still waits for something (a plan decision, a run, results): not closed, no results, not
+ * rejected in the ticket and not stopped at the readiness gate.
+ */
+function runIsOpen(ws: RunWorkspace): boolean {
+  const d = ws.record.data;
+  if (d["closed"] !== undefined || d["results"] !== undefined) return false;
+  if ((d["ticketFlow"] as { rejected?: unknown } | undefined)?.rejected !== undefined) return false;
+  const readiness = d["readiness"] as { result?: string } | undefined;
+  if (readiness?.result !== undefined && readiness.result !== "READY" && d["readinessOverride"] === undefined)
+    return false;
+  return true;
 }
 
 const wait = (ms: number, signal?: AbortSignal): Promise<void> =>
@@ -330,6 +362,9 @@ export async function startPickupServer(
       if (!res.headersSent) res.writeHead(500).end();
     });
   });
+  // A client that sends slowly is cut off instead of holding the server.
+  server.headersTimeout = 10_000;
+  server.requestTimeout = 15_000;
   const host = options.host ?? flow.pickup.host;
   const port = options.port ?? flow.pickup.port;
   await new Promise<void>((done, fail) => {

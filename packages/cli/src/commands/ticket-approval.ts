@@ -341,6 +341,16 @@ export async function runWorkflowSync(
           cmd,
           code === 0 && sha !== undefined ? `approved v${String(current)}` : "approval failed",
         );
+        // Testing starts now: the ticket leaves "waiting for approval".
+        if (code === 0 && sha !== undefined)
+          await moveToRole(
+            session,
+            io,
+            workflow,
+            publisher,
+            "in_testing",
+            `plan v${String(current)} approved`,
+          );
         continue;
       }
       if (cmd.name === "reject") {
