@@ -1006,6 +1006,17 @@ files and key is kept, so its id stays the same. `qj publish` issues the certifi
 
 Exit codes: `0` issued (or still valid), `1` no certificate (gaps listed), `3` errors or no signing key.
 
+### `qajitsu audit timestamp <ticket>`
+
+Timestamps the run's certificate at the configured time-stamping authority (`certificate.timestamp.url`, RFC 3161,
+REQ-VER-17), for a certificate issued while the TSA was unreachable, or to stamp it again. Only the SHA-256 of the
+signed statement is sent; the token is checked before it is kept in `certificate/timestamp.tsr`.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+
+Exit codes: `0` timestamped, `1` not timestamped (the reason is printed), `3` errors (no TSA configured, no
+certificate).
+
 ### `qajitsu audit keygen`
 
 Creates an Ed25519 signing key. The private key is written with mode 0600 into the project home and never printed; put
@@ -1038,6 +1049,10 @@ key, the format, the Merkle root, and every covered file (journals and logs up t
 changed or missing file. Works offline, without the run's project.
 
 - `--key <file>`: trusted public key in PEM; repeat for rotated keys. Inside a project `.qa/keys/*.pub` are trusted too.
+- `--tsa-ca <file>`: trusted CA certificate of the time-stamping authority (PEM or DER); repeatable. Inside a project
+  `.qa/keys/tsa/*.pem` are trusted too. A timestamp token present is checked (REQ-VER-17): a token for another hash,
+  a broken signature or a certificate claiming to be issued after its stamp fails the check; an untrusted TSA is
+  named.
 
 Exit codes: `0` valid, `1` a file changed or is missing, or the key is not trusted, `3` no certificate or an
 unreadable path.

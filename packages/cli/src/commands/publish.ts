@@ -209,7 +209,13 @@ export async function runPublish(
       );
     }
     // REQ-VER-15: the certificate is issued before anything leaves the run, so the comment can name it.
-    const certificate = await certificateForPublish(session, io, ports.now, certifiedVerdict(verdict));
+    const certificate = await certificateForPublish(
+      session,
+      io,
+      ports.now,
+      certifiedVerdict(verdict),
+      ports.fetch,
+    );
     const evidenceZip = await buildEvidenceZip(session, verdict);
     // Failure screenshots and videos are attached individually so they show without unzipping (REQ-PUB-02/AC2).
     const failing = new Set(

@@ -697,6 +697,18 @@ export const ProjectConfigSchema = z.strictObject({
     .strictObject({
       signing_key: SecretRef.optional(),
       required: z.boolean().default(false),
+      /**
+       * Trusted timestamps (REQ-VER-17): the RFC 3161 time-stamping authority that stamps every certificate. Only the
+       * hash of the signed statement is sent. `qualified` marks a qualified trust service provider under eIDAS; its CA
+       * certificates go to `.qa/keys/tsa/`.
+       */
+      timestamp: z
+        .strictObject({
+          url: z.url().refine((u) => /^https?:\/\//.test(u), "http(s) URL"),
+          qualified: z.boolean().default(false),
+          timeout_s: z.number().int().min(1).max(120).default(20),
+        })
+        .optional(),
     })
     .default({ required: false }),
   /**

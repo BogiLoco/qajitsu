@@ -203,6 +203,8 @@ test_types: [api, web]
 #
 # Signed test certificates (REQ-VER-15): `qj audit keygen`, then the private key in the secret provider
 # certificate: { signing_key: secret://env/QAJITSU_SIGNING_KEY, required: false }
+# Trusted timestamps (RFC 3161): only the certificate's hash goes to the TSA; its CA in .qa/keys/tsa/
+# certificate: { signing_key: ..., timestamp: { url: http://timestamp.digicert.com, qualified: false } }
 #
 # Android and iOS (REQ-ENV-06, docs/guides/mobile.md)
 # mobile: { recording: retain-on-failure, android: { app: { source: build, repo: app, command: [./gradlew, assembleDebug], output: app/build/outputs/apk/debug/app-debug.apk }, app_id: com.example.app } }

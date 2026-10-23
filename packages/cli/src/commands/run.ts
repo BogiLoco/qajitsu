@@ -762,8 +762,11 @@ export async function runRun(
     await writeReports(session, verdict);
     await sealRun(session);
     if (ws.record.data["bench"] === undefined) {
-      const certified = await issueCertificate(session, ports.now, certifiedVerdict(verdict));
-      if (certified.status === "issued") io.write(`${certificateLines(certified.certificate).join("\n")}\n`);
+      const certified = await issueCertificate(session, ports.now, certifiedVerdict(verdict), ports.fetch);
+      if (certified.status === "issued")
+        io.write(
+          `${[...certificateLines(certified.certificate), ...(certified.timestamp ? [certified.timestamp] : [])].join("\n")}\n`,
+        );
       if (certified.status === "gaps")
         io.writeError(
           `Warning: no certificate, the audit trail has ${String(certified.gaps.length)} gap(s):\n${certified.gaps

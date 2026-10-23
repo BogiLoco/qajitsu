@@ -251,18 +251,19 @@ Everything that influenced the verdict is recorded and hashed, not only the resu
 
 ### REQ-VER-17 · Trusted timestamps
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: 9
 - Related: REQ-VER-15
+- Note: the timestamp covers the SHA-256 of the certificate's signed statement, which holds the Merkle root. AC2: a qualified eIDAS provider is configured with `qualified: true` and its CA in `.qa/keys/tsa/`; QAJitsu does not check the EU trusted lists itself.
 
 **Acceptance criteria**
 
-- [ ] AC1: The certificate's root hash can be timestamped by an RFC 3161 time-stamping authority configured per project.
-- [ ] AC2: Qualified electronic timestamps under eIDAS can be used by configuring a qualified trust service provider.
-- [ ] AC3: The timestamp token is stored with the certificate and checked by `qj verify-report`.
-- [ ] AC4: Only the hash is sent to the authority, never content.
-- [ ] AC5: An unavailable authority does not block the run; the certificate is marked "not timestamped" and can be timestamped later.
+- [x] AC1: The certificate's root hash can be timestamped by an RFC 3161 time-stamping authority configured per project.
+- [x] AC2: Qualified electronic timestamps under eIDAS can be used by configuring a qualified trust service provider.
+- [x] AC3: The timestamp token is stored with the certificate and checked by `qj verify-report`.
+- [x] AC4: Only the hash is sent to the authority, never content.
+- [x] AC5: An unavailable authority does not block the run; the certificate is marked "not timestamped" and can be timestamped later.
 
 ### REQ-VER-18 · Public and private transparency logs
 

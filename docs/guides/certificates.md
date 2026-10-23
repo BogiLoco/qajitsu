@@ -29,6 +29,8 @@ A certificate does **not** prove:
 - anything about files it does not list. Check the subject list; `run.json` itself, `env/` (secrets), `audit/` and the
   copies made when publishing (`report/published/`, `report/media/`) are not covered;
 - that the signing key was kept secret. Keep it in the secret provider and rotate it if in doubt.
+- when it was issued, without a timestamp. The issue time in the statement is written by QAJitsu; someone with the
+  key could sign a certificate dated in the past. A trusted timestamp (below) closes that.
 - that the key is the project's. `verify-report` says where its trust in the key comes from: `--key` (a key you got
   from the project through another channel) or `.qa/keys/` (anyone who can write to the repository can add a key
   there, so an outside auditor should pass `--key`).
@@ -62,6 +64,37 @@ certifying, so a hand-edited report is never certified, and rendering them again
 
 Keys rotate: create a new key, keep the old `*.pub` files in `.qa/keys/`, and old certificates still verify.
 
+## Trusted timestamps (REQ-VER-17)
+
+A timestamp from an RFC 3161 time-stamping authority (TSA) proves the certificate existed **no later than** a time
+vouched for by someone else. Configure one and every certificate is stamped when it is issued:
+
+```yaml
+# .qa/qa.project.yaml
+certificate:
+  signing_key: secret://env/QAJITSU_SIGNING_KEY
+  timestamp:
+    url: http://timestamp.digicert.com # or Sectigo, FreeTSA, your company's TSA, a qualified eIDAS provider
+    qualified: false # true for a qualified trust service provider under eIDAS
+    timeout_s: 20
+```
+
+- Only the SHA-256 of the signed statement goes to the TSA, never a file of the run.
+- The token is checked before it is kept: it stamps this hash, answers this request (nonce), is signed by a
+  certificate for time stamping valid at that time, and its time is not before the certificate's issue time.
+- Kept as `certificate/timestamp.tsr` (the RFC 3161 token, DER) with `certificate/timestamp.json` (time, TSA, whether
+  it is trusted, qualified).
+- A TSA that cannot be reached or answers with something unusable never stops a run: the certificate is marked "not
+  timestamped" with the reason; `qj audit timestamp <TICKET>` stamps it later.
+- Trust: put the CA certificate of your TSA (from its website, for example "DigiCert Trusted Root G4") into
+  `.qa/keys/tsa/*.pem`, or pass it to `qj verify-report --tsa-ca <file>` or `tools/verify-certificate.mjs --tsa-ca
+<file>`. A token whose TSA is not trusted is shown as such, never as trusted.
+- A stamp made much later than the certificate (for example with `qj audit timestamp` days after) proves only that the
+  certificate existed by then; `verify-report` says so. A certificate that claims to be issued after its own stamp is
+  dated falsely and fails the check.
+
+Tested with DigiCert, Sectigo and FreeTSA (RSA tokens with intermediate certificates) and with ECDSA tokens.
+
 ## Reproducing a certified run (REQ-VER-20)
 
 `qj reproduce <run folder or audit zip> [--env <env> | --build]` runs again exactly what was certified: the certificate
@@ -81,6 +114,8 @@ is one in about 100 lines of Node.js built-ins, tested against real certificates
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `certificate/certificate.dsse.json` | the certificate: a DSSE envelope                                                                            |
 | `certificate/<key id>.pub`          | the signer's public key, for convenience (trust only keys you were given)                                   |
+| `certificate/timestamp.tsr`         | RFC 3161 timestamp token over the SHA-256 of the envelope's payload (REQ-VER-17)                            |
+| `certificate/timestamp.json`        | the timestamp's time, TSA and trust, or why the certificate is not timestamped                              |
 | `audit/trail.json`                  | the audit trail: every file with category and SHA-256, the gaps, records                                    |
 | `evidence/manifest.json`            | evidence files with SHA-256, kind, case and step (REQ-VER-05)                                               |
 | `journal/events.jsonl`              | event journal; each line's `prev` is the SHA-256 of the line before                                         |

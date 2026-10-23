@@ -59,6 +59,7 @@ import { runReviewSpec } from "./commands/spec-review.js";
 import { runFeedback } from "./commands/feedback.js";
 import { runWorkflowSync } from "./commands/ticket-approval.js";
 import { runWorkflowPoll, runWorkflowServe } from "./commands/pickup.js";
+import { runAuditTimestamp } from "./commands/timestamp.js";
 import { runReproduce } from "./commands/reproduce.js";
 import { runTelemetryExport } from "./commands/telemetry.js";
 import { runMetrics } from "./commands/metrics.js";
@@ -1081,6 +1082,16 @@ export function createProgram(version: string, io: ProgramIO): Command {
       withPorts((ports) => runCertify(ticket, options, commandIO, ports))(),
     );
   audit
+    .command("timestamp")
+    .description(
+      "Timestamp a run's certificate at the configured TSA (RFC 3161), e.g. after the TSA was unreachable",
+    )
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .action((ticket: string, options: { run?: string }) =>
+      withPorts((ports) => runAuditTimestamp(ticket, options, commandIO, ports))(),
+    );
+  audit
     .command("keygen")
     .description("Create an Ed25519 key for signing certificates; the public key goes to .qa/keys/")
     .action(() => withPorts((ports) => runKeygen(commandIO, ports))());
@@ -1113,7 +1124,13 @@ export function createProgram(version: string, io: ProgramIO): Command {
       (v: string, all: string[]) => [...all, v],
       [] as string[],
     )
-    .action(async (path: string, options: { key: string[] }) => {
+    .option(
+      "--tsa-ca <file>",
+      "trusted CA certificate of the time-stamping authority (PEM or DER); repeatable",
+      (v: string, all: string[]) => [...all, v],
+      [] as string[],
+    )
+    .action(async (path: string, options: { key: string[]; tsaCa: string[] }) => {
       if (!io.ports) return withPorts(() => Promise.resolve(3))();
       // Inside a project its .qa/keys are trusted too; outside one, only --key.
       const project = await resolveProject(qajitsuHome(io.ports.env, io.ports.home), {
