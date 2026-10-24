@@ -35,7 +35,7 @@ describe("a lying healer (INV-4, REQ-EXEC-09)", () => {
     expect(assertionLockDiff(before, after).map((p) => p.check)).toContain("assertion-lock");
   });
 
-  it("accepts a healer that only changes selectors and adds waits or scrolling into view", () => {
+  it("REQ-EXEC-39/AC4: accepts a healer that only changes selectors (frames included) and adds waits or scrolling into view", () => {
     const healed = web
       .replace('"frame:title:Payment >> testid:pay"', '"frame:title:Payment >> role:button:Pay"')
       .replace(

@@ -465,7 +465,7 @@ describe("case runtime (REQ-EXEC-02, REQ-EVD-01, REQ-CFG-06)", () => {
     expect((await run(false)).evidence.map((e) => e.name)).not.toContain("failure-elements.json");
   });
 
-  it("REQ-EXEC-21/AC7: a screen that shows no element QAJitsu can address ends the attempt as an error with the reason, never FAILED or PASSED", async () => {
+  it("REQ-EXEC-21/AC7 + REQ-EXEC-56/AC3: a screen that shows no element QAJitsu can address ends the attempt as an error with the reason, never FAILED or PASSED", async () => {
     const custom = PlanSchema.parse({
       schema: 1,
       ticket: "DEMO-9",

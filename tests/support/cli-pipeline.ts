@@ -91,7 +91,7 @@ export async function createDemoPipeline(
   } = {},
 ) {
   const ticket = options.ticket ?? "DEMO-1";
-  const web = ["DEMO-4", "DEMO-5", "DEMO-7", "DEMO-8", "DEMO-9"].includes(ticket);
+  const web = ["DEMO-4", "DEMO-5", "DEMO-7", "DEMO-8", "DEMO-9", "DEMO-10"].includes(ticket);
   const shop = await startShop({
     env: { DEMO_USER_PASSWORD: DEMO_PASSWORD, ...(options.flag ? { [options.flag]: "1" } : {}) },
   });

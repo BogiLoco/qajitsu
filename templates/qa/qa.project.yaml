@@ -217,6 +217,8 @@ test_types: [api, web]
 #
 # Browser options (REQ-EXEC-05)
 # web: { browser: chromium, video: retain-on-failure, headless: true, action_timeout_ms: 5000, test_id_attribute: data-testid }
+# The application can expose its state for tests (canvas charts, maps): web: { test_state: __QA_STATE__ }
+# Files web cases upload live in .qa/fixtures/; an environment behind Basic Auth: http_auth: { username, password: secret://... } in .qa/envs/<name>.yaml
 #
 # Jira comment and attachments (REQ-PUB-01, REQ-PUB-02, REQ-VER-10)
 # publish: { max_attachment_mb: 10, auto: false, media_hosts: [media.atlassian.com] }
