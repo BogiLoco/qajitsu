@@ -9,8 +9,15 @@ import { request as playwrightRequest, type APIRequestContext } from "playwright
  */
 export async function createPlaywrightTransport(options: {
   readonly timeoutMs: number;
+  /** HTTP authentication of the environment (REQ-EXEC-61/AC5), sent when the server asks for it. */
+  readonly httpCredentials?: { readonly username: string; readonly password: string } | undefined;
 }): Promise<{ transport: ApiTransport; dispose: () => Promise<void> }> {
-  const context: APIRequestContext = await playwrightRequest.newContext({ timeout: options.timeoutMs });
+  const context: APIRequestContext = await playwrightRequest.newContext({
+    timeout: options.timeoutMs,
+    ...(options.httpCredentials
+      ? { httpCredentials: { ...options.httpCredentials, send: "unauthorized" as const } }
+      : {}),
+  });
   return {
     transport: async (req) => {
       const response = await context.fetch(req.url, {

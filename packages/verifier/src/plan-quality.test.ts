@@ -132,6 +132,9 @@ describe("concrete expected values (REQ-PLAN-09)", () => {
         { expect: { description: "Prices are in Polish format" } },
         { manual: true, instructions: "Look at the receipt", expect: { description: "Printed" } },
         { expect: { description: "d", visual: { name: "checkout" } } },
+        // REQ-EXEC-38/AC2 + REQ-EXEC-56/AC2: a download or the application's test state is something to compare.
+        { expect: { description: "d", download: { name: "orders.csv" } } },
+        { expect: { description: "d", state: { "bars.0": 1 } } },
       ]),
     );
     expect(flags).toEqual([

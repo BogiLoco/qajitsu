@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import { join } from "node:path";
@@ -44,6 +44,10 @@ export interface WebRunnerOptions {
   /** Attribute `testid:` selectors find, e.g. `data-qa` (REQ-EXEC-21/AC1); `data-testid` by default. */
   readonly testIdAttribute?: string;
   readonly viewport?: { readonly width: number; readonly height: number };
+  /** HTTP authentication of the environment (REQ-EXEC-61/AC5), sent when a page asks for it. */
+  readonly httpCredentials?: { readonly username: string; readonly password: string } | undefined;
+  /** Largest download a step reads, in bytes (REQ-EXEC-38/AC2); 100 MB by default. */
+  readonly maxDownloadBytes?: number;
   /** Passive observations (REQ-EVD-07); all on by default. They never change a status. */
   readonly observations?: {
     readonly console?: boolean;
@@ -186,6 +190,9 @@ export function maskHar(text: string, maskText: (t: string) => string): string {
   return maskText(JSON.stringify(har, null, 2));
 }
 
+/** Largest download a step reads (REQ-EXEC-38/AC2): 100 MB. */
+const MAX_DOWNLOAD = 100_000_000;
+
 /** A rectangle as `getBoundingClientRect` returns it (the Node build has no DOM types). */
 interface DOMRectLike {
   readonly top: number;
@@ -251,9 +258,32 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
         headless: options.headless ?? true,
         ...(options.slowMoMs ? { slowMo: options.slowMoMs } : {}),
       });
+      // REQ-EXEC-61/AC3: the case's browser grants only what its plan names; everything else stays denied.
+      const settings = input.plan.cases.find((c) => c.id === input.caseId)?.browser;
       const context = await browser.newContext({
         baseURL: input.baseUrl,
         viewport: options.viewport ?? { width: 1280, height: 800 },
+        ...(options.httpCredentials
+          ? {
+              httpCredentials: {
+                ...options.httpCredentials,
+                origin: new URL(input.baseUrl).origin,
+                send: "unauthorized" as const,
+              },
+            }
+          : {}),
+        ...(settings?.permissions ? { permissions: [...settings.permissions] } : {}),
+        ...(settings?.geolocation
+          ? {
+              geolocation: {
+                latitude: settings.geolocation.latitude,
+                longitude: settings.geolocation.longitude,
+                ...(settings.geolocation.accuracy === undefined
+                  ? {}
+                  : { accuracy: settings.geolocation.accuracy }),
+              },
+            }
+          : {}),
         // REQ-EXEC-14: a locale run renders numbers, dates and currencies of its locale and time zone.
         ...(input.locale ? { locale: input.locale.name, timezoneId: input.locale.timezone } : {}),
         ...(video === "off"
@@ -298,15 +328,39 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
         else void ws.close({ code: 1008, reason: "blocked by QAJitsu allowlist" });
       });
       await context.tracing.start({ screenshots: true, snapshots: true });
+      // REQ-EXEC-61/AC2: the case starts at the plan's time; time flows from there and steps can move it forward.
+      let clockInstalled = false;
+      if (settings?.clock !== undefined) {
+        await context.clock.install({ time: new Date(settings.clock) });
+        await context.clock.resume();
+        clockInstalled = true;
+      }
       const page = await context.newPage();
       const console: string[] = [];
       // Every page of the case, in the order it opened (REQ-EXEC-39): pop-ups and tabs get the same recording.
       const pages: Page[] = [page];
       /** Pages a switch already went to or refused: each pop-up is taken once. */
       const taken = new Set<Page>([page]);
+      // REQ-EXEC-61/AC1: dialogs are answered as the step says, otherwise dismissed, and always recorded.
+      let dialogPolicy:
+        { readonly action: "accept" | "dismiss"; readonly text?: string | undefined } | undefined;
+      const dialogs: { type: string; message: string; answer: string }[] = [];
       const wire = (pg: Page): void => {
         pg.on("console", (m) => console.push(`[${m.type()}] ${m.text()}`));
         pg.on("pageerror", (e) => console.push(`[pageerror] ${e.message}`));
+        pg.on("dialog", (dialog) => {
+          const accept = dialogPolicy?.action === "accept";
+          dialogs.push({
+            type: dialog.type(),
+            message: dialog.message(),
+            answer: accept
+              ? dialogPolicy?.text !== undefined
+                ? `accepted with text`
+                : "accepted"
+              : "dismissed",
+          });
+          void (accept ? dialog.accept(dialogPolicy?.text) : dialog.dismiss()).catch(() => undefined);
+        });
       };
       wire(page);
       context.on("page", (pg) => {
@@ -546,6 +600,13 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
           const failure = await d.failure();
           if (failure !== null) throw new Error(`the download from ${s} failed: ${failure}`);
           const path = await d.path();
+          // A download larger than any test needs is refused before it is read into memory.
+          const size = (await stat(path)).size;
+          const limit = options.maxDownloadBytes ?? MAX_DOWNLOAD;
+          if (size > limit)
+            throw new Error(
+              `the download from ${s} has ${String(size)} bytes, more than ${String(limit)} a test reads`,
+            );
           return { name: d.suggestedFilename(), data: new Uint8Array(await readFile(path)) };
         },
         // REQ-EXEC-39/AC2+AC3: pop-ups and tabs.
@@ -586,6 +647,18 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
           return pageRef(p);
         },
         currentPage: () => pageRef(p),
+        setDialogPolicy: (policy) => {
+          dialogPolicy = policy;
+        },
+        takeDialogs: () => dialogs.splice(0),
+        advanceTime: async (ms) => {
+          if (!clockInstalled) {
+            await context.clock.install();
+            await context.clock.resume();
+            clockInstalled = true;
+          }
+          await context.clock.fastForward(ms);
+        },
         // REQ-EXEC-56/AC2: the application's own test state; read here, never passed by the spec.
         testState: (hook, path) =>
           p.evaluate(

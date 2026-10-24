@@ -16,6 +16,8 @@ export function plannedFields(expect: Expectation): string[] {
       Object.keys(state).map((prop) => `elements.${selector}.${prop}`),
     ),
     ...downloadFields(expect.download),
+    ...(expect.dialog?.type === undefined ? [] : ["dialog.type"]),
+    ...(expect.dialog?.message === undefined ? [] : ["dialog.message"]),
     ...Object.keys(expect.state ?? {}).map((path) => `state.${path}`),
     ...(expect.message === undefined ? [] : ["message"]),
     ...(expect.visual === undefined ? [] : ["visual"]),
@@ -31,6 +33,7 @@ function downloadFields(d: Expectation["download"]): string[] {
     ...(d.min_bytes === undefined && d.max_bytes === undefined ? [] : ["download.size"]),
     ...(d.sha256 === undefined ? [] : ["download.sha256"]),
     ...(d.rows === undefined ? [] : ["download.rows"]),
+    ...(d.count === undefined ? [] : ["download.count"]),
     ...(d.texts ?? []).map((_, i) => `download.texts.${String(i)}`),
     ...Object.keys(d.fields ?? {}).map((path) => `download.fields.${path}`),
   ];

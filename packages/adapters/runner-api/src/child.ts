@@ -196,6 +196,8 @@ async function start(m: StartMessage): Promise<void> {
       switchToNewPage: () => rpc({ op: "ui", operation: { op: "switchPage", to: "new" } }),
       switchToOpener: () => rpc({ op: "ui", operation: { op: "switchPage", to: "opener" } }),
       closePage: () => rpc({ op: "ui", operation: { op: "closePage" } }),
+      advanceTime: (seconds: unknown) =>
+        rpc({ op: "ui", operation: { op: "advanceTime", seconds: Number(seconds) } }),
     },
     step: async (stepId: string, fn: () => unknown): Promise<void> => {
       await rpc({ op: "beginStep", stepId });

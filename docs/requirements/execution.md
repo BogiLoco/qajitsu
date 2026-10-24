@@ -939,3 +939,49 @@ timeout, an empty list, a slow response.
 - [ ] AC4: Every mocked call is evidence, and the report and Jira comment list per case which dependencies were mocked and how; a result that depends on a mock never reads as a test of the real dependency.
 - [ ] AC5: The application under test itself, or the dependency a case is meant to test, can never be mocked; such a plan is refused at approval.
 - [ ] AC6: A mock that was declared but never called, or a call that matched no mock where the plan required one, is reported and makes the case NEEDS_REVIEW.
+
+### REQ-EXEC-61 · Web: dialogs, time, permissions and protected environments
+
+- Status: accepted
+- Priority: must
+- Stage: later
+- Related: REQ-EXEC-05, REQ-EXEC-38, REQ-ENV-01, REQ-CFG-07, INV-4, INV-8, INV-10
+
+Found in the critical review of the web gaps (2026-10-24): flows that a browser interrupts or that depend on time or
+permissions could not be tested, and staging behind HTTP authentication could not be reached.
+
+**Acceptance criteria**
+
+- [ ] AC1: Browser dialogs (`alert`, `confirm`, `prompt`, `beforeunload`) are answered as the step says: accept, dismiss, or accept with a text from the plan; the dialog's type and message are evidence and can be checked with `dialog.*`. A dialog no step expected is dismissed, recorded, and named in the step's result.
+- [ ] AC2: A web case can run at a fixed or starting time from the plan (`clock`), and a step can move time forward, so countdowns, expiring offers and sessions can be tested.
+- [ ] AC3: A web case can grant browser permissions (geolocation, notifications, clipboard, camera, microphone) and set a location from the plan; anything not granted stays denied.
+- [ ] AC4: Every download of a step is evidence; `download.*` checks the last one, `downloads.count` how many there were.
+- [ ] AC5: An environment profile can give HTTP authentication (`http_auth: { username, password: secret://... }`) for its hosts; the browser and the API client use it, and the values are masked like every other secret.
+
+### REQ-EXEC-62 · Several users in one web case
+
+- Status: proposed
+- Priority: should
+- Stage: later
+- Related: REQ-EXEC-05, REQ-ENV-09, REQ-CFG-07
+
+Chats, shared documents, approvals and auctions need two people at once.
+
+**Acceptance criteria**
+
+- [ ] AC1: A web case can open more than one browser session, each as a test account alias, and switch between them by name (`ui.session("buyer")`).
+- [ ] AC2: Each session has its own cookies and storage; the evidence names the session of every action and screenshot.
+- [ ] AC3: Accounts come from the pool (REQ-ENV-09) so parallel cases never share a user.
+
+### REQ-EXEC-63 · Mobile web emulation
+
+- Status: proposed
+- Priority: should
+- Stage: later
+- Related: REQ-EXEC-13, REQ-EXEC-05
+
+**Acceptance criteria**
+
+- [ ] AC1: The browser matrix can name devices (for example `iPhone 15`, `Pixel 8`) whose viewport, device scale, touch, `isMobile` and user agent are emulated, besides plain viewports.
+- [ ] AC2: Taps and swipes work in emulated mobile pages (REQ-EXEC-41 gestures on the web).
+- [ ] AC3: The report names the emulated device; emulation is never presented as a real device test.

@@ -229,7 +229,10 @@ export function checkPlanExpectations(
         e.texts !== undefined ||
         e.elements !== undefined ||
         e.message !== undefined ||
-        e.visual !== undefined;
+        e.visual !== undefined ||
+        e.download !== undefined ||
+        e.dialog !== undefined ||
+        e.state !== undefined;
       if (s.manual !== true && !checks)
         flag(
           "description-only",

@@ -31,10 +31,12 @@ describe("element and page inventory (REQ-PLAN-09/AC7)", () => {
     expect(byId["testid:cart-count"]?.platforms).toEqual(["android"]);
     // The demo shop's pages, the web gaps' pages included (REQ-EXEC-38..40, REQ-EXEC-56).
     expect(inventory.pages).toEqual([
+      "/app/addresses",
       "/app/board",
       "/app/cart",
       "/app/checkout",
       "/app/login",
+      "/app/offer",
       "/app/pay",
       "/app/products",
       "/app/profile",

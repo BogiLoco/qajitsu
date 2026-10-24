@@ -1,0 +1,22 @@
+{
+  "key": "DEMO-10",
+  "type": "Story",
+  "status": "Ready for QA",
+  "summary": "Address deletion, Christmas offer and nearest store",
+  "description": "Deleting an address asks for confirmation. The Christmas offer is active until 24 December 2026 12:00 UTC. The offer page finds the nearest store from the shopper's location.",
+  "acceptanceCriteria": [
+    "Deleting an address asks Delete this address?; cancelling keeps it, confirming removes it.",
+    "The offer page shows Offer active before 24 December 2026 12:00 UTC and Offer ended after it.",
+    "With the location allowed, a shopper in Warsaw gets Warsaw as the nearest store."
+  ],
+  "labels": ["addresses", "offer", "web"],
+  "components": ["shop-web"],
+  "attachments": [],
+  "comments": [
+    {
+      "author": "designer",
+      "created": "2026-10-20T09:00:00Z",
+      "body": "Test ids: delete-1, address-1, address-count, offer-status, nearest-store, store."
+    }
+  ]
+}

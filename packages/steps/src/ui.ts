@@ -96,6 +96,18 @@ export interface UiDriver {
   ) => Promise<{ readonly hook: boolean; readonly value: unknown }>;
   /** A PNG of one element (a canvas, a chart) for a visual check (REQ-EXEC-56/AC2). */
   readonly elementScreenshot?: (selector: UiSelector) => Promise<Uint8Array>;
+  /** How browser dialogs of the current step are answered (REQ-EXEC-61/AC1); undefined dismisses them. */
+  readonly setDialogPolicy?: (
+    policy: { readonly action: "accept" | "dismiss"; readonly text?: string | undefined } | undefined,
+  ) => void;
+  /** The dialogs shown since the last call, with how they were answered. */
+  readonly takeDialogs?: () => readonly {
+    readonly type: string;
+    readonly message: string;
+    readonly answer: string;
+  }[];
+  /** Moves the browser's clock forward (REQ-EXEC-61/AC2), firing timers that fall due. */
+  readonly advanceTime?: (ms: number) => Promise<void>;
   /** Why an element cannot be reached, when the page explains it (a closed shadow root, REQ-EXEC-56/AC1). */
   readonly unreachableReason?: () => Promise<string | undefined>;
 }
@@ -137,6 +149,8 @@ export interface UiClient {
   readonly switchToOpener: () => Promise<void>;
   /** Closes the current pop-up or tab; actions go back to its opener. */
   readonly closePage: () => Promise<void>;
+  /** Moves the page's clock forward by seconds (countdowns, expiring offers; REQ-EXEC-61/AC2). */
+  readonly advanceTime: (seconds: number) => Promise<void>;
 }
 
 /** UI operations sent from a spec to the parent. */
@@ -157,7 +171,8 @@ export type UiOperation =
   | { readonly op: "keys"; readonly value: string }
   | { readonly op: "upload"; readonly selector: UiSelector; readonly files: readonly string[] }
   | { readonly op: "switchPage"; readonly to: "new" | "opener" }
-  | { readonly op: "closePage" };
+  | { readonly op: "closePage" }
+  | { readonly op: "advanceTime"; readonly seconds: number };
 
 /**
  * Selector kinds, the most stable first (REQ-EXEC-21/AC3). The web resolves testid, role, label, text, placeholder,

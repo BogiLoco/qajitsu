@@ -290,6 +290,57 @@
               "pattern": "^[a-z]{2,3}(-[A-Z][A-Za-z]{1,3})?$"
             }
           },
+          "browser": {
+            "type": "object",
+            "properties": {
+              "clock": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+              },
+              "permissions": {
+                "maxItems": 6,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "geolocation",
+                    "notifications",
+                    "clipboard-read",
+                    "clipboard-write",
+                    "camera",
+                    "microphone"
+                  ]
+                }
+              },
+              "geolocation": {
+                "type": "object",
+                "properties": {
+                  "latitude": {
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90
+                  },
+                  "longitude": {
+                    "type": "number",
+                    "minimum": -180,
+                    "maximum": 180
+                  },
+                  "accuracy": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100000
+                  }
+                },
+                "required": [
+                  "latitude",
+                  "longitude"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
           "files": {
             "type": "object",
             "propertyNames": {
@@ -408,6 +459,26 @@
                         "additionalProperties": false
                       }
                     },
+                    "dialog": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "alert",
+                            "confirm",
+                            "prompt",
+                            "beforeunload"
+                          ]
+                        },
+                        "message": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        }
+                      },
+                      "additionalProperties": false
+                    },
                     "download": {
                       "type": "object",
                       "properties": {
@@ -442,6 +513,11 @@
                             "type": "string",
                             "minLength": 1
                           }
+                        },
+                        "count": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 100
                         },
                         "rows": {
                           "type": "integer",
@@ -593,6 +669,26 @@
                   "type": "string",
                   "minLength": 3,
                   "maxLength": 1000
+                },
+                "dialog": {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string",
+                      "enum": [
+                        "accept",
+                        "dismiss"
+                      ]
+                    },
+                    "text": {
+                      "type": "string",
+                      "maxLength": 500
+                    }
+                  },
+                  "required": [
+                    "action"
+                  ],
+                  "additionalProperties": false
                 },
                 "scroll_limit": {
                   "type": "integer",

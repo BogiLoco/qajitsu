@@ -240,11 +240,13 @@ function expectationOf(planCase: TestCase, stepId: string, field: string, path: 
           ? undefined
           : { min_bytes: d.min_bytes, max_bytes: d.max_bytes };
     else if (
-      (part === "name" || part === "type" || part === "sha256" || part === "rows") &&
+      (part === "name" || part === "type" || part === "sha256" || part === "rows" || part === "count") &&
       more.length === 0
     )
       value = d?.[part];
     else throw new Error(`plan.expect('${path}'): unknown download field`);
+  } else if (kind === "dialog" && rest.length === 1 && (rest[0] === "type" || rest[0] === "message")) {
+    value = e.dialog?.[rest[0]];
   } else if (kind === "state" && rest.length >= 1) {
     const key = rest.join(".");
     if (!e.state || !(key in e.state)) throw new Error(`plan.expect('${path}'): no expected state '${key}'`);
@@ -334,8 +336,15 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     return f;
   };
   const waitMs = options.waitTimeoutMs ?? 15_000;
-  /** What each step downloaded (REQ-EXEC-38/AC2). */
+  /** What each step downloaded (REQ-EXEC-38/AC2), the last file, and how many (REQ-EXEC-61/AC4). */
   const downloads = new Map<string, DownloadedFile>();
+  const downloadCount = new Map<string, number>();
+  /** Dialogs each step showed (REQ-EXEC-61/AC1). */
+  const dialogsOf = new Map<string, { type: string; message: string; answer: string }[]>();
+  const collectDialogs = (stepId: string): void => {
+    const shown = driver?.takeDialogs?.() ?? [];
+    if (shown.length > 0) dialogsOf.set(stepId, [...(dialogsOf.get(stepId) ?? []), ...shown]);
+  };
   /** Every UI action with the page it went to (REQ-EXEC-39/AC2), masked; case evidence `ui-actions.json`. */
   const actions: Record<string, unknown>[] = [];
   /** A case file by its plan key (REQ-EXEC-38/AC1): never a path or bytes from the spec. */
@@ -450,6 +459,16 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       ...(driver ? { url: masker.maskText(driver.url()) } : {}),
     });
     currentStep = undefined;
+    // REQ-EXEC-61/AC1: every dialog of the step is evidence, with how it was answered.
+    collectDialogs(stepId);
+    const shown = dialogsOf.get(stepId);
+    if (shown && shown.length > 0)
+      media.push({
+        stepId,
+        kind: "log",
+        name: `${stepId}-dialogs.json`,
+        content: `${JSON.stringify(maskValue(shown), null, 2)}\n`,
+      });
     // REQ-EVD-02/AC1: a screenshot after every step of a case that uses the browser.
     if (driver) {
       try {
@@ -562,6 +581,8 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     if (currentStep === undefined) throw new Error("UI actions must run inside step()");
     lastAction.set(currentStep, "ui");
     const d = await browser();
+    // REQ-EXEC-61/AC1: dialogs the action opens are answered as the step says.
+    d.setDialogPolicy?.(planCase.steps.find((x) => x.id === currentStep)?.dialog);
     switch (operation.op) {
       case "goto": {
         const url = new URL(operation.path, options.baseUrl);
@@ -649,6 +670,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         const type = mimeOf(got.name);
         const text = await fileEvidence(currentStep, "download", { name: got.name, type, data: got.data });
         downloads.set(currentStep, { name: got.name, type, data: got.data, text });
+        downloadCount.set(currentStep, (downloadCount.get(currentStep) ?? 0) + 1);
         return;
       }
       case "switchPage":
@@ -656,6 +678,11 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         return;
       case "closePage":
         await need(d, "closePage", "ui.closePage()")();
+        return;
+      case "advanceTime":
+        if (!Number.isInteger(operation.seconds) || operation.seconds < 1 || operation.seconds > 604_800)
+          throw new Error("ui.advanceTime() takes whole seconds from 1 to 604800 (7 days)");
+        await need(d, "advanceTime", "ui.advanceTime()")(operation.seconds * 1000);
         return;
     }
   };
@@ -929,7 +956,8 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
           throw new Error(`verify('${stepId}', '${field}'): the content of ${got.name} cannot be read`);
         return got.text;
       };
-      if (part === "name") record(expected, got.name);
+      if (part === "count") record(expected, downloadCount.get(stepId) ?? 0);
+      else if (part === "name") record(expected, got.name);
       else if (part === "sha256") record(expected, sha256Hex(got.data));
       else if (part === "type") {
         const ext = /\.([A-Za-z0-9]+)$/.exec(got.name)?.[1]?.toLowerCase();
@@ -962,6 +990,24 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         }
         record(expected, at(parsed, more.join(".")));
       }
+      return;
+    }
+    if (kind === "dialog") {
+      // REQ-EXEC-61/AC1: the last dialog of the step, read by the parent; none shown is a failure, never a pass.
+      const expected = expectationOf(planCase, stepId, field, `${caseId}.${stepId}.${field}`);
+      collectDialogs(stepId);
+      const last = dialogsOf.get(stepId)?.at(-1);
+      const part = rest[0] === "type" ? "type" : "message";
+      const actual = last?.[part];
+      assertions.push({
+        stepId,
+        field,
+        expected: maskValue(expected),
+        actual: actual === undefined ? "(no dialog in this step)" : maskValue(actual),
+        pass:
+          actual !== undefined &&
+          (part === "type" ? actual === expected : typeof expected === "string" && actual.includes(expected)),
+      });
       return;
     }
     if (kind === "state") {
@@ -1085,6 +1131,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       switchToNewPage: () => uiOp({ op: "switchPage", to: "new" }),
       switchToOpener: () => uiOp({ op: "switchPage", to: "opener" }),
       closePage: () => uiOp({ op: "closePage" }),
+      advanceTime: (seconds) => uiOp({ op: "advanceTime", seconds }),
     },
     step: async (stepId, fn) => {
       beginStep(stepId);

@@ -336,6 +336,67 @@ describe("web actions in the trusted runtime (REQ-EXEC-38..40, REQ-EXEC-56, ADR-
   });
 });
 
+describe("dialogs, time and downloads (REQ-EXEC-61)", () => {
+  it("REQ-EXEC-61/AC1: the step's dialog answer goes to the driver before each action; dialog.* checks the last dialog; none is a failure", async () => {
+    const plan = planWith({
+      dialog: { action: "accept", text: "Ada" },
+      expect: { description: "d", dialog: { type: "confirm", message: "Delete" } },
+    });
+    const policies: unknown[] = [];
+    let queue: { type: string; message: string; answer: string }[] = [];
+    const { driver } = fakeDriver({
+      setDialogPolicy: (p: unknown) => {
+        policies.push(p);
+      },
+      takeDialogs: () => queue.splice(0),
+    });
+    const rt = runtimeFor(plan, driver);
+    rt.beginStep("S1");
+    await rt.uiOp({ op: "goto", path: "/a" });
+    await rt.verify("S1", "dialog.type");
+    queue = [
+      { type: "alert", message: "Saved", answer: "accepted" },
+      { type: "confirm", message: `Delete ${SECRET}?`, answer: "accepted with text" },
+    ];
+    await rt.verify("S1", "dialog.type");
+    await rt.verify("S1", "dialog.message");
+    queue = [{ type: "prompt", message: "Name?", answer: "dismissed" }];
+    await rt.endStep("S1");
+    const record = await rt.finish();
+    expect(policies).toEqual([{ action: "accept", text: "Ada" }]);
+    expect(record.assertions.map((a) => [a.field, a.actual, a.pass])).toEqual([
+      ["dialog.type", "(no dialog in this step)", false],
+      ["dialog.type", "confirm", true],
+      ["dialog.message", "Delete ***?", true],
+    ]);
+    const log = String(record.evidence.find((e) => e.name === "S1-dialogs.json")?.content);
+    expect(log).toContain('"Name?"');
+    expect(log).not.toContain(SECRET);
+  });
+
+  it("REQ-EXEC-61/AC2+AC4: time moves by whole seconds up to 7 days; download.count counts the step's downloads", async () => {
+    const plan = planWith({ expect: { description: "d", download: { count: 2 } } });
+    const { driver, calls } = fakeDriver({
+      advanceTime: (ms: number) => Promise.resolve(void calls.push(["advanceTime", ms])),
+    });
+    const rt = runtimeFor(plan, driver);
+    rt.beginStep("S1");
+    await rt.context.ui.advanceTime(90);
+    await expect(rt.context.ui.advanceTime(0)).rejects.toThrow("whole seconds from 1 to 604800");
+    await expect(rt.context.ui.advanceTime(1.5)).rejects.toThrow("whole seconds");
+    await expect(rt.context.ui.advanceTime(604_801)).rejects.toThrow("7 days");
+    await rt.uiOp({ op: "download", selector: "testid:a" });
+    await rt.uiOp({ op: "download", selector: "testid:a" });
+    await rt.verify("S1", "download.count");
+    expect(calls).toContainEqual(["advanceTime", 90_000]);
+    expect((await rt.finish()).assertions[0]).toMatchObject({
+      field: "download.count",
+      actual: 2,
+      pass: true,
+    });
+  });
+});
+
 describe("files of web cases (REQ-EXEC-38)", () => {
   it("types by name, text types, generated files and CSV rows", () => {
     expect(mimeOf("a.PNG")).toBe("image/png");

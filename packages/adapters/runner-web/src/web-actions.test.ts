@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { createPlaywrightTransport, executeAttempt, type AttemptInput } from "@qajitsu/adapter-runner-api";
 import { PlanSchema } from "@qajitsu/core";
@@ -64,8 +65,12 @@ const attempt = async (ticket: string, caseId: string, flag?: string) => {
 };
 
 /** A browser on a data: page or the shop, outside a case, for the driver's own behaviour. */
-const driverOn = async (allowedOrigins: string[] = []) => {
-  const session = createPlaywrightBrowserFactory({ video: "off", actionTimeoutMs: 1500 })({
+const driverOn = async (allowedOrigins: string[] = [], maxDownloadBytes?: number) => {
+  const session = createPlaywrightBrowserFactory({
+    video: "off",
+    actionTimeoutMs: 1500,
+    ...(maxDownloadBytes === undefined ? {} : { maxDownloadBytes }),
+  })({
     specFile: spec("DEMO-9", "TC-01"),
     caseId: "TC-01",
     attempt: 1,
@@ -213,5 +218,148 @@ describe("web actions (REQ-EXEC-38, REQ-EXEC-39, REQ-EXEC-40, REQ-EXEC-56)", () 
     expect(await d.scrollUntil?.("testid:missing", 2)).toMatchObject({ found: false, scrolls: 2 });
     expect(await d.testState?.("__QA_STATE__", "a")).toEqual({ hook: false, value: undefined });
     expect(await d.property("testid:missing", "in_viewport")).toBe(false);
+  });
+
+  it("REQ-EXEC-38/AC2+AC4 + INV-10: a download larger than the limit or from a host outside the allowlist is refused, never read", async () => {
+    const server = createServer((req, res) => {
+      if (req.url === "/big.bin") {
+        res.writeHead(200, {
+          "content-type": "application/octet-stream",
+          "content-disposition": 'attachment; filename="big.bin"',
+        });
+        res.end(Buffer.alloc(5000));
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end(
+        '<a data-testid="big" href="/big.bin">Big</a> <a data-testid="far" href="https://files.example.com/report.csv" download>Far</a>',
+      );
+    });
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    cleanups.push(
+      () =>
+        new Promise((done) =>
+          server.close(() => {
+            done();
+          }),
+        ),
+    );
+    const address = server.address();
+    const origin = `http://127.0.0.1:${String(typeof address === "object" && address ? address.port : 0)}`;
+    const d = await driverOn([origin], 1000);
+    await d.goto(`${origin}/`);
+    await expect(d.download?.("testid:big", 3000)).rejects.toThrow(
+      "has 5000 bytes, more than 1000 a test reads",
+    );
+    await expect(d.download?.("testid:far", 1500)).rejects.toThrow();
+  });
+
+  it("REQ-EXEC-61/AC1 + REQ-NFR-04/AC1: a confirm dialog is answered as the step says and checked; BUG-14 (cancel deletes) is FAILED", async () => {
+    const ok = await attempt("DEMO-10", "TC-01");
+    expect(ok.record.error).toBeUndefined();
+    expect(ok.status).toBe("PASSED");
+    const shown = JSON.parse(
+      String(ok.record.evidence.find((e) => e.name === "S1-dialogs.json")?.content),
+    ) as unknown[];
+    expect(shown).toEqual([{ type: "confirm", message: "Delete this address?", answer: "dismissed" }]);
+    expect((await attempt("DEMO-10", "TC-01", "BUG_DELETE_IGNORES_CANCEL")).status).toBe("FAILED");
+  });
+
+  it("REQ-EXEC-61/AC2 + REQ-NFR-04/AC1: the case starts at the plan's time and a step moves it; BUG-15 (offer never ends) is FAILED", async () => {
+    const ok = await attempt("DEMO-10", "TC-02");
+    expect(ok.record.error).toBeUndefined();
+    expect(ok.status).toBe("PASSED");
+    expect((await attempt("DEMO-10", "TC-02", "BUG_OFFER_NEVER_EXPIRES")).status).toBe("FAILED");
+  });
+
+  it("REQ-EXEC-61/AC3: a granted location reaches the page; without the permission it stays denied", async () => {
+    const ok = await attempt("DEMO-10", "TC-03");
+    expect(ok.record.error).toBeUndefined();
+    expect(ok.status).toBe("PASSED");
+    const d = await driverOn();
+    await d.goto(
+      html(
+        `<button data-testid="where" onclick="navigator.geolocation.getCurrentPosition(()=>{s.textContent='allowed'},()=>{s.textContent='denied'})">Where</button><span id="s" data-testid="s"></span>`,
+      ),
+    );
+    await d.click("testid:where");
+    await d.waitFor("testid:s", "visible");
+    expect(await d.property("testid:s", "text")).toBe("denied");
+  });
+
+  it("REQ-EXEC-61/AC1: a prompt gets the plan's text; a dialog no step expected is dismissed and recorded", async () => {
+    const d = await driverOn();
+    await d.goto(
+      html(
+        `<button data-testid="ask" onclick="r.textContent=String(prompt('Your name?'))">Ask</button><span id="r" data-testid="r"></span>`,
+      ),
+    );
+    d.setDialogPolicy?.({ action: "accept", text: "Ada" });
+    await d.click("testid:ask");
+    expect(await d.property("testid:r", "text")).toBe("Ada");
+    d.setDialogPolicy?.(undefined);
+    await d.click("testid:ask");
+    expect(await d.property("testid:r", "text")).toBe("null");
+    expect(d.takeDialogs?.()).toEqual([
+      { type: "prompt", message: "Your name?", answer: "accepted with text" },
+      { type: "prompt", message: "Your name?", answer: "dismissed" },
+    ]);
+    expect(d.takeDialogs?.()).toEqual([]);
+  });
+
+  it("REQ-EXEC-61/AC5: an environment behind Basic Auth is reached by the browser and the API client with the profile's credentials", async () => {
+    const server = createServer((req, res) => {
+      if (req.headers.authorization !== `Basic ${Buffer.from("qa:fictional-pass").toString("base64")}`) {
+        res.writeHead(401, { "www-authenticate": 'Basic realm="staging"' }).end("no");
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/html" }).end('<p data-testid="in">inside</p>');
+    });
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    cleanups.push(
+      () =>
+        new Promise((done) =>
+          server.close(() => {
+            done();
+          }),
+        ),
+    );
+    const address = server.address();
+    const origin = `http://127.0.0.1:${String(typeof address === "object" && address ? address.port : 0)}`;
+    const session = createPlaywrightBrowserFactory({
+      video: "off",
+      httpCredentials: { username: "qa", password: "fictional-pass" },
+    })({
+      specFile: spec("DEMO-9", "TC-01"),
+      caseId: "TC-01",
+      attempt: 1,
+      plan: plan("DEMO-9"),
+      baseUrl: origin,
+      allowedOrigins: [origin],
+      accounts: {},
+      secrets: [],
+      timeoutMs: 30_000,
+    });
+    cleanups.push(async () => {
+      await session.close(false);
+    });
+    const d = await session.driver();
+    await d.goto(`${origin}/`);
+    expect(await d.property("testid:in", "text")).toBe("inside");
+    const { transport, dispose } = await createPlaywrightTransport({
+      timeoutMs: 5000,
+      httpCredentials: { username: "qa", password: "fictional-pass" },
+    });
+    try {
+      expect((await transport({ method: "GET", url: `${origin}/`, headers: {} })).status).toBe(200);
+    } finally {
+      await dispose();
+    }
+    const { transport: bare, dispose: closeBare } = await createPlaywrightTransport({ timeoutMs: 5000 });
+    try {
+      expect((await bare({ method: "GET", url: `${origin}/`, headers: {} })).status).toBe(401);
+    } finally {
+      await closeBare();
+    }
   });
 });

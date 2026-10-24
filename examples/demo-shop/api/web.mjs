@@ -14,6 +14,26 @@ const toast=(text,ok)=>{const t=document.createElement("div");t.className="toast
 <h1>${title}</h1>${body}</body></html>`;
 
 const PAGES = {
+  "/app/addresses": [
+    "Addresses",
+    `<ul id="list"><li data-testid="address-1">Home, Warsaw <button data-testid="delete-1">Delete</button></li>
+<li data-testid="address-2">Office, Krakow <button data-testid="delete-2">Delete</button></li></ul>
+<p>Addresses: <span data-testid="address-count">2</span></p>
+<script>for(const b of document.querySelectorAll("[data-testid^=delete-]")){b.onclick=()=>{
+const ok=confirm("Delete this address?");if(ok||window.__BUGS.BUG_DELETE_IGNORES_CANCEL){b.parentElement.remove();
+document.querySelector("[data-testid=address-count]").textContent=String(document.querySelectorAll("#list li").length);}};}</script>`,
+  ],
+  "/app/offer": [
+    "Christmas offer",
+    `<p data-testid="offer-status"></p>
+<p><button data-testid="nearest-store">Find the nearest store</button> <span data-testid="store"></span></p>
+<script>const END=Date.parse("2026-12-24T12:00:00Z");
+const tick=()=>{const left=END-Date.now();document.querySelector("[data-testid=offer-status]").textContent=
+left>0||window.__BUGS.BUG_OFFER_NEVER_EXPIRES?"Offer active":"Offer ended";};tick();setInterval(tick,1000);
+document.querySelector("[data-testid=nearest-store]").onclick=()=>navigator.geolocation.getCurrentPosition(
+(p)=>{document.querySelector("[data-testid=store]").textContent=p.coords.latitude>51?"Warsaw":"Wroclaw";},
+()=>{document.querySelector("[data-testid=store]").textContent="Location denied";});</script>`,
+  ],
   "/app/profile": [
     "Profile",
     `<p><label>Avatar <input type="file" accept="image/png" data-testid="avatar-input" id="av"></label></p>

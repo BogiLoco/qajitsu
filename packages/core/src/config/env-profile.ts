@@ -95,6 +95,16 @@ export const EnvProfileSchema = z.strictObject({
   web_session: z
     .strictObject({ storage: z.enum(["sessionStorage", "localStorage"]), key: z.string().min(1) })
     .optional(),
+  /**
+   * HTTP authentication in front of the environment (REQ-EXEC-61/AC5), e.g. a staging site behind Basic Auth: sent by
+   * the browser and the API client when the server asks for it.
+   */
+  http_auth: z
+    .strictObject({
+      username: z.string().min(1),
+      password: z.string().regex(/^secret:\/\/[a-z0-9-]+\/.+$/, "Passwords must be secret:// references"),
+    })
+    .optional(),
   /** Feature flags of this environment, available to plans and specs as data. */
   flags: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}),
 });

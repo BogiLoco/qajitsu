@@ -1,3 +1,4 @@
+import { httpCredentialsFor } from "../http-auth.js";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { runUsage, saveRunUsage } from "../run-usage.js";
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
@@ -179,9 +180,11 @@ export async function runExplore(
       `Exploratory session ${id} on ${env.name} (${env.baseUrl}): ${String(minutes)} min, ${String(maxSteps)} actions\n`,
     );
 
+    const httpCredentials = await httpCredentialsFor(env, session.resolveSecret);
     const factory =
       ports.exploreBrowser ??
       createPlaywrightBrowserFactory({
+        ...(httpCredentials ? { httpCredentials } : {}),
         browser: project.config.web.browser,
         video: "always",
         // REQ-EXEC-15/AC7: --headed shows the browser, --slow-mo slows every action down to watch it.
