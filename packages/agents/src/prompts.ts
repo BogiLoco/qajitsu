@@ -53,7 +53,14 @@ Rules:
   test id attribute; native app: accessibility id or Android resource id), role:<role>:<accessible name> (web),
   label:<label text>, placeholder:<text>, alt:<text>, title:<text>, text:<visible text>, id:<id>; never a made-up
   name and without dots. Use test ids found in the code for the case's platform; without them, use the roles, labels
-  and texts the recorded pages show. Properties: visible, enabled, checked (booleans), text, value (exact strings).
+  and texts the recorded pages show. Properties: visible, enabled, checked, in_viewport (booleans), text, value
+  (exact strings). An element inside an iframe: "frame:title:Payment >> testid:iban-field".
+- A web case that uploads files lists them in the case: "files": {"avatar": {"fixture": "images/avatar.png"}} (a file
+  of the project's .qa/fixtures/) or {"big": {"name": "big.pdf", "type": "application/pdf", "bytes": 3000000}}
+  (generated). A step that downloads a file expects it: "download": {"name": "orders.csv", "type": "csv", "rows": 3,
+  "texts": ["ORD-1"], "min_bytes": 10}; JSON files can also expect "fields". Infinite lists: a step may set
+  "scroll_limit" (scrolls, default 20). A canvas, chart or map whose state the application exposes for tests is
+  expected as "state": {"bars.0.value": 12} (read from the page's test hook).
 - For a visible layout or design change a web or mobile step can expect "visual": {"name": "checkout", "mask":
   ["testid:date"]}: its screenshot is compared with an approved baseline; mask regions that change on their own. The
   name uses lower-case letters, digits and "-" only (e.g. "checkout-terms").

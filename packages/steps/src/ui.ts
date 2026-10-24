@@ -17,8 +17,29 @@ export function pngDimensions(png: Uint8Array): { width: number; height: number 
  */
 export type UiSelector = string;
 
-/** Element properties a plan can expect and the parent can read (REQ-EXEC-05). */
-export type UiProperty = "visible" | "enabled" | "checked" | "text" | "value";
+/** Element properties a plan can expect and the parent can read (REQ-EXEC-05, REQ-EXEC-40/AC2). */
+export type UiProperty = "visible" | "enabled" | "checked" | "text" | "value" | "in_viewport";
+
+/** A file the parent gives an upload (REQ-EXEC-38/AC1), resolved from the plan, never from the spec. */
+export interface UiFile {
+  readonly name: string;
+  readonly type: string;
+  readonly data: Uint8Array;
+}
+
+/** A file a step downloaded (REQ-EXEC-38/AC2). */
+export interface UiDownload {
+  /** The name the application suggested. */
+  readonly name: string;
+  readonly data: Uint8Array;
+}
+
+/** Which page of the case actions go to (REQ-EXEC-39/AC2). */
+export interface UiPageRef {
+  /** 0 is the first page of the case; pop-ups and new tabs count up. */
+  readonly index: number;
+  readonly url: string;
+}
 
 /** Browser driven by the trusted parent (ADR-0004). Implemented by `runner-web` on Playwright. */
 export interface UiDriver {
@@ -45,6 +66,38 @@ export interface UiDriver {
   readonly bounds?: (selector: UiSelector) => Promise<ScreenBox | undefined>;
   /** The elements on the page or screen now, for snapshots of the trusted parent (REQ-EXEC-22/AC1). */
   readonly elements?: () => Promise<readonly UiElementFact[]>;
+  // Web actions (REQ-EXEC-38..40, ADR-0013); a driver without one refuses the action.
+  readonly pointer?: (selector: UiSelector, kind: "hover" | "dblclick" | "rightclick") => Promise<void>;
+  readonly dragTo?: (source: UiSelector, target: UiSelector) => Promise<void>;
+  readonly dragBy?: (selector: UiSelector, dx: number, dy: number) => Promise<void>;
+  /** A key or combination for the focused element or the page, e.g. `Control+A`. */
+  readonly keys?: (combination: string) => Promise<void>;
+  readonly scrollTo?: (selector: UiSelector) => Promise<void>;
+  readonly scrollBy?: (dx: number, dy: number) => Promise<void>;
+  /** Scrolls down until the element is visible, at most `limit` times; returns how often it scrolled. */
+  readonly scrollUntil?: (
+    selector: UiSelector,
+    limit: number,
+  ) => Promise<{ scrolls: number; found: boolean; y: number }>;
+  /** Puts files into a file input, or drops them on a drop zone. */
+  readonly upload?: (selector: UiSelector, files: readonly UiFile[]) => Promise<void>;
+  /** Clicks the element and waits for the download it starts. */
+  readonly download?: (selector: UiSelector, timeoutMs: number) => Promise<UiDownload>;
+  /** Actions go to the newest page opened after the current one, or back to the page that opened it. */
+  readonly switchPage?: (to: "new" | "opener", timeoutMs: number) => Promise<UiPageRef>;
+  /** Closes the current page and returns to its opener. */
+  readonly closePage?: () => Promise<UiPageRef>;
+  /** The page actions go to now. */
+  readonly currentPage?: () => UiPageRef;
+  /** A value of the application's test hook by path (REQ-EXEC-56/AC2); undefined when the hook has none. */
+  readonly testState?: (
+    hook: string,
+    path: string,
+  ) => Promise<{ readonly hook: boolean; readonly value: unknown }>;
+  /** A PNG of one element (a canvas, a chart) for a visual check (REQ-EXEC-56/AC2). */
+  readonly elementScreenshot?: (selector: UiSelector) => Promise<Uint8Array>;
+  /** Why an element cannot be reached, when the page explains it (a closed shadow root, REQ-EXEC-56/AC1). */
+  readonly unreachableReason?: () => Promise<string | undefined>;
 }
 
 /** The browser API a spec sees (the parent performs every action). */
@@ -61,6 +114,29 @@ export interface UiClient {
   readonly back: () => Promise<void>;
   /** Opens the app as an account alias, e.g. `user:standard`. */
   readonly as: (alias: string) => Promise<void>;
+  readonly hover: (selector: UiSelector) => Promise<void>;
+  readonly dblclick: (selector: UiSelector) => Promise<void>;
+  readonly rightClick: (selector: UiSelector) => Promise<void>;
+  /** Drags an element onto another one. */
+  readonly dragTo: (source: UiSelector, target: UiSelector) => Promise<void>;
+  /** Drags an element by an offset in pixels. */
+  readonly dragBy: (selector: UiSelector, dx: number, dy: number) => Promise<void>;
+  /** A key or combination for the page, e.g. `Control+A` or `Escape`. */
+  readonly keys: (combination: string) => Promise<void>;
+  readonly scrollTo: (selector: UiSelector) => Promise<void>;
+  readonly scrollBy: (dx: number, dy: number) => Promise<void>;
+  /** Scrolls until the element appears (infinite lists), at most the step's `scroll_limit` times. */
+  readonly scrollUntil: (selector: UiSelector) => Promise<void>;
+  /** Uploads the case's files by their plan keys (`files` of the case). */
+  readonly upload: (selector: UiSelector, ...files: string[]) => Promise<void>;
+  /** Clicks the element and keeps the file it downloads; checked with `download.*`. */
+  readonly download: (selector: UiSelector) => Promise<void>;
+  /** Actions go to the pop-up or tab the last action opened. */
+  readonly switchToNewPage: () => Promise<void>;
+  /** Actions go back to the page that opened the current one. */
+  readonly switchToOpener: () => Promise<void>;
+  /** Closes the current pop-up or tab; actions go back to its opener. */
+  readonly closePage: () => Promise<void>;
 }
 
 /** UI operations sent from a spec to the parent. */
@@ -70,7 +146,18 @@ export type UiOperation =
   | { readonly op: "fill" | "select" | "press"; readonly selector: UiSelector; readonly value: string }
   | { readonly op: "waitFor"; readonly selector: UiSelector; readonly state: "visible" | "hidden" }
   | { readonly op: "back" }
-  | { readonly op: "as"; readonly alias: string };
+  | { readonly op: "as"; readonly alias: string }
+  | {
+      readonly op: "hover" | "dblclick" | "rightclick" | "scrollTo" | "scrollUntil" | "download";
+      readonly selector: UiSelector;
+    }
+  | { readonly op: "dragTo"; readonly selector: UiSelector; readonly target: UiSelector }
+  | { readonly op: "dragBy"; readonly selector: UiSelector; readonly dx: number; readonly dy: number }
+  | { readonly op: "scrollBy"; readonly dx: number; readonly dy: number }
+  | { readonly op: "keys"; readonly value: string }
+  | { readonly op: "upload"; readonly selector: UiSelector; readonly files: readonly string[] }
+  | { readonly op: "switchPage"; readonly to: "new" | "opener" }
+  | { readonly op: "closePage" };
 
 /**
  * Selector kinds, the most stable first (REQ-EXEC-21/AC3). The web resolves testid, role, label, text, placeholder,
@@ -91,14 +178,27 @@ export const SELECTOR_KINDS = [
 ] as const;
 
 const SELECTOR = new RegExp(`^(${SELECTOR_KINDS.join("|")}):.+$`);
+/** A frame of a frame chain: the iframe element found by test id, title, id or CSS (REQ-EXEC-39/AC1). */
+const FRAME = /^frame:(testid|title|id|css):.+$/;
+
+/** The frames of a selector and the element inside the innermost one: `frame:title:Pay >> testid:card`. */
+export function splitFrames(selector: UiSelector): {
+  readonly frames: readonly string[];
+  readonly element: string;
+} {
+  const parts = selector.split(" >> ");
+  return { frames: parts.slice(0, -1).map((p) => p.slice("frame:".length)), element: parts.at(-1) ?? "" };
+}
 
 /**
- * Validates a selector string.
+ * Validates a selector string: a known kind, optionally inside frames (`frame:<selector> >> ...`, at most 5).
  *
  * @throws {Error} For anything that is not a known selector kind.
  */
 export function assertSelector(selector: string): UiSelector {
-  if (!SELECTOR.test(selector) || selector.length > 300)
+  const parts = selector.split(" >> ");
+  const framesOk = parts.length <= 6 && parts.slice(0, -1).every((p) => FRAME.test(p));
+  if (!framesOk || !SELECTOR.test(parts.at(-1) ?? "") || selector.length > 300)
     throw new Error(
       `Invalid selector '${selector.slice(0, 60)}': use ${SELECTOR_KINDS.map((k) => `${k}:`).join(", ")}`,
     );

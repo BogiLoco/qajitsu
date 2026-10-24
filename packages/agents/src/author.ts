@@ -99,6 +99,15 @@ Rules (checked by code; a violating spec is rejected):
 - Web and mobile steps drive the app only through ui, inside the step: await ui.as("<account alias>") opens it as an
   account, then ui.goto("/path"), ui.click(sel), ui.fill(sel, text), ui.check(sel), ui.uncheck(sel), ui.select(sel,
   value), ui.press(sel, key), ui.waitFor(sel), ui.back(). Open the page before checking anything on it.
+- Web cases also have: ui.hover(sel), ui.dblclick(sel), ui.rightClick(sel), ui.dragTo(sel, targetSel),
+  ui.dragBy(sel, dx, dy), ui.keys("Control+A"), ui.scrollTo(sel), ui.scrollBy(dx, dy), ui.scrollUntil(sel) for
+  infinite lists; ui.upload(sel, "<file key>", ...) with the keys of the case's "files" in the plan (never a path or
+  content); ui.download(sel) clicks and keeps the file, checked with
+  verify("<step id>", "download.<name|type|size|sha256|rows|texts.<n>|fields.<key>>", undefined, plan.expect(...))
+  in the same step; ui.switchToNewPage() after the action that opened a pop-up or tab, ui.switchToOpener() and
+  ui.closePage() to go back. Elements inside iframes: "frame:<selector of the iframe> >> <selector>", for example
+  "frame:title:Payment >> testid:iban-field". A step whose expect has "state" reads the application's test hook:
+  verify("<step id>", "state.<path>", undefined, plan.expect("<case>.<step>.state.<path>")). These are web only.
 - Selectors, the most stable first: testid:<id> (the project's test id; in a native app the accessibility id, on
   Android also the resource id), role:<role>:<accessible name>, label:<text>, placeholder:<text>, alt:<text>,
   title:<text>, text:<visible text>, id:<id>; css:<selector> (web) and xpath:<path> (native app) only as the last

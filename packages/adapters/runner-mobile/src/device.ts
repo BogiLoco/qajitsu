@@ -181,7 +181,9 @@ export function createAppiumDeviceFactory(options: MobileRunnerOptions): Browser
         property: async (s, property: UiProperty) => {
           const el = await c.$(appiumLocator(s, options.platform));
           switch (property) {
+            // A native screen is the viewport: on screen means visible.
             case "visible":
+            case "in_viewport":
               return el.isDisplayed().catch(() => false);
             case "enabled":
               return el.isEnabled();

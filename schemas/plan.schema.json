@@ -290,6 +290,54 @@
               "pattern": "^[a-z]{2,3}(-[A-Z][A-Za-z]{1,3})?$"
             }
           },
+          "files": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{0,40}$"
+            },
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "fixture": {
+                      "type": "string",
+                      "pattern": "^(?!\\/)(?!.*(^|\\/)\\.\\.(\\/|$))[A-Za-z0-9_./-]{1,200}$"
+                    }
+                  },
+                  "required": [
+                    "fixture"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_.() -]{1,100}$"
+                    },
+                    "type": {
+                      "type": "string",
+                      "pattern": "^[a-z]+\\/[a-z0-9.+-]+$"
+                    },
+                    "bytes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 50000000
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "type",
+                    "bytes"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
           "steps": {
             "minItems": 1,
             "type": "array",
@@ -333,7 +381,7 @@
                       "type": "object",
                       "propertyNames": {
                         "type": "string",
-                        "pattern": "^(testid|role|label|text|css):[^.]+$"
+                        "pattern": "^(frame:(testid|title|id|css):[^.>]+ >> )*(testid|role|label|text|css):[^.]+$"
                       },
                       "additionalProperties": {
                         "type": "object",
@@ -352,10 +400,71 @@
                           },
                           "value": {
                             "type": "string"
+                          },
+                          "in_viewport": {
+                            "type": "boolean"
                           }
                         },
                         "additionalProperties": false
                       }
+                    },
+                    "download": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 255
+                        },
+                        "type": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "min_bytes": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "max_bytes": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "sha256": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{64}$"
+                        },
+                        "texts": {
+                          "maxItems": 50,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "rows": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "fields": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "state": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_$][\\w$]*(\\.[\\w$]+|\\[\\d+\\])*$"
+                      },
+                      "additionalProperties": {}
                     },
                     "message": {
                       "type": "object",
@@ -403,6 +512,11 @@
                             "minLength": 1,
                             "maxLength": 200
                           }
+                        },
+                        "element": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300
                         }
                       },
                       "required": [
@@ -454,6 +568,9 @@
                                 },
                                 "value": {
                                   "type": "string"
+                                },
+                                "in_viewport": {
+                                  "type": "boolean"
                                 }
                               },
                               "additionalProperties": false
@@ -476,6 +593,11 @@
                   "type": "string",
                   "minLength": 3,
                   "maxLength": 1000
+                },
+                "scroll_limit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 200
                 }
               },
               "required": [

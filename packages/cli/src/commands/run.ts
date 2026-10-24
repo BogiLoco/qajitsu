@@ -1,3 +1,4 @@
+import { extractDownloadText, readFixture } from "../web-files.js";
 import { warnStageBudgets } from "../timing.js";
 import type { KnowledgePorts } from "./knowledge.js";
 import { runUsage, saveRunUsage } from "../run-usage.js";
@@ -1063,6 +1064,10 @@ async function executeCases(
     stopReason: timeStop,
     ...(run.messages ? { messages: run.messages.forCase } : {}),
     visual: visualFor(primaryVariant),
+    // REQ-EXEC-38: uploads read the project's fixtures; downloads are read by trusted code; REQ-EXEC-56: test hook.
+    fixture: (path: string) => readFixture(project.qaDir, path),
+    extractText: extractDownloadText,
+    testStateHook: project.config.web.test_state,
     executor,
     baseUrl: env.baseUrl,
     allowedOrigins: [env.origin],

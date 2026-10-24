@@ -178,6 +178,24 @@ async function start(m: StartMessage): Promise<void> {
         rpc({ op: "ui", operation: { op: "waitFor", selector, state } }),
       back: () => rpc({ op: "ui", operation: { op: "back" } }),
       as: (alias: string) => rpc({ op: "ui", operation: { op: "as", alias } }),
+      hover: (selector: string) => rpc({ op: "ui", operation: { op: "hover", selector } }),
+      dblclick: (selector: string) => rpc({ op: "ui", operation: { op: "dblclick", selector } }),
+      rightClick: (selector: string) => rpc({ op: "ui", operation: { op: "rightclick", selector } }),
+      dragTo: (selector: string, target: string) =>
+        rpc({ op: "ui", operation: { op: "dragTo", selector, target } }),
+      dragBy: (selector: string, dx: unknown, dy: unknown) =>
+        rpc({ op: "ui", operation: { op: "dragBy", selector, dx: Number(dx), dy: Number(dy) } }),
+      keys: (value: unknown) => rpc({ op: "ui", operation: { op: "keys", value: String(value) } }),
+      scrollTo: (selector: string) => rpc({ op: "ui", operation: { op: "scrollTo", selector } }),
+      scrollBy: (dx: unknown, dy: unknown) =>
+        rpc({ op: "ui", operation: { op: "scrollBy", dx: Number(dx), dy: Number(dy) } }),
+      scrollUntil: (selector: string) => rpc({ op: "ui", operation: { op: "scrollUntil", selector } }),
+      upload: (selector: string, ...files: unknown[]) =>
+        rpc({ op: "ui", operation: { op: "upload", selector, files: files.map(String) } }),
+      download: (selector: string) => rpc({ op: "ui", operation: { op: "download", selector } }),
+      switchToNewPage: () => rpc({ op: "ui", operation: { op: "switchPage", to: "new" } }),
+      switchToOpener: () => rpc({ op: "ui", operation: { op: "switchPage", to: "opener" } }),
+      closePage: () => rpc({ op: "ui", operation: { op: "closePage" } }),
     },
     step: async (stepId: string, fn: () => unknown): Promise<void> => {
       await rpc({ op: "beginStep", stepId });

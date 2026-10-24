@@ -103,6 +103,47 @@ export type Analysis = z.infer<typeof AnalysisSchema>;
 /** A locale name, e.g. `pl-PL` or `de` (REQ-EXEC-14). */
 export const LocaleNameSchema = z.string().regex(/^[a-z]{2,3}(-[A-Z][A-Za-z]{1,3})?$/, "Locale like pl-PL");
 
+/** Expected state of one UI element (REQ-EXEC-05, REQ-EXEC-40/AC2). */
+const ElementStateSchema = z.strictObject({
+  visible: z.boolean().optional(),
+  enabled: z.boolean().optional(),
+  checked: z.boolean().optional(),
+  text: z.string().optional(),
+  value: z.string().optional(),
+  /** The element is inside the visible part of the page (after scrolling, REQ-EXEC-40/AC2). */
+  in_viewport: z.boolean().optional(),
+});
+
+/**
+ * An element selector of an expectation: `testid:`, `role:`, `label:`, `text:` or `css:`, optionally inside frames
+ * (`frame:<selector> >> testid:pay`, REQ-EXEC-39/AC1); no dots, they separate the property in `verify()` fields.
+ */
+const ElementKeySchema = z
+  .string()
+  .regex(
+    /^(frame:(testid|title|id|css):[^.>]+ >> )*(testid|role|label|text|css):[^.]+$/,
+    "Selector like testid:place-order or frame:title:Payment >> testid:pay (no dots)",
+  );
+
+/** What a downloaded file must be (REQ-EXEC-38/AC2); every given part is checked by code. */
+const DownloadExpectationSchema = z.strictObject({
+  name: z.string().min(1).max(255).optional(),
+  /** MIME type or file extension, e.g. `text/csv` or `csv`. */
+  type: z.string().min(1).max(100).optional(),
+  min_bytes: z.number().int().min(0).optional(),
+  max_bytes: z.number().int().min(1).optional(),
+  sha256: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .optional(),
+  /** Texts the content must contain (CSV, JSON, text, XLSX and PDF files). */
+  texts: z.array(z.string().min(1)).max(50).optional(),
+  /** Data rows of a CSV or the first XLSX sheet, header excluded. */
+  rows: z.number().int().min(0).optional(),
+  /** Values in a JSON file by path, as `fields` of a response. */
+  fields: z.record(z.string(), z.unknown()).optional(),
+});
+
 /**
  * Per-locale values of an expectation (REQ-EXEC-14/AC2): the same fields, texts and element states with the values
  * this locale shows (number, date and currency formats). Only keys of the base expectation can be overridden.
@@ -110,18 +151,7 @@ export const LocaleNameSchema = z.string().regex(/^[a-z]{2,3}(-[A-Z][A-Za-z]{1,3
 const LocaleOverrideSchema = z.strictObject({
   fields: z.record(z.string(), z.unknown()).optional(),
   texts: z.array(z.string()).optional(),
-  elements: z
-    .record(
-      z.string(),
-      z.strictObject({
-        visible: z.boolean().optional(),
-        enabled: z.boolean().optional(),
-        checked: z.boolean().optional(),
-        text: z.string().optional(),
-        value: z.string().optional(),
-      }),
-    )
-    .optional(),
+  elements: z.record(z.string(), ElementStateSchema).optional(),
 });
 
 /**
@@ -140,20 +170,14 @@ export const ExpectationSchema = z
      * Expected state of UI elements by selector (`testid:place-order`, `role:button:Pay`, `label:Email`,
      * `text:Total`), e.g. `{ "testid:place-order": { "enabled": true } }` (REQ-EXEC-05).
      */
-    elements: z
-      .record(
-        z
-          .string()
-          .regex(/^(testid|role|label|text|css):[^.]+$/, "Selector like testid:place-order (no dots)"),
-        z.strictObject({
-          visible: z.boolean().optional(),
-          enabled: z.boolean().optional(),
-          checked: z.boolean().optional(),
-          text: z.string().optional(),
-          value: z.string().optional(),
-        }),
-      )
-      .optional(),
+    elements: z.record(ElementKeySchema, ElementStateSchema).optional(),
+    /** The file the step downloads (REQ-EXEC-38/AC2). */
+    download: DownloadExpectationSchema.optional(),
+    /**
+     * State the application exposes for tests (REQ-EXEC-56/AC2), read by the framework from the page's test hook
+     * (`web.test_state`, default `window.__QA_STATE__`) by path: canvas charts, maps, editors.
+     */
+    state: z.record(z.string().regex(/^[A-Za-z0-9_$][\w$]*(\.[\w$]+|\[\d+\])*$/), z.unknown()).optional(),
     /**
      * A message the step must receive in the case's inbox (REQ-ENV-08/AC2): an e-mail, an SMS forwarded to a webhook,
      * or an outgoing webhook. Every given part must be contained (case-insensitive); none arriving in time fails.
@@ -175,6 +199,8 @@ export const ExpectationSchema = z
         name: z.string().regex(/^[a-z0-9][a-z0-9-]{0,40}$/),
         threshold: z.number().min(0).max(1).optional(),
         mask: z.array(z.string().min(1).max(200)).max(20).optional(),
+        /** Compare only this element (a canvas, a chart) instead of the page (REQ-EXEC-56/AC2). */
+        element: z.string().min(1).max(300).optional(),
       })
       .optional(),
     /** Values that differ per locale, by locale name (REQ-EXEC-14/AC2). */
@@ -228,6 +254,27 @@ export const TestCaseSchema = z.strictObject({
     .default({}),
   /** Locales of the project this case also runs in (REQ-EXEC-14/AC1); expectations per locale in `by_locale`. */
   locales: z.array(LocaleNameSchema).optional(),
+  /**
+   * Files the case uploads, by key (REQ-EXEC-38/AC1): a file of the project's `.qa/fixtures/`, or one generated by code
+   * with a name, a type and a size. A spec names the key; it never passes a path or bytes.
+   */
+  files: z
+    .record(
+      z.string().regex(/^[a-z][a-z0-9_-]{0,40}$/),
+      z.union([
+        z.strictObject({
+          fixture: z
+            .string()
+            .regex(/^(?!\/)(?!.*(^|\/)\.\.(\/|$))[A-Za-z0-9_./-]{1,200}$/, "A path inside .qa/fixtures/"),
+        }),
+        z.strictObject({
+          name: z.string().regex(/^[A-Za-z0-9_.() -]{1,100}$/),
+          type: z.string().regex(/^[a-z]+\/[a-z0-9.+-]+$/),
+          bytes: z.number().int().min(0).max(50_000_000),
+        }),
+      ]),
+    )
+    .optional(),
   steps: z
     .array(
       z
@@ -242,6 +289,8 @@ export const TestCaseSchema = z.strictObject({
           manual: z.boolean().optional(),
           /** What the tester does and checks; required for a manual step. */
           instructions: z.string().min(3).max(1000).optional(),
+          /** Most scrolls of `ui.scrollUntil` in this step (REQ-EXEC-40/AC2); 20 when not given. */
+          scroll_limit: z.number().int().min(1).max(200).optional(),
         })
         .superRefine((step, ctx) => {
           if (step.manual !== true) return;
@@ -256,7 +305,9 @@ export const TestCaseSchema = z.strictObject({
             e.status !== undefined ||
             e.fields !== undefined ||
             e.texts !== undefined ||
-            e.elements !== undefined
+            e.elements !== undefined ||
+            e.download !== undefined ||
+            e.state !== undefined
           )
             ctx.addIssue({
               code: "custom",

@@ -29,7 +29,17 @@ describe("element and page inventory (REQ-PLAN-09/AC7)", () => {
     expect(byId["testid:product-"]?.prefix).toBe(true);
     expect(byId["testid:cart-count"]?.files).toEqual(["android/src/dev/qajitsu/demoshop/CartActivity.java"]);
     expect(byId["testid:cart-count"]?.platforms).toEqual(["android"]);
-    expect(inventory.pages).toEqual(["/app/cart", "/app/checkout", "/app/login", "/app/products"]);
+    // The demo shop's pages, the web gaps' pages included (REQ-EXEC-38..40, REQ-EXEC-56).
+    expect(inventory.pages).toEqual([
+      "/app/board",
+      "/app/cart",
+      "/app/checkout",
+      "/app/login",
+      "/app/pay",
+      "/app/products",
+      "/app/profile",
+      "/app/reviews",
+    ]);
     expect(selectorKnown(inventory, "testid:place-order")).toBe(true);
     expect(selectorKnown(inventory, "testid:price-P-2")).toBe(true);
     expect(selectorKnown(inventory, "testid:price-")).toBe(false);

@@ -1,0 +1,63 @@
+{
+  "summary": "Avatar upload and product export for DEMO-7.",
+  "cases": [
+    {
+      "id": "TC-01",
+      "title": "A 1.5 MB PNG avatar is accepted",
+      "type": "web",
+      "priority": "high",
+      "source": [{ "kind": "ac", "id": "AC1" }],
+      "data": { "user": "user:standard" },
+      "files": { "avatar": { "name": "avatar.png", "type": "image/png", "bytes": 1500000 } },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "Upload the avatar through the file input",
+          "expect": {
+            "description": "Name and size shown",
+            "elements": {
+              "testid:avatar-name": { "text": "avatar.png" },
+              "testid:avatar-size": { "text": "1500000" }
+            }
+          }
+        }
+      ],
+      "evidence": ["screenshot"]
+    },
+    {
+      "id": "TC-02",
+      "title": "A 3 MB file dropped on the drop zone is refused",
+      "type": "web",
+      "priority": "medium",
+      "source": [{ "kind": "ac", "id": "AC2" }],
+      "data": { "user": "user:standard" },
+      "files": { "big": { "name": "big.png", "type": "image/png", "bytes": 3000000 } },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "Drop the large file on the drop zone",
+          "expect": { "description": "File too large", "texts": ["File too large"] }
+        }
+      ],
+      "evidence": ["screenshot"]
+    },
+    {
+      "id": "TC-03",
+      "title": "Export CSV downloads every product",
+      "type": "web",
+      "priority": "high",
+      "source": [{ "kind": "ac", "id": "AC3" }],
+      "steps": [
+        {
+          "id": "S1",
+          "action": "Export the products as CSV",
+          "expect": {
+            "description": "products.csv with three products",
+            "download": { "name": "products.csv", "type": "csv", "rows": 3, "texts": ["P-3,T-shirt"] }
+          }
+        }
+      ],
+      "evidence": ["screenshot"]
+    }
+  ]
+}

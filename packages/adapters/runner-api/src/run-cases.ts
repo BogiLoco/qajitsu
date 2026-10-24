@@ -85,6 +85,12 @@ export interface RunCasesOptions {
   readonly evidencePrefix?: string;
   /** The message inbox of a case (REQ-ENV-08), created on first use and shared by its attempts. */
   readonly messages?: ((caseId: string) => CaseMessages) | undefined;
+  /** Files of `.qa/fixtures/` for uploads (REQ-EXEC-38/AC1). */
+  readonly fixture?: ((path: string) => Promise<Uint8Array>) | undefined;
+  /** Text of downloaded PDF and XLSX files (REQ-EXEC-38/AC2). */
+  readonly extractText?: ((name: string, data: Uint8Array) => Promise<string | undefined>) | undefined;
+  /** The application's test hook (REQ-EXEC-56/AC2). */
+  readonly testStateHook?: string | undefined;
   /** OpenAPI contract of the application; responses that violate it fail the step (REQ-EXEC-04/AC2). */
   readonly contract?: ContractValidator | undefined;
 }
@@ -215,6 +221,9 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
           },
         },
         ...(options.messages ? { messages: options.messages(caseId) } : {}),
+        ...(options.fixture ? { fixture: options.fixture } : {}),
+        ...(options.extractText ? { extractText: options.extractText } : {}),
+        ...(options.testStateHook ? { testStateHook: options.testStateHook } : {}),
       })
       // The accounts go back to the pool as soon as the attempt ends, also when it throws (REQ-ENV-09/AC2).
       .finally(() => release?.());

@@ -51,6 +51,8 @@ export interface EvidenceItem {
     | "dom"
     | "manual"
     | "message"
+    | "upload"
+    | "download"
     | "other";
   /** File name inside the attempt folder: `S1-01.json`, `S1.png`, `failure.png`, `video.webm`. */
   readonly name: string;
@@ -205,6 +207,12 @@ export interface AttemptRequest {
   readonly pause?: StepPause;
   /** Live progress for a person watching (REQ-OBS-09): never part of the record or a status. */
   readonly progress?: AttemptProgress;
+  /** Reads a file of the project's `.qa/fixtures/` for an upload (REQ-EXEC-38/AC1); the path comes from the plan. */
+  readonly fixture?: (path: string) => Promise<Uint8Array>;
+  /** Text of a downloaded PDF or XLSX file (REQ-EXEC-38/AC2). */
+  readonly extractText?: (name: string, data: Uint8Array) => Promise<string | undefined>;
+  /** The application's test hook for `state.*` checks (REQ-EXEC-56/AC2), e.g. `__QA_STATE__`. */
+  readonly testStateHook?: string;
 }
 
 /** What the trusted parent reports while an attempt runs (REQ-OBS-09). */

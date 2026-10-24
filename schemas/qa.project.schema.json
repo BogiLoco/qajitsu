@@ -1274,7 +1274,8 @@
         "video": "retain-on-failure",
         "headless": true,
         "action_timeout_ms": 5000,
-        "test_id_attribute": "data-testid"
+        "test_id_attribute": "data-testid",
+        "test_state": "__QA_STATE__"
       },
       "type": "object",
       "properties": {
@@ -1310,6 +1311,11 @@
           "default": "data-testid",
           "type": "string",
           "pattern": "^[a-z][a-z0-9_-]{0,49}$"
+        },
+        "test_state": {
+          "default": "__QA_STATE__",
+          "type": "string",
+          "pattern": "^[A-Za-z_$][\\w$]{0,60}$"
         },
         "matrix": {
           "type": "object",
