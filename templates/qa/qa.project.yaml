@@ -172,11 +172,41 @@ test_types: [api, web]
 # GO / NO-GO policy (REQ-PUB-10): GO only if every case PASSED; statuses of medium and low cases may be tolerated
 # decision: { version: "1", tolerate: { medium: [], low: [NOT_RUN] } }
 #
+# Ticket readiness gate before the first plan (REQ-PLAN-13): extra risk rules over the changed paths, and when the
+# result is posted to the ticket (always | not_ready | never)
+# readiness: { comment: always, risk_rules: [{ pattern: "^api/payments/", level: high, reason: "payments API" }] }
+#
+# The team's Jira workflow (REQ-FLOW-02, REQ-FLOW-04): status names per role. After `qj publish` the ticket moves by
+# the computed statuses only: all PASSED -> passed (done only with passed_to_done), FAILED -> failed and the change's
+# author (authors maps code host user -> Jira account), anything else stays in in_testing with attention_label and
+# qa_assignee. A missing transition leaves the ticket where it is and adds a comment. Checked by `qj doctor --online`.
+# workflow:
+#   statuses: { start: "Ready for QA", in_testing: "In QA", waiting_for_approval: "Plan review", needs_info: "Needs info", passed: "QA passed", failed: "In development", needs_review: "QA review", done: "Done" }
+#   passed_to_done: false
+#   qa_assignee: <jira-account-id>
+#   authors: { octocat: <jira-account-id> }
+#   attention_label: qa-needs-attention
+#   max_runs_per_day: 5
+#   approvers_group: qa-leads   # plan approval by /qj comments (qj workflow sync)
+#   pickup: { interval_s: 300, batch: 5, secret: secret://env/QJ_WEBHOOK_SECRET }   # qj workflow poll | serve
+#
+# Prompt cache and input limits (REQ-LLM-12), inside models: { ... }:
+#   cache_ttl: auto            # auto | 5m | 1h | off
+#   max_input_tokens: 150000   # stop calls that would send more
+#
+# Time budget per stage in seconds (REQ-NFR-11): over it is a warning with the measured time, never a status.
+# Defaults: fetch 300, analyze 900, plan 1200, run 3600, audit 900, triage 600, explore 3600
+# timing: { budgets_s: { run: 1800 } }
+#
 # A person reviews generated specs before they run (REQ-VER-24): for the first runs of a new project, or always
 # spec_review: { first_runs: 5, always: false }
 #
 # Signed test certificates (REQ-VER-15): `qj audit keygen`, then the private key in the secret provider
 # certificate: { signing_key: secret://env/QAJITSU_SIGNING_KEY, required: false }
+# Trusted timestamps (RFC 3161): only the certificate's hash goes to the TSA; its CA in .qa/keys/tsa/
+# certificate: { signing_key: ..., timestamp: { url: http://timestamp.digicert.com, qualified: false } }
+# Write-once storage of certified runs (S3 Object Lock; bucket created with Object Lock):
+# archive: { type: s3, endpoint: https://s3.eu-central-1.amazonaws.com, region: eu-central-1, bucket: qa-evidence, access_key_id: secret://env/S3_KEY, secret_access_key: secret://env/S3_SECRET, mode: compliance, retention_days: 2555 }
 #
 # Android and iOS (REQ-ENV-06, docs/guides/mobile.md)
 # mobile: { recording: retain-on-failure, android: { app: { source: build, repo: app, command: [./gradlew, assembleDebug], output: app/build/outputs/apk/debug/app-debug.apk }, app_id: com.example.app } }

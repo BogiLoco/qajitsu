@@ -265,8 +265,18 @@ like an unknown selector (AC8). An environment that cannot be reached is reporte
 - `--build`: start the environment from the run's worktree (and the mobile devices, building the app when configured)
   only to record the pages and the app's first screen for the planner, then stop them (REQ-EXEC-22/AC9). Use it
   when the application is built per run, so the plan expects the texts the application really shows.
+- `--override-readiness <reason>`: plan although the readiness gate did not find the ticket READY (REQ-PLAN-13/AC3);
+  the reason is recorded in `run.json` and the journal
 
-Exit codes: `0` plan written (and approved, if accepted in the review), `2` token budget exceeded, `3` errors.
+Before the first plan of a run, the readiness gate (REQ-PLAN-13) checks the ticket: acceptance criteria, a found
+change (unless `code.access: none`), and how sure the analyst is. It prints `READY`, `NEEDS_CLARIFICATION` or
+`NOT_TESTABLE` with a risk level computed from the changed paths (migrations, authentication, payments,
+infrastructure, size, the ticket's labels; extra rules in `readiness.risk_rules`), the gaps and concrete questions,
+writes `readiness.json` and posts the result to the ticket (`readiness.comment`: `always`, `not_ready` or `never`).
+A ticket that is not READY gets no plan unless `--override-readiness` is given.
+
+Exit codes: `0` plan written (and approved, if accepted in the review), `2` token budget exceeded or the ticket is not
+ready, `3` errors.
 
 ### `qajitsu approve <ticket>`
 
@@ -874,6 +884,68 @@ Makes real model calls; never in PR CI.
 
 Exit codes: `0` the benchmark completed (whatever the scores), `3` configuration errors.
 
+### `qajitsu feedback <ticket>`
+
+Records what a person found after a run (REQ-PLAN-16): what a FAILED case really was, or a defect found later on a
+ticket the run passed. It feeds the project's plan and test quality metrics (`qj status`, `qj metrics`) and never
+changes a status, the results or the certificate. The note is masked before it is stored.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+- `--case <id>` with `--is <kind>`: a FAILED case is a `product-bug`, `test-bug`, `environment` or `data` problem
+- `--escaped <bug>`: a defect found later, e.g. `SHOP-512`
+- `--note <text>`: why
+
+Exit codes: `0` recorded, `3` errors (a case that is not FAILED, an unknown kind, a run without results).
+
+### `qajitsu workflow poll`
+
+Pull mode of picking tickets up (REQ-FLOW-01), for workers behind a firewall. Every `workflow.pickup.interval_s`
+seconds (default 300) it finds the project's tickets in `workflow.statuses.start` (or runs `workflow.pickup.jql`) and
+picks up at most `workflow.pickup.batch` of them, one after the other: `qj fetch` (one active run per ticket, daily
+limit), the ticket moves to `in_testing` with a "QAJitsu started run ..." comment, `qj plan` with the readiness gate,
+and with `approvers_group` the plan is posted for approval (`qj workflow sync`). A ticket that comes back to the start
+status after "needs info" is checked again the same way. Every pick-up is logged in `<runs>/pickup.jsonl`.
+
+- `--once`: poll once and stop (for cron or a CI schedule)
+
+Exit codes: `0` polled (Ctrl+C stops the loop), `3` errors (no `workflow` section).
+
+### `qajitsu workflow serve`
+
+Push mode (REQ-FLOW-01): listens for `POST /jira` from a Jira Automation rule ("When: issue transitioned to Ready for
+QA" → "Send web request" with the body `{"ticket": "{{issue.key}}"}`) or a Jira webhook (`{"issue": {"key": ...}}`).
+Requests must carry the shared secret `workflow.pickup.secret` as the `X-QAJitsu-Token` header or an HMAC-SHA256 of
+the body as `X-Hub-Signature: sha256=<hex>`; without a configured secret the server does not start. Unauthenticated,
+oversized (over 64 KB), malformed or foreign-project requests are refused and logged in `<runs>/pickup.jsonl` without
+their body. Accepted tickets are picked up one after the other as in `poll`; the same ticket queued twice is picked up
+once. It listens on `127.0.0.1:8787` by default; put a TLS proxy in front to reach it from Jira Cloud.
+
+- `--host <host>`: address to listen on (default `workflow.pickup.host`)
+- `--port <port>`: port (default `workflow.pickup.port`)
+
+Exit codes: `0` stopped with Ctrl+C, `3` errors (no secret, port in use).
+
+### `qajitsu workflow sync <ticket>`
+
+The plan approval loop in the ticket (REQ-FLOW-03), for projects with a `workflow` section and
+`workflow.approvers_group`. Run it from a scheduler or a Jira automation; every call does what is due:
+
+- posts the plan version waiting for approval as a ticket comment (cases, exclusions, what no case covers, what code
+  cannot check, the change list against the version before) and moves the ticket to `waiting_for_approval`;
+- acts on new comments with `/qj approve v<N>` (freezes exactly that version; another version is refused),
+  `/qj revise <what to change>` (the planner writes and posts the next version; after `max_revisions` rounds a person
+  edits the plan directly) and `/qj reject <reason>` (no testing; the ticket moves to `needs_info`);
+- answers commands from people outside the approvers group and ignores them;
+- reminds after `remind_after_h` hours without an answer. Silence never approves.
+
+Every version, command, author and time is in the ticket, in `run.json` (`ticketFlow`) and in the journal. Comment
+text is untrusted: only an approver's revise instruction reaches the planner. QAJitsu's own comments start with
+"QAJitsu" and are never read as commands.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+
+Exit codes: `0` the loop ran, `2` no plan yet, `3` errors (no `workflow.approvers_group`, tracker errors).
+
 ### `qajitsu review-spec <ticket>`
 
 Reads and decides on the generated specs that wait for a person (REQ-VER-24). Without a decision it shows each spec
@@ -934,6 +1006,28 @@ files and key is kept, so its id stays the same. `qj publish` issues the certifi
 
 Exit codes: `0` issued (or still valid), `1` no certificate (gaps listed), `3` errors or no signing key.
 
+### `qajitsu audit archive <ticket>`
+
+Keeps a certified run in the configured write-once storage (`archive`, S3 Object Lock, REQ-VER-19), for example after
+the storage was unreachable when the run ended. Stores the audit export and the certificate locked until the date the
+certificate states, and reads each object back to confirm the lock.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+
+Exit codes: `0` archived, `1` not archived (the reason is printed), `3` errors (no archive configured, no certificate
+stating storage).
+
+### `qajitsu audit timestamp <ticket>`
+
+Timestamps the run's certificate at the configured time-stamping authority (`certificate.timestamp.url`, RFC 3161,
+REQ-VER-17), for a certificate issued while the TSA was unreachable, or to stamp it again. Only the SHA-256 of the
+signed statement is sent; the token is checked before it is kept in `certificate/timestamp.tsr`.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+
+Exit codes: `0` timestamped, `1` not timestamped (the reason is printed), `3` errors (no TSA configured, no
+certificate).
+
 ### `qajitsu audit keygen`
 
 Creates an Ed25519 signing key. The private key is written with mode 0600 into the project home and never printed; put
@@ -943,6 +1037,22 @@ certificates they signed keep verifying.
 
 Exit codes: `0` created, `3` errors.
 
+### `qajitsu reproduce <path>`
+
+Runs a certified run again and compares (REQ-VER-20). The certificate of the run folder or audit export is checked
+first: only a run whose certificate verifies, with no file changed, is reproduced. A new run of the ticket gets the
+certified ticket snapshot, the frozen plan byte for byte (the same SHA-256) and the generated tests, and runs them
+without any agent; it gets its own certificate. Each case is `same`, `different` or `not reproducible` (BLOCKED or
+NOT_RUN now); tool versions and container images that differ from the certificate are named. The comparison is kept in
+the new run (`run.json`, `reproduction`); the original run never changes.
+
+- `--env <profile|url>`: environment to run against (default: `environments.default`)
+- `--build`: build the application from the code at the certified commits
+- `--key <file>`: trusted public key in PEM, repeatable; inside a project `.qa/keys/*.pub` are trusted too
+
+Exit codes: `0` every case the same, `1` a case differs, `2` a case could not be reproduced, `3` errors (no
+certificate, a certificate that does not verify).
+
 ### `qajitsu verify-report <path>`
 
 Checks the certificate of a run folder or of an audit export zip (REQ-VER-15/AC3): the signature with a trusted public
@@ -950,6 +1060,10 @@ key, the format, the Merkle root, and every covered file (journals and logs up t
 changed or missing file. Works offline, without the run's project.
 
 - `--key <file>`: trusted public key in PEM; repeat for rotated keys. Inside a project `.qa/keys/*.pub` are trusted too.
+- `--tsa-ca <file>`: trusted CA certificate of the time-stamping authority (PEM or DER); repeatable. Inside a project
+  `.qa/keys/tsa/*.pem` are trusted too. A timestamp token present is checked (REQ-VER-17): a token for another hash,
+  a broken signature or a certificate claiming to be issued after its stamp fails the check; an untrusted TSA is
+  named.
 
 Exit codes: `0` valid, `1` a file changed or is missing, or the key is not trusted, `3` no certificate or an
 unreadable path.

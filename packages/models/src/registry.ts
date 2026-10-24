@@ -3,10 +3,11 @@ import { createGoogle } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { ConfigError, type ModelProvider, type ProjectConfig } from "@qajitsu/core";
-import type { LanguageModel } from "ai";
+import type { JSONValue, LanguageModel } from "ai";
 import { createOllama } from "ai-sdk-ollama";
 import { patientFetch } from "./patient-fetch.js";
 import { modelProfile, type ModelProfile } from "./capabilities.js";
+import { cacheProviderOptions, inputLimit, type CacheTtl } from "./cost-features.js";
 import { parseModelRef, resolveRoleModel, type ModelRef, type ModelRole } from "./model-ref.js";
 
 /** A resolved model: AI SDK handle plus its capability profile. */
@@ -16,6 +17,10 @@ export interface ResolvedModel {
   readonly id: string;
   readonly model: LanguageModel;
   readonly profile: ModelProfile;
+  /** Provider options that mark a prompt cache breakpoint, when the provider needs them (REQ-LLM-12/AC1). */
+  readonly cacheOptions?: Record<string, Record<string, JSONValue>> | undefined;
+  /** Most input tokens one call may send and why (REQ-LLM-12/AC4). */
+  readonly inputLimit?: { readonly limit: number; readonly why: string } | undefined;
 }
 
 /** Access to the configured models: the core ModelProvider with AI SDK types (ADR-0005). */
@@ -43,8 +48,19 @@ export function createModelRegistry(options: {
   readonly fetch?: typeof globalThis.fetch;
   /** Extra providers by alias, e.g. a mock model in tests; they win over configured ones. */
   readonly extra?: Readonly<Record<string, (model: string) => ResolvedModel["model"]>>;
+  /** The project's prompt cache duration, already chosen when `cache_ttl` is `auto` (REQ-LLM-12/AC2). */
+  readonly cacheTtl?: CacheTtl;
 }): ModelRegistry {
   const { config, resolveSecret } = options;
+  /** REQ-LLM-12: the cache breakpoint and the input limit go with the model, so agents need not know the provider. */
+  const withCostFeatures = (providerType: string, m: ResolvedModel): ResolvedModel => {
+    const cacheOptions = cacheProviderOptions(providerType, options.cacheTtl ?? "off");
+    return {
+      ...m,
+      ...(cacheOptions ? { cacheOptions } : {}),
+      inputLimit: inputLimit(m.profile, config.max_input_tokens),
+    };
+  };
   const fetchOption = options.fetch ? { fetch: options.fetch } : {};
 
   const build = async (alias: string, provider: ProviderConfig, model: string): Promise<LanguageModel> => {
@@ -91,7 +107,7 @@ export function createModelRegistry(options: {
     const id = `${ref.provider}/${ref.model}`;
     const extra = options.extra?.[ref.provider];
     if (extra) {
-      return {
+      return withCostFeatures("mock", {
         ref,
         id,
         model: extra(ref.model),
@@ -105,7 +121,7 @@ export function createModelRegistry(options: {
             context_window: 200_000,
           },
         ),
-      };
+      });
     }
     const provider = config.providers[ref.provider];
     if (!provider) {
@@ -114,12 +130,12 @@ export function createModelRegistry(options: {
         available: Object.keys(config.providers),
       });
     }
-    return {
+    return withCostFeatures(provider.type, {
       ref,
       id,
       model: await build(ref.provider, provider, ref.model),
       profile: modelProfile(provider.type, ref.model, provider.models[ref.model]),
-    };
+    });
   };
 
   return {

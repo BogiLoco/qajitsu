@@ -64,6 +64,15 @@ export const CertificateStatementSchema = z.strictObject({
     images: z.array(z.unknown()).optional(),
     environment: z.unknown().optional(),
     codeAccess: z.unknown().optional(),
+    /** Where the run is kept write-once and until when (REQ-VER-19/AC3). */
+    storage: z
+      .strictObject({
+        kind: z.literal("s3-object-lock"),
+        location: z.string(),
+        mode: z.enum(["compliance", "governance"]),
+        retainUntil: z.string(),
+      })
+      .optional(),
   }),
 });
 

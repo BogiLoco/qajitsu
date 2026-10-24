@@ -182,7 +182,7 @@ depends on all twenty adapter packages, so everyone installs every integration (
 
 **Acceptance criteria**
 
-- [ ] AC1: The core installation carries the core adapters only: Jira, GitHub, GitLab, local repositories, the API and web runners, secrets from the environment and local evidence. Every other integration (for example Xray, Zephyr, TestRail, Vault, Doppler, Confluence, Chroma, LanceDB, the mobile runner, webhook.site) is a plugin package published from this repository.
+- [ ] AC1: The core installation carries the core only: ticket files, local repositories, secrets from the environment, local evidence and the steps library. Every integration is a plugin package published from this repository and can be added or removed per installation: ticket systems and publishers (Jira Cloud and Data Center, Xray, Zephyr Scale and Squad, TestRail), code hosts (GitHub, GitLab), runners (API, web, mobile), knowledge stores and sources, secret managers, environment providers and tools. `qj init` installs the official plugins the chosen setup needs, so the usual Jira and GitHub flow needs no extra step.
 - [ ] AC2: `qj doctor` reads the project configuration and names every plugin it needs and lacks (for example `test_cases: { type: xray }` without the Xray plugin) with the command that installs it; a command that needs a missing plugin stops with the same message instead of a module error.
 - [ ] AC3: `qj setup` and `qj doctor --fix` install the plugins the project needs into the QAJitsu home at versions pinned for the QAJitsu release, checked against their published checksums, without install scripts; `qj plugin list|add|remove` shows and changes them by hand.
 - [ ] AC4: A plugin works only through the adapter interfaces of `@qajitsu/core` (INV-12): it cannot replace the guard, the verifier, status computation, masking or publish gates, and it gets secrets only through the secret provider.
@@ -191,6 +191,8 @@ depends on all twenty adapter packages, so everyone installs every integration (
 - [ ] AC7: Each plugin has a manifest: name, version, plugin type (ticket source, test-case source, publisher, runner, environment provider, secret provider, tool), the range of the core's adapter API it works with, required secrets, network hosts and permissions.
 - [ ] AC8: A plugin whose core API range does not match is refused with a clear message.
 - [ ] AC9: A plugin reaches the network only to the hosts in its manifest that are also on the environment allowlist, and never writes results, evidence or the frozen plan; the guard enforces it like for agents.
+
+- [ ] AC10: Removing a plugin a project still uses is refused with the projects and settings that use it; removing one no project uses deletes its files and records it.
 
 ### REQ-GEN-12 · Plugin tiers, dev kit and registry
 
@@ -213,3 +215,40 @@ what makes the results trustworthy.
 - [ ] AC7: A plugin is marked "verified" in the registry only after it passed the dev kit's contract tests in CI and a review of its manifest.
 - [ ] AC8: Adapter interfaces follow semantic versioning; a breaking change gets a new major version and a documented transition period.
 - [ ] AC9: A template repository and the `/new-adapter` guide describe how to build, test and publish a plugin.
+
+### REQ-GEN-13 · Doctor recommends what to install from the application
+
+- Status: accepted
+- Priority: should
+- Stage: later
+- Related: REQ-GEN-03, REQ-GEN-06, REQ-PRJ-02, REQ-LLM-01, INV-11
+
+Installing every tool "just in case" costs gigabytes and time. QAJitsu looks at the application and proposes only what its tests need.
+
+**Acceptance criteria**
+
+- [ ] AC1: `qj doctor --recommend` detects by code from the repositories what the application is and how it can be tested: web front-ends, mobile projects (Gradle, Xcode, React Native, Flutter), API descriptions (OpenAPI, GraphQL SDL, `.proto`, WSDL, AsyncAPI), compose files and existing test suites (Playwright, Appium, Maestro).
+- [ ] AC2: An agent turns the findings into a recommendation of tools and `.qa` settings (browsers, Docker, Java and the Android SDK or not, Xcode or a farm, Appium or Maestro, runners per API type), each with the files it is based on; every cited file and finding is checked by code, and a recommendation without a found basis is dropped.
+- [ ] AC3: The recommendation lists what will not be installed and why, the download size and disk space of each tool, and the command for it (`qj setup --only ...`).
+- [ ] AC4: Nothing is installed or changed without the user's confirmation; with `--yes` in CI only the recommended set is installed.
+- [ ] AC5: Without a model (offline) the deterministic findings still give a recommendation, marked as such.
+- [ ] AC6: Repository content is untrusted data: it can never make the agent recommend tools outside QAJitsu's toolchain manifest or sources outside the configured mirrors.
+
+### REQ-GEN-14 · Plugin inventory before the plugin system
+
+- Status: accepted
+- Priority: must
+- Stage: later
+- Related: REQ-GEN-02, REQ-GEN-11, REQ-GEN-12, REQ-GEN-13, ADR-0011
+
+Before the plugin system is built (REQ-GEN-11), every plugin QAJitsu has or plans (Jira, Xray, TestRail, Zephyr and
+all other integrations) is collected in one place, so the plugin types, interfaces and packaging fit all of them and
+none needs a redesign later.
+
+**Acceptance criteria**
+
+- [ ] AC1: `docs/architecture/plugins.md` lists every existing integration package (today under `packages/adapters/`) and every integration named in the requirements, each with: plugin type, interface in `@qajitsu/core`, status (exists, planned, idea), the requirements that need it, external dependencies and their install size, network hosts, secrets and the proposed tier (REQ-GEN-12).
+- [ ] AC2: The inventory covers at least: ticket systems and test management (Jira Cloud and Data Center, Xray, Zephyr Scale, Zephyr Squad, TestRail, and candidates such as Azure DevOps, Linear, qTest), code hosts (GitHub, GitLab, Bitbucket, Azure Repos), runners (API, web, mobile with Appium and Maestro, desktop, performance, security, contract, chain plugins and wallets), environment providers (compose, remote, preview platforms, device farms), knowledge stores and sources, secret managers, message capture, evidence storage (local, WORM, REQ-VER-19) and publishers.
+- [ ] AC3: For each plugin type the inventory names the interface it implements and the gaps: an interface that does not fit a listed plugin is changed in an ADR before implementation starts.
+- [ ] AC4: The inventory decides what the core keeps and what becomes a plugin, and in which order integrations move out into plugins; it is reviewed and accepted before REQ-GEN-11 is implemented.
+- [ ] AC5: A check keeps it current: an integration package or a requirement naming an integration that is missing from the inventory fails `pnpm req:check`.

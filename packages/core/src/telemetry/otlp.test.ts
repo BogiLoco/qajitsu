@@ -34,7 +34,14 @@ const events: RunEvent[] = [
     4,
     "plan",
     "model.usage",
-    { role: "planner", model: "local/gemma4:e2b", inputTokens: 100, outputTokens: 20, costUsd: 0.5 },
+    {
+      role: "planner",
+      model: "local/gemma4:e2b",
+      inputTokens: 100,
+      outputTokens: 20,
+      costUsd: 0.5,
+      durationMs: 2500,
+    },
     { kind: "agent", name: "planner" },
   ),
   ev(5, "plan", "stage.end"),
@@ -96,6 +103,9 @@ describe("OTLP export (REQ-OBS-03)", () => {
     expect(attempt.status).toEqual({ code: 2, message: "attempt error" });
     expect(attr(model, "gen_ai.usage.input_tokens")).toEqual({ intValue: "100" });
     expect(attr(model, "qajitsu.cost_usd")).toEqual({ doubleValue: 0.5 });
+    // REQ-NFR-11/AC1: the model call spans its recorded duration, ending when it was journaled.
+    expect(BigInt(model.endTimeUnixNano) - BigInt(model.startTimeUnixNano)).toBe(2_500_000_000n);
+    expect(attr(model, "qajitsu.wait_ms")).toEqual({ intValue: "2500" });
     expect(p.counts).toEqual({ spans: 7, logs: 10, metrics: 4 });
     const logs =
       (

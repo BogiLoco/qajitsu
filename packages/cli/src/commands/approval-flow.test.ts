@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createDemoPipeline, flowScript } from "../../../../tests/support/cli-pipeline.js";
@@ -183,6 +183,8 @@ describe("approval comments in Jira (REQ-PLAN-10/AC4)", () => {
       "jira-comment.approval-2.wiki.txt",
       "jira-comment.approval-frozen.wiki.txt",
       "jira-comment.plan.wiki.txt",
+      // The readiness gate's result is a comment of its own before the plan (REQ-PLAN-13/AC4).
+      "jira-comment.readiness.wiki.txt",
     ]);
     const { data } = await p.record();
     const model = await readFile(join(dir, "jira-comment.approval-1.wiki.txt"), "utf8");
@@ -215,6 +217,8 @@ describe("approval comments in Jira (REQ-PLAN-10/AC4)", () => {
   it("REQ-PLAN-10/AC4: Jira failing to take a comment is reported and journaled, and never changes the decision", async () => {
     const p = await planned("[model]", { jira: "comment" });
     await mkdir(join(p.runDir, "report"), { recursive: true });
+    // The readiness comment of the plan stage already made the folder; Jira fails for the approval comments.
+    await rm(join(p.runDir, "report", "published"), { recursive: true, force: true });
     await writeFile(join(p.runDir, "report", "published"), "not a folder");
     const r = await p.run(["approve", "DEMO-1"], { script: [answer("approve", ["fine"])] });
     expect(r.exitCode).toBe(0);

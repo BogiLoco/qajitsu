@@ -1,3 +1,4 @@
+import { warnStageBudgets } from "../timing.js";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -37,6 +38,8 @@ import { mapAroundChange } from "@qajitsu/report";
 import { explorationLines } from "./explore-review.js";
 import { approvalCommenter, recordReviewApproval, runApprovalFlow } from "./approval-flow.js";
 import { publisherFor } from "./publish.js";
+import { recordReadinessOverride, runReadinessGate } from "./readiness.js";
+import { moveToRole, runWorkflow } from "./workflow.js";
 import { createMasker } from "@qajitsu/steps";
 import { runUsage, saveRunUsage } from "../run-usage.js";
 import { exportRunTelemetry } from "./telemetry.js";
@@ -74,6 +77,8 @@ export interface PlanOptions {
   readonly snapshot?: boolean | undefined;
   /** Start the environment and the app from the worktree to record them, then stop them (REQ-EXEC-22/AC9). */
   readonly build?: boolean | undefined;
+  /** Plan although the readiness gate did not find the ticket READY, with the reason (REQ-PLAN-13/AC3). */
+  readonly overrideReadiness?: string | undefined;
 }
 
 /** Ports of the review loop (REQ-PLAN-04/AC1). */
@@ -264,6 +269,31 @@ async function recordCoverageGaps(
 const gapLines = (gaps: readonly CoverageGap[]): string[] =>
   gaps.map((g) => (g.kind === "criterion" ? `${g.id} "${g.text ?? ""}"` : `${g.id} changed in the diff`));
 
+/**
+ * What a reviewer of a plan version must see besides its cases (REQ-FLOW-03/AC1): what no case covers (REQ-PLAN-14)
+ * and the expectations code cannot check as written (REQ-PLAN-09), one line each.
+ */
+export async function planRisks(
+  session: RunSession,
+  plan: Plan,
+): Promise<{ readonly gaps: string[]; readonly flags: string[] }> {
+  const context = await buildChangeContext(session.ws, [], {
+    indexCache: codeIndexCache(session.project),
+    testIdAttribute: session.project.config.web.test_id_attribute,
+  });
+  const flags = (await planFlagsOf(session, context))(plan);
+  const gaps = (await coverageOf(session, context))(plan);
+  return {
+    gaps: gapLines(gaps),
+    flags:
+      flags.length > 0
+        ? formatPlanFlags(flags)
+            .split("\n")
+            .filter((l) => l.trim() !== "")
+        : [],
+  };
+}
+
 /** Records what was approved although code could not check it (REQ-PLAN-09/AC4). */
 async function recordPlanFlags(
   session: RunSession,
@@ -372,6 +402,70 @@ export async function runPlan(
       analysis = await runAnalyst(deps, context);
       await deps.save();
     }
+    // REQ-PLAN-13: before the first plan, code checks that the ticket can be tested at all.
+    const planned = await readPlan(ws).then(
+      () => true,
+      () => false,
+    );
+    if (!planned && ws.record.data["readiness"] === undefined) {
+      const readiness = await runReadinessGate(session, io, {
+        analysis,
+        env: options.env,
+        publisher: publisherFor(session, ports),
+        now: ports.now,
+      });
+      if (readiness.result !== "READY") {
+        if (options.overrideReadiness === undefined) {
+          io.write(
+            `No plan for ${ws.ticket}: answer the questions in the ticket and run qajitsu plan ${ws.ticket} again in a new run, or plan anyway with --override-readiness "<reason>".\n`,
+          );
+          // REQ-PLAN-13/AC2: in the team's workflow the ticket waits for its author in "needs info".
+          const workflow = runWorkflow(session, ports);
+          if (workflow)
+            await moveToRole(
+              session,
+              io,
+              workflow,
+              publisherFor(session, ports),
+              "needs_info",
+              `readiness ${readiness.result}`,
+            );
+          return 2;
+        }
+        await recordReadinessOverride(session, {
+          user: review.user,
+          reason: options.overrideReadiness,
+          result: readiness.result,
+          now: ports.now,
+        });
+        io.write(
+          session.masker.maskText(
+            `Planning although the ticket is ${readiness.result}: ${options.overrideReadiness}\n`,
+          ),
+        );
+      }
+    } else if (!planned && options.overrideReadiness !== undefined) {
+      const recorded = (ws.record.data["readiness"] as { result?: string } | undefined)?.result;
+      if (recorded !== undefined && recorded !== "READY")
+        await recordReadinessOverride(session, {
+          user: review.user,
+          reason: options.overrideReadiness,
+          result: recorded,
+          now: ports.now,
+        });
+    } else if (!planned) {
+      const recorded = (ws.record.data["readiness"] as { result?: string } | undefined)?.result;
+      if (
+        recorded !== undefined &&
+        recorded !== "READY" &&
+        ws.record.data["readinessOverride"] === undefined
+      ) {
+        io.write(
+          `No plan for ${ws.ticket}: the readiness gate found it ${recorded} (readiness.json); plan anyway with --override-readiness "<reason>".\n`,
+        );
+        return 2;
+      }
+    }
     const mapAround = await writeMapAround(session, ports, analysis, context, io);
     if (mapAround) context = { ...context, mapAround };
     // REQ-EXEC-22/AC7: without the code, the planner names elements as the environment's pages show them.
@@ -439,8 +533,16 @@ export async function runPlan(
         io.write(`Cannot be checked as written (${String(flags.length)}):\n${formatPlanFlags(flags)}\n`);
       // REQ-PLAN-14/AC3: what of the ticket and the change no case covers, next to the plan.
       const gaps = gapsOf(current);
+      // REQ-PLAN-16, REQ-LLM-14/AC2: what code found in this version, for the plan and agent metrics.
+      session.events.emit("plan", { kind: "system", name: "orchestrator" }, "plan.coverage", {
+        version: current.version,
+        flags: flags.length,
+        gaps: gaps.length,
+      });
       if (gaps.length > 0)
         io.write(`Not covered by any case (${String(gaps.length)}):\n${formatCoverageGaps(gaps)}\n`);
+      // REQ-NFR-11/AC3: a stage over its time budget is a warning, never a status.
+      await warnStageBudgets(session, io, ["analyze", "plan"]);
       if (!io.ask) return 0;
 
       const answer = (await io.ask("[a]ccept, [r]evise, [e]dit, [q]uit? ")).trim().toLowerCase();

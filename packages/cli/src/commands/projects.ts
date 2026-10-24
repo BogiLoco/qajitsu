@@ -1,3 +1,4 @@
+import { lockedUntil } from "./archive.js";
 import { cp, lstat, mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import {
@@ -9,6 +10,7 @@ import {
   qajitsuHome,
   readActiveProject,
   readProject,
+  openRunWorkspace,
   readRunIndex,
   registerProject,
   setActiveProject,
@@ -287,6 +289,22 @@ export async function runProjectRemove(
         "",
       ].join("\n"),
     );
+    // REQ-VER-19/AC2: runs kept write-once stay until their retention ends; the project cannot be removed before.
+    const locked: string[] = [];
+    for (const ticket of tickets) {
+      const key = TicketKeySchema.parse(ticket);
+      for (const r of (await readRunIndex(paths.runs, key)).runs) {
+        const ws = await openRunWorkspace(paths.runs, key, r.runId).catch(() => undefined);
+        const until = ws ? lockedUntil(ws.record.data, ports.now()) : undefined;
+        if (until !== undefined) locked.push(`${key}/${r.runId} until ${until}`);
+      }
+    }
+    if (locked.length > 0) {
+      io.writeError(
+        `Project ${slug} keeps runs in write-once storage; it cannot be removed before their retention ends:\n${locked.map((l) => `  ${l}`).join("\n")}\n`,
+      );
+      return 3;
+    }
     if (options.dryRun === true) return 0;
     if (options.yes !== true) {
       const answer = io.ask

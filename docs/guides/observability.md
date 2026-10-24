@@ -107,3 +107,18 @@ Each journal line carries `prev`, the SHA-256 of the line before it (64 zeros fo
 audit:
   retention_days: 730
 ```
+
+## Where the time goes (REQ-NFR-11)
+
+Every stage of a run is a span from its first event to `stage.end`, and every model call records its duration, so
+the journal and the OpenTelemetry export show model calls with their real length (`qajitsu.wait_ms`) next to tool
+calls and case attempts. `qj status` sums it up per project as medians per run: active time (time the stages were
+running; waiting for an approval between commands is not counted), split into model calls, starting the environment,
+test execution and QAJitsu's own processing, with overlapping lanes counted once; then the median time of each stage,
+and the stage times by QAJitsu version and by week once there is more than one, so a slower release shows up.
+`qj metrics` exports the same as `qajitsu_run_time_seconds{category}`, `qajitsu_stage_seconds{stage}` and
+`qajitsu_stage_seconds_by_version{stage,qajitsu_version}`.
+
+Each stage has a time budget (defaults: fetch 5 min, analyze 15, plan 20, run 60, audit 15, triage 10, explore 60);
+`timing.budgets_s` in the project config changes them. A stage over its budget prints a warning with the measured
+time and journals `stage.over_budget`; it never changes a status.

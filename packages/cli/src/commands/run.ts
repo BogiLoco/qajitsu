@@ -1,3 +1,4 @@
+import { warnStageBudgets } from "../timing.js";
 import type { KnowledgePorts } from "./knowledge.js";
 import { runUsage, saveRunUsage } from "../run-usage.js";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
@@ -744,7 +745,13 @@ export async function runRun(
     await ws.update({
       status: "completed",
       stage: "run",
-      data: { ...ws.record.data, results: statuses, gatesOk: verdict.ok },
+      // REQ-LLM-11/AC2: the decision tells verified tickets (GO or NO-GO) from runs that decided nothing.
+      data: {
+        ...ws.record.data,
+        results: statuses,
+        gatesOk: verdict.ok,
+        decision: verdict.decision.decision,
+      },
       checkpoints: [...ws.record.checkpoints, { stage: "run", at: ports.now().toISOString() }],
     });
     events.emit("run", SYSTEM, "stage.end", { statuses, gatesOk: verdict.ok });
@@ -755,8 +762,11 @@ export async function runRun(
     await writeReports(session, verdict);
     await sealRun(session);
     if (ws.record.data["bench"] === undefined) {
-      const certified = await issueCertificate(session, ports.now, certifiedVerdict(verdict));
-      if (certified.status === "issued") io.write(`${certificateLines(certified.certificate).join("\n")}\n`);
+      const certified = await issueCertificate(session, ports.now, certifiedVerdict(verdict), ports.fetch);
+      if (certified.status === "issued")
+        io.write(
+          `${[...certificateLines(certified.certificate), ...(certified.timestamp ? [certified.timestamp] : []), ...(certified.archived ? [certified.archived] : [])].join("\n")}\n`,
+        );
       if (certified.status === "gaps")
         io.writeError(
           `Warning: no certificate, the audit trail has ${String(certified.gaps.length)} gap(s):\n${certified.gaps
@@ -766,6 +776,8 @@ export async function runRun(
         );
     }
     // REQ-OBS-03: export what this command added to the journal; telemetry never changes the result.
+    // REQ-NFR-11/AC3: a stage over its time budget is a warning, never a status.
+    await warnStageBudgets(session, io, ["run", "audit", "triage"]);
     await anchorJournal(session);
     const telemetry = await exportRunTelemetry(session, ports.fetch);
     if (telemetry?.error !== undefined) io.writeError(`Telemetry export failed: ${telemetry.error}\n`);

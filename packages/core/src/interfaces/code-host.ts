@@ -16,6 +16,8 @@ export interface ChangeRef {
   readonly targetBranch?: string;
   readonly headSha: string;
   readonly url?: string;
+  /** Login of the change's author on the code host (REQ-FLOW-04/AC2), when the host names one. */
+  readonly author?: string;
   /** Why discovery found this change; set by `findChangesForTicket`. */
   readonly matchedBy?: "title" | "branch";
 }

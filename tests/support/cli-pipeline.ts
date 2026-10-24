@@ -75,7 +75,7 @@ export async function createDemoPipeline(
     ticket?: string;
     wrapExecutor?: (executor: AttemptExecutor) => AttemptExecutor;
     /** Extra ports, e.g. `browserUnavailable` for the browser matrix. */
-    ports?: Partial<RunPorts & ExplorePorts & { random: () => number }>;
+    ports?: Partial<RunPorts & ExplorePorts & { random: () => number; now: () => Date }>;
     /** Changes the fixture plan draft before planning. */
     transformPlan?: (draft: string) => string;
     /** Changes a fixture spec before the run. */

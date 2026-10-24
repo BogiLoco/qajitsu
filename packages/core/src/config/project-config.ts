@@ -32,9 +32,34 @@ const CapabilityOverrideSchema = z.strictObject({
    * requests only when it is set explicitly: without it Qwen3 thinks and returns neither text nor a tool call.
    */
   think: z.boolean().optional(),
-  /** USD per million input and output tokens, for cost estimates (REQ-LLM-07). */
+  /**
+   * USD per million input and output tokens, for cost estimates (REQ-LLM-07); `cached_input` and `cache_write` for
+   * prompt cache reads and writes (REQ-LLM-11/AC1), charged as input when not given.
+   */
   cost_per_mtok: z
-    .strictObject({ input: z.number().nonnegative(), output: z.number().nonnegative() })
+    .strictObject({
+      input: z.number().nonnegative(),
+      output: z.number().nonnegative(),
+      cached_input: z.number().nonnegative().optional(),
+      cache_write: z.number().nonnegative().optional(),
+    })
+    .optional(),
+  /** Prompt size above which the provider charges more (REQ-LLM-12/AC4); calls above it are stopped. */
+  price_tier_tokens: z.number().int().positive().optional(),
+  /**
+   * Prices with the day they apply from (REQ-LLM-11/AC3): a call is charged with the latest price whose `from` is not
+   * after the day of the call; before the first one, `cost_per_mtok` or the built-in price applies.
+   */
+  prices: z
+    .array(
+      z.strictObject({
+        from: z.iso.date(),
+        input: z.number().nonnegative(),
+        output: z.number().nonnegative(),
+        cached_input: z.number().nonnegative().optional(),
+        cache_write: z.number().nonnegative().optional(),
+      }),
+    )
     .optional(),
 });
 
@@ -245,6 +270,63 @@ export const ProjectConfigSchema = z.strictObject({
         ctx.addIssue({ code: "custom", path: ["model"], message: "Required for a flow with a model step" });
     })
     .default({ flow: ["person"], model_only: "as-computed", jira: "off" }),
+  /**
+   * The team's ticket workflow (REQ-FLOW-02..05): the status names QAJitsu moves a ticket to, by role. Without this
+   * section QAJitsu never moves a ticket.
+   */
+  workflow: z
+    .strictObject({
+      statuses: z.strictObject({
+        start: z.string().min(1),
+        in_testing: z.string().min(1),
+        waiting_for_approval: z.string().min(1).optional(),
+        needs_info: z.string().min(1),
+        passed: z.string().min(1),
+        failed: z.string().min(1),
+        needs_review: z.string().min(1),
+        /** Used only with `passed_to_done` (REQ-FLOW-04/AC1). */
+        done: z.string().min(1).optional(),
+      }),
+      /** Move a ticket whose cases all PASSED on to `done` (REQ-FLOW-04/AC1); off by default. */
+      passed_to_done: z.boolean().default(false),
+      /** Account a ticket that needs a person goes to (REQ-FLOW-04/AC3). */
+      qa_assignee: z.string().min(1).optional(),
+      /**
+       * Jira accounts of the people who write changes, by code host login, so a FAILED ticket goes back to the change's
+       * author (REQ-FLOW-04/AC2).
+       */
+      authors: z.record(z.string(), z.string()).default({}),
+      /** Label of a ticket that needs a person's look (BLOCKED, NEEDS_REVIEW, FLAKY, NOT_RUN). */
+      attention_label: z.string().regex(/^\S+$/).default("qa-needs-attention"),
+      /** Most runs of one ticket per day; after it the ticket goes to `needs_review` (REQ-FLOW-05/AC2). */
+      max_runs_per_day: z.number().int().positive().default(5),
+      /**
+       * Plan approval in the ticket (REQ-FLOW-03): the Jira group whose members may `/qj approve`, `/qj revise` and
+       * `/qj reject`; without it no comment approves anything.
+       */
+      approvers_group: z.string().min(1).optional(),
+      /** Hours a posted plan may wait before a reminder; silence never approves (REQ-FLOW-03/AC5). */
+      remind_after_h: z.number().positive().default(24),
+      /** Revision rounds by comment before a person must edit the plan directly (REQ-FLOW-03/AC6). */
+      max_revisions: z.number().int().nonnegative().default(3),
+      /** Picking tickets up from the start status (REQ-FLOW-01). */
+      pickup: z
+        .strictObject({
+          /** Pull mode: the query polled; default the project's tickets in `statuses.start`. */
+          jql: z.string().min(1).max(2000).optional(),
+          /** Pull mode: seconds between polls. */
+          interval_s: z.number().int().min(30).default(300),
+          /** Most tickets picked up per poll. */
+          batch: z.number().int().positive().max(50).default(5),
+          /** Push mode: shared secret of the webhook (`secret://`), as a header or an HMAC-SHA256 signature. */
+          secret: z.string().min(1).optional(),
+          /** Push mode: address the webhook listens on; loopback unless a proxy in front needs more. */
+          host: z.string().min(1).default("127.0.0.1"),
+          port: z.number().int().min(1).max(65535).default(8787),
+        })
+        .default({ interval_s: 300, batch: 5, host: "127.0.0.1", port: 8787 }),
+    })
+    .optional(),
   /** Mobile runner, devices and app binaries (REQ-EXEC-06, REQ-ENV-06, REQ-EVD-03). */
   mobile: MobileSchema.optional(),
   /** Web runner (REQ-EXEC-05, REQ-EVD-06). */
@@ -333,8 +415,15 @@ export const ProjectConfigSchema = z.strictObject({
       roles: z.record(z.string(), z.string()).default({}),
       /** Per-run token budget; exceeding it stops the run with BLOCKED (REQ-LLM-07/AC2). */
       token_budget: z.number().int().positive().optional(),
+      /**
+       * Prompt cache duration (REQ-LLM-12/AC2): `auto` chooses from how close together the project's model calls are;
+       * `off` sends no cache breakpoints.
+       */
+      cache_ttl: z.enum(["auto", "5m", "1h", "off"]).default("auto"),
+      /** Most input tokens one model call may send (REQ-LLM-12/AC4); larger calls are stopped with the reason. */
+      max_input_tokens: z.number().int().positive().optional(),
     })
-    .default({ providers: {}, roles: {} }),
+    .default({ providers: {}, roles: {}, cache_ttl: "auto" }),
   /**
    * Scripts from `.qa/hooks/` around every run (REQ-GEN-01/AC2): `setup` after the environment is healthy and
    * before the cases (a failure makes every case BLOCKED), `teardown` after the cases (a failure is a warning).
@@ -561,6 +650,33 @@ export const ProjectConfigSchema = z.strictObject({
     })
     .default({ version: "1", tolerate: { medium: [], low: [] } }),
   /**
+   * The ticket readiness gate (REQ-PLAN-13): extra risk rules over the changed paths, and when its result is posted to
+   * the ticket (`always`, only when the ticket is not READY, or `never`).
+   */
+  readiness: z
+    .strictObject({
+      risk_rules: z
+        .array(
+          z.strictObject({
+            pattern: z.string().min(1).max(500),
+            level: z.enum(["low", "medium", "high"]),
+            reason: z.string().min(1).max(200),
+          }),
+        )
+        .default([]),
+      comment: z.enum(["always", "not_ready", "never"]).default("always"),
+    })
+    .default({ risk_rules: [], comment: "always" }),
+  /**
+   * Time budget per pipeline stage in seconds (REQ-NFR-11/AC3): a stage that takes longer is a warning with the
+   * measured time; it never changes a test status.
+   */
+  timing: z
+    .strictObject({
+      budgets_s: z.record(z.string(), z.number().int().positive()).default({}),
+    })
+    .default({ budgets_s: {} }),
+  /**
    * Human review of generated specs (REQ-VER-24): a person reads each spec next to its planned steps before it runs,
    * for the project's first `first_runs` executed runs, or always. Off by default; `qj run --review-specs` turns it
    * on for one run.
@@ -572,6 +688,32 @@ export const ProjectConfigSchema = z.strictObject({
     })
     .default({ first_runs: 0, always: false }),
   /**
+   * Write-once storage of evidence and certificates (REQ-VER-19): after a run is certified, its audit export and
+   * certificate go to S3 Object Lock (AWS, MinIO and other S3-compatible storage) locked for `retention_days`. The
+   * certificate states where and until when; runs locked there are never cleaned up locally before that date.
+   */
+  archive: z
+    .strictObject({
+      type: z.literal("s3"),
+      endpoint: z.url().refine((u) => /^https?:\/\//.test(u), "http(s) URL"),
+      region: z.string().min(1).default("us-east-1"),
+      bucket: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/, "S3 bucket name"),
+      /** Key prefix; each run goes to `<prefix><TICKET>/<run id>/`. */
+      prefix: z
+        .string()
+        .regex(/^([A-Za-z0-9_.-]+\/)*$/, "Path segments ending with /")
+        .default("qajitsu/"),
+      /** Path-style addressing, as MinIO needs. */
+      path_style: z.boolean().default(false),
+      access_key_id: SecretRef,
+      secret_access_key: SecretRef,
+      session_token: SecretRef.optional(),
+      /** `compliance`: nobody can delete before the date; `governance`: only with a special permission. */
+      mode: z.enum(["compliance", "governance"]).default("compliance"),
+      retention_days: z.number().int().min(1).max(36_500),
+    })
+    .optional(),
+  /**
    * Signed test certificates (REQ-VER-15): with `signing_key` (an Ed25519 private key in PEM, or its base64, from the
    * secret provider) every published run gets a certificate over its audit trail. Public keys that verify them live
    * in `.qa/keys/*.pub`, old ones stay there after a rotation. With `required`, a run whose audit trail has gaps is
@@ -581,6 +723,18 @@ export const ProjectConfigSchema = z.strictObject({
     .strictObject({
       signing_key: SecretRef.optional(),
       required: z.boolean().default(false),
+      /**
+       * Trusted timestamps (REQ-VER-17): the RFC 3161 time-stamping authority that stamps every certificate. Only the
+       * hash of the signed statement is sent. `qualified` marks a qualified trust service provider under eIDAS; its CA
+       * certificates go to `.qa/keys/tsa/`.
+       */
+      timestamp: z
+        .strictObject({
+          url: z.url().refine((u) => /^https?:\/\//.test(u), "http(s) URL"),
+          qualified: z.boolean().default(false),
+          timeout_s: z.number().int().min(1).max(120).default(20),
+        })
+        .optional(),
     })
     .default({ required: false }),
   /**

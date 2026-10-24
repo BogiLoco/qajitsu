@@ -26,6 +26,7 @@ import { annotatedFirst } from "./annotated.js";
 import type { CommandIO } from "./fetch.js";
 import { exportRunTelemetry } from "./telemetry.js";
 import { certificateForPublish, certifiedVerdict } from "./certificate.js";
+import { applyVerdictPolicy, runWorkflow } from "./workflow.js";
 import { anchorJournal, codeAccessNote, computeVerdict, writeReports, type RunVerdict } from "./verdict.js";
 
 /** Options of `qajitsu publish`. */
@@ -208,7 +209,13 @@ export async function runPublish(
       );
     }
     // REQ-VER-15: the certificate is issued before anything leaves the run, so the comment can name it.
-    const certificate = await certificateForPublish(session, io, ports.now, certifiedVerdict(verdict));
+    const certificate = await certificateForPublish(
+      session,
+      io,
+      ports.now,
+      certifiedVerdict(verdict),
+      ports.fetch,
+    );
     const evidenceZip = await buildEvidenceZip(session, verdict);
     // Failure screenshots and videos are attached individually so they show without unzipping (REQ-PUB-02/AC2).
     const failing = new Set(
@@ -344,6 +351,16 @@ export async function runPublish(
       `${result.updated ? "Updated" : "Published"} ${ws.ticket} comment ${result.commentId}${result.url ? `: ${result.url}` : ""}\n`,
     );
     for (const s of result.skipped) io.write(`  not attached: ${s.name} (${s.reason})\n`);
+    // REQ-FLOW-04: the ticket moves after the comment is up, by the computed statuses only.
+    const workflow = runWorkflow(session, ports);
+    if (workflow)
+      await applyVerdictPolicy(
+        session,
+        io,
+        workflow,
+        publisher,
+        verdict.cases.map((c) => c.status),
+      );
     // REQ-OBS-03: export what this command added to the journal; telemetry never changes the result.
     await anchorJournal(session);
     const telemetry = await exportRunTelemetry(session, ports.fetch);

@@ -10,6 +10,7 @@
 | [glossary.md](glossary.md)                             | Terms used across code and docs                                                                |
 | [guides/getting-started.md](guides/getting-started.md) | Set up the repo and make a first change                                                        |
 | [guides/certificates.md](guides/certificates.md)       | Audit trail, signed test certificates, their format and what they prove                        |
+| [guides/jira-workflow.md](guides/jira-workflow.md)     | Status mapping, transitions after a run, plan approval by ticket comment, one run per ticket   |
 | [plan.md](plan.md)                                     | Original planning document (Polish): rationale, alternatives, risks                            |
 
 For contributors and AI agents: the binding rules are in [`CLAUDE.md`](../CLAUDE.md) and [`.claude/rules/`](../.claude/rules/).

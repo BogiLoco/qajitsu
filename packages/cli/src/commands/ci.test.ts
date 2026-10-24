@@ -212,7 +212,7 @@ describe("qajitsu ci and pipeline outputs (REQ-CI-03, REQ-CI-04)", () => {
     expect(filtered.out).toContain('"run": false');
   });
 
-  it("REQ-CI-04/AC2+AC3 + REQ-CI-03/AC1+AC4: export bundles artifacts; the plan goes to Jira; approval is explicit or reused", async () => {
+  it("REQ-CI-04/AC2+AC3 + REQ-CI-03/AC1+AC4 + REQ-FLOW-05/AC3: export bundles artifacts; the plan goes to Jira; approval is explicit or reused", async () => {
     const p = await createBuildProject();
     cleanups.push(p.cleanup);
     await p.run(["fetch", "DEMO-1"]);

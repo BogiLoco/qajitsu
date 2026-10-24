@@ -4,7 +4,7 @@ QAJitsu works inside the team's Jira workflow like a human tester: a status chan
 
 ### REQ-FLOW-01 · Start from a Jira status
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: 10
 - Related: REQ-CI-02
@@ -13,46 +13,47 @@ Extends REQ-CI-02 (a Jira automation that dispatches a pipeline) with QAJitsu pi
 
 **Acceptance criteria**
 
-- [ ] AC1: Push mode: a Jira Automation rule or webhook calls QAJitsu when a ticket enters the configured start status (default "Ready for QA").
-- [ ] AC2: Pull mode for workers behind a firewall: a configurable JQL query is polled at a configurable interval.
-- [ ] AC3: Webhook requests are authenticated with a shared secret or a signature; unauthenticated requests are rejected and logged.
-- [ ] AC4: The ticket is picked up and moved to the "in testing" status with a comment saying a run started.
+- [x] AC1: Push mode: a Jira Automation rule or webhook calls QAJitsu when a ticket enters the configured start status (default "Ready for QA").
+- [x] AC2: Pull mode for workers behind a firewall: a configurable JQL query is polled at a configurable interval.
+- [x] AC3: Webhook requests are authenticated with a shared secret or a signature; unauthenticated requests are rejected and logged.
+- [x] AC4: The ticket is picked up and moved to the "in testing" status with a comment saying a run started.
 
 ### REQ-FLOW-02 · Status mapping per project
 
-- Status: proposed
+- Status: implemented
 - Priority: must
 - Stage: 10
 - Related: REQ-FLOW-01, REQ-CFG-01
 
 **Acceptance criteria**
 
-- [ ] AC1: The project config maps roles to the team's own status names: start, in testing, waiting for plan approval, needs info, passed, failed, needs human review.
-- [ ] AC2: `qj doctor` checks that the mapped statuses and transitions exist in the Jira project and that the service account may perform them.
-- [ ] AC3: A missing transition at run time leaves the ticket where it is and adds a comment; the run result is not lost.
+- [x] AC1: The project config maps roles to the team's own status names: start, in testing, waiting for plan approval, needs info, passed, failed, needs human review.
+- [x] AC2: `qj doctor` checks that the mapped statuses and transitions exist in the Jira project and that the service account may perform them.
+- [x] AC3: A missing transition at run time leaves the ticket where it is and adds a comment; the run result is not lost.
 
 ### REQ-FLOW-03 · Plan approval in the ticket
 
-- Status: proposed
+- Status: implemented
 - Priority: must
 - Stage: 10
 - Related: REQ-PLAN-04, REQ-PLAN-06, REQ-PLAN-07, REQ-PLAN-10, ADR-0010
+- Note: `qj workflow sync <TICKET>` runs the loop (from a scheduler or a Jira automation); approving with `/qj approve v<N>` confirms the coverage and check lists posted with that version. QAJitsu's own comments start with "QAJitsu" and are never commands.
 
 Implements REQ-PLAN-07/AC3 (approval in Jira by comment) inside the approval flow of REQ-PLAN-10.
 
 **Acceptance criteria**
 
-- [ ] AC1: The plan is posted as a ticket comment with version number, cases, exclusions and the coverage risk list (REQ-PLAN-14).
-- [ ] AC2: Commands in comments: `/qj approve`, `/qj revise <text>` (the planner posts the next version with a change list), `/qj reject <reason>` (no testing; the ticket goes to "needs info").
-- [ ] AC3: Only members of a configured Jira group may approve, revise or reject; commands from others are ignored with a reply.
-- [ ] AC4: An approval freezes exactly the version it answers; a command for an older version is rejected.
-- [ ] AC5: Silence is never approval: reminders after a configurable time; a plan is approved without a person only by the model steps the project configured (REQ-PLAN-10).
-- [ ] AC6: After a configurable number of revision rounds the planner stops and asks a person to edit the plan directly.
-- [ ] AC7: Every version, command, author and time stays in the ticket and in `run.json`.
+- [x] AC1: The plan is posted as a ticket comment with version number, cases, exclusions and the coverage risk list (REQ-PLAN-14).
+- [x] AC2: Commands in comments: `/qj approve`, `/qj revise <text>` (the planner posts the next version with a change list), `/qj reject <reason>` (no testing; the ticket goes to "needs info").
+- [x] AC3: Only members of a configured Jira group may approve, revise or reject; commands from others are ignored with a reply.
+- [x] AC4: An approval freezes exactly the version it answers; a command for an older version is rejected.
+- [x] AC5: Silence is never approval: reminders after a configurable time; a plan is approved without a person only by the model steps the project configured (REQ-PLAN-10).
+- [x] AC6: After a configurable number of revision rounds the planner stops and asks a person to edit the plan directly.
+- [x] AC7: Every version, command, author and time stays in the ticket and in `run.json`.
 
 ### REQ-FLOW-04 · Transition policy from the verdict
 
-- Status: proposed
+- Status: implemented
 - Priority: must
 - Stage: 10
 - Related: REQ-VER-01, REQ-VER-07, REQ-PUB-01, REQ-PUB-05, INV-1
@@ -61,24 +62,25 @@ Implements REQ-PUB-05/AC3 (transition the ticket after a run).
 
 **Acceptance criteria**
 
-- [ ] AC1: All cases PASSED: the ticket moves to the "passed" status; moving it to Done is allowed only when the project enables it explicitly.
-- [ ] AC2: Confirmed FAILED (after retries, REQ-EXEC-08): the ticket moves back to development, assigned to the change's author, with reproduction steps and evidence links.
-- [ ] AC3: BLOCKED, NEEDS_REVIEW, FLAKY or NOT_RUN: the ticket stays in testing, gets a label and is assigned to the configured QA person; it never goes to Done or back to development.
-- [ ] AC4: The transition is decided by code from the computed matrix only; agents cannot trigger transitions.
-- [ ] AC5: The results comment is published before the transition (REQ-PUB-01).
+- [x] AC1: All cases PASSED: the ticket moves to the "passed" status; moving it to Done is allowed only when the project enables it explicitly.
+- [x] AC2: Confirmed FAILED (after retries, REQ-EXEC-08): the ticket moves back to development, assigned to the change's author, with reproduction steps and evidence links.
+- [x] AC3: BLOCKED, NEEDS_REVIEW, FLAKY or NOT_RUN: the ticket stays in testing, gets a label and is assigned to the configured QA person; it never goes to Done or back to development.
+- [x] AC4: The transition is decided by code from the computed matrix only; agents cannot trigger transitions.
+- [x] AC5: The results comment is published before the transition (REQ-PUB-01).
 
 ### REQ-FLOW-05 · One run per ticket and loop limits
 
-- Status: proposed
+- Status: implemented
 - Priority: must
 - Stage: 10
-- Related: REQ-FLOW-01, REQ-PUB-04
+- Related: REQ-FLOW-01, REQ-PUB-04, REQ-WS-04
+- Note: applies to projects with a `workflow` section (the Jira flow); without it parallel runs of a ticket stay allowed (REQ-WS-04/AC2). A run is active while a live process holds its lock; AC3 is `qj approve --reuse-from latest` (REQ-CI-03/AC4).
 
 **Acceptance criteria**
 
-- [ ] AC1: At most one active run per ticket; duplicate events are ignored and logged.
-- [ ] AC2: A configurable maximum number of runs per ticket per day; after it the ticket goes to human review.
-- [ ] AC3: A new run after a fix reuses the approved plan when the ticket did not change; a changed ticket needs a new approval.
+- [x] AC1: At most one active run per ticket; duplicate events are ignored and logged.
+- [x] AC2: A configurable maximum number of runs per ticket per day; after it the ticket goes to human review.
+- [x] AC3: A new run after a fix reuses the approved plan when the ticket did not change; a changed ticket needs a new approval.
 
 ### REQ-FLOW-06 · Cost budget per ticket and per month
 

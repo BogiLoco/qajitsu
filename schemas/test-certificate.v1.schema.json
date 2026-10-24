@@ -135,7 +135,36 @@
           "items": {}
         },
         "environment": {},
-        "codeAccess": {}
+        "codeAccess": {},
+        "storage": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "s3-object-lock"
+            },
+            "location": {
+              "type": "string"
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "compliance",
+                "governance"
+              ]
+            },
+            "retainUntil": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "location",
+            "mode",
+            "retainUntil"
+          ],
+          "additionalProperties": false
+        }
       },
       "required": [
         "ticket",

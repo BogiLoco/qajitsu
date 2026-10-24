@@ -9,6 +9,15 @@ import {
   readRunIndex,
   resolveWorkspaceRoot,
 } from "@qajitsu/core";
+import {
+  agentScorecard,
+  costInsights,
+  digestRun,
+  planInsights,
+  timeInsights,
+  weeklyCosts,
+  type RunDigest,
+} from "@qajitsu/report";
 import type { RuntimePorts } from "../adapters.js";
 import { loadProject } from "../project.js";
 import type { CommandIO } from "./fetch.js";
@@ -20,6 +29,246 @@ export interface Sample {
   readonly type: "gauge" | "counter";
   readonly labels: Readonly<Record<string, string>>;
   readonly value: number;
+}
+
+/**
+ * The digest of every run of a workspace (REQ-LLM-11/AC2), computed from each run's record, journal and results.
+ *
+ * @param root - Workspace root.
+ */
+export async function readRunDigests(root: string): Promise<RunDigest[]> {
+  const digests: RunDigest[] = [];
+  for (const ticket of await listTickets(root))
+    for (const entry of (await readRunIndex(root, ticket)).runs) {
+      const dir = join(root, ticket, entry.runId);
+      const parsed = RunRecordSchema.safeParse(
+        JSON.parse(await readFile(join(dir, "run.json"), "utf8").catch(() => "null")) as unknown,
+      );
+      if (!parsed.success) continue;
+      const attemptsMs: number[] = [];
+      for (const file of (await readdir(join(dir, "results")).catch(() => [] as string[])).filter((f) =>
+        f.endsWith(".json"),
+      )) {
+        const r = CaseResultFileSchema.safeParse(
+          JSON.parse(await readFile(join(dir, "results", file), "utf8").catch(() => "null")) as unknown,
+        );
+        if (r.success) for (const a of r.data.attempts) attemptsMs.push(a.durationMs ?? 0);
+      }
+      const { events } = parseEventLines(
+        await readFile(join(dir, "journal", "events.jsonl"), "utf8").catch(() => ""),
+      );
+      digests.push(
+        digestRun({
+          ticket,
+          runId: parsed.data.runId,
+          createdAt: parsed.data.createdAt,
+          data: parsed.data.data,
+          events,
+          attemptsMs,
+        }),
+      );
+    }
+  return digests;
+}
+
+/** Cost samples of a project (REQ-LLM-11/AC2+AC4): per verified ticket, per role, per week. */
+export function costSamples(digests: readonly RunDigest[]): Sample[] {
+  const all = costInsights(digests);
+  const gauge = (name: string, help: string, labels: Record<string, string>, value: number): Sample => ({
+    name,
+    help,
+    type: "gauge",
+    labels,
+    value,
+  });
+  return [
+    gauge("qajitsu_verified_tickets", "Tickets with a GO or NO-GO decision.", {}, all.verifiedTickets),
+    ...(all.costPerVerifiedTicketUsd === undefined
+      ? []
+      : [
+          gauge(
+            "qajitsu_cost_per_verified_ticket_usd",
+            "Model cost of every run over the verified tickets (a lower bound when cost_known is 0).",
+            { cost_known: all.costKnown ? "1" : "0" },
+            all.costPerVerifiedTicketUsd,
+          ),
+        ]),
+    ...Object.entries(all.byRole).map(([role, r]) =>
+      gauge("qajitsu_role_cost_usd", "Model cost per agent role.", { role }, r.costUsd),
+    ),
+    gauge(
+      "qajitsu_runner_minutes_per_ticket",
+      "Test execution minutes per ticket.",
+      {},
+      all.runnerMinutesPerTicket,
+    ),
+    gauge(
+      "qajitsu_stages_without_model_ratio",
+      "Share of pipeline stages that called no model.",
+      {},
+      all.stagesWithoutModelShare,
+    ),
+    ...weeklyCosts(digests).flatMap(({ week, insights }) =>
+      insights.costPerVerifiedTicketUsd === undefined
+        ? []
+        : [
+            gauge(
+              "qajitsu_week_cost_per_verified_ticket_usd",
+              "Cost per verified ticket by ISO week (trend).",
+              { week },
+              insights.costPerVerifiedTicketUsd,
+            ),
+          ],
+    ),
+  ];
+}
+
+/** Time samples of a project (REQ-NFR-11/AC2+AC4): medians per run by category, per stage, and per QAJitsu version. */
+export function timeSamples(digests: readonly RunDigest[]): Sample[] {
+  const t = timeInsights(digests);
+  if (t.runs === 0) return [];
+  const seconds = (ms: number): number => Number((ms / 1000).toFixed(3));
+  const gauge = (name: string, help: string, labels: Record<string, string>, ms: number): Sample => ({
+    name,
+    help,
+    type: "gauge",
+    labels,
+    value: seconds(ms),
+  });
+  return [
+    ...(
+      [
+        ["active", t.perRun.activeMs],
+        ["model", t.perRun.modelMs],
+        ["environment", t.perRun.environmentMs],
+        ["tests", t.perRun.testsMs],
+        ["qajitsu", t.perRun.otherMs],
+      ] as const
+    ).map(([category, ms]) =>
+      gauge("qajitsu_run_time_seconds", "Median time of a run by category.", { category }, ms),
+    ),
+    ...Object.entries(t.stages).map(([stage, ms]) =>
+      gauge("qajitsu_stage_seconds", "Median time of a stage in a run.", { stage }, ms),
+    ),
+    ...Object.entries(t.byVersion).flatMap(([version, stages]) =>
+      Object.entries(stages).map(([stage, ms]) =>
+        gauge(
+          "qajitsu_stage_seconds_by_version",
+          "Median stage time by QAJitsu version (release trend).",
+          { stage, qajitsu_version: version },
+          ms,
+        ),
+      ),
+    ),
+  ];
+}
+
+const gauge = (name: string, help: string, labels: Record<string, string>, value: number): Sample => ({
+  name,
+  help,
+  type: "gauge",
+  labels,
+  value,
+});
+
+/** Plan and test quality of a project (REQ-PLAN-16/AC3). */
+export function qualitySamples(digests: readonly RunDigest[]): Sample[] {
+  const q = planInsights(digests);
+  return [
+    gauge(
+      "qajitsu_plan_accepted_unchanged_ratio",
+      "Approved runs whose first plan version was approved.",
+      {},
+      Number(q.approvedUnchangedShare.toFixed(3)),
+    ),
+    gauge(
+      "qajitsu_plan_revision_rounds_avg",
+      "Average revision rounds before approval.",
+      {},
+      q.averageRevisionRounds,
+    ),
+    gauge(
+      "qajitsu_readiness_stopped_ratio",
+      "Share of checked tickets the readiness gate did not find READY.",
+      {},
+      q.readinessStoppedShare,
+    ),
+    gauge(
+      "qajitsu_false_failed_recorded_ratio",
+      "FAILED cases a person recorded as no product bug (qj feedback), over all FAILED cases.",
+      {},
+      q.falseFailedShare,
+    ),
+    gauge("qajitsu_auditor_downgrades", "PASSED cases the auditor downgraded.", {}, q.auditorDowngrades),
+    gauge(
+      "qajitsu_escaped_defects",
+      "Defects found later and linked to a run (qj feedback --escaped).",
+      {},
+      q.escapedDefects,
+    ),
+  ];
+}
+
+/** The agent scorecard (REQ-LLM-14/AC3), per role and model. */
+export function scorecardSamples(digests: readonly RunDigest[]): Sample[] {
+  const card = agentScorecard(digests);
+  return [
+    ...card.roles.flatMap((r) => {
+      const labels = { role: r.role, model: r.model };
+      return [
+        gauge("qajitsu_agent_calls", "Model calls per role and model.", labels, r.calls),
+        gauge("qajitsu_agent_cost_usd", "Model cost per role and model.", labels, r.costUsd),
+        gauge(
+          "qajitsu_agent_latency_p95_seconds",
+          "95th percentile of call duration.",
+          labels,
+          r.p95Ms / 1000,
+        ),
+        gauge(
+          "qajitsu_agent_no_repair_ratio",
+          "Share of agent steps that needed no repair.",
+          labels,
+          r.noRepairShare,
+        ),
+        gauge("qajitsu_agent_guard_denials", "Tool calls the guard denied.", labels, r.guardDenials),
+      ];
+    }),
+    gauge(
+      "qajitsu_author_first_try_ratio",
+      "Share of specs that passed every check on the first answer.",
+      {},
+      card.author.firstTryShare,
+    ),
+    ...Object.entries(card.author.findings).map(([check, n]) =>
+      gauge(
+        "qajitsu_author_findings",
+        "Problems the checks found in rejected specs, by check.",
+        { check },
+        n,
+      ),
+    ),
+    ...Object.entries(card.author.rules).map(([rule, n]) =>
+      gauge("qajitsu_author_quality_rule", "Quality gate findings in rejected specs, by rule.", { rule }, n),
+    ),
+    gauge(
+      "qajitsu_planner_flags_avg",
+      "Average flagged expectations in a plan's last version.",
+      {},
+      card.planner.averageFlags,
+    ),
+    gauge(
+      "qajitsu_planner_gaps_avg",
+      "Average coverage gaps in a plan's last version.",
+      {},
+      card.planner.averageGaps,
+    ),
+    gauge(
+      "qajitsu_healer_accepted_ratio",
+      "Share of heals the assertion lock accepted.",
+      {},
+      card.healer.acceptedShare,
+    ),
+  ];
 }
 
 /** Groups BLOCKED reasons into a few stable categories (labels must stay low-cardinality). */
@@ -60,8 +309,6 @@ export async function collectMetrics(root: string, now: Date): Promise<Sample[]>
       if (s) samples[existing] = { ...s, value: s.value + value };
     } else samples.push({ name, help, type, labels, value });
   };
-  let approved = 0;
-  let unchanged = 0;
   let cleanBench = 0;
   let cleanBenchWithFailed = 0;
   for (const ticket of await listTickets(root)) {
@@ -144,11 +391,6 @@ export async function collectMetrics(root: string, now: Date): Promise<Sample[]>
         { ticket },
         Number(cost.toFixed(6)),
       );
-      const approval = record.data["approval"] as { version?: number } | undefined;
-      if (approval?.version !== undefined) {
-        approved += 1;
-        if (approval.version === 1) unchanged += 1;
-      }
       const bench = record.data["bench"] as { flags?: string[] } | undefined;
       if (bench && (bench.flags ?? []).length === 0 && Object.keys(results).length > 0) {
         cleanBench += 1;
@@ -156,13 +398,13 @@ export async function collectMetrics(root: string, now: Date): Promise<Sample[]>
       }
     }
   }
-  samples.push({
-    name: "qajitsu_plan_accepted_unchanged_ratio",
-    help: "Approved runs whose first plan version was approved.",
-    type: "gauge",
-    labels: {},
-    value: approved === 0 ? 0 : Number((unchanged / approved).toFixed(3)),
-  });
+  const digests = await readRunDigests(root);
+  samples.push(
+    ...costSamples(digests),
+    ...timeSamples(digests),
+    ...qualitySamples(digests),
+    ...scorecardSamples(digests),
+  );
   samples.push({
     name: "qajitsu_false_failed_ratio",
     help: "Clean benchmark runs (no bug flag) with a FAILED case.",

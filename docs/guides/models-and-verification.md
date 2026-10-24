@@ -98,6 +98,45 @@ with a call of a model without a price is marked `costUnknown` and estimates say
 `budget.max_cost_usd` stops a model stage once the run's cost reaches it (`COST_BUDGET_EXCEEDED`, BLOCKED, exit code 2) and makes the cases not written yet NOT_RUN. `qj doctor --models` makes one call per role and names a rejected
 key by its variable, never by its value.
 
+### Cache prices, dated prices and cost per verified ticket (REQ-LLM-11)
+
+Every model call records its input tokens, the input tokens read from or written to the provider's prompt cache,
+output tokens, duration and cost, per role (`model.usage` in the journal). Cache reads and writes are charged with
+their own price when one is set, and as input otherwise, so a cost is never lower than it may be. A price can carry
+the day it applies from; a call is charged with the price valid on its day:
+
+```yaml
+models:
+  providers:
+    claude:
+      type: anthropic
+      models:
+        claude-opus-5-5:
+          cost_per_mtok: { input: 5, output: 25, cached_input: 0.5, cache_write: 6.25 }
+          prices:
+            - { from: "2026-12-01", input: 4, output: 20, cached_input: 0.4 }
+```
+
+`qj status` and `qj metrics` show what the project's runs cost: the cost per verified ticket (every run's cost,
+also of runs that decided nothing, over the tickets with a GO or NO-GO decision), the cost per role, runner minutes per
+ticket, the share of pipeline stages that needed no model, and the cost per verified ticket by ISO week as a trend.
+When some call had no known price the cost is shown as a lower bound ("at least"), never as an exact number.
+
+### Prompt caching and input limits (REQ-LLM-12)
+
+Agents send their instructions and the ticket and repository context first, the same for every repair of an answer
+and every case of a stage, so providers can cache that prefix. Anthropic needs an explicit cache breakpoint, which
+QAJitsu sets on the instructions and the context message; OpenAI and Google cache a stable prefix by themselves. Cache
+reads show up as `cachedInputTokens` in the journal and are charged at the cache price (REQ-LLM-11).
+`models.cache_ttl` sets the cache duration: `auto` (default) chooses five minutes when the project's model calls
+usually come within five minutes of each other and one hour when within an hour (the longer cache costs more to
+write), `5m`, `1h`, or `off`. The choice and its reason are recorded in `run.json` (`promptCache`).
+
+Before every call QAJitsu estimates its input (one token per four characters, a fixed amount per image) and stops a
+call that would exceed the model's context window, its price tier boundary (Gemini Pro charges more above 200k
+tokens; `price_tier_tokens` sets it for any model) or `models.max_input_tokens`, with the estimate and the limit
+(`MODEL_INPUT_TOO_LARGE`); nothing is sent.
+
 ## Local models, honestly (REQ-LLM-05)
 
 Local models are good at the roles that read and classify: **summary**, **analyst** on small changes and
@@ -222,3 +261,26 @@ JSON in `bench-results/<date>-<model>.json`) lists per case the plan acceptance 
 Benchmark runs are marked `bench` in `run.json`, approved as `bench:<user>` (not as a person) and refused by
 `qajitsu publish`. The benchmark makes real model calls: it never runs in PR CI (a contract test checks the workflows); run it
 nightly or on demand.
+
+## Agent scorecard and plan quality (REQ-LLM-14, REQ-PLAN-16)
+
+How well each agent does its job is measured by code from what every run records (`journal/agents.jsonl`, the
+journal, gates and reviews), never by asking a model. `qj status` and `qj metrics` show, per role and model: calls,
+cost, latency (p50, p95), the share of agent steps that needed no repair of invalid output, and tool calls the guard
+denied; the author's share of specs right on the first try and what the checks and the quality gate rejected, by
+rule; review send-backs; the planner's flagged expectations and coverage gaps per plan; the healer's accepted heals.
+
+Plan and test quality per project: plans approved without changes, revision rounds, tickets the readiness gate
+stopped, FAILED cases a person found to be no product bug, PASSED cases the auditor downgraded, and defects that
+escaped. The last two need a person's word, recorded after the run, which never changes a status:
+
+```sh
+qj feedback SHOP-482 --case TC-03 --is test-bug --note "the plan expected the old rounding"
+qj feedback SHOP-482 --escaped SHOP-512        # a defect found later on a ticket the run passed
+```
+
+`qj bench` adds the scorecard to its report, with the demo shop's ground truth (the seeded bug was found, the plan
+has a case for the criterion the bug breaks, `criterion` in `.qa/bench.yaml`), and compares it with the previous
+report of the same model. Answers of real models recorded in `journal/agents.jsonl` can be replayed as scripted models
+in tests (`tests/support/replay.ts`): `tests/golden/replay-gemma.test.ts` plays gemma4:e2b's analysis and plan for
+DEMO-1, invalid answers included, through today's parsers and checks.

@@ -11,6 +11,7 @@ import { certificateStatement, certificateSubject, keySigner, signStatement } fr
 import { createProgram } from "../../packages/cli/src/program.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { createDemoPipeline } from "../support/cli-pipeline.js";
+import { startFakeTsaServer } from "../support/fake-tsa.js";
 
 const run = promisify(execFile);
 const tool = new URL("../../tools/verify-certificate.mjs", import.meta.url).pathname;
@@ -113,5 +114,40 @@ describe("open verifier (REQ-VER-21)", () => {
     const r = await reference(run, join(dir, "key.pem"));
     expect(r.code).toBe(1);
     expect(r.out).toContain('unsafe file name: "../outside.txt"');
+  });
+
+  it("REQ-VER-21/AC1 + REQ-VER-17/AC3: the reference verifier checks the timestamp token and its TSA", async () => {
+    const tsa = await startFakeTsaServer();
+    cleanups.push(tsa.close);
+    const env: Record<string, string> = {};
+    const p = await createDemoPipeline({
+      config: [
+        `certificate: { signing_key: secret://env/QAJITSU_SIGNING_KEY, timestamp: { url: "${tsa.url}" } }`,
+      ],
+      env,
+    });
+    cleanups.push(p.cleanup);
+    const keygen = await p.run(["audit", "keygen"]);
+    env["QAJITSU_SIGNING_KEY"] = Buffer.from(
+      await readFile(/Private key \(mode 0600\): (\S+)/.exec(keygen.out)?.[1] ?? ""),
+    ).toString("base64");
+    expect((await p.executed()).out).toContain("Timestamped");
+    const keys = join(p.project, ".qa", "keys");
+    const publicKey = join(keys, (await readdir(keys)).find((f) => f.endsWith(".pub")) ?? "");
+    const ca = join(p.home, "tsa-ca.pem");
+    await writeFile(ca, tsa.caPem);
+    const withCa = await run(process.execPath, [tool, p.runDir, publicKey, "--tsa-ca", ca]);
+    expect(withCa.stdout).toContain("  timestamped 20261003104600Z by CN=Fake TSA (trusted TSA)");
+    const without = await run(process.execPath, [tool, p.runDir, publicKey]);
+    expect(without.stdout).toContain("(TSA not trusted: pass --tsa-ca)");
+    // A token of another statement is named.
+    const token = join(p.runDir, "certificate", "timestamp.tsr");
+    const bytes = await readFile(token);
+    const digestAt = bytes.indexOf(Buffer.from([0x04, 0x20]), 40);
+    bytes[digestAt + 2] = (bytes[digestAt + 2] ?? 0) ^ 0xff;
+    await writeFile(token, bytes);
+    const bad = await reference(p.runDir, publicKey);
+    expect(bad.code).toBe(1);
+    expect(bad.out).toMatch(/timestamp: (stamps another hash|message digest does not match)/);
   });
 });

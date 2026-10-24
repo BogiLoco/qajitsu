@@ -251,18 +251,19 @@ Everything that influenced the verdict is recorded and hashed, not only the resu
 
 ### REQ-VER-17 · Trusted timestamps
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: 9
 - Related: REQ-VER-15
+- Note: the timestamp covers the SHA-256 of the certificate's signed statement, which holds the Merkle root. AC2: a qualified eIDAS provider is configured with `qualified: true` and its CA in `.qa/keys/tsa/`; QAJitsu does not check the EU trusted lists itself.
 
 **Acceptance criteria**
 
-- [ ] AC1: The certificate's root hash can be timestamped by an RFC 3161 time-stamping authority configured per project.
-- [ ] AC2: Qualified electronic timestamps under eIDAS can be used by configuring a qualified trust service provider.
-- [ ] AC3: The timestamp token is stored with the certificate and checked by `qj verify-report`.
-- [ ] AC4: Only the hash is sent to the authority, never content.
-- [ ] AC5: An unavailable authority does not block the run; the certificate is marked "not timestamped" and can be timestamped later.
+- [x] AC1: The certificate's root hash can be timestamped by an RFC 3161 time-stamping authority configured per project.
+- [x] AC2: Qualified electronic timestamps under eIDAS can be used by configuring a qualified trust service provider.
+- [x] AC3: The timestamp token is stored with the certificate and checked by `qj verify-report`.
+- [x] AC4: Only the hash is sent to the authority, never content.
+- [x] AC5: An unavailable authority does not block the run; the certificate is marked "not timestamped" and can be timestamped later.
 
 ### REQ-VER-18 · Public and private transparency logs
 
@@ -280,31 +281,34 @@ Everything that influenced the verdict is recorded and hashed, not only the resu
 
 ### REQ-VER-19 · Immutable evidence storage
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: 9
 - Related: REQ-VER-16, REQ-WS-03
+- Note: implemented as the plugin `@qajitsu/adapter-evidence-s3` (S3 Object Lock on AWS, MinIO and other S3-compatible storage; SigV4 on Node.js built-ins). The audit export and the certificate are stored once the run is certified; each object is read back to confirm its lock.
 
 **Acceptance criteria**
 
-- [ ] AC1: Evidence and certificates can be stored in write-once storage (for example S3 Object Lock in compliance mode) with a retention period per project.
-- [ ] AC2: During retention, cleanup (REQ-WS-03) skips locked runs and says so.
-- [ ] AC3: Storage location and retention are recorded in the certificate.
+- [x] AC1: Evidence and certificates can be stored in write-once storage (for example S3 Object Lock in compliance mode) with a retention period per project.
+- [x] AC2: During retention, cleanup (REQ-WS-03) skips locked runs and says so.
+- [x] AC3: Storage location and retention are recorded in the certificate.
 
 ### REQ-VER-20 · Reproduce a run from its certificate
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: 9
 - Related: REQ-VER-15, REQ-PLAN-06, REQ-EXEC-01
+
+- Note: TO BE REVIEWED (2026-10-22): tool versions and container image digests that differ from the certificate are named in the comparison, not forced: images built from the code at the certified commits get new digests, and installed tools are those of the machine.
 
 Anyone with access can run again exactly what was approved and compare.
 
 **Acceptance criteria**
 
-- [ ] AC1: `qj reproduce <certificate>` runs the frozen plan again with the same generated tests, runner versions and image digests against a chosen environment, without any agent step.
-- [ ] AC2: The new run produces its own certificate and a comparison with the original: same, different or not reproducible per case.
-- [ ] AC3: Differences are never merged into the original run; the original certificate stays unchanged.
+- [x] AC1: `qj reproduce <certificate>` runs the frozen plan again with the same generated tests, runner versions and image digests against a chosen environment, without any agent step.
+- [x] AC2: The new run produces its own certificate and a comparison with the original: same, different or not reproducible per case.
+- [x] AC3: Differences are never merged into the original run; the original certificate stays unchanged.
 
 ### REQ-VER-21 · Open verifier and audit documentation
 

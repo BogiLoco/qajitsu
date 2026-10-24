@@ -276,6 +276,54 @@ const README = (doc: Record<string, unknown>, left: readonly string[]): string =
   ].join("\n");
 
 /**
+ * The audit export of a run as one zip (REQ-VER-16/AC5): the exportable files, `audit/trail.json`, `SHA256SUMS` and a
+ * README; every file secret-scanned first. Also what goes to write-once storage (REQ-VER-19).
+ *
+ * @throws {ConfigError} `SECRET_IN_EXPORT` when a file holds a secret value.
+ */
+export async function buildAuditExport(
+  session: RunSession,
+  now: () => Date,
+): Promise<{ data: Uint8Array; entries: readonly { name: string }[]; trail: AuditTrail }> {
+  const { masker } = session;
+  const loaded = await loadAuditTrail(session);
+  const doc = trailDocument(loaded, now());
+  const kinds = new Map<string, string>();
+  try {
+    const manifest = JSON.parse(new TextDecoder().decode(await loaded.read("evidence/manifest.json"))) as {
+      path: string;
+      kind?: string;
+    }[];
+    for (const m of manifest) kinds.set(`evidence/${m.path}`, m.kind ?? "");
+  } catch {
+    // A missing manifest is a gap of the trail already.
+  }
+  const included = loaded.trail.items.filter((i) => exportable(i.path, kinds));
+  const left = loaded.trail.items.filter((i) => !exportable(i.path, kinds)).map((i) => i.path);
+  const entries = await Promise.all(
+    included.map(async (i) => ({ name: i.path, data: await loaded.read(i.path) })),
+  );
+  const leaking = entries
+    .filter((e) => masker.containsSecret(Buffer.from(e.data).toString("utf8")))
+    .map((e) => e.name);
+  if (leaking.length > 0)
+    throw new ConfigError(
+      "SECRET_IN_EXPORT",
+      `Secret scan failed: ${leaking.join(", ")} contain a secret value; nothing was exported.`,
+      {},
+    );
+  const trailJson = new TextEncoder().encode(`${JSON.stringify(doc, null, 2)}\n`);
+  const sums = [...included.map((i) => `${i.sha256}  ${i.path}`), `${sha256(trailJson)}  ${TRAIL_FILE}`];
+  const data = zip([
+    ...entries,
+    { name: TRAIL_FILE, data: trailJson },
+    { name: "SHA256SUMS", data: new TextEncoder().encode(`${sums.join("\n")}\n`) },
+    { name: "README.txt", data: new TextEncoder().encode(README(doc, left)) },
+  ]);
+  return { data, entries, trail: loaded.trail };
+}
+
+/**
  * `qajitsu audit export <TICKET> [--run <id>] [--out <file>]`: the audit trail as one zip for an external auditor,
  * readable without QAJitsu (REQ-VER-16/AC5): the files, `audit/trail.json`, `SHA256SUMS` and a README. Every file is
  * secret-scanned first; a file with a secret value stops the export.
@@ -291,40 +339,8 @@ export async function runAuditExport(
   const masker = createMasker();
   try {
     const session = await openSession(rawKey, options.run, io.cwd, ports, masker);
-    const loaded = await loadAuditTrail(session);
-    const doc = trailDocument(loaded, ports.now());
-    const kinds = new Map<string, string>();
-    try {
-      const manifest = JSON.parse(new TextDecoder().decode(await loaded.read("evidence/manifest.json"))) as {
-        path: string;
-        kind?: string;
-      }[];
-      for (const m of manifest) kinds.set(`evidence/${m.path}`, m.kind ?? "");
-    } catch {
-      // A missing manifest is a gap of the trail already.
-    }
-    const included = loaded.trail.items.filter((i) => exportable(i.path, kinds));
-    const left = loaded.trail.items.filter((i) => !exportable(i.path, kinds)).map((i) => i.path);
-    const entries = await Promise.all(
-      included.map(async (i) => ({ name: i.path, data: await loaded.read(i.path) })),
-    );
-    const leaking = entries
-      .filter((e) => masker.containsSecret(Buffer.from(e.data).toString("utf8")))
-      .map((e) => e.name);
-    if (leaking.length > 0)
-      throw new ConfigError(
-        "SECRET_IN_EXPORT",
-        `Secret scan failed: ${leaking.join(", ")} contain a secret value; nothing was exported.`,
-        {},
-      );
-    const trailJson = new TextEncoder().encode(`${JSON.stringify(doc, null, 2)}\n`);
-    const sums = [...included.map((i) => `${i.sha256}  ${i.path}`), `${sha256(trailJson)}  ${TRAIL_FILE}`];
-    const data = zip([
-      ...entries,
-      { name: TRAIL_FILE, data: trailJson },
-      { name: "SHA256SUMS", data: new TextEncoder().encode(`${sums.join("\n")}\n`) },
-      { name: "README.txt", data: new TextEncoder().encode(README(doc, left)) },
-    ]);
+    const { data, entries, trail } = await buildAuditExport(session, ports.now);
+    const loaded = { trail };
     const name = `${session.ws.ticket}_${session.ws.runId}_audit.zip`;
     const out =
       options.out !== undefined

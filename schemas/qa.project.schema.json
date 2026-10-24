@@ -596,6 +596,149 @@
       },
       "additionalProperties": false
     },
+    "workflow": {
+      "type": "object",
+      "properties": {
+        "statuses": {
+          "type": "object",
+          "properties": {
+            "start": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in_testing": {
+              "type": "string",
+              "minLength": 1
+            },
+            "waiting_for_approval": {
+              "type": "string",
+              "minLength": 1
+            },
+            "needs_info": {
+              "type": "string",
+              "minLength": 1
+            },
+            "passed": {
+              "type": "string",
+              "minLength": 1
+            },
+            "failed": {
+              "type": "string",
+              "minLength": 1
+            },
+            "needs_review": {
+              "type": "string",
+              "minLength": 1
+            },
+            "done": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "start",
+            "in_testing",
+            "needs_info",
+            "passed",
+            "failed",
+            "needs_review"
+          ],
+          "additionalProperties": false
+        },
+        "passed_to_done": {
+          "default": false,
+          "type": "boolean"
+        },
+        "qa_assignee": {
+          "type": "string",
+          "minLength": 1
+        },
+        "authors": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "attention_label": {
+          "default": "qa-needs-attention",
+          "type": "string",
+          "pattern": "^\\S+$"
+        },
+        "max_runs_per_day": {
+          "default": 5,
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "approvers_group": {
+          "type": "string",
+          "minLength": 1
+        },
+        "remind_after_h": {
+          "default": 24,
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_revisions": {
+          "default": 3,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "pickup": {
+          "default": {
+            "interval_s": 300,
+            "batch": 5,
+            "host": "127.0.0.1",
+            "port": 8787
+          },
+          "type": "object",
+          "properties": {
+            "jql": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "interval_s": {
+              "default": 300,
+              "type": "integer",
+              "minimum": 30,
+              "maximum": 9007199254740991
+            },
+            "batch": {
+              "default": 5,
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 50
+            },
+            "secret": {
+              "type": "string",
+              "minLength": 1
+            },
+            "host": {
+              "default": "127.0.0.1",
+              "type": "string",
+              "minLength": 1
+            },
+            "port": {
+              "default": 8787,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "statuses"
+      ],
+      "additionalProperties": false
+    },
     "mobile": {
       "type": "object",
       "properties": {
@@ -1472,7 +1615,8 @@
     "models": {
       "default": {
         "providers": {},
-        "roles": {}
+        "roles": {},
+        "cache_ttl": "auto"
       },
       "type": "object",
       "properties": {
@@ -1540,6 +1684,14 @@
                         "output": {
                           "type": "number",
                           "minimum": 0
+                        },
+                        "cached_input": {
+                          "type": "number",
+                          "minimum": 0
+                        },
+                        "cache_write": {
+                          "type": "number",
+                          "minimum": 0
                         }
                       },
                       "required": [
@@ -1547,6 +1699,46 @@
                         "output"
                       ],
                       "additionalProperties": false
+                    },
+                    "price_tier_tokens": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "prices": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "from": {
+                            "type": "string",
+                            "format": "date",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                          },
+                          "input": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "output": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "cached_input": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "cache_write": {
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        },
+                        "required": [
+                          "from",
+                          "input",
+                          "output"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "additionalProperties": false
@@ -1575,6 +1767,21 @@
           }
         },
         "token_budget": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "cache_ttl": {
+          "default": "auto",
+          "type": "string",
+          "enum": [
+            "auto",
+            "5m",
+            "1h",
+            "off"
+          ]
+        },
+        "max_input_tokens": {
           "type": "integer",
           "exclusiveMinimum": 0,
           "maximum": 9007199254740991
@@ -2227,6 +2434,79 @@
       },
       "additionalProperties": false
     },
+    "readiness": {
+      "default": {
+        "risk_rules": [],
+        "comment": "always"
+      },
+      "type": "object",
+      "properties": {
+        "risk_rules": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "pattern": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "level": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            },
+            "required": [
+              "pattern",
+              "level",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "comment": {
+          "default": "always",
+          "type": "string",
+          "enum": [
+            "always",
+            "not_ready",
+            "never"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "timing": {
+      "default": {
+        "budgets_s": {}
+      },
+      "type": "object",
+      "properties": {
+        "budgets_s": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "spec_review": {
       "default": {
         "first_runs": 0,
@@ -2247,6 +2527,71 @@
       },
       "additionalProperties": false
     },
+    "archive": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "s3"
+        },
+        "endpoint": {
+          "type": "string",
+          "format": "uri"
+        },
+        "region": {
+          "default": "us-east-1",
+          "type": "string",
+          "minLength": 1
+        },
+        "bucket": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+        },
+        "prefix": {
+          "default": "qajitsu/",
+          "type": "string",
+          "pattern": "^([A-Za-z0-9_.-]+\\/)*$"
+        },
+        "path_style": {
+          "default": false,
+          "type": "boolean"
+        },
+        "access_key_id": {
+          "type": "string",
+          "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+        },
+        "secret_access_key": {
+          "type": "string",
+          "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+        },
+        "session_token": {
+          "type": "string",
+          "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+        },
+        "mode": {
+          "default": "compliance",
+          "type": "string",
+          "enum": [
+            "compliance",
+            "governance"
+          ]
+        },
+        "retention_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 36500
+        }
+      },
+      "required": [
+        "type",
+        "endpoint",
+        "bucket",
+        "access_key_id",
+        "secret_access_key",
+        "retention_days"
+      ],
+      "additionalProperties": false
+    },
     "certificate": {
       "default": {
         "required": false
@@ -2260,6 +2605,29 @@
         "required": {
           "default": false,
           "type": "boolean"
+        },
+        "timestamp": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "qualified": {
+              "default": false,
+              "type": "boolean"
+            },
+            "timeout_s": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 120
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

@@ -13,6 +13,8 @@ import {
 import { generateText } from "ai";
 import { extractCode } from "./author.js";
 import { modelExchange } from "./exchange.js";
+import { callUsage } from "./usage.js";
+import { prepareCall } from "./prepare-call.js";
 import { untrusted, UNTRUSTED_DATA_RULES } from "./context.js";
 import { modelForRole, type AgentStageDeps } from "./roles-run.js";
 
@@ -80,10 +82,10 @@ export async function healSpec(
       ? ["## Page DOM at the failure (truncated)", untrusted("dom", request.dom.slice(0, 20_000))]
       : []),
   ].join("\n");
+  const startedAt = Date.now();
   const result = await generateText({
     model: model.model,
-    system: HEALER_SYSTEM,
-    prompt,
+    ...prepareCall(model, HEALER_SYSTEM, [{ role: "user", content: prompt }]),
     ...(deps.signal ? { abortSignal: deps.signal } : {}),
     maxRetries: 2,
   });
@@ -92,10 +94,7 @@ export async function healSpec(
     "healer",
     model.id,
     model.profile,
-    {
-      inputTokens: result.usage.inputTokens ?? 0,
-      outputTokens: result.usage.outputTokens ?? 0,
-    },
+    callUsage(result.usage, startedAt),
     modelExchange("heal", "healer", model, { system: HEALER_SYSTEM, prompt }, result),
   );
   const code = extractCode(result.text);

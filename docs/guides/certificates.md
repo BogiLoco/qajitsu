@@ -29,6 +29,8 @@ A certificate does **not** prove:
 - anything about files it does not list. Check the subject list; `run.json` itself, `env/` (secrets), `audit/` and the
   copies made when publishing (`report/published/`, `report/media/`) are not covered;
 - that the signing key was kept secret. Keep it in the secret provider and rotate it if in doubt.
+- when it was issued, without a timestamp. The issue time in the statement is written by QAJitsu; someone with the
+  key could sign a certificate dated in the past. A trusted timestamp (below) closes that.
 - that the key is the project's. `verify-report` says where its trust in the key comes from: `--key` (a key you got
   from the project through another channel) or `.qa/keys/` (anyone who can write to the repository can add a key
   there, so an outside auditor should pass `--key`).
@@ -62,6 +64,80 @@ certifying, so a hand-edited report is never certified, and rendering them again
 
 Keys rotate: create a new key, keep the old `*.pub` files in `.qa/keys/`, and old certificates still verify.
 
+## Trusted timestamps (REQ-VER-17)
+
+A timestamp from an RFC 3161 time-stamping authority (TSA) proves the certificate existed **no later than** a time
+vouched for by someone else. Configure one and every certificate is stamped when it is issued:
+
+```yaml
+# .qa/qa.project.yaml
+certificate:
+  signing_key: secret://env/QAJITSU_SIGNING_KEY
+  timestamp:
+    url: http://timestamp.digicert.com # or Sectigo, FreeTSA, your company's TSA, a qualified eIDAS provider
+    qualified: false # true for a qualified trust service provider under eIDAS
+    timeout_s: 20
+```
+
+- Only the SHA-256 of the signed statement goes to the TSA, never a file of the run.
+- The token is checked before it is kept: it stamps this hash, answers this request (nonce), is signed by a
+  certificate for time stamping valid at that time, and its time is not before the certificate's issue time.
+- Kept as `certificate/timestamp.tsr` (the RFC 3161 token, DER) with `certificate/timestamp.json` (time, TSA, whether
+  it is trusted, qualified).
+- A TSA that cannot be reached or answers with something unusable never stops a run: the certificate is marked "not
+  timestamped" with the reason; `qj audit timestamp <TICKET>` stamps it later.
+- Trust: put the CA certificate of your TSA (from its website, for example "DigiCert Trusted Root G4") into
+  `.qa/keys/tsa/*.pem`, or pass it to `qj verify-report --tsa-ca <file>` or `tools/verify-certificate.mjs --tsa-ca
+<file>`. A token whose TSA is not trusted is shown as such, never as trusted.
+- A stamp made much later than the certificate (for example with `qj audit timestamp` days after) proves only that the
+  certificate existed by then; `verify-report` says so. A certificate that claims to be issued after its own stamp is
+  dated falsely and fails the check.
+
+Tested with DigiCert, Sectigo and FreeTSA (RSA tokens with intermediate certificates) and with ECDSA tokens.
+
+## Write-once storage (REQ-VER-19)
+
+A certificate shows that something changed; write-once storage stops it from being changed or deleted at all, by
+anyone, an administrator included, until the retention ends. Configure S3 Object Lock (AWS S3, MinIO or another
+S3-compatible store; the bucket must be created with Object Lock enabled):
+
+```yaml
+# .qa/qa.project.yaml
+archive:
+  type: s3
+  endpoint: https://s3.eu-central-1.amazonaws.com # or your MinIO
+  region: eu-central-1
+  bucket: qa-evidence
+  prefix: qajitsu/ # each run goes to <prefix><TICKET>/<run id>/
+  path_style: false # true for MinIO
+  access_key_id: secret://vault/qa/s3#key
+  secret_access_key: secret://vault/qa/s3#secret
+  mode: compliance # or governance
+  retention_days: 2555 # about 7 years
+```
+
+- The certificate states, inside what is signed, where the run is kept and until when (`predicate.storage`).
+- When the run is certified (and timestamped), its audit export (every file, the trail, `SHA256SUMS`, the certificate
+  and its timestamp) and the certificate go to `<prefix><TICKET>/<run id>/` with that lock, and each object is read back:
+  the storage must hold the lock and the same content, not just answer 200. The result is in
+  `certificate/archive.json` and the journal (`archive.stored`).
+- Storage that is unreachable, has no Object Lock, does not hold the lock, or refuses the keys never stops a run: the
+  run is "not archived" with the reason, and `qj audit archive <TICKET>` tries again.
+- `qj gc`, `qj work reset --delete` and `qj projects remove` keep locked runs on disk until their retention ends and
+  say so.
+- `qj verify-report` shows where the certificate says the run is kept and whether it was archived.
+
+Tested against a fake S3 that checks every signature and, exploratory, against moto with authentication on, where
+deleting a locked version was refused even for a user allowed everything.
+
+## Reproducing a certified run (REQ-VER-20)
+
+`qj reproduce <run folder or audit zip> [--env <env> | --build]` runs again exactly what was certified: the certificate
+is checked, the frozen plan (same SHA-256), the generated tests and the ticket snapshot go into a new run that runs
+them without any agent, against the chosen environment or the code at the certified commits. It reports per case
+`same`, `different` or `not reproducible`, and names tool versions and container images that differ. The new run has
+its own certificate; the original never changes.
+
 ## Format (REQ-VER-15/AC5, REQ-VER-21/AC2)
 
 Everything below is enough to write a verifier; [`tools/verify-certificate.mjs`](../../tools/verify-certificate.mjs)
@@ -73,6 +149,9 @@ is one in about 100 lines of Node.js built-ins, tested against real certificates
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `certificate/certificate.dsse.json` | the certificate: a DSSE envelope                                                                            |
 | `certificate/<key id>.pub`          | the signer's public key, for convenience (trust only keys you were given)                                   |
+| `certificate/timestamp.tsr`         | RFC 3161 timestamp token over the SHA-256 of the envelope's payload (REQ-VER-17)                            |
+| `certificate/timestamp.json`        | the timestamp's time, TSA and trust, or why the certificate is not timestamped                              |
+| `certificate/archive.json`          | where the run is kept write-once, the objects with SHA-256 and version, or why it is not archived           |
 | `audit/trail.json`                  | the audit trail: every file with category and SHA-256, the gaps, records                                    |
 | `evidence/manifest.json`            | evidence files with SHA-256, kind, case and step (REQ-VER-05)                                               |
 | `journal/events.jsonl`              | event journal; each line's `prev` is the SHA-256 of the line before                                         |

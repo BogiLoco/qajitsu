@@ -1,4 +1,10 @@
-import { createPrivateKey, createPublicKey, generateKeyPairSync, type KeyObject } from "node:crypto";
+import {
+  X509Certificate,
+  createPrivateKey,
+  createPublicKey,
+  generateKeyPairSync,
+  type KeyObject,
+} from "node:crypto";
 import { chmod, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
@@ -22,6 +28,7 @@ import {
   certificateSubject,
   certificateCoverage,
   checkCertificate,
+  checkTimestampToken,
   keyIdOf,
   keySigner,
   signStatement,
@@ -33,13 +40,15 @@ import { loadProject } from "../project.js";
 import { openSession, type ModelPorts, type RunSession } from "../session.js";
 import { loadAuditTrail } from "./audit-trail.js";
 import type { CommandIO } from "./fetch.js";
+import { TIMESTAMP_TOKEN, payloadDigest, stampCertificate, trustedTsaCertificates } from "./timestamp.js";
+import { archiveRun, plannedStorage } from "./archive.js";
 import { computeVerdict, writeReports } from "./verdict.js";
 
 /** Folder of the project's trusted public keys (REQ-VER-15/AC6). */
-const KEYS_DIR = "keys";
+export const KEYS_DIR = "keys";
 
-/** Reads every `*.pub` file of a folder as a public key; unreadable files are skipped. */
-async function publicKeysIn(dir: string): Promise<{ key: KeyObject; source: string }[]> {
+/** Reads every `*.pub` file of a folder as a public key with where it came from; unreadable files are skipped. */
+export async function publicKeysIn(dir: string): Promise<{ key: KeyObject; source: string }[]> {
   const keys: { key: KeyObject; source: string }[] = [];
   for (const name of await readdir(dir).catch(() => [] as string[]))
     if (name.endsWith(".pub"))
@@ -100,7 +109,15 @@ export function certifiedVerdict(verdict: {
 export type IssueOutcome =
   | { readonly status: "off" }
   | { readonly status: "gaps"; readonly gaps: readonly string[] }
-  | { readonly status: "issued"; readonly certificate: CertificateSummary; readonly reused: boolean };
+  | {
+      readonly status: "issued";
+      readonly certificate: CertificateSummary;
+      readonly reused: boolean;
+      /** The timestamp line (REQ-VER-17), when a TSA is configured. */
+      readonly timestamp?: string;
+      /** The write-once storage line (REQ-VER-19), when an archive is configured. */
+      readonly archived?: string;
+    };
 
 const readRunFile = (dir: string) => async (path: string) =>
   new Uint8Array(await readFile(join(dir, path))).slice();
@@ -118,6 +135,25 @@ const readRunFile = (dir: string) => async (path: string) =>
  *   never the statuses recorded in `run.json`, which the certificate does not cover.
  */
 export async function issueCertificate(
+  session: RunSession,
+  now: () => Date,
+  verdict: CertifiedVerdict,
+  fetchImpl?: typeof globalThis.fetch,
+): Promise<IssueOutcome> {
+  const outcome = await issueOrReuse(session, now, verdict);
+  if (outcome.status !== "issued" || fetchImpl === undefined) return outcome;
+  // REQ-VER-17: a configured TSA stamps the certificate; a TSA that cannot help never stops the run (AC5).
+  const timestamp = await stampCertificate(session, fetchImpl, now);
+  // REQ-VER-19: then the run goes to write-once storage, timestamp included; an archive that cannot help never stops it.
+  const archived = await archiveRun(session, fetchImpl, now);
+  return {
+    ...outcome,
+    ...(timestamp === undefined ? {} : { timestamp }),
+    ...(archived === undefined ? {} : { archived }),
+  };
+}
+
+async function issueOrReuse(
   session: RunSession,
   now: () => Date,
   verdict: CertifiedVerdict,
@@ -169,12 +205,13 @@ export async function issueCertificate(
     if (certificateScope(i.path) !== "excluded")
       subjects.push(certificateSubject(i.path, await read(i.path)));
   const digest = (name: string): string | undefined => subjects.find((s) => s.name === name)?.digest.sha256;
+  const issuedAt = now().toISOString();
   const data = ws.record.data;
   const build = (data["build"] ?? {}) as Record<string, unknown>;
   const statement = certificateStatement(subjects, {
     ticket: ws.ticket,
     runId: ws.runId,
-    issuedAt: now().toISOString(),
+    issuedAt,
     files: subjects.length,
     repos: ws.record.repos,
     plan: data["approval"],
@@ -189,6 +226,7 @@ export async function issueCertificate(
     images: build["images"] ?? [],
     environment: data["environment"],
     ...(data["codeAccess"] ? { codeAccess: data["codeAccess"] } : {}),
+    ...storageOf(session, issuedAt),
   });
   const envelope = signStatement(statement, keySigner(key));
   await mkdir(ws.path(CERTIFICATE_DIR), { recursive: true });
@@ -214,6 +252,17 @@ export async function issueCertificate(
   await stampReport(session, certificate);
   return { status: "issued", certificate, reused: false };
 }
+
+/** The write-once storage a new certificate states (REQ-VER-19/AC3). */
+const storageOf = (session: RunSession, issuedAt: string): { storage?: unknown } => {
+  const storage = plannedStorage(
+    session.project.config.archive,
+    session.ws.ticket,
+    session.ws.runId,
+    issuedAt,
+  );
+  return storage === undefined ? {} : { storage };
+};
 
 /** Writes the certificate section into `report.html` (REQ-VER-15/AC7); the covered content stays the same. */
 async function stampReport(session: Pick<RunSession, "ws">, certificate: CertificateSummary): Promise<void> {
@@ -249,8 +298,9 @@ export async function certificateForPublish(
   io: CommandIO,
   now: () => Date,
   verdict: CertifiedVerdict,
+  fetchImpl?: typeof globalThis.fetch,
 ): Promise<string[]> {
-  const outcome = await issueCertificate(session, now, verdict);
+  const outcome = await issueCertificate(session, now, verdict, fetchImpl);
   if (outcome.status === "off") return [];
   if (outcome.status === "gaps") {
     if (session.project.config.certificate.required)
@@ -271,7 +321,11 @@ export async function certificateForPublish(
     return [`No certificate: the audit trail has ${String(outcome.gaps.length)} gap(s).`];
   }
   // The lines go into the comment, whose preview is printed; printing them here too repeated them.
-  return certificateLines(outcome.certificate);
+  return [
+    ...certificateLines(outcome.certificate),
+    ...(outcome.timestamp ? [outcome.timestamp] : []),
+    ...(outcome.archived ? [outcome.archived] : []),
+  ];
 }
 
 /**
@@ -293,7 +347,7 @@ export async function runCertify(
     // The reports are rendered by code from the run's files first, so a hand-edited report is never certified.
     const verdict = await computeVerdict(session, ports.now);
     await writeReports(session, verdict);
-    const outcome = await issueCertificate(session, ports.now, certifiedVerdict(verdict));
+    const outcome = await issueCertificate(session, ports.now, certifiedVerdict(verdict), ports.fetch);
     if (outcome.status === "off")
       throw new ConfigError(
         "CERTIFICATE_KEY_MISSING",
@@ -307,7 +361,7 @@ export async function runCertify(
       return 1;
     }
     io.write(
-      `${outcome.reused ? "The run's certificate is still valid" : "Issued"}: ${session.ws.path(...(CERTIFICATE_FILE.split("/") as [string, string]))}\n${certificateLines(outcome.certificate).join("\n")}\n`,
+      `${outcome.reused ? "The run's certificate is still valid" : "Issued"}: ${session.ws.path(...(CERTIFICATE_FILE.split("/") as [string, string]))}\n${[...certificateLines(outcome.certificate), ...(outcome.timestamp ? [outcome.timestamp] : []), ...(outcome.archived ? [outcome.archived] : [])].join("\n")}\n`,
     );
     return 0;
   } catch (error) {
@@ -364,7 +418,7 @@ export async function runKeygen(io: CommandIO, ports: RuntimePorts): Promise<num
 }
 
 /** A run folder or an audit export (zip) as run-relative files. */
-interface RunFiles {
+export interface RunFiles {
   readonly read: (path: string) => Uint8Array | undefined;
   readonly paths: readonly string[];
   /** Names an archive holds twice: what a tool unpacks may differ from what was checked. */
@@ -372,7 +426,7 @@ interface RunFiles {
   readonly archive: boolean;
 }
 
-async function openRunFiles(path: string): Promise<RunFiles> {
+export async function openRunFiles(path: string): Promise<RunFiles> {
   if ((await stat(path)).isDirectory()) {
     const files = new Map<string, Uint8Array>();
     const walk = async (dir: string, prefix: string): Promise<void> => {
@@ -405,6 +459,8 @@ function reportCheck(
     readonly grown: readonly { name: string; bytes: number }[];
     readonly problems: readonly string[];
     readonly keySource?: string | undefined;
+    /** Lines about the timestamp (REQ-VER-17). */
+    readonly notes?: readonly string[];
   },
 ): boolean {
   const failures = [
@@ -416,9 +472,12 @@ function reportCheck(
   ];
   const p = check.statement?.predicate;
   const what = p ? `${p.ticket} run ${p.runId}, issued ${p.issuedAt}` : "";
-  const grown = extra.grown.map(
-    (g) => `  ${g.name}: ${String(g.bytes)} byte(s) written after the certificate (not covered)\n`,
-  );
+  const grown = [
+    ...(extra.notes ?? []).map((n) => `  ${n}\n`),
+    ...extra.grown.map(
+      (g) => `  ${g.name}: ${String(g.bytes)} byte(s) written after the certificate (not covered)\n`,
+    ),
+  ];
   if (failures.length === 0) {
     io.write(
       `✔ Certificate ${check.id ?? ""} is valid: ${what}\n  ${String(check.statement?.subject.length ?? 0)} files unchanged, Merkle root ${p?.merkleRoot ?? ""}\n  signed with trusted key ${(check.keyId ?? "").slice(0, 16)}${extra.keySource ? ` (from ${extra.keySource})` : ""}\n${p?.decision === undefined ? "" : `  ${p.decision}\n`}${grown.join("")}`,
@@ -440,7 +499,7 @@ function reportCheck(
  */
 export async function runVerifyReport(
   path: string,
-  options: { readonly key?: readonly string[] | undefined },
+  options: { readonly key?: readonly string[] | undefined; readonly tsaCa?: readonly string[] | undefined },
   io: CommandIO,
   ports: RuntimePorts,
 ): Promise<number> {
@@ -499,7 +558,58 @@ export async function runVerifyReport(
         )
       : { added: [], grown: [] };
     const keySource = keys.find((k) => keyIdOf(k.key) === check.keyId)?.source;
-    return reportCheck(io, check, { ...coverage, problems, keySource }) ? 0 : 1;
+    // REQ-VER-17/AC3: a token present must check; a TSA nobody trusts is said, not hidden.
+    const notes: string[] = [];
+    const token = read(`${CERTIFICATE_DIR}/${TIMESTAMP_TOKEN}`);
+    if (token === undefined) notes.push("not timestamped");
+    else {
+      const tsaCas: X509Certificate[] = [];
+      for (const f of options.tsaCa ?? []) {
+        try {
+          tsaCas.push(new X509Certificate(await readFile(resolve(io.cwd, f))));
+        } catch {
+          throw new ConfigError("TSA_CA_INVALID", `${f} is not a certificate in PEM or DER.`, {});
+        }
+      }
+      if (project) tsaCas.push(...(await trustedTsaCertificates(project)));
+      const ts = checkTimestampToken(Buffer.from(token), payloadDigest(envelope), { trusted: tsaCas });
+      const issuedAt = check.statement ? Date.parse(check.statement.predicate.issuedAt) : Number.NaN;
+      const stampedAt = ts.genTime === undefined ? Number.NaN : Date.parse(ts.genTime);
+      if (!ts.ok) problems.push(...ts.problems.map((p) => `timestamp: ${p}`));
+      // A timestamp proves the certificate existed by then: one claiming a later issue time is dated falsely.
+      else if (stampedAt + 5 * 60_000 < issuedAt)
+        problems.push(
+          `timestamp: the certificate claims to be issued ${check.statement?.predicate.issuedAt ?? ""}, after its timestamp ${ts.genTime ?? ""}`,
+        );
+      else {
+        if (stampedAt - issuedAt > 24 * 3_600_000)
+          notes.push(
+            `stamped ${String(Math.round((stampedAt - issuedAt) / 3_600_000))} h after the certificate was issued: it proves the certificate existed by then, not earlier`,
+          );
+        notes.push(
+          `timestamped ${ts.genTime ?? ""} by ${ts.tsa ?? "a TSA"}${ts.trusted ? " (trusted TSA)" : "; the TSA is not trusted here (pass its CA with --tsa-ca)"}`,
+        );
+      }
+    }
+    // REQ-VER-19/AC3: where the certificate says the run is kept write-once, and what QAJitsu recorded about it.
+    const storage = check.statement?.predicate.storage;
+    if (storage) {
+      const record = read(`${CERTIFICATE_DIR}/archive.json`);
+      let status = "not archived yet";
+      try {
+        const r = record
+          ? (JSON.parse(new TextDecoder().decode(record)) as { status?: string; reason?: string })
+          : undefined;
+        if (r?.status === "archived") status = "archived";
+        else if (r?.status === "not_archived") status = `not archived: ${r.reason ?? ""}`;
+      } catch {
+        status = "archive record unreadable";
+      }
+      notes.push(
+        `kept write-once at ${storage.location} (${storage.mode}) until ${storage.retainUntil}; ${status}`,
+      );
+    }
+    return reportCheck(io, check, { ...coverage, problems, keySource, notes }) ? 0 : 1;
   } catch (error) {
     const code = error instanceof QajitsuError ? ` [${error.code}]` : "";
     io.writeError(`Error${code}: ${error instanceof Error ? error.message : String(error)}\n`);

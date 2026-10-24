@@ -29,6 +29,7 @@ export interface GitHubConfig {
 
 const PullSchema = z.object({
   number: z.number(),
+  user: z.object({ login: z.string() }).nullable().optional(),
   title: z.string(),
   html_url: z.string(),
   body: z.string().nullable().optional(),
@@ -131,6 +132,7 @@ export function createGitHubCodeHost(
     targetBranch: pr.base.ref,
     headSha: pr.head.sha,
     url: pr.html_url,
+    ...(pr.user?.login ? { author: pr.user.login } : {}),
     ...(matchedBy ? { matchedBy } : {}),
   });
 

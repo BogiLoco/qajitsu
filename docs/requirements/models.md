@@ -157,33 +157,35 @@ gateways know them; QAJitsu should ask instead of making the user copy them into
 
 ### REQ-LLM-11 · Cost per verified ticket
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: 2
 - Related: REQ-LLM-07, REQ-LLM-09, REQ-PLAN-16
-- Note: TO BE REVIEWED: the original said prices come only from configuration, never hard-coded; REQ-LLM-09 (accepted 2026-10-21) built in Claude prices with config overrides, so AC3 was adapted to that. Confirm.
+- Note: TO BE REVIEWED: the original said prices come only from configuration, never hard-coded; REQ-LLM-09 (accepted 2026-10-21) built in Claude prices with config overrides, so AC3 was adapted to that. Confirm. TO BE REVIEWED (2026-10-22): AC4's web console view moves to REQ-WEB-01, which does not exist yet; a verified ticket is a ticket with a GO or NO-GO decision (REQ-SCALE-10/AC1), and the cost per verified ticket counts every run, also those that decided nothing.
 
 **Acceptance criteria**
 
-- [ ] AC1: Tokens (input, cached input, output), model and cost are recorded per agent step and role.
-- [ ] AC2: Per run and per project: cost per verified ticket, cost per role, runner minutes per ticket and the share of steps done without a model.
-- [ ] AC3: A price declared in the project config (which wins over the built-in one, REQ-LLM-09/AC2) can carry the date it applies from; costs are computed with the price valid on the day of the call.
-- [ ] AC4: Trends over time are shown in `qj status`, `qj metrics` and the web console; numbers are computed from run records.
+- [x] AC1: Tokens (input, cached input, output), model and cost are recorded per agent step and role.
+- [x] AC2: Per run and per project: cost per verified ticket, cost per role, runner minutes per ticket and the share of steps done without a model.
+- [x] AC3: A price declared in the project config (which wins over the built-in one, REQ-LLM-09/AC2) can carry the date it applies from; costs are computed with the price valid on the day of the call.
+- [x] AC4: Trends over time are shown in `qj status` and `qj metrics` (in the web console with REQ-WEB-01); numbers are computed from run records.
 
 ### REQ-LLM-12 · Provider cost features: prompt caching and batches
 
-- Status: proposed
+- Status: in-progress
 - Priority: should
 - Stage: 3
 - Related: REQ-LLM-01, REQ-LLM-07, REQ-LLM-11, INV-11
 
+- Note: TO BE REVIEWED (2026-10-22): AC3 (provider batch APIs) is open; AI SDK 7 offers an experimental batch API (`experimental_startBatch`, `getBatchStatus`, `getBatchResults`) that fits audits queued across runs and benchmark preparation, not the dependent steps of one run. AC4 stops a call over its limit; reducing the context automatically is not done.
+
 **Acceptance criteria**
 
-- [ ] AC1: Prompts are laid out with a stable prefix (instructions, project rules, repository context) so provider prompt caching applies; cache hits are recorded.
-- [ ] AC2: The cache duration (short or long) is chosen per project from the observed rate of runs; the choice is recorded.
+- [x] AC1: Prompts are laid out with a stable prefix (instructions, project rules, repository context) so provider prompt caching applies; cache hits are recorded.
+- [x] AC2: The cache duration (short or long) is chosen per project from the observed rate of runs; the choice is recorded.
 - [ ] AC3: Work that is not time-critical (benchmarks, nightly regression analysis, queued audits, data preparation) can go through a provider batch API where there is one.
-- [ ] AC4: The input size of each call is counted before sending; a call that would exceed its step budget or a provider price tier boundary is reduced or stopped with a reason.
-- [ ] AC5: All of this lives in `packages/models` behind the provider interface (INV-11); other packages only ask for "cacheable" or "batchable" work.
+- [x] AC4: The input size of each call is counted before sending; a call that would exceed its step budget or a provider price tier boundary is reduced or stopped with a reason.
+- [x] AC5: All of this lives in `packages/models` behind the provider interface (INV-11); other packages only ask for "cacheable" or "batchable" work.
 
 ### REQ-LLM-13 · Model routing proposals from data
 
@@ -197,3 +199,23 @@ gateways know them; QAJitsu should ask instead of making the user copy them into
 - [ ] AC1: Periodically, recorded costs and benchmark results are compared per role and model (for example the healer on a smaller model with the same success rate).
 - [ ] AC2: A cheaper model for a role is proposed only if plan acceptance, coverage and mutation score on the frozen benchmark are not worse.
 - [ ] AC3: Proposals are shown with expected savings and the evidence; a person applies them; nothing changes `models.roles` automatically.
+
+### REQ-LLM-14 · Agent scorecard
+
+- Status: implemented
+- Priority: should
+- Stage: 7
+- Related: REQ-LLM-06, REQ-LLM-11, REQ-PLAN-16, REQ-NFR-11, REQ-VER-16, REQ-SKILL-04, INV-1, INV-6
+- Note: accepted by the owner on 2026-10-22. Deterministic first: every number comes from recorded data
+  (`journal/agents.jsonl`, the journal, gate and review records); an LLM judge is used only offline in benchmarks and
+  never affects a status or a reported number.
+
+How well each agent does its job, per role and model, from what every run already records.
+
+**Acceptance criteria**
+
+- [x] AC1: Per role and model, from the agent transcript and the journal: calls, tokens, cost, latency (p50, p95), repair rounds of invalid output, guard denials, and the share of calls that needed no repair.
+- [x] AC2: Role outcomes computed by code: the author's share of specs that passed the static checks and the quality gate on the first try, quality findings per rule, review send-backs (REQ-VER-24); the planner's coverage gaps and flagged expectations (REQ-PLAN-14); the healer's healed specs accepted by the assertion lock.
+- [x] AC3: `qj metrics` exports the scorecard (Prometheus and JSON) and `qj status` shows it per project; numbers are computed from run records, never estimated by a model.
+- [x] AC4: `qj bench` adds the scorecard of each model to its report, with ground truth from the demo shop (seeded bug found, plan covers the bug's criterion), and compares it with the previous result of the same model.
+- [x] AC5: Recorded agent answers from benchmark runs can be replayed as scripted models in tests, so changes to parsers and checks are tested against real model output without calling a model.

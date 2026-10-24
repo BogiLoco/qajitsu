@@ -1,9 +1,47 @@
 import type { ModelCapabilities } from "@qajitsu/core";
 
+/** USD per million tokens; cache reads and writes are charged as input when they have no price of their own. */
+export interface TokenPrice {
+  readonly input: number;
+  readonly output: number;
+  readonly cachedInput?: number | undefined;
+  readonly cacheWrite?: number | undefined;
+}
+
 /** A capability profile plus optional pricing (USD per million tokens) for cost estimates (REQ-LLM-07). */
 export interface ModelProfile extends ModelCapabilities {
-  readonly costPerMTok?: { readonly input: number; readonly output: number } | undefined;
+  readonly costPerMTok?: TokenPrice | undefined;
+  /** Prices with the day they apply from, oldest first (REQ-LLM-11/AC3). */
+  readonly datedPrices?: readonly (TokenPrice & { readonly from: string })[] | undefined;
+  /** Prompt size above which the provider charges a higher price (REQ-LLM-12/AC4). */
+  readonly priceTierTokens?: number | undefined;
 }
+
+/**
+ * The price of a model on a day (REQ-LLM-11/AC3): the latest dated price whose `from` is not after the day, else the
+ * profile's price.
+ *
+ * @param profile - The model's profile.
+ * @param day - The day of the call.
+ */
+export function priceOn(profile: ModelProfile, day: Date): TokenPrice | undefined {
+  const date = day.toISOString().slice(0, 10);
+  const dated = (profile.datedPrices ?? []).filter((p) => p.from <= date).at(-1);
+  return dated ?? profile.costPerMTok;
+}
+
+/** Converts a price from the project config to a {@link TokenPrice}. */
+const fromConfig = (p: {
+  readonly input: number;
+  readonly output: number;
+  readonly cached_input?: number | undefined;
+  readonly cache_write?: number | undefined;
+}): TokenPrice => ({
+  input: p.input,
+  output: p.output,
+  ...(p.cached_input === undefined ? {} : { cachedInput: p.cached_input }),
+  ...(p.cache_write === undefined ? {} : { cacheWrite: p.cache_write }),
+});
 
 /** Declared overrides from `models.providers.<alias>.models.<model>` in `.qa/qa.project.yaml`. */
 export interface CapabilityOverride {
@@ -13,7 +51,24 @@ export interface CapabilityOverride {
   readonly context_window?: number | undefined;
   /** Thinking mode sent to Ollama for reasoning models. */
   readonly think?: boolean | undefined;
-  readonly cost_per_mtok?: { readonly input: number; readonly output: number } | undefined;
+  readonly cost_per_mtok?:
+    | {
+        readonly input: number;
+        readonly output: number;
+        readonly cached_input?: number | undefined;
+        readonly cache_write?: number | undefined;
+      }
+    | undefined;
+  readonly price_tier_tokens?: number | undefined;
+  readonly prices?:
+    | readonly {
+        readonly from: string;
+        readonly input: number;
+        readonly output: number;
+        readonly cached_input?: number | undefined;
+        readonly cache_write?: number | undefined;
+      }[]
+    | undefined;
 }
 
 /** When the built-in context windows and prices were last checked against the providers' pages (REQ-LLM-09/AC2). */
@@ -114,7 +169,11 @@ const BUILT_IN: readonly {
   ...GOOGLE.map(([id, input, output, until]) => ({
     type: "google",
     match: exact(id),
-    profile: cloud(1_000_000, input, output),
+    // Pro models charge more above 200k prompt tokens (REQ-LLM-12/AC4); the price here is that higher tier.
+    profile: {
+      ...cloud(1_000_000, input, output),
+      ...(id.includes("-pro") ? { priceTierTokens: 200_000 } : {}),
+    },
     ...(until ? { priceUntil: until } : {}),
   })),
   { type: "anthropic", match: /^claude-(fable|mythos)-5-1\b/, profile: claude(1_000_000, 10, 50) },
@@ -183,6 +242,16 @@ export function modelProfile(
     structuredOutput: override.structured_output ?? base.structuredOutput,
     vision: override.vision ?? base.vision,
     contextWindow: override.context_window ?? base.contextWindow,
-    costPerMTok: override.cost_per_mtok ?? base.costPerMTok,
+    costPerMTok: override.cost_per_mtok ? fromConfig(override.cost_per_mtok) : base.costPerMTok,
+    ...((override.price_tier_tokens ?? base.priceTierTokens) === undefined
+      ? {}
+      : { priceTierTokens: override.price_tier_tokens ?? base.priceTierTokens }),
+    ...(override.prices && override.prices.length > 0
+      ? {
+          datedPrices: [...override.prices]
+            .sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0))
+            .map((p) => ({ from: p.from, ...fromConfig(p) })),
+        }
+      : {}),
   };
 }

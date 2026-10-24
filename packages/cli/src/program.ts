@@ -56,6 +56,12 @@ import { runAuditVerify } from "./commands/audit.js";
 import { runAuditExport, runAuditTrail } from "./commands/audit-trail.js";
 import { runCertify, runKeygen, runVerifyReport } from "./commands/certificate.js";
 import { runReviewSpec } from "./commands/spec-review.js";
+import { runFeedback } from "./commands/feedback.js";
+import { runWorkflowSync } from "./commands/ticket-approval.js";
+import { runWorkflowPoll, runWorkflowServe } from "./commands/pickup.js";
+import { runAuditTimestamp } from "./commands/timestamp.js";
+import { runAuditArchive } from "./commands/archive.js";
+import { runReproduce } from "./commands/reproduce.js";
 import { runTelemetryExport } from "./commands/telemetry.js";
 import { runMetrics } from "./commands/metrics.js";
 import { runExport } from "./commands/export.js";
@@ -606,6 +612,10 @@ export function createProgram(version: string, io: ProgramIO): Command {
       "--build",
       "start the environment and the app from the worktree to record their pages and first screen for the planner, then stop them",
     )
+    .option(
+      "--override-readiness <reason>",
+      "plan although the readiness gate did not find the ticket READY; the reason is recorded",
+    )
     .action(
       (
         ticket: string,
@@ -616,6 +626,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
           env?: string;
           snapshot?: boolean;
           build?: boolean;
+          overrideReadiness?: string;
         },
       ) => withPorts((ports) => runPlan(ticket, options, commandIO, ports, review))(),
     );
@@ -725,6 +736,53 @@ export function createProgram(version: string, io: ProgramIO): Command {
             : runRun(ticket, { ...runOptions, user: io.user }, commandIO, ports),
         )();
       },
+    );
+
+  program
+    .command("feedback")
+    .description(
+      "Record what a person found after a run: what a FAILED case really was, or a defect that escaped it",
+    )
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .option("--case <id>", "a FAILED case of the run")
+    .option("--is <kind>", "with --case: product-bug, test-bug, environment or data")
+    .option("--escaped <bug>", "a defect found later on this ticket, e.g. SHOP-512")
+    .option("--note <text>", "why (masked before it is stored)")
+    .action(
+      (
+        ticket: string,
+        options: { run?: string; case?: string; is?: string; escaped?: string; note?: string },
+      ) => withPorts((ports) => runFeedback(ticket, options, commandIO, ports, io.user ?? "unknown"))(),
+    );
+
+  const workflowCmd = program.command("workflow").description("The ticket's Jira workflow (REQ-FLOW)");
+  workflowCmd
+    .command("poll")
+    .description(
+      "Pick up the tickets waiting in the start status (pull mode; every workflow.pickup.interval_s)",
+    )
+    .option("--once", "poll once and stop")
+    .action((options: { once?: boolean }) =>
+      withPorts((ports) => runWorkflowPoll(options, commandIO, ports, review))(),
+    );
+  workflowCmd
+    .command("serve")
+    .description("Listen for Jira webhooks that start a ticket (push mode; needs workflow.pickup.secret)")
+    .option("--host <host>", "address to listen on (default: workflow.pickup.host, 127.0.0.1)")
+    .option("--port <port>", "port (default: workflow.pickup.port, 8787)")
+    .action((options: { host?: string; port?: string }) =>
+      withPorts((ports) => runWorkflowServe(options, commandIO, ports, review))(),
+    );
+  workflowCmd
+    .command("sync")
+    .description(
+      "Post the plan waiting for approval to the ticket, act on /qj approve, revise and reject comments from the approvers group, and remind when nobody answered",
+    )
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .action((ticket: string, options: { run?: string }) =>
+      withPorts((ports) => runWorkflowSync(ticket, options, commandIO, ports, review))(),
     );
 
   program
@@ -1025,9 +1083,47 @@ export function createProgram(version: string, io: ProgramIO): Command {
       withPorts((ports) => runCertify(ticket, options, commandIO, ports))(),
     );
   audit
+    .command("archive")
+    .description(
+      "Keep a certified run in the configured write-once storage (S3 Object Lock), e.g. after it was unreachable",
+    )
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .action((ticket: string, options: { run?: string }) =>
+      withPorts((ports) => runAuditArchive(ticket, options, commandIO, ports))(),
+    );
+  audit
+    .command("timestamp")
+    .description(
+      "Timestamp a run's certificate at the configured TSA (RFC 3161), e.g. after the TSA was unreachable",
+    )
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .action((ticket: string, options: { run?: string }) =>
+      withPorts((ports) => runAuditTimestamp(ticket, options, commandIO, ports))(),
+    );
+  audit
     .command("keygen")
     .description("Create an Ed25519 key for signing certificates; the public key goes to .qa/keys/")
     .action(() => withPorts((ports) => runKeygen(commandIO, ports))());
+
+  program
+    .command("reproduce")
+    .description(
+      "Run a certified run again without agents and compare every case (same, different, not reproducible)",
+    )
+    .argument("<path>", "certified run folder or audit export zip")
+    .option("--env <profile|url>", "environment to run against (default: environments.default)")
+    .option("--build", "build the application from the code at the certified commits")
+    .option(
+      "--key <file>",
+      "trusted public key (PEM); repeat for rotated keys",
+      (v: string, all: string[]) => [...all, v],
+      [] as string[],
+    )
+    .action((path: string, options: { env?: string; build?: boolean; key: string[] }) =>
+      withPorts((ports) => runReproduce(path, { ...options, user: io.user }, commandIO, ports))(),
+    );
 
   program
     .command("verify-report")
@@ -1039,7 +1135,13 @@ export function createProgram(version: string, io: ProgramIO): Command {
       (v: string, all: string[]) => [...all, v],
       [] as string[],
     )
-    .action(async (path: string, options: { key: string[] }) => {
+    .option(
+      "--tsa-ca <file>",
+      "trusted CA certificate of the time-stamping authority (PEM or DER); repeatable",
+      (v: string, all: string[]) => [...all, v],
+      [] as string[],
+    )
+    .action(async (path: string, options: { key: string[]; tsaCa: string[] }) => {
       if (!io.ports) return withPorts(() => Promise.resolve(3))();
       // Inside a project its .qa/keys are trusted too; outside one, only --key.
       const project = await resolveProject(qajitsuHome(io.ports.env, io.ports.home), {

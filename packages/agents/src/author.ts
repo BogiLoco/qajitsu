@@ -22,6 +22,8 @@ import { guardTools } from "./loop.js";
 import { openMcpTools } from "./mcp.js";
 import { renderTestsRepo } from "./tests-repo.js";
 import { modelExchange } from "./exchange.js";
+import { callUsage } from "./usage.js";
+import { prepareCall } from "./prepare-call.js";
 import { untrusted, UNTRUSTED_DATA_RULES, type ChangeContext } from "./context.js";
 import { modelForRole, stageGuard, type AgentStageDeps } from "./roles-run.js";
 import { AGENT_ROLES } from "./roles.js";
@@ -289,15 +291,17 @@ export async function runAuthor(
         },
       ];
       let problems: SpecProblem[] = [];
+      // Every problem of every rejected answer, for the agent scorecard (REQ-LLM-14/AC2).
+      const rejected: SpecProblem[] = [];
       let file: string | undefined;
       let attempts = 0;
       let askedAboutSelectors = false;
       for (let attempt = 1; attempt <= AUTHOR_MAX_ATTEMPTS; attempt += 1) {
         attempts += 1;
+        const startedAt = Date.now();
         const result = await generateText({
           model: model.model,
-          system: AUTHOR_SYSTEM,
-          messages,
+          ...prepareCall(model, AUTHOR_SYSTEM, messages),
           ...(tools ? { tools, stopWhen: stepCountIs(10) } : {}),
           ...(deps.signal ? { abortSignal: deps.signal } : {}),
           maxRetries: 2,
@@ -307,10 +311,7 @@ export async function runAuthor(
           "author",
           model.id,
           model.profile,
-          {
-            inputTokens: result.usage.inputTokens ?? 0,
-            outputTokens: result.usage.outputTokens ?? 0,
-          },
+          callUsage(result.usage, startedAt),
           modelExchange("author", "author", model, { system: AUTHOR_SYSTEM, messages }, result),
         );
         const code = extractCode(result.text);
@@ -318,6 +319,7 @@ export async function runAuthor(
           code === undefined
             ? [{ check: "lint", message: "answer contained no ```ts code block" }]
             : await checkSpec(code, planCase.id, plan, deps.specChecks);
+        rejected.push(...problems);
         // REQ-EXEC-22/AC3: selectors that match nothing recorded go back to the author once, with the closest ones;
         // the question does not use up an attempt, and the answer is accepted when it passes the checks.
         const ask = code !== undefined && problems.length === 0 && !askedAboutSelectors;
@@ -389,11 +391,20 @@ export async function runAuthor(
           },
         ];
       }
+      const findings: Record<string, number> = {};
+      const rules: Record<string, number> = {};
+      for (const p of rejected) {
+        findings[p.check] = (findings[p.check] ?? 0) + 1;
+        const rule = p.check === "quality" ? /^([a-z-]+):/.exec(p.message)?.[1] : undefined;
+        if (rule) rules[rule] = (rules[rule] ?? 0) + 1;
+      }
       deps.events.emit("author", actor, "case.end", {
         caseId: planCase.id,
         attempts,
         ok: file !== undefined,
         problems: problems.length,
+        // REQ-LLM-14/AC2: what the checks and the quality gate rejected, by check and by quality rule.
+        ...(rejected.length > 0 ? { findings, ...(Object.keys(rules).length > 0 ? { rules } : {}) } : {}),
       });
       out.push({ caseId: planCase.id, ...(file ? { file } : {}), attempts, problems: file ? [] : problems });
     }

@@ -1,0 +1,122 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`replay of recorded model answers (REQ-LLM-14/AC5) > REQ-LLM-14/AC5: gemma4:e2b's analysis and plan for DEMO-1, invalid answers and repairs included, go through the current checks 1`] = `
+"Project: demo (ticket prefix DEMO)
+Analysing the change…
+Readiness: READY · risk low
+  risk analyst: The cart endpoint might return an incorrect total (sum of unit price × quantity) if rounding or initial calculation is flawed.
+  risk analyst: Applying discount codes might result in incorrect total reduction when a single valid code is applied (percentage reduction).
+  risk analyst: The system may fail to correctly handle sequential discount codes, potentially allowing codes to stack instead of replacing the first one (AC3).
+  risk analyst: The system may fail to return an appropriate 404 error with the code DISCOUNT_NOT_FOUND when an unknown discount code is submitted, leaving the total unchanged (AC4).
+Writing the test plan…
+Plan v1: 4 case(s), 0 open question(s)
+<run>/plan/plan.v1.md
+"
+`;
+
+exports[`replay of recorded model answers (REQ-LLM-14/AC5) > REQ-LLM-14/AC5: gemma4:e2b's analysis and plan for DEMO-1, invalid answers and repairs included, go through the current checks 2`] = `
+"schema: 1
+ticket: DEMO-1
+version: 1
+summary: Test cases verifying cart total calculation, discount application rules, and error handling for discount codes.
+cases:
+  - id: TC-01
+    title: GET /cart returns total rounded once to 2 decimals (AC1)
+    type: api
+    priority: high
+    reproduces: false
+    source:
+      - kind: ac
+        id: AC1
+    preconditions:
+      - Cart contains multiple line items with prices and quantities.
+    data:
+      user: user:standard
+    steps:
+      - id: S1
+        action: GET /cart
+        expect:
+          description: The total returned is the sum of (unit price × quantity) for all lines, rounded once to 2 decimals.
+          status: 200
+          fields:
+            total: The calculated sum rounded to two decimal places
+    evidence:
+      - response
+  - id: TC-02
+    title: POST /cart/discount applies a single valid percentage discount (AC2)
+    type: api
+    priority: high
+    reproduces: false
+    source:
+      - kind: ac
+        id: AC2
+    preconditions:
+      - Cart total is calculated (e.g., $100.00). A valid discount code exists with a percentage.
+    data:
+      user: user:standard
+    steps:
+      - id: S1
+        action: POST /cart/discount
+        expect:
+          description: Total is reduced by the code's percentage.
+          status: 200
+          fields:
+            total: The cart total reflects the discount applied as a percentage reduction.
+    evidence:
+      - response
+  - id: TC-03
+    title: Applying a second valid code replaces the first (AC3)
+    type: api
+    priority: high
+    reproduces: false
+    source:
+      - kind: ac
+        id: AC3
+    preconditions:
+      - Cart contains items. A valid discount code (Code A) exists, and a second valid discount code (Code B) exists.
+    data:
+      user: user:standard
+    steps:
+      - id: S1
+        action: POST /cart/discount
+        expect:
+          description: Apply the first valid discount code (Code A).
+          status: 200
+      - id: S2
+        action: POST /cart/discount
+        expect:
+          description: Apply a second valid discount code (Code B), which must replace Code A. Codes must never stack.
+          status: 200
+          fields:
+            total: The final total reflects the reduction based on Code B applied to the original total, ignoring Code A.
+    evidence:
+      - response
+  - id: TC-04
+    title: Applying an unknown discount code returns 404 with DISCOUNT_NOT_FOUND (AC4)
+    type: api
+    priority: medium
+    reproduces: false
+    source:
+      - kind: ac
+        id: AC4
+    preconditions:
+      - Cart total is calculated. An invalid discount code is provided.
+    data:
+      user: user:standard
+    steps:
+      - id: S1
+        action: POST /cart/discount
+        expect:
+          description: Attempt to apply a discount code that does not exist.
+          status: 404
+          fields:
+            error_code: DISCOUNT_NOT_FOUND
+            total: The total remains unchanged from the state before this request.
+    evidence:
+      - response
+open_questions: []
+out_of_scope: []
+existing_coverage: []
+selection: []
+"
+`;

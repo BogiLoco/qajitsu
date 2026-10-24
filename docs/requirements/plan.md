@@ -211,21 +211,23 @@ person has to ask for a revision by hand. When the API description leaves no dou
 
 ### REQ-PLAN-13 · Ticket readiness gate
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: 2
 - Related: REQ-PLAN-05, REQ-CTX-01, REQ-FLOW-02
+
+- Note: TO BE REVIEWED (2026-10-22): an unknown environment is reported as a gap but does not stop planning: the plan does not need it and `qj run --env` names it later; asking the ticket's author would be the wrong person. AC2's move to "needs info" works with a `workflow` mapping (REQ-FLOW-02); AC6's automatic re-check runs through REQ-FLOW-01 (`qj workflow poll` or `serve`).
 
 Before planning, code and the planner check that the ticket can be tested at all.
 
 **Acceptance criteria**
 
-- [ ] AC1: Checks: acceptance criteria present, scope understandable, linked change found (when code access is not `none`), target environment known.
-- [ ] AC2: A ticket that fails the gate gets a list of concrete questions instead of a plan; in the Jira workflow it moves to the configured "needs info" status (REQ-FLOW-02).
-- [ ] AC3: The person can override the gate explicitly; the override is recorded in `run.json`.
-- [ ] AC4: The result is READY, NEEDS_CLARIFICATION or NOT_TESTABLE, with a risk level (low, medium, high) and a list of requirement gaps, posted to the ticket as a structured comment.
-- [ ] AC5: The risk level is computed by rules from the change (paths, components, migrations, security-relevant areas) where code access allows; the agent may add reasons but cannot lower a computed level.
-- [ ] AC6: A ticket answered after NEEDS_CLARIFICATION is checked again automatically when it returns to the start status.
+- [x] AC1: Checks: acceptance criteria present, scope understandable, linked change found (when code access is not `none`), target environment known.
+- [x] AC2: A ticket that fails the gate gets a list of concrete questions instead of a plan; in the Jira workflow it moves to the configured "needs info" status (REQ-FLOW-02).
+- [x] AC3: The person can override the gate explicitly; the override is recorded in `run.json`.
+- [x] AC4: The result is READY, NEEDS_CLARIFICATION or NOT_TESTABLE, with a risk level (low, medium, high) and a list of requirement gaps, posted to the ticket as a structured comment.
+- [x] AC5: The risk level is computed by rules from the change (paths, components, migrations, security-relevant areas) where code access allows; the agent may add reasons but cannot lower a computed level.
+- [x] AC6: A ticket answered after NEEDS_CLARIFICATION is checked again automatically when it returns to the start status.
 
 ### REQ-PLAN-14 · Coverage matrix computed by code
 
@@ -262,14 +264,55 @@ Each human correction makes the next plan better.
 
 ### REQ-PLAN-16 · Plan quality metrics
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: 7
 - Related: REQ-PLAN-04, REQ-LLM-07, REQ-OBS-04, INV-6
 
 **Acceptance criteria**
 
-- [ ] AC1: Per project: share of plans approved without changes, average number of revision rounds, share of tickets stopped by the readiness gate (REQ-PLAN-13).
-- [ ] AC2: Defects reported later on a ticket marked as passed can be linked to the run (escaped defects).
-- [ ] AC3: The metrics are shown in `qj status`, `qj metrics` and the web console; numbers are computed from run records.
-- [ ] AC4: Per project also: false FAILED (FAILED cases later triaged as a test or environment problem), auditor downgrades of PASSED, and escaped defects (AC2), so a team sees whether tests check enough.
+- [x] AC1: Per project: share of plans approved without changes, average number of revision rounds, share of tickets stopped by the readiness gate (REQ-PLAN-13).
+- [x] AC2: Defects reported later on a ticket marked as passed can be linked to the run (escaped defects).
+- [x] AC3: The metrics are shown in `qj status` and `qj metrics` (in the web console with REQ-WEB-01); numbers are computed from run records.
+- [x] AC4: Per project also: false FAILED (FAILED cases later triaged as a test or environment problem), auditor downgrades of PASSED, and escaped defects (AC2), so a team sees whether tests check enough.
+
+### REQ-PLAN-17 · Test cases from recorded steps
+
+- Status: accepted
+- Priority: should
+- Stage: later
+- Related: REQ-PLAN-03, REQ-PLAN-11, REQ-CTX-08, REQ-EXEC-21, REQ-PUB-08, INV-3, INV-4, INV-8
+
+A tester clicks through a scenario once in a browser or on a device; QAJitsu turns the recording into a plan case and an
+automated test, so known flows need no writing from scratch.
+
+**Acceptance criteria**
+
+- [ ] AC1: `qj record <TICKET> [--env <profile>] [--web | --android | --ios]` opens a browser or the device with the environment and records every action (navigation, clicks, typing, selections, gestures, uploads) with a screenshot, the element's stable selectors (REQ-EXEC-21) and the network calls it caused.
+- [ ] AC2: The person marks checks while recording ("this text must be visible", "this field equals", "this request returns 201"); expectations come only from these marks or from values the person confirms afterwards, never invented by an agent.
+- [ ] AC3: Typed values are masked as they are recorded: a field of type password, a value equal to a known secret, or one the person marks as secret becomes a `secret://` reference or a test account alias; nothing unmasked is stored.
+- [ ] AC4: Code turns the recording into a plan case (steps, expectations, data, source `recording:<id>`); an agent may only name and group the steps and propose missing checks, each shown as a proposal for the person to accept.
+- [ ] AC5: The recorded case goes through the normal review and approval of a plan version (frozen with its hash); a recording never runs as an approved case by itself.
+- [ ] AC6: From the approved case the author writes the spec with the recorded selectors; the recording, screenshots and network calls are kept as evidence of how the case was made.
+- [ ] AC7: A recording made against hosts outside the environment allowlist, or with an action QAJitsu cannot replay, is refused or marked with the step it cannot replay.
+- [ ] AC8: An approved recorded case can become an automated test in the team's tests repository (Playwright, Appium or Maestro, REQ-EXEC-52) through `qj promote` (REQ-PUB-08), after it passed a run; it then runs in `qj regression` without models.
+- [ ] AC9: Besides `qj record`, recordings can be imported: Playwright codegen scripts, Chrome DevTools Recorder exports and HAR files of API calls, treated as untrusted input and converted by code the same way.
+- [ ] AC10: Recording works for web, Android and iOS (taps, typing, gestures from the device), with the same masking and review.
+
+### REQ-PLAN-18 · Mapping existing automated tests to cases and requirements
+
+- Status: accepted
+- Priority: should
+- Stage: later
+- Related: REQ-PLAN-14, REQ-PLAN-17, REQ-CTX-08, REQ-PUB-08, REQ-EXEC-52
+
+Teams that already have automated tests (Playwright, Cypress, Selenium, Appium, Maestro, REST Assured, Postman) want them
+linked to tickets and acceptance criteria instead of written again.
+
+**Acceptance criteria**
+
+- [ ] AC1: QAJitsu reads the tests of the tests repository and builds a map: test file and title, the steps and assertions found by code, the pages, screens or endpoints they touch.
+- [ ] AC2: The planner proposes for each acceptance criterion of a ticket the existing tests that cover it, each link citing the test file and the assertion; links are checked by code against the real files and titles, and a person accepts them.
+- [ ] AC3: Accepted links appear in the coverage matrix (REQ-PLAN-14) as "covered by an existing test", with the test's last known result; a criterion covered only by a test that is not run in this run stays an open gap.
+- [ ] AC4: An existing test can be added to a run as a regression case, executed by its own runner with its own verdict; QAJitsu never rewrites its assertions.
+- [ ] AC5: A recording (REQ-PLAN-17) can be compared with existing tests: when one already covers the same flow, QAJitsu says so before a new case is created.
