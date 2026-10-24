@@ -133,7 +133,8 @@ describe("mobile cases in qj run (REQ-EXEC-06, REQ-EVD-03, REQ-ENV-06)", () => {
     const good = await read("fixtures/specs/demo-6/TC-01.spec.ts");
     await writeFile(
       join(dir, "specs", "TC-01.spec.ts"),
-      good.replace('await ui.click("testid:open-checkout");', 'await ui.waitFor("text:Go to checkout");'),
+      // A selector that is not on the screen: the healer may fix selectors only (INV-4), so it puts the right one back.
+      good.replace('await ui.click("testid:open-checkout");', 'await ui.click("text:Go to checkout");'),
     );
     const result = await run(["run", "DEMO-6", "--build"], [{ text: "```ts\n" + good + "```" }]);
     const prompt = promptOf(result.model, 0);

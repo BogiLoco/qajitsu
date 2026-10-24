@@ -755,5 +755,24 @@ export function assertionLockDiff(before: string, after: string): SpecProblem[] 
       check: "assertion-lock",
       message: "try/catch was added; failures must not be swallowed",
     });
+  // INV-4: what the spec does (actions with their data) and how it flows stay; only selectors and waits may change.
+  if (!same(a.actions, b.actions))
+    problems.push({
+      check: "assertion-lock",
+      message: `actions changed beyond their selectors: ${diffLine(a.actions, b.actions)}`,
+    });
+  if (!same(a.flow, b.flow))
+    problems.push({
+      check: "assertion-lock",
+      message:
+        "control flow changed (conditions, loops, returns); the healer may change selectors and waits only",
+    });
   return problems;
 }
+
+/** The first difference of two action lists, for the message. */
+const diffLine = (a: readonly string[], b: readonly string[]): string => {
+  const i = a.findIndex((v, j) => v !== b[j]);
+  const at = i < 0 ? Math.min(a.length, b.length) : i;
+  return `${a[at] ?? "(none)"} → ${b[at] ?? "(none)"}`;
+};

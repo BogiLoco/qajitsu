@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { PlanSchema } from "@qajitsu/core";
 import { describe, expect, it } from "vitest";
 import { plannedFields } from "./expectations.js";
-import { checkSpecSource } from "./spec-checks.js";
+import { assertionLockDiff, checkSpecSource } from "./spec-checks.js";
 
 const fixturePlan = (ticket: string) =>
   PlanSchema.parse({
@@ -139,5 +139,32 @@ export async function run({ step, verify, plan, ui }: CaseContext): Promise<void
       "lint: ui.scrollBy() is not available in native apps yet: it works in web cases",
       "lint: ui.switchToNewPage() is not available in native apps yet: it works in web cases",
     ]);
+  });
+
+  it("REQ-EXEC-09: the healer may change the selectors of web actions and add scrolling into view, never their files or offsets", () => {
+    const before = fixtureSpec("DEMO-9", "TC-01");
+    expect(
+      assertionLockDiff(
+        before,
+        before.replace(
+          '"testid:card-1", "testid:col-done"',
+          '"role:listitem:Write tests", "role:region:Done"',
+        ),
+      ),
+    ).toEqual([]);
+    expect(
+      assertionLockDiff(
+        before,
+        before.replace("await ui.dragTo(", 'await ui.scrollTo("testid:card-1");\n    await ui.dragTo('),
+      ),
+    ).toEqual([]);
+    const upload = fixtureSpec("DEMO-7", "TC-01");
+    expect(assertionLockDiff(upload, upload.replace('"avatar"', '"big"'))).not.toEqual([]);
+    expect(
+      assertionLockDiff(
+        before,
+        before.replace("await ui.dragTo(", 'await ui.hover("testid:card-1");\n    await ui.dragTo('),
+      ),
+    ).not.toEqual([]);
   });
 });
