@@ -3,7 +3,7 @@ import { PlanSchema } from "@qajitsu/core";
 import { describe, expect, it } from "vitest";
 import { createMasker } from "./masking.js";
 import { createCaseRuntime, createPlanAccessor, type CaseRuntimeOptions } from "./runtime.js";
-import { assertSelector, splitFrames } from "./ui.js";
+import { assertSelector, selectorParts, splitFrames } from "./ui.js";
 import type { UiDriver, UiFile } from "./ui.js";
 import { csvRows, generateFile, isTextType, mimeOf } from "./web-files.js";
 
@@ -468,8 +468,42 @@ describe("files of web cases (REQ-EXEC-38)", () => {
     });
     expect(splitFrames("testid:a")).toEqual({ frames: [], element: "testid:a" });
     expect(() => assertSelector("frame:role:x >> testid:a")).toThrow("Invalid selector");
-    expect(() => assertSelector("testid:a >> testid:b")).toThrow("Invalid selector");
-    expect(() => assertSelector(`${"frame:css:f >> ".repeat(6)}testid:a`)).toThrow("Invalid selector");
+    // REQ-EXEC-64: an element inside an element is a chain now.
+    expect(assertSelector("testid:a >> testid:b")).toBe("testid:a >> testid:b");
+    expect(() => assertSelector(`${"frame:css:f >> ".repeat(8)}testid:a`)).toThrow("Invalid selector");
     expect(() => assertSelector("frame:title:Pay >> ")).toThrow("Invalid selector");
+  });
+
+  it("REQ-EXEC-64/AC1+AC2+AC3: chains of elements and filters are parsed and validated; several matches say how to narrow", async () => {
+    expect(
+      selectorParts("frame:title:Pay >> role:row >> has-text:Anna Smith >> role:button:Delete >> nth:2"),
+    ).toEqual([
+      { kind: "frame", selector: "title:Pay" },
+      { kind: "element", selector: "role:row" },
+      { kind: "hasText", text: "Anna Smith" },
+      { kind: "element", selector: "role:button:Delete" },
+      { kind: "nth", n: 2 },
+    ]);
+    expect(assertSelector("testid:card >> nth:2")).toBe("testid:card >> nth:2");
+    for (const bad of [
+      "has-text:Anna",
+      "nth:2",
+      "frame:title:Pay >> nth:1",
+      "testid:a >> nth:0",
+      "testid:a >> frame:title:x",
+      `${"testid:a >> ".repeat(8)}testid:b`,
+    ])
+      expect(() => assertSelector(bad), bad).toThrow("Invalid selector");
+    const { driver } = fakeDriver({
+      click: () =>
+        Promise.reject(
+          new Error("strict mode violation: getByRole('button', { name: 'Delete' }) resolved to 3 elements"),
+        ),
+    });
+    const rt = runtimeFor(planWith({ expect: { description: "d" } }), driver);
+    rt.beginStep("S1");
+    await expect(rt.uiOp({ op: "click", selector: "role:button:Delete" })).rejects.toThrow(
+      "the selector matches 3 elements: narrow it with ' >> has-text:<text>', ' >> nth:<n>' or a parent element first",
+    );
   });
 });

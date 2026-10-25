@@ -333,6 +333,13 @@ export function checkSpecSource(
             `'${first.text}' cannot be found in a native app: use testid:, label:, text:, id: or xpath:`,
             node,
           );
+        // REQ-EXEC-64/AC4: a native app's driver does not resolve chains yet.
+        if (UI_ACTIONS.has(name) && first && ts.isStringLiteral(first) && first.text.includes(" >> "))
+          add(
+            "lint",
+            `'${first.text}' is a selector chain, which native apps do not support yet: use one selector`,
+            node,
+          );
         // REQ-EXEC-21/AC6: XPath follows the screen's structure and breaks with it.
         if (UI_ACTIONS.has(name) && first && ts.isStringLiteral(first) && first.text.startsWith("xpath:"))
           add("review", `XPath selector '${first.text}' is brittle; prefer testid:, label: or text:`, node);

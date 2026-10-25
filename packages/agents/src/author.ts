@@ -106,7 +106,9 @@ Rules (checked by code; a violating spec is rejected):
   verify("<step id>", "download.<name|type|size|sha256|rows|texts.<n>|fields.<key>>", undefined, plan.expect(...))
   in the same step; ui.switchToNewPage() after the action that opened a pop-up or tab, ui.switchToOpener() and
   ui.closePage() to go back. Elements inside iframes: "frame:<selector of the iframe> >> <selector>", for example
-  "frame:title:Payment >> testid:iban-field". A step whose expect has "state" reads the application's test hook:
+  "frame:title:Payment >> testid:iban-field". When a selector matches several elements, narrow it with a chain:
+  "role:row >> has-text:Anna Smith >> role:button:Delete" or "testid:card >> nth:2" (1 is the first).
+  A step whose expect has "state" reads the application's test hook:
   verify("<step id>", "state.<path>", undefined, plan.expect("<case>.<step>.state.<path>")). These are web only.
 - Selectors, the most stable first: testid:<id> (the project's test id; in a native app the accessibility id, on
   Android also the resource id), role:<role>:<accessible name>, label:<text>, placeholder:<text>, alt:<text>,

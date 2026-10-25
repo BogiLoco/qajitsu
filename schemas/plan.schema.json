@@ -431,8 +431,7 @@
                     "elements": {
                       "type": "object",
                       "propertyNames": {
-                        "type": "string",
-                        "pattern": "^(frame:(testid|title|id|css):[^.>]+ >> )*(testid|role|label|text|css):[^.]+$"
+                        "type": "string"
                       },
                       "additionalProperties": {
                         "type": "object",

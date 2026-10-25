@@ -362,4 +362,20 @@ describe("web actions (REQ-EXEC-38, REQ-EXEC-39, REQ-EXEC-40, REQ-EXEC-56)", () 
       await closeBare();
     }
   });
+
+  it("REQ-EXEC-64/AC1+AC2: a repeated button is reached through its row; nth picks a match; without narrowing the page says how many", async () => {
+    const r = await attempt("DEMO-10", "TC-04");
+    expect(r.record.error).toBeUndefined();
+    expect(r.status).toBe("PASSED");
+    const d = await driverOn();
+    await d.goto(
+      html(`<table><tr><td>Anna</td><td><button onclick="o.textContent='Anna'">Delete</button></td></tr>
+<tr><td>Bob</td><td><button onclick="o.textContent='Bob'">Delete</button></td></tr></table><span id="o" data-testid="o"></span>`),
+    );
+    await expect(d.click("role:button:Delete")).rejects.toThrow("resolved to 2 elements");
+    await d.click("role:row >> has-text:Bob >> role:button:Delete");
+    expect(await d.property("testid:o", "text")).toBe("Bob");
+    await d.click("role:button:Delete >> nth:1");
+    expect(await d.property("testid:o", "text")).toBe("Anna");
+  });
 });

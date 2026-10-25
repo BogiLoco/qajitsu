@@ -8,7 +8,7 @@ import {
   createMasker,
   DEFAULT_SENSITIVE_HEADERS,
   MASK,
-  splitFrames,
+  selectorParts,
   type EvidenceItem,
   type UiDriver,
   type UiProperty,
@@ -120,15 +120,25 @@ async function pageElements(page: Page, testIdAttribute: string): Promise<UiElem
  *   `id:<dom id>` or `css:<selector>` (REQ-EXEC-21/AC3).
  */
 export function locate(page: Page, selector: string): Locator {
-  // REQ-EXEC-39/AC1: `frame:<selector> >> ... >> <selector>` finds the element inside (nested) iframes.
-  const { frames, element } = splitFrames(selector);
-  let root: Page | FrameLocator = page;
-  for (const frame of frames) root = locateIn(root, frame).first().contentFrame();
-  return locateIn(root, element);
+  // REQ-EXEC-39 + REQ-EXEC-64: frames, elements inside elements, and the filters has-text: and nth:.
+  let root: Page | FrameLocator | Locator = page;
+  let current: Locator | undefined;
+  for (const part of selectorParts(selector)) {
+    if (part.kind === "frame") {
+      root = locateIn(current ?? root, part.selector)
+        .first()
+        .contentFrame();
+      current = undefined;
+    } else if (part.kind === "element") current = locateIn(current ?? root, part.selector);
+    else if (current && part.kind === "hasText") current = current.filter({ hasText: part.text });
+    else if (current && part.kind === "nth") current = current.nth(part.n - 1);
+  }
+  if (!current) throw new Error(`Selector '${selector.slice(0, 60)}' names no element`);
+  return current;
 }
 
-/** A locator of one selector (no frames) in a page or a frame. */
-function locateIn(page: Page | FrameLocator, selector: string): Locator {
+/** A locator of one selector (no chain) in a page, a frame or inside another element. */
+function locateIn(page: Page | FrameLocator | Locator, selector: string): Locator {
   const i = selector.indexOf(":");
   const kind = selector.slice(0, i);
   const rest = selector.slice(i + 1);

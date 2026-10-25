@@ -54,7 +54,9 @@ Rules:
   label:<label text>, placeholder:<text>, alt:<text>, title:<text>, text:<visible text>, id:<id>; never a made-up
   name and without dots. Use test ids found in the code for the case's platform; without them, use the roles, labels
   and texts the recorded pages show. Properties: visible, enabled, checked, in_viewport (booleans), text, value
-  (exact strings). An element inside an iframe: "frame:title:Payment >> testid:iban-field".
+  (exact strings). An element inside an iframe: "frame:title:Payment >> testid:iban-field". An element that
+  repeats (a button per row) is narrowed with a chain: "role:row >> has-text:Anna Smith >> role:button:Delete" or
+  "testid:card >> nth:2" (web only).
 - A web case that uploads files lists them in the case: "files": {"avatar": {"fixture": "images/avatar.png"}} (a file
   of the project's .qa/fixtures/) or {"big": {"name": "big.pdf", "type": "application/pdf", "bytes": 3000000}}
   (generated). A step that downloads a file expects it: "download": {"name": "orders.csv", "type": "csv", "rows": 3,

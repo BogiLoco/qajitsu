@@ -571,6 +571,13 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     } catch (error) {
       if (driver && (await unaddressable(driver)))
         throw new Error(`${describeError(error)}; ${NO_ELEMENTS}`, { cause: error });
+      // REQ-EXEC-64/AC3: a selector that matches several elements says how many and how to narrow it.
+      const many = /resolved to (\d+) elements/.exec(describeError(error));
+      if (many)
+        throw new Error(
+          `${describeError(error)}; the selector matches ${many[1] ?? "several"} elements: narrow it with ' >> has-text:<text>', ' >> nth:<n>' or a parent element first (role:row >> ...)`,
+          { cause: error },
+        );
       // REQ-EXEC-56/AC1: say why an element cannot be reached when the page explains it.
       const reason = driver ? await driver.unreachableReason?.().catch(() => undefined) : undefined;
       if (reason !== undefined) throw new Error(`${describeError(error)}; ${reason}`, { cause: error });

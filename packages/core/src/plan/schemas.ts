@@ -118,12 +118,22 @@ const ElementStateSchema = z.strictObject({
  * An element selector of an expectation: `testid:`, `role:`, `label:`, `text:` or `css:`, optionally inside frames
  * (`frame:<selector> >> testid:pay`, REQ-EXEC-39/AC1); no dots, they separate the property in `verify()` fields.
  */
-const ElementKeySchema = z
-  .string()
-  .regex(
-    /^(frame:(testid|title|id|css):[^.>]+ >> )*(testid|role|label|text|css):[^.]+$/,
-    "Selector like testid:place-order or frame:title:Payment >> testid:pay (no dots)",
+const ElementKeySchema = z.string().refine((key) => {
+  const parts = key.split(" >> ");
+  const last = parts.at(-1) ?? "";
+  return (
+    !key.includes(".") &&
+    parts.length <= 8 &&
+    /^(testid|role|label|text|css):.+$|^has-text:.+$|^nth:[1-9]\d{0,2}$/.test(last) &&
+    parts
+      .slice(0, -1)
+      .every((p) =>
+        /^(frame:(testid|title|id|css):.+|(testid|role|label|text|css|has-text):.+|nth:[1-9]\d{0,2})$/.test(
+          p,
+        ),
+      )
   );
+}, "Selector like testid:place-order, frame:title:Payment >> testid:pay or role:row >> has-text:Anna >> role:button:Delete (no dots)");
 
 /** What a downloaded file must be (REQ-EXEC-38/AC2); every given part is checked by code. */
 const DownloadExpectationSchema = z.strictObject({

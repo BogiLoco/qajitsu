@@ -205,17 +205,55 @@ export function splitFrames(selector: UiSelector): {
   return { frames: parts.slice(0, -1).map((p) => p.slice("frame:".length)), element: parts.at(-1) ?? "" };
 }
 
+/** One part of a selector chain (REQ-EXEC-39, REQ-EXEC-64). */
+export type SelectorPart =
+  | { readonly kind: "frame"; readonly selector: string }
+  | { readonly kind: "element"; readonly selector: string }
+  | { readonly kind: "hasText"; readonly text: string }
+  | { readonly kind: "nth"; readonly n: number };
+
+const HAS_TEXT = /^has-text:(.+)$/;
+const NTH = /^nth:([1-9]\d{0,2})$/;
+
 /**
- * Validates a selector string: a known kind, optionally inside frames (`frame:<selector> >> ...`, at most 5).
+ * The parts of a selector chain: `frame:<selector>` enters an iframe, an element selector searches inside what the
+ * previous part found, `has-text:<text>` keeps the matches containing that text and `nth:<n>` the n-th match
+ * (1 is the first). For example `role:row >> has-text:Anna Smith >> role:button:Delete`.
+ */
+export function selectorParts(selector: UiSelector): readonly SelectorPart[] {
+  return selector.split(" >> ").map((p): SelectorPart => {
+    if (FRAME.test(p)) return { kind: "frame", selector: p.slice("frame:".length) };
+    const t = HAS_TEXT.exec(p);
+    if (t) return { kind: "hasText", text: t[1] ?? "" };
+    const n = NTH.exec(p);
+    if (n) return { kind: "nth", n: Number(n[1]) };
+    return { kind: "element", selector: p };
+  });
+}
+
+/**
+ * Validates a selector: a known kind, optionally a chain (` >> `) of frames, elements inside elements, and the filters
+ * `has-text:` and `nth:` after an element (REQ-EXEC-39, REQ-EXEC-64); at most 8 parts and 300 characters.
  *
- * @throws {Error} For anything that is not a known selector kind.
+ * @throws {Error} For anything that is not a known selector kind or a valid chain.
  */
 export function assertSelector(selector: string): UiSelector {
-  const parts = selector.split(" >> ");
-  const framesOk = parts.length <= 6 && parts.slice(0, -1).every((p) => FRAME.test(p));
-  if (!framesOk || !SELECTOR.test(parts.at(-1) ?? "") || selector.length > 300)
+  const raw = selector.split(" >> ");
+  const parts = selectorParts(selector);
+  const ok =
+    selector.length <= 300 &&
+    raw.length <= 8 &&
+    parts.every((p, i) => {
+      if (p.kind === "element") return SELECTOR.test(raw[i] ?? "");
+      if (p.kind === "frame") return i < parts.length - 1;
+      // A filter narrows the element right before it (or before another filter).
+      const before = parts[i - 1];
+      return before !== undefined && before.kind !== "frame";
+    }) &&
+    parts.at(-1)?.kind !== "frame";
+  if (!ok)
     throw new Error(
-      `Invalid selector '${selector.slice(0, 60)}': use ${SELECTOR_KINDS.map((k) => `${k}:`).join(", ")}`,
+      `Invalid selector '${selector.slice(0, 60)}': use ${SELECTOR_KINDS.map((k) => `${k}:`).join(", ")}, chained with ' >> ' (frame:, has-text:, nth:)`,
     );
   return selector;
 }

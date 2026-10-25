@@ -993,7 +993,7 @@ Chats, shared documents, approvals and auctions need two people at once.
 
 ### REQ-EXEC-64 · Selectors narrowed by context
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: later
 - Related: REQ-EXEC-21, REQ-EXEC-39, REQ-EXEC-09, INV-4
@@ -1003,10 +1003,10 @@ elements cannot be acted on, so the case was BLOCKED although the page was fine.
 
 **Acceptance criteria**
 
-- [ ] AC1: A selector can be a chain of parts separated by `>>`: each part searches inside what the previous one found (`role:row >> role:button:Delete`); frames keep their place in the chain (REQ-EXEC-39).
-- [ ] AC2: A part `has-text:<text>` keeps only what contains that text, and `nth:<n>` keeps the n-th match (1 is the first): `role:row >> has-text:Anna Smith >> role:button:Delete`, `testid:product-card >> nth:2`.
-- [ ] AC3: Plans, static checks, the author's and planner's prompts and the healer know the chain; a chain that still matches several elements names how many it found and how to narrow it.
-- [ ] AC4: Native apps refuse chains until their driver supports them, before anything runs.
+- [x] AC1: A selector can be a chain of parts separated by `>>`: each part searches inside what the previous one found (`role:row >> role:button:Delete`); frames keep their place in the chain (REQ-EXEC-39).
+- [x] AC2: A part `has-text:<text>` keeps only what contains that text, and `nth:<n>` keeps the n-th match (1 is the first): `role:row >> has-text:Anna Smith >> role:button:Delete`, `testid:product-card >> nth:2`.
+- [x] AC3: Plans, static checks, the author's and planner's prompts and the healer know the chain; a chain that still matches several elements names how many it found and how to narrow it.
+- [x] AC4: Native apps refuse chains until their driver supports them, before anything runs.
 
 ### REQ-EXEC-65 · Service workers, offline mode and installable web apps
 

@@ -100,7 +100,7 @@ describe("static checks of web actions (REQ-EXEC-38..40, REQ-EXEC-56, ADR-0013)"
     ).toEqual([]);
   });
 
-  it("REQ-EXEC-38..40: web actions are refused in a native app until its driver offers them", () => {
+  it("REQ-EXEC-38..40 + REQ-EXEC-64/AC4: web actions and selector chains are refused in a native app until its driver offers them", () => {
     const plan = PlanSchema.parse({
       schema: 1,
       ticket: "DEMO-6",
@@ -130,6 +130,7 @@ export async function run({ step, verify, plan, ui }: CaseContext): Promise<void
     await ui.hover("testid:a");
     await ui.scrollBy(0, 100);
     await ui.switchToNewPage();
+    await ui.click("testid:list >> testid:a");
     verify("S1", "elements.testid:a.visible", undefined, plan.expect("TC-01.S1.elements.testid:a.visible"));
   });
 }
@@ -138,6 +139,7 @@ export async function run({ step, verify, plan, ui }: CaseContext): Promise<void
       "lint: ui.hover() is not available in native apps yet: it works in web cases",
       "lint: ui.scrollBy() is not available in native apps yet: it works in web cases",
       "lint: ui.switchToNewPage() is not available in native apps yet: it works in web cases",
+      "lint: 'testid:list >> testid:a' is a selector chain, which native apps do not support yet: use one selector",
     ]);
   });
 
