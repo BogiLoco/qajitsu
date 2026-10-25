@@ -1,4 +1,4 @@
-import { mobileDevices, webCombinations, type ProjectConfig } from "@qajitsu/core";
+import { browserEngine, mobileDevices, webCombinations, type ProjectConfig } from "@qajitsu/core";
 import type { ToolchainFile } from "./config.js";
 import { ANDROID_DEFAULTS, type ToolId } from "./manifest.js";
 
@@ -41,7 +41,10 @@ export interface ToolchainNeeds {
 export function toolchainNeeds(config: ProjectConfig, versions: ToolchainFile["versions"]): ToolchainNeeds {
   const tools = new Map<ToolId, string>();
   const browsers = config.test_types.includes("web")
-    ? [...new Set(webCombinations(config.web).map((c) => c.browser))].sort()
+    ? // Browsers only a device farm has (safari, chrome@118) are never installed here (REQ-EXEC-66/AC4).
+      [...new Set(webCombinations(config.web).map((c) => c.browser))]
+        .filter((b) => browserEngine(b) !== undefined)
+        .sort()
     : [];
   if (browsers.length > 0) tools.set("browsers", "web tests");
   if (Object.values(config.services).some((s) => s.kind !== "process"))

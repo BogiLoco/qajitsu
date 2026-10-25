@@ -235,6 +235,38 @@ describe("the setup plan (REQ-GEN-06/AC1, AC2, AC4, AC5)", () => {
     expect(Object.values(p).every((s) => s.licence.length > 0)).toBe(true);
   });
 
+  it("REQ-EXEC-66/AC2+AC4: branded channels of the matrix are installed; farm-only browsers never are", async () => {
+    const web = config({
+      test_types: ["web"],
+      web: {
+        browser: "chromium",
+        matrix: { browsers: ["chromium", "chrome", "msedge-beta", "safari", "chrome@118"] },
+      },
+    });
+    expect(toolchainNeeds(web, {}).browsers).toEqual(["chrome", "chromium", "msedge-beta"]);
+    const ports = (host: Host, installed: Record<string, boolean>): DetectPorts => ({
+      ...machine({}, [], installed),
+      host,
+      browsers: () =>
+        ["chromium", "chrome", "msedge-beta"].map((name) => ({ name, installed: installed[name] === true })),
+    });
+    const onMac = await plan(ports(mac, { chromium: true }), {}, undefined, {}, web);
+    expect(onMac["browsers"]).toMatchObject({ action: "install", parts: ["chrome", "msedge-beta"] });
+    const ready = await plan(
+      ports(mac, { chromium: true, chrome: true, "msedge-beta": true }),
+      {},
+      undefined,
+      {},
+      web,
+    );
+    expect(ready["browsers"]?.action).toBe("use-system");
+    const armLinux = await plan(ports({ os: "linux", arch: "arm64" }, {}), {}, undefined, {}, web);
+    expect(armLinux["browsers"]).toMatchObject({
+      action: "unsupported",
+      reason: "chrome, msedge-beta have no build for Linux on arm64; use chromium there",
+    });
+  });
+
   it("REQ-GEN-06/AC2: compatible tools on the machine are used as they are; nothing is installed", async () => {
     const p = await plan(machine(good, fullSdk, { chromium: true, firefox: true }));
     expect(changingSteps(Object.values(p))).toEqual([]);

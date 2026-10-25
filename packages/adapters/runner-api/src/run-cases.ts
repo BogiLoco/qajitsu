@@ -271,6 +271,7 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
         durationMs: options.now().getTime() - started.getTime(),
         ...(healed ? { healed: true } : {}),
         ...(specSha256 === undefined ? {} : { specSha256 }),
+        ...(record.browser ? { browser: record.browser } : {}),
       },
     };
   };

@@ -5,7 +5,8 @@ import { createRequire } from "node:module";
 import { arch, platform, release, type } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { androidSdkRoot } from "@qajitsu/adapter-runner-mobile";
-import { webCombinations } from "@qajitsu/core";
+import { channelExecutables } from "@qajitsu/adapter-runner-web";
+import { WEB_CHANNELS, webCombinations } from "@qajitsu/core";
 import type { LoadedProject } from "./project.js";
 
 /** Runs a command and returns its output (stdout and stderr), or undefined when it cannot run. */
@@ -64,17 +65,24 @@ export function playwrightInfo(): PlaywrightInfo {
     const pw = require("playwright-core") as Record<string, { executablePath(): string } | undefined>;
     return {
       version: pkg.version,
-      browsers: ["chromium", "firefox", "webkit"].map((name) => {
-        const installed = (() => {
-          try {
-            return existsSync(pw[name]?.executablePath() ?? "");
-          } catch {
-            return false;
-          }
-        })();
-        const version = manifest.browsers.find((b) => b.name === name)?.browserVersion;
-        return { name, installed, ...(version ? { version } : {}) };
-      }),
+      browsers: [
+        ...["chromium", "firefox", "webkit"].map((name) => {
+          const installed = (() => {
+            try {
+              return existsSync(pw[name]?.executablePath() ?? "");
+            } catch {
+              return false;
+            }
+          })();
+          const version = manifest.browsers.find((b) => b.name === name)?.browserVersion;
+          return { name, installed, ...(version ? { version } : {}) };
+        }),
+        // REQ-EXEC-66/AC2: branded browsers on the machine; their versions are asked from the browser itself.
+        ...WEB_CHANNELS.map((name) => ({
+          name,
+          installed: channelExecutables(name).some((p) => existsSync(p)),
+        })),
+      ],
     };
   } catch {
     return { browsers: [] };
@@ -104,6 +112,8 @@ export async function toolVersions(input: {
   readonly project?: LoadedProject | undefined;
   readonly exec?: VersionExec;
   readonly playwright?: () => PlaywrightInfo;
+  /** File check for installed browser channels (replaced in tests). */
+  readonly exists?: (path: string) => boolean;
   /** Ask only the tools the project needs (a run); `qj doctor` asks every tool. */
   readonly neededOnly?: boolean;
 }): Promise<ToolVersion[]> {
@@ -157,14 +167,27 @@ export async function toolVersions(input: {
   ];
   const pw = (input.playwright ?? playwrightInfo)();
   out.push({ name: "playwright", version: pw.version, needed: web, why: "web tests" });
-  for (const b of pw.browsers)
+  for (const b of pw.browsers) {
+    const channel = (WEB_CHANNELS as readonly string[]).includes(b.name);
+    // A channel nobody uses and nobody installed is not worth a line.
+    if (channel && !b.installed && !browsers.has(b.name)) continue;
+    const path = channel
+      ? channelExecutables(b.name).find((p) => (input.exists ?? existsSync)(p))
+      : undefined;
     out.push({
       name: b.name,
-      version: b.installed ? b.version : undefined,
+      version: channel
+        ? path === undefined
+          ? undefined
+          : first(await exec(browsers.has(b.name))(path, ["--version"]), /(\d+(?:\.\d+){1,3})/)
+        : b.installed
+          ? b.version
+          : undefined,
       needed: browsers.has(b.name),
       why: "web tests",
       install: "qj setup --only browsers",
     });
+  }
   out.push({
     name: "java",
     version: first(await exec(android)("java", ["-version"]), /version "([^"]+)"/),

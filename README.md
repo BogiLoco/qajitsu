@@ -1073,7 +1073,7 @@ run folder looks like this:
 | `.qa/auth/`                                   | login scripts for logins one request cannot do (forms, cookies, SSO): `login: { script: auth/<file> }` in a profile; values are masked                                                                                                                                                                             |
 | `.qa/stubs/<name>/`                           | WireMock/Mockoon mappings for stubbed dependencies                                                                                                                                                                                                                                                                 |
 | `.qa/bench.yaml`                              | benchmark cases                                                                                                                                                                                                                                                                                                    |
-| `web.matrix` in `qa.project.yaml`             | browsers (`chromium`, `firefox`, `webkit`) and viewports (`{ name, width, height }`) for web cases; the first combination is the primary run                                                                                                                                                                       |
+| `web.matrix` in `qa.project.yaml`             | browsers (`chromium`, `firefox`, `webkit`, `chrome`, `chrome-beta`, `msedge`, `msedge-beta`) and viewports (`{ name, width, height }`) for web cases; the first combination is the primary run                                                                                                                     |
 | `web.test_state` in `qa.project.yaml`         | the global the application exposes its state on for `state.*` checks (`__QA_STATE__` by default): canvas charts, maps, editors                                                                                                                                                                                     |
 | `http_auth` in `.qa/envs/<name>.yaml`         | `{ username, password: secret://... }` for an environment behind HTTP authentication; used by the browser and the API client                                                                                                                                                                                       |
 | `.qa/fixtures/`                               | files web cases upload, named by the plan (`files: { avatar: { fixture: images/avatar.png } }`)                                                                                                                                                                                                                    |
@@ -1247,8 +1247,11 @@ verification: { auditor: optional, canary: true, triage: on }
   [docs/guides/models-and-verification.md](docs/guides/models-and-verification.md)
 - **Browser and viewport matrix.** `web: { matrix: { browsers: [chromium, firefox, webkit], viewports: [...] } }`
   runs web cases in every combination; the matrix, report and ticket comment show the status per combination, and a
-  case is PASSED only when all of them passed. A missing browser is BLOCKED with the install command; cases with
-  manual steps run in the first combination only.
+  case is PASSED only when all of them passed. Besides the engines the matrix takes Google Chrome and Microsoft Edge
+  (`chrome`, `chrome-beta`, `msedge`, `msedge-beta`), installed by `qj setup` and listed with their versions by
+  `qj doctor`; every combination is named with the exact browser version it ran in. A missing browser is BLOCKED with
+  the install command; real Safari and older versions (`safari`, `chrome@118`) need a device farm and are BLOCKED
+  without one, never replaced by another browser. Cases with manual steps run in the first combination only.
 - **Test depth, estimate and budget.** `qj plan --depth smoke|standard|full` keeps cases by risk and records why;
   every run starts with an estimate of time and model use from past runs; `budget: { max_minutes, max_cost_usd }`
   stops a run gracefully with NOT_RUN for what is left.

@@ -27,5 +27,17 @@ describe("placement hints for model repairs (REQ-LLM-04/AC2)", () => {
     expect(
       withPlacementHint(["cases", 1, "steps", 0, "expect", "elements", "testid:x"], "Invalid key in record"),
     ).toBe("Invalid key in record");
+    // Dogfood pass 2026-10-25: a selector as a state path, and a case without evidence.
+    expect(
+      withPlacementHint(
+        ["cases", 0, "steps", 2, "expect", "state", "testid:address-1"],
+        "Invalid key in record",
+      ),
+    ).toBe(
+      'Invalid key in record ("testid:address-1" is an element: its check goes into "elements": {"testid:address-1": {"visible": ..}}; "state" holds paths of the application\'s test hook)',
+    );
+    expect(
+      withPlacementHint(["cases", 3, "evidence"], "Too small: expected array to have >=1 items"),
+    ).toContain('"evidence": ["screenshot"] for web and mobile');
   });
 });

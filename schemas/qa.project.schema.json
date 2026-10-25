@@ -1269,14 +1269,6 @@
       "additionalProperties": false
     },
     "web": {
-      "default": {
-        "browser": "chromium",
-        "video": "retain-on-failure",
-        "headless": true,
-        "action_timeout_ms": 5000,
-        "test_id_attribute": "data-testid",
-        "test_state": "__QA_STATE__"
-      },
       "type": "object",
       "properties": {
         "browser": {
@@ -1285,7 +1277,11 @@
           "enum": [
             "chromium",
             "firefox",
-            "webkit"
+            "webkit",
+            "chrome",
+            "chrome-beta",
+            "msedge",
+            "msedge-beta"
           ]
         },
         "video": {
@@ -1324,11 +1320,23 @@
               "minItems": 1,
               "type": "array",
               "items": {
-                "type": "string",
-                "enum": [
-                  "chromium",
-                  "firefox",
-                  "webkit"
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "chromium",
+                      "firefox",
+                      "webkit",
+                      "chrome",
+                      "chrome-beta",
+                      "msedge",
+                      "msedge-beta"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^(safari|(chrome|msedge|firefox)@\\d{2,3})$"
+                  }
                 ]
               }
             },

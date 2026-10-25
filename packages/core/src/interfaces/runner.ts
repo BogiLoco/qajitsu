@@ -74,6 +74,8 @@ export interface AttemptRecord {
   }[];
   readonly assertions: readonly AssertionRecord[];
   readonly evidence: readonly EvidenceItem[];
+  /** The browser of a web attempt with its exact version (REQ-EXEC-66/AC3). */
+  readonly browser?: { readonly name: string; readonly version: string };
 }
 
 /** Result of comparing a screenshot with its baseline (REQ-EXEC-12). */

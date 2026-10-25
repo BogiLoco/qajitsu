@@ -93,7 +93,7 @@ test_types: [api, web]
 # Browser and viewport matrix (REQ-EXEC-13): web cases run in every combination, the first is the primary run.
 # web:
 #   matrix:
-#     browsers: [chromium, firefox]
+#     browsers: [chromium, firefox]        # also chrome, chrome-beta, msedge, msedge-beta (REQ-EXEC-66)
 #     viewports: [{ name: desktop, width: 1280, height: 800 }, { name: mobile, width: 390, height: 844 }]
 
 # Run budget (REQ-PLAN-08): once a limit is reached the remaining cases are NOT_RUN with the reason.

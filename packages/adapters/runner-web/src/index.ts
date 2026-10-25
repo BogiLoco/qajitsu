@@ -6,6 +6,7 @@
  */
 export {
   browserUnavailable,
+  channelExecutables,
   createPlaywrightBrowserFactory,
   locate,
   maskHar,

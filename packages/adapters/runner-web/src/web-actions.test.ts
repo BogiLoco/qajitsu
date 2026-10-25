@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { createPlaywrightTransport, executeAttempt, type AttemptInput } from "@qajitsu/adapter-runner-api";
@@ -6,7 +6,7 @@ import { PlanSchema } from "@qajitsu/core";
 import { computeStatus } from "@qajitsu/verifier";
 import { afterEach, describe, expect, it } from "vitest";
 import { startShop } from "../../../../examples/demo-shop/api/server.mjs";
-import { createPlaywrightBrowserFactory } from "./browser.js";
+import { channelExecutables, createPlaywrightBrowserFactory } from "./browser.js";
 
 const PASSWORD = "fictional-demo-password";
 const plan = (ticket: string) =>
@@ -33,7 +33,7 @@ const attempt = async (
   ticket: string,
   caseId: string,
   flag?: string,
-  browserName?: "chromium" | "firefox" | "webkit",
+  browserName?: "chromium" | "firefox" | "webkit" | "chrome",
 ) => {
   const shop = await startShop({ env: { DEMO_USER_PASSWORD: PASSWORD, ...(flag ? { [flag]: "1" } : {}) } });
   cleanups.push(() => shop.close());
@@ -468,4 +468,22 @@ describe("web actions (REQ-EXEC-38, REQ-EXEC-39, REQ-EXEC-40, REQ-EXEC-56)", () 
     expect((await d.manifest?.())?.controlled).toBe(true);
     expect(outside).toEqual([]);
   });
+
+  it("REQ-EXEC-66/AC3: every attempt records the exact browser it ran in", async () => {
+    const r = await attempt("DEMO-11", "TC-02");
+    expect(r.record.browser?.name).toBe("chromium");
+    expect(r.record.browser?.version).toMatch(/^\d+\.\d+/);
+  });
+
+  // Runs where Google Chrome is installed (developer machines, GitHub's runners); elsewhere `qj setup` installs it.
+  it.skipIf(!channelExecutables("chrome").some((p) => existsSync(p)))(
+    "REQ-EXEC-66/AC1+AC3: a case runs in the installed Google Chrome, named with its version",
+    async () => {
+      const r = await attempt("DEMO-11", "TC-01", undefined, "chrome");
+      expect(r.record.error).toBeUndefined();
+      expect(r.status).toBe("PASSED");
+      expect(r.record.browser).toMatchObject({ name: "chrome" });
+      expect(r.record.browser?.version).toMatch(/^\d+\.\d+/);
+    },
+  );
 });

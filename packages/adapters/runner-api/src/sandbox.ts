@@ -88,6 +88,8 @@ const UiOperationSchema = z.discriminatedUnion("op", [
 export interface BrowserSession {
   /** Starts the browser on first use. */
   readonly driver: () => Promise<UiDriver>;
+  /** The browser the attempt ran in with its exact version, once started (REQ-EXEC-66/AC3). */
+  readonly browser?: () => { readonly name: string; readonly version: string } | undefined;
   /** Closes the browser and returns case evidence: video, trace, HAR, console log (REQ-EVD-02). */
   readonly close: (failed: boolean) => Promise<EvidenceItem[]>;
 }
@@ -271,7 +273,12 @@ export function createSandboxExecutor(
           child.kill("SIGKILL");
           void runtime.finish(fatal ?? error).then(async (record) => {
             const media = session ? await session.close(record.outcome !== "passed").catch(() => []) : [];
-            resolve({ ...record, evidence: [...record.evidence, ...media] });
+            const ran = session?.browser?.();
+            resolve({
+              ...record,
+              evidence: [...record.evidence, ...media],
+              ...(ran ? { browser: ran } : {}),
+            });
           });
         };
         const deadline = startDeadline(input.timeoutMs, () => {

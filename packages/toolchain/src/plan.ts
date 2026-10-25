@@ -284,6 +284,16 @@ function planBrowsers(d: DetectedTool, input: PlanInput): PlanStep {
     );
   const wantedBrowsers =
     input.needs.browsers.length > 0 ? input.needs.browsers : ["chromium", "firefox", "webkit"];
+  // REQ-EXEC-66/AC2: Google and Microsoft publish no Chrome or Edge for Linux on arm64.
+  if (input.host.os === "linux" && input.host.arch === "arm64") {
+    const none = wantedBrowsers.filter((b) => /^(chrome|msedge)/.test(b));
+    if (none.length > 0)
+      return step(
+        "browsers",
+        "unsupported",
+        `${none.join(", ")} have no build for Linux on arm64; use chromium there`,
+      );
+  }
   const reinstall = input.options.reinstall?.includes("browsers") === true;
   const missing = reinstall
     ? wantedBrowsers

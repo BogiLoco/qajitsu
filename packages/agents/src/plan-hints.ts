@@ -26,6 +26,12 @@ const PLACES: Readonly<Record<string, string>> = {
  * @param message - The validator's message.
  */
 export function withPlacementHint(path: readonly PropertyKey[], message: string): string {
+  const key = path.at(-1);
+  // A selector used as a state path (dogfood pass 2026-10-25: "state": {"testid:address-1": ...}).
+  if (path.at(-2) === "state" && typeof key === "string" && key.includes(":"))
+    return `${message} ("${key}" is an element: its check goes into "elements": {"${key}": {"visible": ..}}; "state" holds paths of the application's test hook)`;
+  if (path.at(-1) === "evidence" && path.at(-3) === "cases")
+    return `${message} (every case lists its evidence, e.g. "evidence": ["screenshot"] for web and mobile, ["request", "response"] for API)`;
   const named = [
     ...path.map(String),
     ...[...message.matchAll(/"([a-z_]+)"/g)].map((m) => m[1] ?? ""),
@@ -34,7 +40,6 @@ export function withPlacementHint(path: readonly PropertyKey[], message: string)
   const field = named.reverse().find((k) => k in PLACES);
   if (field !== undefined) return `${message} ("${field}" ${PLACES[field] ?? ""})`;
   // An element key without its selector kind (`offer-status` for `testid:offer-status`).
-  const key = path.at(-1);
   if (path.at(-2) === "elements" && typeof key === "string" && !key.includes(":"))
     return `${message} (an element key is a selector with its kind: "testid:${key}", "role:button:${key}" or "text:${key}")`;
   return message;

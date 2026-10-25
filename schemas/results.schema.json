@@ -133,6 +133,24 @@
           "durationMs": {
             "type": "number",
             "minimum": 0
+          },
+          "browser": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "maxLength": 40
+              },
+              "version": {
+                "type": "string",
+                "maxLength": 60
+              }
+            },
+            "required": [
+              "name",
+              "version"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [

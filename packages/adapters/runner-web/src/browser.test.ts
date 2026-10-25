@@ -14,7 +14,12 @@ import {
 import { PlanSchema, createEventLog } from "@qajitsu/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { startShop } from "../../../../examples/demo-shop/api/server.mjs";
-import { browserUnavailable, createPlaywrightBrowserFactory, maskHar } from "./browser.js";
+import {
+  browserUnavailable,
+  channelExecutables,
+  createPlaywrightBrowserFactory,
+  maskHar,
+} from "./browser.js";
 
 const PASSWORD = "fictional-demo-password";
 const plan = (ticket: string) =>
@@ -405,5 +410,34 @@ describe("browser availability (REQ-EXEC-13/AC3)", () => {
       "firefox is not installed; install it with 'pnpm --filter @qajitsu/cli exec playwright-core install firefox'",
     );
     expect(browserUnavailable("chromium", () => true)).toBeUndefined();
+  });
+
+  it("REQ-EXEC-66/AC1+AC2: a branded channel is found at its vendor's install path, else named with qj setup", () => {
+    expect(channelExecutables("chrome", "darwin")).toEqual([
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    ]);
+    expect(channelExecutables("msedge-beta", "linux")).toEqual(["/opt/microsoft/msedge-beta/msedge"]);
+    expect(
+      channelExecutables("msedge", "win32", {
+        LOCALAPPDATA: "C:\\Users\\u\\AppData\\Local",
+        PROGRAMFILES: "C:\\Program Files",
+      }),
+    ).toEqual([
+      "C:\\Users\\u\\AppData\\Local\\Microsoft\\Edge\\Application\\msedge.exe",
+      "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+    ]);
+    expect(channelExecutables("opera", "darwin")).toEqual([]);
+    const mac = "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge";
+    expect(browserUnavailable("msedge", (p) => p === mac, "darwin")).toBeUndefined();
+    expect(browserUnavailable("chrome-beta", () => false, "darwin")).toBe(
+      "chrome-beta is not installed; install it with 'qj setup' (Playwright's 'install chrome-beta', may ask for an administrator password)",
+    );
+  });
+
+  it("REQ-EXEC-66/AC4: real Safari and specific versions are refused without a device farm, never replaced", () => {
+    for (const name of ["safari", "chrome@118"] as const)
+      expect(browserUnavailable(name, () => true)).toBe(
+        `${name} runs only on a device farm (REQ-EXEC-35), which QAJitsu does not drive for web cases yet; it is never replaced by another browser`,
+      );
   });
 });

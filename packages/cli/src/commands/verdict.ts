@@ -203,6 +203,11 @@ export async function computeVerdict(
   // only when every combination it ran in passed.
   const combos = webCombinations(session.project.config.web);
   const perCombination = new Map<string, { combo: string; status: TestStatus }[]>();
+  // REQ-EXEC-66/AC3: a combination is named with the exact browser its last attempt ran in.
+  const ranIn = (file: CaseResultFile | undefined, id: string): string => {
+    const b = file?.attempts.at(-1)?.browser;
+    return b ? `${id} (${b.name} ${b.version})` : id;
+  };
   const matrixResults: { name: string; text: string }[] = [];
   for (const combo of combos.slice(1)) {
     const dir = ws.path("results", "matrix", combo.id);
@@ -219,7 +224,7 @@ export async function computeVerdict(
       if (comboResults.has(c.caseId))
         perCombination.set(c.caseId, [
           ...(perCombination.get(c.caseId) ?? []),
-          { combo: combo.id, status: c.status },
+          { combo: ranIn(comboResults.get(c.caseId), combo.id), status: c.status },
         ]);
   }
   // REQ-EXEC-20/AC3: in matrix mode every further device is evaluated by the same code; a mobile case is PASSED only
@@ -288,7 +293,10 @@ export async function computeVerdict(
       return [`${devices[0]} ${primaryStatus}`, ...onDevices.map((o) => `${o.combo} ${o.status}`)].join(", ");
     const others = perCombination.get(caseId);
     return others && combos[0]
-      ? [`${combos[0].id} ${primaryStatus}`, ...others.map((o) => `${o.combo} ${o.status}`)].join(", ")
+      ? [
+          `${ranIn(results.get(caseId), combos[0].id)} ${primaryStatus}`,
+          ...others.map((o) => `${o.combo} ${o.status}`),
+        ].join(", ")
       : undefined;
   };
   // REQ-VER-06, REQ-VER-09: the auditor and the canary can only move PASSED to NEEDS_REVIEW.

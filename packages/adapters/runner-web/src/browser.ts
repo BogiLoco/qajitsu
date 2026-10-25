@@ -13,7 +13,14 @@ import {
   type UiDriver,
   type UiProperty,
 } from "@qajitsu/steps";
-import { OBSERVATIONS_FILE, type PassiveObservations, type UiElementFact } from "@qajitsu/core";
+import {
+  browserEngine,
+  OBSERVATIONS_FILE,
+  type LocalBrowser,
+  type PassiveObservations,
+  type UiElementFact,
+  type WebBrowser,
+} from "@qajitsu/core";
 import { ariaElements } from "./aria.js";
 import {
   chromium,
@@ -30,7 +37,8 @@ import {
 /** Settings of the web runner (REQ-EXEC-05, REQ-EVD-02, REQ-EVD-06). */
 export interface WebRunnerOptions {
   /** Chromium by default; Firefox and WebKit configurable (REQ-EXEC-05/AC1). */
-  readonly browser?: "chromium" | "firefox" | "webkit";
+  /** An engine of QAJitsu's Playwright or an installed channel such as `chrome` or `msedge` (REQ-EXEC-66/AC1). */
+  readonly browser?: LocalBrowser;
   /** `retain-on-failure` by default, `always` or `off` (REQ-EVD-06/AC1). */
   readonly video?: "retain-on-failure" | "always" | "off";
   /** Where the app keeps its session token; the framework sets it for `ui.as(alias)` (REQ-CFG-07). */
@@ -256,12 +264,15 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
     const masker = createMasker({ secrets: input.secrets });
     const observed: PassiveObservations = { console: [], http: [], accessibility: [] };
     const audits: Promise<void>[] = [];
+    let ran: { readonly name: string; readonly version: string } | undefined;
     let started:
       { browser: Browser; context: BrowserContext; page: Page; dir: string; console: string[] } | undefined;
 
     const start = async (): Promise<UiDriver> => {
       const dir = await mkdtemp(join(tmpdir(), "qj-web-"));
-      const type = options.browser === "firefox" ? firefox : options.browser === "webkit" ? webkit : chromium;
+      const name = options.browser ?? "chromium";
+      const engine = browserEngine(name) ?? "chromium";
+      const type = engine === "firefox" ? firefox : engine === "webkit" ? webkit : chromium;
       // REQ-EXEC-21/AC1: getByTestId finds the project's attribute (one project per process).
       selectors.setTestIdAttribute(testIdAttribute);
       // REQ-EXEC-61/AC3: the case's browser grants only what its plan names; everything else stays denied.
@@ -269,12 +280,15 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
       // REQ-EXEC-65/AC1: only Chromium routes a service worker's own requests, so only there they stay on the allowlist.
       if (settings?.service_workers === true && type !== chromium)
         throw new Error(
-          `the case allows service workers, which QAJitsu can keep on the allowlist only in Chromium, not in ${options.browser ?? "chromium"}: run it on chromium`,
+          `the case allows service workers, which QAJitsu can keep on the allowlist only in Chromium, not in ${name}: run it on chromium`,
         );
       const browser = await type.launch({
         headless: options.headless ?? true,
+        // REQ-EXEC-66/AC1: a branded browser installed on the machine, driven through Chromium's engine.
+        ...(name === engine ? {} : { channel: name }),
         ...(options.slowMoMs ? { slowMo: options.slowMoMs } : {}),
       });
+      ran = { name, version: browser.version() };
       const context = await browser.newContext({
         baseURL: input.baseUrl,
         viewport: options.viewport ?? { width: 1280, height: 800 },
@@ -753,6 +767,8 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
 
     return {
       driver: start,
+      // REQ-EXEC-66/AC3: the exact browser the attempt ran in, once it started.
+      browser: () => ran,
       close: async (failed) => {
         if (!started) return [];
         const { browser, context, page, dir, console } = started;
@@ -812,17 +828,77 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
   };
 }
 
+const CHANNEL_DIRS: Readonly<Record<string, { mac: string; linux: string; win: string }>> = {
+  chrome: {
+    mac: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    linux: "/opt/google/chrome/chrome",
+    win: "Google\\Chrome\\Application\\chrome.exe",
+  },
+  "chrome-beta": {
+    mac: "/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta",
+    linux: "/opt/google/chrome-beta/chrome",
+    win: "Google\\Chrome Beta\\Application\\chrome.exe",
+  },
+  msedge: {
+    mac: "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+    linux: "/opt/microsoft/msedge/msedge",
+    win: "Microsoft\\Edge\\Application\\msedge.exe",
+  },
+  "msedge-beta": {
+    mac: "/Applications/Microsoft Edge Beta.app/Contents/MacOS/Microsoft Edge Beta",
+    linux: "/opt/microsoft/msedge-beta/msedge",
+    win: "Microsoft\\Edge Beta\\Application\\msedge.exe",
+  },
+};
+
 /**
- * Why a browser cannot run here, or undefined when its Playwright build is installed (REQ-EXEC-13/AC3).
+ * Where Playwright looks for an installed branded browser (REQ-EXEC-66/AC2): the vendor's standard install paths.
+ *
+ * @param channel - `chrome`, `chrome-beta`, `msedge` or `msedge-beta`.
+ * @param os - Platform, `process.platform` by default.
+ * @param env - Environment with `LOCALAPPDATA` and `PROGRAMFILES` on Windows.
+ */
+export function channelExecutables(
+  channel: string,
+  os: NodeJS.Platform = process.platform,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string[] {
+  const dirs = CHANNEL_DIRS[channel];
+  if (!dirs) return [];
+  if (os === "darwin") return [dirs.mac];
+  if (os === "linux") return [dirs.linux];
+  if (os === "win32")
+    return [env["LOCALAPPDATA"], env["PROGRAMFILES"], env["PROGRAMFILES(X86)"]]
+      .filter((d): d is string => d !== undefined && d !== "")
+      .map((d) => `${d}\\${dirs.win}`);
+  return [];
+}
+
+/**
+ * Why a browser cannot run here, or undefined when it is installed (REQ-EXEC-13/AC3, REQ-EXEC-66/AC2+AC4): an engine
+ * of QAJitsu's Playwright, a branded channel on the machine, or a browser only a device farm has, which is refused and
+ * never replaced by another one.
  *
  * @param name - Browser of the matrix.
  * @param exists - File check, injectable for tests.
+ * @param os - Platform, injectable for tests.
  */
 export function browserUnavailable(
-  name: "chromium" | "firefox" | "webkit",
+  name: WebBrowser,
   exists: (path: string) => boolean = existsSync,
+  os: NodeJS.Platform = process.platform,
 ): string | undefined {
-  const type = name === "firefox" ? firefox : name === "webkit" ? webkit : chromium;
+  const engine = browserEngine(name);
+  if (engine === undefined)
+    return `${name} runs only on a device farm (REQ-EXEC-35), which QAJitsu does not drive for web cases yet; it is never replaced by another browser`;
+  if (engine !== name) {
+    if (os === "linux" && process.arch === "arm64")
+      return `${name} has no build for Linux on arm64; use chromium there`;
+    return channelExecutables(name, os).some((p) => exists(p))
+      ? undefined
+      : `${name} is not installed; install it with 'qj setup' (Playwright's 'install ${name}', may ask for an administrator password)`;
+  }
+  const type = engine === "firefox" ? firefox : engine === "webkit" ? webkit : chromium;
   let path: string;
   try {
     path = type.executablePath();

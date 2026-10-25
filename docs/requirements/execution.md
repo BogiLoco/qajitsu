@@ -1026,7 +1026,7 @@ offline behaviour could therefore not be tested at all.
 
 ### REQ-EXEC-66 · Browser channels and versions
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-EXEC-13, REQ-GEN-06, REQ-GEN-03, REQ-OBS-10, REQ-EXEC-35
@@ -1036,7 +1036,7 @@ WebKit builds of its Playwright.
 
 **Acceptance criteria**
 
-- [ ] AC1: The browser matrix accepts branded channels besides the engines: `chrome`, `chrome-beta`, `msedge`, `msedge-beta`.
-- [ ] AC2: `qj setup` installs the channels the matrix names (where the platform allows it) and `qj doctor` checks them with their version; a channel that is not installed makes its combinations BLOCKED with the command that installs it.
-- [ ] AC3: Every attempt records the exact browser name and version it ran in; the report and the matrix name them per combination.
-- [ ] AC4: Specific older versions and real Safari run on a device farm (REQ-EXEC-35); without one they are refused with the reason, never replaced by another browser.
+- [x] AC1: The browser matrix accepts branded channels besides the engines: `chrome`, `chrome-beta`, `msedge`, `msedge-beta`.
+- [x] AC2: `qj setup` installs the channels the matrix names (where the platform allows it) and `qj doctor` checks them with their version; a channel that is not installed makes its combinations BLOCKED with the command that installs it.
+- [x] AC3: Every attempt records the exact browser name and version it ran in; the report and the matrix name them per combination.
+- [x] AC4: Specific older versions and real Safari run on a device farm (REQ-EXEC-35); without one they are refused with the reason, never replaced by another browser.

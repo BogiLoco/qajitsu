@@ -116,5 +116,6 @@ export async function executeAttempt(
     record = await runtime.finish(error);
   }
   const media = session ? await session.close(record.outcome !== "passed") : [];
-  return { ...record, evidence: [...record.evidence, ...media] };
+  const ran = session?.browser?.();
+  return { ...record, evidence: [...record.evidence, ...media], ...(ran ? { browser: ran } : {}) };
 }

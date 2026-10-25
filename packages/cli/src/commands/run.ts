@@ -27,6 +27,7 @@ import {
   ConfigError,
   CaseResultFileSchema,
   acquireRunLock,
+  browserEngine,
   createAccountLeases,
   laneWorkers,
   QajitsuError,
@@ -44,6 +45,8 @@ import {
   type UiElementFact,
   type ResolvedEnvironment,
   type VisualCheck,
+  type LocalBrowser,
+  type WebBrowser,
   type WebCombination,
 } from "@qajitsu/core";
 import { createMasker } from "@qajitsu/steps";
@@ -117,7 +120,7 @@ export interface RunPorts extends KnowledgePorts, MessagePorts {
   };
   readonly exit?: (code: number) => void;
   /** Why a browser of the matrix cannot run (replaced in tests); default: its Playwright build is missing. */
-  readonly browserUnavailable?: (browser: "chromium" | "firefox" | "webkit") => string | undefined;
+  readonly browserUnavailable?: (browser: WebBrowser) => string | undefined;
   /** Runs setup and teardown hooks (replaced in tests). */
   readonly hookExec?: HookExec;
   /** Operating system, for the display check of `--headed` (default: the process's). */
@@ -1020,7 +1023,11 @@ async function executeCases(
       ...(httpCredentials ? { httpCredentials } : {}),
       // The browser starts only when a spec uses ui.* (REQ-EXEC-05, REQ-EXEC-07).
       browser: createPlaywrightBrowserFactory({
-        browser: combo?.browser ?? project.config.web.browser,
+        // A farm-only browser never reaches here: its combinations are BLOCKED before they run (REQ-EXEC-66/AC4).
+        browser:
+          combo && browserEngine(combo.browser) !== undefined
+            ? (combo.browser as LocalBrowser)
+            : project.config.web.browser,
         ...(combo ? { viewport: { width: combo.viewport.width, height: combo.viewport.height } } : {}),
         video: project.config.web.video,
         // REQ-EXEC-16/AC2: --headed shows the browser, --slow-mo slows every action down.
@@ -1202,11 +1209,14 @@ async function executeCases(
           workers: lanes.web,
         }),
       unavailable: (combo) =>
-        ports.browserUnavailable
-          ? ports.browserUnavailable(combo.browser)
-          : ports.executor
-            ? undefined
-            : browserUnavailable(combo.browser),
+        // A farm-only browser is refused whatever runs the cases: it is never replaced (REQ-EXEC-66/AC4).
+        browserEngine(combo.browser) === undefined
+          ? browserUnavailable(combo.browser)
+          : ports.browserUnavailable
+            ? ports.browserUnavailable(combo.browser)
+            : ports.executor
+              ? undefined
+              : browserUnavailable(combo.browser),
     });
   const mobileCases = active.filter((c) => c.type === "mobile" && specs.has(c.id));
   const mobileRan = new Map<string, CaseResultFile>();

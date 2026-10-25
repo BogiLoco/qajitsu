@@ -44,6 +44,8 @@ export const CaseAttemptSchema = z.strictObject({
   /** The attempt ran a spec changed by the healer (REQ-EXEC-09). */
   healed: z.boolean().optional(),
   durationMs: z.number().nonnegative().optional(),
+  /** The browser of a web attempt with its exact version, recorded by the runner (REQ-EXEC-66/AC3). */
+  browser: z.strictObject({ name: z.string().max(40), version: z.string().max(60) }).optional(),
 });
 
 /** Schema of `results/<case>.json`, written only by runners (invariant 2). */
