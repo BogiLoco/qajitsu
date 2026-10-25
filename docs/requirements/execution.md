@@ -1010,7 +1010,7 @@ elements cannot be acted on, so the case was BLOCKED although the page was fine.
 
 ### REQ-EXEC-65 · Service workers, offline mode and installable web apps
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-EXEC-05, REQ-ENV-01, INV-10
@@ -1020,9 +1020,9 @@ offline behaviour could therefore not be tested at all.
 
 **Acceptance criteria**
 
-- [ ] AC1: A web case can allow service workers (`browser.service_workers: true`); this is accepted only in a browser where QAJitsu still sees and checks every request of the worker against the allowlist, otherwise the case is BLOCKED with the reason.
-- [ ] AC2: A step can switch the browser offline and back (`ui.setOffline(true|false)`), so offline pages, queued actions and their sync can be tested.
-- [ ] AC3: The page's web app manifest is read by code and checkable as `manifest.<field>` (name, short_name, start_url, display, icons), and whether a service worker controls the page as `manifest.controlled`.
+- [x] AC1: A web case can allow service workers (`browser.service_workers: true`); this is accepted only in a browser where QAJitsu still sees and checks every request of the worker against the allowlist, otherwise the case is BLOCKED with the reason.
+- [x] AC2: A step can switch the browser offline and back (`ui.setOffline(true|false)`), so offline pages, queued actions and their sync can be tested.
+- [x] AC3: The page's web app manifest is read by code and checkable as `manifest.<field>` (name, short_name, start_url, display, icons), and whether a service worker controls the page as `manifest.controlled`.
 
 ### REQ-EXEC-66 · Browser channels and versions
 

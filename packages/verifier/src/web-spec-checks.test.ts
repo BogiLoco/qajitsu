@@ -83,8 +83,16 @@ describe("static checks of web actions (REQ-EXEC-38..40, REQ-EXEC-56, ADR-0013)"
         description: "d",
         download: { min_bytes: 1, sha256: "a".repeat(64), fields: { "a.b": 1 } },
         state: { "x.y": 1 },
+        manifest: { short_name: "Notes", controlled: true },
       }),
-    ).toEqual(["download.size", "download.sha256", "download.fields.a.b", "state.x.y"]);
+    ).toEqual([
+      "download.size",
+      "download.sha256",
+      "download.fields.a.b",
+      "state.x.y",
+      "manifest.short_name",
+      "manifest.controlled",
+    ]);
   });
 
   it("REQ-EXEC-39/AC1 + REQ-EXEC-40/AC1: frame selectors are browser selectors; both selectors of dragTo are checked", () => {
@@ -130,6 +138,7 @@ export async function run({ step, verify, plan, ui }: CaseContext): Promise<void
     await ui.hover("testid:a");
     await ui.scrollBy(0, 100);
     await ui.switchToNewPage();
+    await ui.setOffline(true);
     await ui.click("testid:list >> testid:a");
     verify("S1", "elements.testid:a.visible", undefined, plan.expect("TC-01.S1.elements.testid:a.visible"));
   });
@@ -139,6 +148,7 @@ export async function run({ step, verify, plan, ui }: CaseContext): Promise<void
       "lint: ui.hover() is not available in native apps yet: it works in web cases",
       "lint: ui.scrollBy() is not available in native apps yet: it works in web cases",
       "lint: ui.switchToNewPage() is not available in native apps yet: it works in web cases",
+      "lint: ui.setOffline() is not available in native apps yet: it works in web cases",
       "lint: 'testid:list >> testid:a' is a selector chain, which native apps do not support yet: use one selector",
     ]);
   });

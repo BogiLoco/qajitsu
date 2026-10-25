@@ -251,6 +251,11 @@ function expectationOf(planCase: TestCase, stepId: string, field: string, path: 
     const key = rest.join(".");
     if (!e.state || !(key in e.state)) throw new Error(`plan.expect('${path}'): no expected state '${key}'`);
     value = e.state[key];
+  } else if (kind === "manifest" && rest.length === 1) {
+    const part = rest[0] ?? "";
+    if (!["name", "short_name", "start_url", "display", "icons", "controlled"].includes(part))
+      throw new Error(`plan.expect('${path}'): unknown manifest field`);
+    value = e.manifest?.[part as keyof NonNullable<typeof e.manifest>];
   } else if (kind === "message" && rest.length === 0) value = e.message;
   else if (kind === "visual" && rest.length === 0) value = e.visual;
   else throw new Error(`plan.expect('${path}'): unknown field`);
@@ -699,6 +704,12 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
           throw new Error("ui.advanceTime() takes whole seconds from 1 to 604800 (7 days)");
         await need(d, "advanceTime", "ui.advanceTime()")(operation.seconds * 1000);
         return;
+      case "setOffline":
+        // REQ-EXEC-65/AC2: the browser's whole network goes off or comes back; the page sees it as a real outage.
+        if (typeof operation.offline !== "boolean")
+          throw new Error("ui.setOffline() takes true (offline) or false (back online)");
+        await need(d, "setOffline", "ui.setOffline()")(operation.offline);
+        return;
     }
   };
 
@@ -1025,6 +1036,27 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       });
       return;
     }
+    if (kind === "manifest") {
+      // REQ-EXEC-65/AC3: the page's manifest and its service worker, read by the parent; no manifest never passes.
+      const expected = expectationOf(planCase, stepId, field, `${caseId}.${stepId}.${field}`);
+      if (!driver)
+        throw new Error(`verify('${stepId}', '${field}') needs an open page: call ui.goto() first`);
+      const part = rest[0] ?? "";
+      // Blocked service workers never control a page: that would fail the check for a reason of the plan.
+      if (part === "controlled" && planCase.browser?.service_workers !== true)
+        throw new Error(
+          `verify('${stepId}', '${field}'): the case blocks service workers; allow them with "browser": {"service_workers": true}`,
+        );
+      const read = await need(driver, "manifest", `verify('${stepId}', 'manifest.*')`)();
+      let actual: unknown;
+      if (part === "controlled") actual = read.controlled;
+      else if (!read.manifest) actual = "(the page links no readable web app manifest)";
+      else if (part === "icons")
+        actual = Array.isArray(read.manifest["icons"]) ? read.manifest["icons"].length : 0;
+      else actual = read.manifest[part];
+      record(expected, actual);
+      return;
+    }
     if (kind === "state") {
       // REQ-EXEC-56/AC2: what the application exposes for tests, read by the parent from the page.
       const expected = expectationOf(planCase, stepId, field, `${caseId}.${stepId}.${field}`);
@@ -1089,7 +1121,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
           : "(text not found in the response)";
     else
       throw new Error(
-        `verify('${stepId}', '${field}'): only status, fields.<key>, texts.<n>, elements.<selector>.<property>, download.*, state.*, message and visual can be verified`,
+        `verify('${stepId}', '${field}'): only status, fields.<key>, texts.<n>, elements.<selector>.<property>, download.*, state.*, manifest.*, message and visual can be verified`,
       );
     record(expected, actual);
   };
@@ -1147,6 +1179,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       switchToOpener: () => uiOp({ op: "switchPage", to: "opener" }),
       closePage: () => uiOp({ op: "closePage" }),
       advanceTime: (seconds) => uiOp({ op: "advanceTime", seconds }),
+      setOffline: (offline) => uiOp({ op: "setOffline", offline }),
     },
     step: async (stepId, fn) => {
       beginStep(stepId);

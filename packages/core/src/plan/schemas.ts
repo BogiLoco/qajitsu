@@ -193,6 +193,20 @@ export const ExpectationSchema = z
     /** The file the step downloads (REQ-EXEC-38/AC2). */
     download: DownloadExpectationSchema.optional(),
     /**
+     * The page's web app manifest, read by code (REQ-EXEC-65/AC3): its fields, the number of its icons, and whether a
+     * service worker controls the page.
+     */
+    manifest: z
+      .strictObject({
+        name: z.string().min(1).max(200).optional(),
+        short_name: z.string().min(1).max(100).optional(),
+        start_url: z.string().min(1).max(500).optional(),
+        display: z.enum(["fullscreen", "standalone", "minimal-ui", "browser"]).optional(),
+        icons: z.number().int().min(0).max(100).optional(),
+        controlled: z.boolean().optional(),
+      })
+      .optional(),
+    /**
      * State the application exposes for tests (REQ-EXEC-56/AC2), read by the framework from the page's test hook
      * (`web.test_state`, default `window.__QA_STATE__`) by path: canvas charts, maps, editors.
      */
@@ -280,6 +294,11 @@ export const TestCaseSchema = z.strictObject({
   browser: z
     .strictObject({
       clock: z.iso.datetime({ offset: true }).optional(),
+      /**
+       * Lets the application register service workers (REQ-EXEC-65/AC1); only in a browser where QAJitsu still checks
+       * every request of the worker against the allowlist (Chromium), otherwise the case is BLOCKED.
+       */
+      service_workers: z.boolean().optional(),
       permissions: z
         .array(
           z.enum([

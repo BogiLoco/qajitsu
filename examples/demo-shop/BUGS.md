@@ -20,6 +20,7 @@ assert that the targeting case ends FAILED with the flag on and PASSED with it o
 | BUG-13 | `BUG_RATING_OFF_BY_ONE`          | reviews   | web    | Clicking a star (in Shadow DOM) records one star less, also in the chart | DEMO-9         | later |
 | BUG-14 | `BUG_DELETE_IGNORES_CANCEL`      | addresses | web    | Cancelling the delete confirmation still deletes the address             | DEMO-10        | later |
 | BUG-15 | `BUG_OFFER_NEVER_EXPIRES`        | offer     | web    | The Christmas offer still shows active after its end time                | DEMO-10        | later |
+| BUG-16 | `BUG_OFFLINE_NOTES_LOST`         | notes     | web    | Notes written offline are dropped instead of saved when back online      | DEMO-11        | later |
 
 Rules:
 

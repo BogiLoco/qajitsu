@@ -24,6 +24,7 @@ export const BUG_FLAGS = [
   "BUG_RATING_OFF_BY_ONE",
   "BUG_DELETE_IGNORES_CANCEL",
   "BUG_OFFER_NEVER_EXPIRES",
+  "BUG_OFFLINE_NOTES_LOST",
 ];
 
 const PRODUCTS = [
@@ -137,6 +138,8 @@ export function createShop(options) {
       seeds.push(input.marker);
       return json(res, 201, { markers: seeds });
     }
+    // Notes of the offline page (REQ-EXEC-65 demo).
+    if (route === "POST /notes") return json(res, 201, { saved: true });
     // Avatar upload (REQ-EXEC-38 demo): PNG up to 2 MB; BUG-09 refuses anything over 100 KB.
     if (route === "POST /profile/avatar") {
       if (req.headers["content-type"] !== "image/png") return json(res, 415, { error: "PNG_ONLY" });

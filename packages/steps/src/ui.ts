@@ -108,6 +108,16 @@ export interface UiDriver {
   }[];
   /** Moves the browser's clock forward (REQ-EXEC-61/AC2), firing timers that fall due. */
   readonly advanceTime?: (ms: number) => Promise<void>;
+  /** Switches the browser's network off or back on (REQ-EXEC-65/AC2). */
+  readonly setOffline?: (offline: boolean) => Promise<void>;
+  /**
+   * The current page's web app manifest, read by trusted code (REQ-EXEC-65/AC3): undefined when the page links none
+   * or it cannot be read; `controlled` tells whether a service worker controls the page.
+   */
+  readonly manifest?: () => Promise<{
+    readonly manifest: Readonly<Record<string, unknown>> | undefined;
+    readonly controlled: boolean;
+  }>;
   /** Why an element cannot be reached, when the page explains it (a closed shadow root, REQ-EXEC-56/AC1). */
   readonly unreachableReason?: () => Promise<string | undefined>;
 }
@@ -151,6 +161,8 @@ export interface UiClient {
   readonly closePage: () => Promise<void>;
   /** Moves the page's clock forward by seconds (countdowns, expiring offers; REQ-EXEC-61/AC2). */
   readonly advanceTime: (seconds: number) => Promise<void>;
+  /** Switches the browser offline (`true`) or back online (`false`): offline pages, queues and sync (REQ-EXEC-65/AC2). */
+  readonly setOffline: (offline: boolean) => Promise<void>;
 }
 
 /** UI operations sent from a spec to the parent. */
@@ -172,7 +184,8 @@ export type UiOperation =
   | { readonly op: "upload"; readonly selector: UiSelector; readonly files: readonly string[] }
   | { readonly op: "switchPage"; readonly to: "new" | "opener" }
   | { readonly op: "closePage" }
-  | { readonly op: "advanceTime"; readonly seconds: number };
+  | { readonly op: "advanceTime"; readonly seconds: number }
+  | { readonly op: "setOffline"; readonly offline: boolean };
 
 /**
  * Selector kinds, the most stable first (REQ-EXEC-21/AC3). The web resolves testid, role, label, text, placeholder,

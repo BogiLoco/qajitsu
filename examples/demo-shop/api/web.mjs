@@ -1,8 +1,8 @@
 // demo-shop web UI (REQ-NFR-04, stage 5): plain HTML pages served by the API server. Seeded UI bugs are
 // switched on by the server and injected as window.__BUGS (see ../BUGS.md).
 
-const page = (title, body, bugs) => `<!doctype html>
-<html lang="pl"><head><meta charset="utf-8"><title>${title} · demo-shop</title>
+const page = (title, body, bugs, head = "") => `<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><title>${title} · demo-shop</title>${head}
 <style>body{font:15px system-ui;margin:24px}nav a{margin-right:12px}.toast{padding:8px;margin:8px 0}.ok{background:#dafbe1}.err{background:#ffebe9}button[disabled]{opacity:.5}</style>
 <script>window.__BUGS=${JSON.stringify(bugs)};
 const token=()=>sessionStorage.getItem("token");
@@ -14,6 +14,24 @@ const toast=(text,ok)=>{const t=document.createElement("div");t.className="toast
 <h1>${title}</h1>${body}</body></html>`;
 
 const PAGES = {
+  // An installable notes page (REQ-EXEC-65): notes written offline wait in a queue and are saved when back online.
+  "/app/notes": [
+    "Notes",
+    `<p>Connection: <span data-testid="connection">Online</span></p>
+<p><label>Note <input data-testid="note-text" id="note"></label> <button data-testid="add-note" id="add">Add note</button></p>
+<p>Queued: <span data-testid="queued-count">0</span> · Saved: <span data-testid="saved-count">0</span></p>
+<script>let queue=[];let saved=0;const show=()=>{document.querySelector("[data-testid=queued-count]").textContent=String(queue.length);
+document.querySelector("[data-testid=saved-count]").textContent=String(saved);
+document.querySelector("[data-testid=connection]").textContent=navigator.onLine?"Online":"Offline";};
+const save=async(text)=>{const r=await api("/notes",{method:"POST",body:JSON.stringify({text})});if(r.ok)saved++;};
+document.getElementById("add").onclick=async()=>{const text=document.getElementById("note").value;
+if(navigator.onLine)await save(text);else queue.push(text);show();};
+window.addEventListener("offline",show);
+window.addEventListener("online",async()=>{const pending=queue;queue=[];
+if(!window.__BUGS.BUG_OFFLINE_NOTES_LOST)for(const t of pending)await save(t);show();});
+if(navigator.serviceWorker)navigator.serviceWorker.register("/sw.js");show();</script>`,
+    `<link rel="manifest" href="/manifest.webmanifest">`,
+  ],
   "/app/addresses": [
     "Addresses",
     `<ul id="list"><li data-testid="address-1">Home, Warsaw <button data-testid="delete-1">Delete</button></li>
@@ -147,6 +165,26 @@ document.querySelector("[data-testid=widget-status]").textContent="Confirmed";wi
 document.querySelector("[data-testid=3ds-done]").textContent="Confirmed, you can close this window";};</script></body></html>`,
 };
 
+/** The notes page's manifest and service worker (REQ-EXEC-65). */
+const STATIC = {
+  "/manifest.webmanifest": [
+    "application/manifest+json",
+    JSON.stringify({
+      name: "demo-shop notes",
+      short_name: "Notes",
+      start_url: "/app/notes",
+      display: "standalone",
+      icons: [{ src: "/icon-192.png", sizes: "192x192", type: "image/png" }],
+    }),
+  ],
+  "/sw.js": [
+    "text/javascript",
+    `self.addEventListener("install",(e)=>{self.skipWaiting();e.waitUntil(caches.open("notes").then((c)=>c.add("/app/notes")));});
+self.addEventListener("activate",(e)=>e.waitUntil(self.clients.claim()));
+self.addEventListener("fetch",(e)=>{if(e.request.mode==="navigate")e.respondWith(fetch(e.request).catch(()=>caches.match("/app/notes")));});`,
+  ],
+};
+
 /**
  * Serves a UI page, or returns false when the path is not a UI page.
  *
@@ -156,6 +194,12 @@ document.querySelector("[data-testid=3ds-done]").textContent="Confirmed, you can
  */
 export function serveWeb(pathname, bugs, res) {
   // The payment provider's widget and its 3-D Secure window: bare pages without the shop's navigation.
+  const asset = STATIC[pathname];
+  if (asset) {
+    res.writeHead(200, { "content-type": asset[0] });
+    res.end(asset[1]);
+    return true;
+  }
   const widget = WIDGETS[pathname];
   if (widget) {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
@@ -165,6 +209,6 @@ export function serveWeb(pathname, bugs, res) {
   const entry = PAGES[pathname === "/" || pathname === "/app" ? "/app/products" : pathname];
   if (!entry) return false;
   res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-  res.end(page(entry[0], entry[1], bugs));
+  res.end(page(entry[0], entry[1], bugs, entry[2]));
   return true;
 }

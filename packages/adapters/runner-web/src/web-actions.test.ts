@@ -29,7 +29,12 @@ afterEach(async () => {
   for (const c of cleanups.splice(0)) await c();
 });
 
-const attempt = async (ticket: string, caseId: string, flag?: string) => {
+const attempt = async (
+  ticket: string,
+  caseId: string,
+  flag?: string,
+  browserName?: "chromium" | "firefox" | "webkit",
+) => {
   const shop = await startShop({ env: { DEMO_USER_PASSWORD: PASSWORD, ...(flag ? { [flag]: "1" } : {}) } });
   cleanups.push(() => shop.close());
   const login = (await (
@@ -56,6 +61,7 @@ const attempt = async (ticket: string, caseId: string, flag?: string) => {
       video: "off",
       webSession: { storage: "sessionStorage", key: "token" },
       actionTimeoutMs: 4000,
+      ...(browserName ? { browser: browserName } : {}),
     });
     const record = await executeAttempt(input, transport, Date.now, browser);
     return { record, status: computeStatus({ caseId, attempts: [record] }, { evidenceComplete: true }) };
@@ -377,5 +383,89 @@ describe("web actions (REQ-EXEC-38, REQ-EXEC-39, REQ-EXEC-40, REQ-EXEC-56)", () 
     expect(await d.property("testid:o", "text")).toBe("Bob");
     await d.click("role:button:Delete >> nth:1");
     expect(await d.property("testid:o", "text")).toBe("Anna");
+  });
+
+  it("REQ-EXEC-65/AC1+AC3: an installable page is read from its manifest and controlled by its allowed service worker", async () => {
+    const ok = await attempt("DEMO-11", "TC-01");
+    expect(ok.record.error).toBeUndefined();
+    expect(ok.status).toBe("PASSED");
+    expect(ok.record.assertions.map((a) => [a.field, a.actual])).toEqual([
+      ["manifest.short_name", "Notes"],
+      ["manifest.display", "standalone"],
+      ["manifest.icons", 1],
+      ["manifest.controlled", true],
+    ]);
+  });
+
+  it("REQ-EXEC-65/AC1: service workers outside Chromium are BLOCKED with the reason", async () => {
+    const r = await attempt("DEMO-11", "TC-01", undefined, "firefox");
+    expect(r.status).toBe("BLOCKED");
+    expect(r.record.error).toMatch(/service workers.*only in Chromium, not in firefox/);
+  });
+
+  it("REQ-EXEC-65/AC2 + REQ-NFR-04/AC1: a note written offline is saved back online; BUG-16 (offline notes lost) is FAILED", async () => {
+    const ok = await attempt("DEMO-11", "TC-02");
+    expect(ok.record.error).toBeUndefined();
+    expect(ok.status).toBe("PASSED");
+    const lost = await attempt("DEMO-11", "TC-02", "BUG_OFFLINE_NOTES_LOST");
+    expect(lost.status).toBe("FAILED");
+    expect(lost.record.assertions.filter((a) => !a.pass).map((a) => [a.field, a.actual])).toEqual([
+      ["elements.testid:saved-count.text", "0"],
+    ]);
+  });
+
+  it("REQ-EXEC-65/AC1: an allowed service worker's own requests stay on the allowlist", async () => {
+    const outside: string[] = [];
+    const other = createServer((req, res) => {
+      outside.push(req.url ?? "");
+      res.end("leaked");
+    });
+    await new Promise<void>((done) => other.listen(0, "127.0.0.1", done));
+    const otherUrl = `http://127.0.0.1:${String((other.address() as { port: number }).port)}`;
+    const app = createServer((req, res) => {
+      if (req.url === "/sw.js") {
+        res.writeHead(200, { "content-type": "text/javascript" });
+        res.end(
+          `self.addEventListener("install",(e)=>{self.skipWaiting();e.waitUntil(fetch("${otherUrl}/from-worker").catch(()=>undefined));});self.addEventListener("activate",(e)=>e.waitUntil(self.clients.claim()));`,
+        );
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end(`<p data-testid="p">ok</p><script>navigator.serviceWorker.register("/sw.js");</script>`);
+    });
+    await new Promise<void>((done) => app.listen(0, "127.0.0.1", done));
+    const appUrl = `http://127.0.0.1:${String((app.address() as { port: number }).port)}`;
+    cleanups.push(
+      () =>
+        new Promise<void>((done) => {
+          other.close(() => {
+            done();
+          });
+        }),
+      () =>
+        new Promise<void>((done) => {
+          app.close(() => {
+            done();
+          });
+        }),
+    );
+    const session = createPlaywrightBrowserFactory({ video: "off", actionTimeoutMs: 3000 })({
+      specFile: spec("DEMO-11", "TC-01"),
+      caseId: "TC-01",
+      attempt: 1,
+      plan: plan("DEMO-11"),
+      baseUrl: appUrl,
+      allowedOrigins: [appUrl],
+      accounts: {},
+      secrets: [],
+      timeoutMs: 30_000,
+    });
+    cleanups.push(async () => {
+      await session.close(false);
+    });
+    const d = await session.driver();
+    await d.goto("/");
+    expect((await d.manifest?.())?.controlled).toBe(true);
+    expect(outside).toEqual([]);
   });
 });

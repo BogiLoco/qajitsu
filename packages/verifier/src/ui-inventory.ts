@@ -112,7 +112,9 @@ export function scanUiSource(
     }
   const pages = new Set<string>();
   for (const pattern of PAGE_PATTERNS)
-    for (const m of text.matchAll(pattern)) if (m[1] && m[1] !== "/") pages.add(m[1]);
+    // A path with a file extension is an asset (a script, a manifest, an image), not a page.
+    for (const m of text.matchAll(pattern))
+      if (m[1] && m[1] !== "/" && !/\.[A-Za-z0-9]+$/.test(m[1])) pages.add(m[1]);
   return { ids: [...ids].map(([id, e]) => ({ id, ...e })), pages: [...pages] };
 }
 

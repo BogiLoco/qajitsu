@@ -36,6 +36,7 @@ describe("element and page inventory (REQ-PLAN-09/AC7)", () => {
       "/app/cart",
       "/app/checkout",
       "/app/login",
+      "/app/notes",
       "/app/offer",
       "/app/pay",
       "/app/products",
@@ -101,7 +102,7 @@ describe("element and page inventory (REQ-PLAN-09/AC7)", () => {
     expect(renderUiInventory(inventory)).toContain("- testid:cart (android, web) in Cart.java, web.html");
   });
 
-  it("REQ-PLAN-09/AC7: pages come from links, routers and page maps; an exact id wins over a prefix", () => {
+  it("REQ-PLAN-09/AC7: pages come from links, routers and page maps, assets excluded; an exact id wins over a prefix", () => {
     const found = scanUiSource(
       [
         '<a href="/orders">',
@@ -109,6 +110,8 @@ describe("element and page inventory (REQ-PLAN-09/AC7)", () => {
         '<Route path="/settings" element={x} />',
         'const PAGES = { "/help": [1] };',
         '<a href="/">',
+        '<link rel="manifest" href="/manifest.webmanifest">',
+        'const ASSETS = { "/sw.js": [1] };',
         '<b data-testid="x-">',
         "<b data-testid=\"x-'+n+'\">",
       ].join("\n"),

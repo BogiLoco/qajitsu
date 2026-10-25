@@ -321,6 +321,62 @@ describe("web actions in the trusted runtime (REQ-EXEC-38..40, REQ-EXEC-56, ADR-
     await expect(closed.verify("S1", "state.bars.3.value")).rejects.toThrow("needs an open page");
   });
 
+  it("REQ-EXEC-65/AC2+AC3: the browser goes offline and back; the manifest is read by the parent and none never passes", async () => {
+    const expect_ = {
+      description: "installable",
+      manifest: { short_name: "Notes", icons: 1, controlled: true },
+    };
+    const sw = planWith({ expect: expect_ }, { browser: { service_workers: true } });
+    const { driver, calls } = fakeDriver({
+      setOffline: (offline: boolean) => Promise.resolve(void calls.push(["setOffline", offline])),
+      manifest: () =>
+        Promise.resolve({ manifest: { short_name: "Notes", icons: [{ src: "/i.png" }] }, controlled: true }),
+    });
+    const rt = runtimeFor(sw, driver);
+    rt.beginStep("S1");
+    await rt.context.ui.goto("/app/notes");
+    await rt.context.ui.setOffline(true);
+    await rt.context.ui.setOffline(false);
+    await expect(rt.uiOp({ op: "setOffline", offline: "yes" as unknown as boolean })).rejects.toThrow(
+      "takes true (offline) or false (back online)",
+    );
+    for (const f of ["manifest.short_name", "manifest.icons", "manifest.controlled"])
+      await rt.verify("S1", f);
+    expect(calls.filter((c) => c[0] === "setOffline")).toEqual([
+      ["setOffline", true],
+      ["setOffline", false],
+    ]);
+    const record = await rt.finish();
+    expect(record.assertions.map((a) => [a.field, a.actual, a.pass])).toEqual([
+      ["manifest.short_name", "Notes", true],
+      ["manifest.icons", 1, true],
+      ["manifest.controlled", true, true],
+    ]);
+    // A page without a manifest fails the check; it is never PASSED.
+    const none = runtimeFor(
+      sw,
+      fakeDriver({ manifest: () => Promise.resolve({ manifest: undefined, controlled: false }) }).driver,
+    );
+    none.beginStep("S1");
+    await none.context.ui.goto("/app/notes");
+    await none.verify("S1", "manifest.short_name");
+    await none.verify("S1", "manifest.controlled");
+    expect((await none.finish()).assertions.map((a) => [a.actual, a.pass])).toEqual([
+      ["(the page links no readable web app manifest)", false],
+      [false, false],
+    ]);
+    // Checking the worker of a case that blocks service workers is the plan's mistake: said, not FAILED.
+    const blocked = runtimeFor(planWith({ expect: expect_ }), driver);
+    blocked.beginStep("S1");
+    await blocked.context.ui.goto("/app/notes");
+    await expect(blocked.verify("S1", "manifest.controlled")).rejects.toThrow(
+      'the case blocks service workers; allow them with "browser": {"service_workers": true}',
+    );
+    expect(() => createPlanAccessor(sw, "TC-01").expect("TC-01.S1.manifest.colour")).toThrow(
+      "unknown manifest field",
+    );
+  });
+
   it("REQ-EXEC-38..40 + ADR-0013: a driver without a web action refuses it with the reason, on mobile as not available yet", async () => {
     const without = fakeDriver({ pointer: undefined, download: undefined, switchPage: undefined });
     const web = runtimeFor(planWith({ expect: { description: "d" } }), without.driver);

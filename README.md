@@ -1156,10 +1156,12 @@ verification: { auditor: optional, canary: true, triage: on }
   Android runs through Appium on an emulator QAJitsu starts; iOS through a device farm. [docs/guides/mobile.md](docs/guides/mobile.md)
 - **Real web pages, not only forms.** Uploads (file inputs, file choosers, drop zones; files from `.qa/fixtures/` or
   generated from the plan) and downloads checked by name, type, size, hash and content (CSV, JSON, XLSX, PDF);
-  elements inside iframes (`frame:title:Payment >> testid:pay`), pop-ups and new tabs; hover, double and right click,
+  elements inside iframes (`frame:title:Payment >> testid:pay`) and narrowed by their context
+  (`role:row >> has-text:Anna >> role:button:Delete`, `testid:card >> nth:2`), pop-ups and new tabs; hover, double and right click,
   drag and drop, keys, scrolling of infinite lists; Shadow DOM; canvas charts through the application's test hook or
   an element screenshot; browser dialogs answered as the plan says; a fixed start time and moving the clock; browser
-  permissions and location; staging behind HTTP authentication. [docs/guides/web-actions.md](docs/guides/web-actions.md)
+  permissions and location; installable apps (manifest, service worker in Chromium) and offline mode; staging behind
+  HTTP authentication. [docs/guides/web-actions.md](docs/guides/web-actions.md)
 - **Built environments (`--build`).** Docker Compose from the change's worktree with a generated overlay (labels,
   dynamic ports), managed processes, WireMock/Mockoon stubs (listed in the report as not real), health checks, seed
   hook, variables from templates and secrets, cleanup policy. The compose file of the change is checked before it

@@ -109,7 +109,12 @@ Rules (checked by code; a violating spec is rejected):
   "frame:title:Payment >> testid:iban-field". When a selector matches several elements, narrow it with a chain:
   "role:row >> has-text:Anna Smith >> role:button:Delete" or "testid:card >> nth:2" (1 is the first).
   A step whose expect has "state" reads the application's test hook:
-  verify("<step id>", "state.<path>", undefined, plan.expect("<case>.<step>.state.<path>")). These are web only.
+  verify("<step id>", "state.<path>", undefined, plan.expect("<case>.<step>.state.<path>")).
+  ui.advanceTime(seconds) moves the page's clock forward (countdowns, offers that end); ui.setOffline(true) cuts the
+  network and ui.setOffline(false) brings it back (offline pages, queued actions and their sync). A step whose expect
+  has "manifest" checks the installable app:
+  verify("<step id>", "manifest.<name|short_name|start_url|display|icons|controlled>", undefined, plan.expect(...)).
+  These are web only.
 - Selectors, the most stable first: testid:<id> (the project's test id; in a native app the accessibility id, on
   Android also the resource id), role:<role>:<accessible name>, label:<text>, placeholder:<text>, alt:<text>,
   title:<text>, text:<visible text>, id:<id>; css:<selector> (web) and xpath:<path> (native app) only as the last

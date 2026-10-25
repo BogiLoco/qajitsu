@@ -6,7 +6,8 @@ plan, and the values a check compares are read by the runner, never handed over 
 
 Requirements: REQ-EXEC-05 (web testing), REQ-EXEC-38 (uploads and downloads), REQ-EXEC-39 (frames, pop-ups, tabs),
 REQ-EXEC-40 (pointer, keyboard, scroll), REQ-EXEC-56 (Shadow DOM, canvas), REQ-EXEC-61 (dialogs, time, permissions,
-HTTP authentication).
+HTTP authentication), REQ-EXEC-64 (selectors narrowed by context), REQ-EXEC-65 (service workers, offline, installable
+apps).
 
 ## Actions
 
@@ -22,9 +23,12 @@ HTTP authentication).
 | `ui.download(sel)`                                                                     | clicks and keeps the file it downloads                                   |
 | `ui.switchToNewPage()`, `ui.switchToOpener()`, `ui.closePage()`                        | pop-ups and new tabs                                                     |
 | `ui.advanceTime(seconds)`                                                              | moves the page's clock forward (countdowns, expiring offers)             |
+| `ui.setOffline(true)`, `ui.setOffline(false)`                                          | cuts the browser's network and brings it back (offline pages, sync)      |
 
 Selectors: `testid:`, `role:<role>:<name>`, `label:`, `placeholder:`, `alt:`, `title:`, `text:`, `id:`, `css:`, and
-inside iframes `frame:<selector of the iframe> >> <selector>` (nested frames chain, up to five). Selectors reach into
+inside iframes `frame:<selector of the iframe> >> <selector>` (nested frames chain). A selector that matches several
+elements is narrowed by its context: `role:row >> has-text:Anna Smith >> role:button:Delete` (the button in the row
+with that text) or `testid:card >> nth:2` (the second card); a chain has at most eight parts. Selectors reach into
 open shadow roots. An element behind a closed shadow root cannot be reached by any selector; in Chromium the error
 names the host so you can ask for an open root or a test id on it.
 
@@ -44,7 +48,8 @@ mobile cases before anything runs.
   "browser": {
     "clock": "2026-12-24T11:58:00Z",
     "permissions": ["geolocation"],
-    "geolocation": { "latitude": 52.23, "longitude": 21.01 }
+    "geolocation": { "latitude": 52.23, "longitude": 21.01 },
+    "service_workers": true
   },
   "steps": [
     {
@@ -62,6 +67,9 @@ mobile cases before anything runs.
   50 MB) or are generated from a name, type and size. A test names the key; it never passes a path or bytes.
 - **The browser** of the case starts at `clock` and time flows from there; `ui.advanceTime` jumps forward.
   `permissions` and `geolocation` are granted only as listed; everything else stays denied.
+- **Service workers** are blocked unless the case sets `service_workers: true`. That is accepted in Chromium only,
+  where QAJitsu still sees every request of the worker and keeps it on the allowlist; in Firefox or WebKit the case is
+  BLOCKED with the reason.
 - **Dialogs** (`alert`, `confirm`, `prompt`, `beforeunload`) are answered as the step's `dialog` says (`accept`,
   `dismiss`, or `accept` with a `text` for a prompt). A dialog no step expected is dismissed. Every dialog is evidence
   (`S1-dialogs.json`).
@@ -72,15 +80,17 @@ mobile cases before anything runs.
 
 Besides `elements.<selector>.<visible|enabled|checked|text|value>`, `texts`, `visual` and `message`:
 
-| Field                                           | Read by the runner from                                                                                                 |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `elements.<sel>.in_viewport`                    | whether the element is in the visible part of the window                                                                |
-| `download.name`, `.type`, `.size`, `.sha256`    | the last file the step downloaded (`size` checks `min_bytes`/`max_bytes`)                                               |
-| `download.rows`, `.texts.<n>`, `.fields.<path>` | its content: CSV, JSON and text as they are, XLSX (first sheet) and PDF read by code                                    |
-| `download.count`                                | how many files the step downloaded                                                                                      |
-| `dialog.type`, `dialog.message`                 | the last dialog of the step (message as contained text)                                                                 |
-| `state.<path>`                                  | the application's test hook, `window.__QA_STATE__` by default (`web.test_state`): an object or a function returning one |
-| `visual` with `element`                         | a screenshot of one element (a canvas, a chart) compared with its baseline                                              |
+| Field                                             | Read by the runner from                                                                                                 |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `elements.<sel>.in_viewport`                      | whether the element is in the visible part of the window                                                                |
+| `download.name`, `.type`, `.size`, `.sha256`      | the last file the step downloaded (`size` checks `min_bytes`/`max_bytes`)                                               |
+| `download.rows`, `.texts.<n>`, `.fields.<path>`   | its content: CSV, JSON and text as they are, XLSX (first sheet) and PDF read by code                                    |
+| `download.count`                                  | how many files the step downloaded                                                                                      |
+| `dialog.type`, `dialog.message`                   | the last dialog of the step (message as contained text)                                                                 |
+| `state.<path>`                                    | the application's test hook, `window.__QA_STATE__` by default (`web.test_state`): an object or a function returning one |
+| `manifest.<name\|short_name\|start_url\|display>` | the web app manifest the page links, fetched by the runner from an allowlisted origin                                   |
+| `manifest.icons`, `manifest.controlled`           | how many icons it lists; whether a service worker controls the page (the case must allow service workers)               |
+| `visual` with `element`                           | a screenshot of one element (a canvas, a chart) compared with its baseline                                              |
 
 A check with nothing to compare never passes: no download in the step, no dialog, a page without the test hook, or
 content that cannot be read is a failed check or BLOCKED with the reason.
@@ -111,4 +121,5 @@ these values; they are masked like every secret.
 
 - Several users in one case (REQ-EXEC-62) and mobile web emulation with touch (REQ-EXEC-63).
 - WebSocket messages of the page (REQ-EXEC-47), the clipboard's content, printing.
+- Service workers in Firefox and WebKit, push notifications and the install prompt itself.
 - Closed shadow roots are named only in Chromium.

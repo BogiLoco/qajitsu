@@ -2,7 +2,7 @@ import type { Expectation } from "@qajitsu/core";
 
 /**
  * Assertion fields a step's structured expectation asks for, named as the runner records them:
- * `status`, `fields.<path>`, `texts.<i>`, `elements.<selector>.<property>`, `download.*`, `state.<path>`. A case can only be PASSED
+ * `status`, `fields.<path>`, `texts.<i>`, `elements.<selector>.<property>`, `download.*`, `state.<path>`, `manifest.<field>`. A case can only be PASSED
  * when each of them was verified; a spec that leaves one out would pass whatever that value is.
  *
  * @param expect - The step's expectation from the approved plan.
@@ -19,6 +19,9 @@ export function plannedFields(expect: Expectation): string[] {
     ...(expect.dialog?.type === undefined ? [] : ["dialog.type"]),
     ...(expect.dialog?.message === undefined ? [] : ["dialog.message"]),
     ...Object.keys(expect.state ?? {}).map((path) => `state.${path}`),
+    ...Object.entries(expect.manifest ?? {})
+      .filter(([, v]) => v !== undefined)
+      .map(([part]) => `manifest.${part}`),
     ...(expect.message === undefined ? [] : ["message"]),
     ...(expect.visual === undefined ? [] : ["visual"]),
   ];

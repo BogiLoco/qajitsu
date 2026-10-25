@@ -65,6 +65,7 @@ const WEB_ONLY = [
   "switchToOpener",
   "closePage",
   "advanceTime",
+  "setOffline",
 ];
 
 /** Selector kinds a native app can resolve (REQ-EXEC-06, REQ-EXEC-21/AC3); `role:` and `css:` exist only in a browser. */

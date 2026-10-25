@@ -72,6 +72,9 @@ Rules:
   * the user's location, notifications, camera, microphone or clipboard: the case gets "browser": {"permissions":
     [...], "geolocation": {"latitude": ..., "longitude": ...}};
   * uploading or downloading files: "files" on the case and "download" in the step's expect;
+  * an installable app (PWA), offline mode or a service worker: the case gets "browser": {"service_workers": true},
+    a step expects "manifest": {"short_name": "...", "display": "standalone", "controlled": true}, and offline
+    behaviour is a step whose action takes the browser offline and a later one that brings it back;
   * the same element repeated (a button per row): name it through its container with a chain.
   Expected texts are the exact words the page shows; when the code or the recorded pages do not show them, write an
   open question instead of guessing.

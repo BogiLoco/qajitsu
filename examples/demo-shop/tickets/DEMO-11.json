@@ -1,0 +1,22 @@
+{
+  "key": "DEMO-11",
+  "type": "Story",
+  "status": "Ready for QA",
+  "summary": "Notes that work offline",
+  "description": "The notes page can be installed as an app (name demo-shop notes, short name Notes, standalone, start page /app/notes) and keeps working offline: its service worker controls the page, notes written offline wait in a queue and are saved once the connection is back.",
+  "acceptanceCriteria": [
+    "The notes page is installable: its manifest has the short name Notes and display standalone, and a service worker controls the page.",
+    "Offline, the page shows Offline and an added note is queued (Queued: 1, Saved: 0).",
+    "Back online, the queued note is saved (Queued: 0, Saved: 1)."
+  ],
+  "labels": ["notes", "pwa", "web"],
+  "components": ["shop-web"],
+  "attachments": [],
+  "comments": [
+    {
+      "author": "designer",
+      "created": "2026-10-25T09:00:00Z",
+      "body": "Test ids: connection, note-text, add-note, queued-count, saved-count."
+    }
+  ]
+}

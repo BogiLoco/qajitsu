@@ -198,6 +198,8 @@ async function start(m: StartMessage): Promise<void> {
       closePage: () => rpc({ op: "ui", operation: { op: "closePage" } }),
       advanceTime: (seconds: unknown) =>
         rpc({ op: "ui", operation: { op: "advanceTime", seconds: Number(seconds) } }),
+      // The parent's schema refuses anything but a boolean.
+      setOffline: (offline: unknown) => rpc({ op: "ui", operation: { op: "setOffline", offline } }),
     },
     step: async (stepId: string, fn: () => unknown): Promise<void> => {
       await rpc({ op: "beginStep", stepId });

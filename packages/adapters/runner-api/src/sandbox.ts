@@ -81,6 +81,7 @@ const UiOperationSchema = z.discriminatedUnion("op", [
   z.strictObject({ op: z.literal("switchPage"), to: z.enum(["new", "opener"]) }),
   z.strictObject({ op: z.literal("closePage") }),
   z.strictObject({ op: z.literal("advanceTime"), seconds: z.number().int().min(1).max(604_800) }),
+  z.strictObject({ op: z.literal("setOffline"), offline: z.boolean() }),
 ]);
 
 /** A browser for one attempt, created by the web runner (ADR-0004). */

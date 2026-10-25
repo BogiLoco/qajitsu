@@ -264,12 +264,17 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
       const type = options.browser === "firefox" ? firefox : options.browser === "webkit" ? webkit : chromium;
       // REQ-EXEC-21/AC1: getByTestId finds the project's attribute (one project per process).
       selectors.setTestIdAttribute(testIdAttribute);
+      // REQ-EXEC-61/AC3: the case's browser grants only what its plan names; everything else stays denied.
+      const settings = input.plan.cases.find((c) => c.id === input.caseId)?.browser;
+      // REQ-EXEC-65/AC1: only Chromium routes a service worker's own requests, so only there they stay on the allowlist.
+      if (settings?.service_workers === true && type !== chromium)
+        throw new Error(
+          `the case allows service workers, which QAJitsu can keep on the allowlist only in Chromium, not in ${options.browser ?? "chromium"}: run it on chromium`,
+        );
       const browser = await type.launch({
         headless: options.headless ?? true,
         ...(options.slowMoMs ? { slowMo: options.slowMoMs } : {}),
       });
-      // REQ-EXEC-61/AC3: the case's browser grants only what its plan names; everything else stays denied.
-      const settings = input.plan.cases.find((c) => c.id === input.caseId)?.browser;
       const context = await browser.newContext({
         baseURL: input.baseUrl,
         viewport: options.viewport ?? { width: 1280, height: 800 },
@@ -300,8 +305,9 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
           ? {}
           : { recordVideo: { dir: join(dir, "video"), size: { width: 1280, height: 800 } } }),
         recordHar: { path: join(dir, "network.har"), content: "omit" },
-        // Service workers could fetch outside the route handler (invariant 10).
-        serviceWorkers: "block",
+        // Service workers could fetch outside the route handler (invariant 10); in Chromium the route sees their
+        // requests too, so a case may allow them there (REQ-EXEC-65/AC1).
+        serviceWorkers: settings?.service_workers === true ? "allow" : "block",
       });
       context.setDefaultTimeout(timeout);
       // Navigation and requests stay inside the environment allowlist (invariant 10).
@@ -668,6 +674,46 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
             clockInstalled = true;
           }
           await context.clock.fastForward(ms);
+        },
+        // REQ-EXEC-65/AC2: the whole context goes offline, service workers included.
+        setOffline: (offline) => context.setOffline(offline),
+        // REQ-EXEC-65/AC3: the page names its manifest; trusted code fetches it from an allowlisted origin.
+        manifest: async () => {
+          const info = await p.evaluate(async () => {
+            const doc = (globalThis as unknown as { document: { querySelector: (s: string) => unknown } })
+              .document;
+            const link = doc.querySelector('link[rel~="manifest"]') as { href: string } | null;
+            const sw = (
+              globalThis as unknown as {
+                navigator: {
+                  serviceWorker?: {
+                    controller: unknown;
+                    getRegistration: () => Promise<unknown>;
+                    addEventListener: (e: string, f: () => void, o: { once: boolean }) => void;
+                  };
+                };
+              }
+            ).navigator.serviceWorker;
+            // A worker that is still installing takes the page over shortly (clients.claim); wait up to 3 s.
+            if (sw && !sw.controller && (await sw.getRegistration()))
+              await new Promise<void>((done) => {
+                sw.addEventListener("controllerchange", done, { once: true });
+                setTimeout(done, 3000);
+              });
+            return { href: link?.href ?? null, controlled: Boolean(sw?.controller) };
+          });
+          let manifest: Record<string, unknown> | undefined;
+          if (info.href !== null && allowed(info.href)) {
+            try {
+              const res = await context.request.get(info.href, { timeout });
+              const body: unknown = res.ok() ? await res.json() : undefined;
+              if (body !== null && typeof body === "object" && !Array.isArray(body))
+                manifest = body as Record<string, unknown>;
+            } catch {
+              // An unreadable manifest is reported as none; the check then fails.
+            }
+          }
+          return { manifest, controlled: info.controlled };
         },
         // REQ-EXEC-56/AC2: the application's own test state; read here, never passed by the spec.
         testState: (hook, path) =>

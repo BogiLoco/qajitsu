@@ -1,0 +1,94 @@
+{
+  "summary": "Installable notes page that works offline for DEMO-11.",
+  "cases": [
+    {
+      "id": "TC-01",
+      "title": "The notes page is installable and controlled by its service worker",
+      "type": "web",
+      "priority": "high",
+      "source": [
+        {
+          "kind": "ac",
+          "id": "AC1"
+        }
+      ],
+      "browser": {
+        "service_workers": true
+      },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "Open the notes page",
+          "expect": {
+            "description": "Installable as Notes, standalone, controlled by a service worker",
+            "manifest": {
+              "short_name": "Notes",
+              "display": "standalone",
+              "icons": 1,
+              "controlled": true
+            }
+          }
+        }
+      ],
+      "evidence": ["screenshot"]
+    },
+    {
+      "id": "TC-02",
+      "title": "A note written offline is saved when back online",
+      "type": "web",
+      "priority": "high",
+      "source": [
+        {
+          "kind": "ac",
+          "id": "AC2"
+        },
+        {
+          "kind": "ac",
+          "id": "AC3"
+        }
+      ],
+      "steps": [
+        {
+          "id": "S1",
+          "action": "Go offline and add a note",
+          "expect": {
+            "description": "Offline, one note queued",
+            "elements": {
+              "testid:connection": {
+                "text": "Offline"
+              },
+              "testid:queued-count": {
+                "text": "1"
+              },
+              "testid:saved-count": {
+                "text": "0"
+              }
+            }
+          }
+        },
+        {
+          "id": "S2",
+          "action": "Go back online",
+          "expect": {
+            "description": "The queued note is saved",
+            "elements": {
+              "testid:connection": {
+                "text": "Online"
+              },
+              "testid:queued-count": {
+                "text": "0"
+              },
+              "testid:saved-count": {
+                "text": "1"
+              }
+            }
+          }
+        }
+      ],
+      "evidence": ["screenshot"],
+      "data": {
+        "user": "user:standard"
+      }
+    }
+  ]
+}

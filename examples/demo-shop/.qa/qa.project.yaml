@@ -68,6 +68,7 @@ services:
       BUG_RATING_OFF_BY_ONE: { value: "0", overridable: true }
       BUG_DELETE_IGNORES_CANCEL: { value: "0", overridable: true }
       BUG_OFFER_NEVER_EXPIRES: { value: "0", overridable: true }
+      BUG_OFFLINE_NOTES_LOST: { value: "0", overridable: true }
     health: { http: /health, timeout_s: 180 }
 
 build:
