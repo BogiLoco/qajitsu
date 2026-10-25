@@ -18,5 +18,14 @@ describe("placement hints for model repairs (REQ-LLM-04/AC2)", () => {
       '"files" belongs to the case',
     );
     expect(withPlacementHint(["cases", 0, "title"], "Too small")).toBe("Too small");
+    expect(
+      withPlacementHint(
+        ["cases", 1, "steps", 0, "expect", "elements", "offer-status"],
+        "Invalid key in record",
+      ),
+    ).toContain('an element key is a selector with its kind: "testid:offer-status"');
+    expect(
+      withPlacementHint(["cases", 1, "steps", 0, "expect", "elements", "testid:x"], "Invalid key in record"),
+    ).toBe("Invalid key in record");
   });
 });

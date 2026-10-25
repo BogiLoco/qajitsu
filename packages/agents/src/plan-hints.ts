@@ -8,6 +8,8 @@ const PLACES: Readonly<Record<string, string>> = {
     'belongs to the case: "browser": {"permissions": ["geolocation"], "geolocation": {"latitude": .., "longitude": ..}} next to "steps"',
   permissions: 'belongs to the case: "browser": {"permissions": [...]} next to "steps"',
   clock: 'belongs to the case: "browser": {"clock": "<ISO time>"} next to "steps"',
+  service_workers: 'belongs to the case: "browser": {"service_workers": true} next to "steps"',
+  manifest: 'goes directly into the step\'s expect ("manifest": {"short_name": ..}), not into "elements"',
   browser: 'belongs to the case, next to "steps", not to a step or its expect',
   dialog:
     'the answer belongs to the step ("dialog": {"action": "accept"}), the check to its expect ("dialog": {"type": .., "message": ..})',
@@ -30,5 +32,10 @@ export function withPlacementHint(path: readonly PropertyKey[], message: string)
     ...[...message.matchAll(/key[s]?: ([a-z_, ]+)/gi)].flatMap((m) => (m[1] ?? "").split(/[, ]+/)),
   ];
   const field = named.reverse().find((k) => k in PLACES);
-  return field === undefined ? message : `${message} ("${field}" ${PLACES[field] ?? ""})`;
+  if (field !== undefined) return `${message} ("${field}" ${PLACES[field] ?? ""})`;
+  // An element key without its selector kind (`offer-status` for `testid:offer-status`).
+  const key = path.at(-1);
+  if (path.at(-2) === "elements" && typeof key === "string" && !key.includes(":"))
+    return `${message} (an element key is a selector with its kind: "testid:${key}", "role:button:${key}" or "text:${key}")`;
+  return message;
 }

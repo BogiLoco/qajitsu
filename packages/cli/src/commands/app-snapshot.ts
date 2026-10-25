@@ -113,7 +113,13 @@ export async function planSnapshot(
   session: RunSession,
   io: CommandIO,
   ports: RuntimePorts & SnapshotPorts,
-  options: { readonly env?: string | undefined; readonly force: boolean; readonly build?: boolean },
+  options: {
+    readonly env?: string | undefined;
+    readonly force: boolean;
+    readonly build?: boolean;
+    /** Pages the code defines, recorded too (dogfood pass 2026-10-25). */
+    readonly paths?: readonly string[] | undefined;
+  },
 ): Promise<UiScreen[] | undefined> {
   const { ws, events, masker } = session;
   const saved = await readPlanSnapshot(ws);
@@ -134,7 +140,11 @@ export async function planSnapshot(
   ).then((sizes) => sizes.some(Boolean));
   if (hasCode && changeShown && !options.force && options.build !== true) return undefined;
   if (options.build !== true)
-    return recordForPlanner(session, io, ports, { env: options.env, force: options.force });
+    return recordForPlanner(session, io, ports, {
+      env: options.env,
+      force: options.force,
+      paths: options.paths,
+    });
   // REQ-EXEC-22/AC9: the environment (and the app) are started from the worktree only to record what they show.
   const releaseEnv = await acquireEnvLock(session);
   io.write("Building the environment to record its pages and screens for the planner…\n");
@@ -160,6 +170,7 @@ export async function planSnapshot(
       env: options.env,
       force: true,
       buildBaseUrl: prepared.build.baseUrl,
+      paths: options.paths,
     });
   } finally {
     await prepared.build?.stop().catch(() => undefined);
@@ -189,7 +200,12 @@ async function recordForPlanner(
   session: RunSession,
   io: CommandIO,
   ports: RuntimePorts & SnapshotPorts,
-  options: { readonly env?: string | undefined; readonly force: boolean; readonly buildBaseUrl?: string },
+  options: {
+    readonly env?: string | undefined;
+    readonly force: boolean;
+    readonly buildBaseUrl?: string;
+    readonly paths?: readonly string[] | undefined;
+  },
 ): Promise<UiScreen[] | undefined> {
   const { ws, project, masker, events } = session;
   let env: ResolvedEnvironment;
@@ -224,6 +240,7 @@ async function recordForPlanner(
       account,
       baseUrl: env.baseUrl,
       allowedOrigins: [env.origin],
+      ...(options.paths ? { paths: options.paths } : {}),
       mask: (v) => masker.maskJson(v),
       emit: (event, details) => {
         events.emit("plan", { kind: "system", name: "orchestrator" }, event, details);

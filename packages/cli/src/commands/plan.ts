@@ -478,6 +478,7 @@ export async function runPlan(
       env: options.env,
       force: options.snapshot === true,
       build: options.build === true,
+      paths: context.ui?.pages,
     });
     if (pages) context = { ...context, snapshot: pages };
     const flagsOf = await planFlagsOf(session, context);

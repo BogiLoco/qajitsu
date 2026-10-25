@@ -176,6 +176,8 @@ export interface UiCrawlInput {
   readonly allowedOrigins: readonly string[];
   /** Pages recorded at most (default 12). */
   readonly maxPages?: number;
+  /** Pages to record right after the start page, e.g. the pages the code defines that no link reaches. */
+  readonly paths?: readonly string[];
   readonly mask: UiSnapshotInput["mask"];
   readonly emit: UiSnapshotInput["emit"];
 }
@@ -237,7 +239,8 @@ export async function crawlUiSnapshot(input: UiCrawlInput): Promise<UiScreen[]> 
   try {
     const driver = await session.driver();
     if (input.account !== undefined) await driver.useAccount(input.account);
-    const queue = ["/"];
+    // The start page, then the pages the code names (an offer page no menu links to), then what links reach.
+    const queue = ["/", ...(input.paths ?? []).filter((p) => /^\/[^\s?#]*$/.test(p) && p !== "/")];
     const seen = new Set(queue);
     while (queue.length > 0 && screens.length < max) {
       const where = queue.shift() ?? "/";

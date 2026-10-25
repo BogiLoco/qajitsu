@@ -279,6 +279,27 @@ describe("snapshot of the running application in qj run (REQ-EXEC-22)", () => {
     ]);
   });
 
+  it("REQ-EXEC-22/AC1: pages the code defines are recorded right after the start page, even when no link reaches them", async () => {
+    const calls: string[] = [];
+    const screens = await crawlUiSnapshot({
+      factory: fakeFactory(
+        {
+          "/": [{ role: "heading", name: "Shop" }],
+          "/app/offer": [{ role: "status", name: "Expires in 10:00" }],
+        },
+        calls,
+      ),
+      login: () => Promise.reject(new Error("unused")),
+      baseUrl: "http://127.0.0.1:3000",
+      allowedOrigins: ["http://127.0.0.1:3000"],
+      paths: ["/app/offer", "/", "https://evil.example/x", "/a b"],
+      mask: (v) => v,
+      emit: () => undefined,
+    });
+    expect(screens.map((s) => s.where)).toEqual(["/", "/app/offer"]);
+    expect(calls.filter((c) => c.startsWith("goto"))).toEqual(["goto /", "goto /app/offer"]);
+  });
+
   it("REQ-EXEC-22/AC6+AC7: without an account the start page is opened anonymously; a failed login records nothing", async () => {
     const calls: string[] = [];
     const events: [string, unknown][] = [];
