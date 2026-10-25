@@ -1,0 +1,21 @@
+{
+  "key": "DEMO-12",
+  "type": "Story",
+  "status": "Ready for QA",
+  "summary": "Live support chat",
+  "description": "The support chat talks to support over a WebSocket. When a customer sends a message, the page sends it as {\"type\":\"message\",\"text\":...} and support replies with Support received: followed by the customer's words.",
+  "acceptanceCriteria": [
+    "The chat shows Online once connected.",
+    "A message the customer sends goes out over the WebSocket, and the reply repeats the customer's words after Support received:."
+  ],
+  "labels": ["chat", "web"],
+  "components": ["shop-web"],
+  "attachments": [],
+  "comments": [
+    {
+      "author": "designer",
+      "created": "2026-10-25T09:00:00Z",
+      "body": "Test ids: chat-status, chat-log, chat-input, chat-send."
+    }
+  ]
+}

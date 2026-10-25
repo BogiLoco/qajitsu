@@ -1,0 +1,35 @@
+{
+  "summary": "Support chat over a WebSocket for DEMO-12.",
+  "cases": [
+    {
+      "id": "TC-01",
+      "title": "A chat message goes out and support repeats it",
+      "type": "web",
+      "priority": "high",
+      "source": [
+        { "kind": "ac", "id": "AC1" },
+        { "kind": "ac", "id": "AC2" }
+      ],
+      "steps": [
+        {
+          "id": "S1",
+          "action": "Open the support chat",
+          "expect": { "description": "Connected", "elements": { "testid:chat-status": { "text": "Online" } } }
+        },
+        {
+          "id": "S2",
+          "action": "Send Where is my order?",
+          "expect": {
+            "description": "Sent over the socket and repeated by support",
+            "websocket": {
+              "url": "/ws/chat",
+              "sent": ["\"text\":\"Where is my order?\""],
+              "received": ["Support received: Where is my order?"]
+            }
+          }
+        }
+      ],
+      "evidence": ["screenshot"]
+    }
+  ]
+}

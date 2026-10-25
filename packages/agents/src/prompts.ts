@@ -72,6 +72,8 @@ Rules:
   * the user's location, notifications, camera, microphone or clipboard: the case gets "browser": {"permissions":
     [...], "geolocation": {"latitude": ..., "longitude": ...}};
   * uploading or downloading files: "files" on the case and "download" in the step's expect;
+  * live updates over a WebSocket (chat, notifications, prices): the step expects "websocket": {"url": "/ws/...",
+    "sent": ["<text the page sends>"], "received": ["<text the page receives>"]} (texts are contained in a frame);
   * an installable app (PWA), offline mode or a service worker: the case gets "browser": {"service_workers": true},
     a step expects "manifest": {"short_name": "...", "display": "standalone", "controlled": true}, and offline
     behaviour is a step whose action takes the browser offline and a later one that brings it back;

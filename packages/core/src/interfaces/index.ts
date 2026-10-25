@@ -30,6 +30,7 @@ export type {
   AttemptExecutor,
   AttemptProgress,
   AttemptRecord,
+  NetworkProblemRecord,
   AttemptRequest,
   CaseAttempt,
   CaseRunResult,

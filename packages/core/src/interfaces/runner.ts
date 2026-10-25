@@ -59,6 +59,15 @@ export interface EvidenceItem {
   readonly content: string | Uint8Array;
 }
 
+/** A request that went wrong in a step (REQ-EVD-09/AC1). */
+export interface NetworkProblemRecord {
+  readonly kind: string;
+  readonly method: string;
+  readonly url: string;
+  readonly status?: number | undefined;
+  readonly detail?: string | undefined;
+}
+
 /** Everything one attempt produced, recorded by the trusted parent (ADR-0004); statuses are computed from it. */
 export interface AttemptRecord {
   readonly caseId: string;
@@ -71,9 +80,13 @@ export interface AttemptRecord {
     readonly ok: boolean;
     readonly error?: string;
     readonly url?: string;
+    /** What went wrong in the step's traffic (REQ-EVD-09/AC1), built by code. */
+    readonly network?: readonly NetworkProblemRecord[];
   }[];
   readonly assertions: readonly AssertionRecord[];
   readonly evidence: readonly EvidenceItem[];
+  /** The application's API endpoints the page reached (REQ-EVD-09/AC2). */
+  readonly requests?: readonly { readonly method: string; readonly path: string; readonly status?: number }[];
   /** The browser of a web attempt with its exact version (REQ-EXEC-66/AC3). */
   readonly browser?: { readonly name: string; readonly version: string };
 }

@@ -725,7 +725,7 @@ Jobs, queues and eventual consistency: "the status changes within 30 seconds".
 
 ### REQ-EXEC-47 · WebSocket and server-sent events testing
 
-- Status: accepted
+- Status: in-progress
 - Priority: should
 - Stage: later
 - Related: REQ-EXEC-04, REQ-ENV-01, INV-1, INV-8, INV-10
@@ -734,7 +734,7 @@ Jobs, queues and eventual consistency: "the status changes within 30 seconds".
 
 - [ ] AC1: A step can open a WebSocket (with the test account's authentication), send messages and wait for messages matching the plan (fields, order, count) within a timeout.
 - [ ] AC2: A step can subscribe to a server-sent events stream and check its events the same way.
-- [ ] AC3: In web cases, the messages of the page's WebSockets can be checked as well as its HTTP traffic.
+- [x] AC3: In web cases, the messages of the page's WebSockets can be checked as well as its HTTP traffic.
 - [ ] AC4: Every frame sent and received is evidence, masked; hosts are checked against the environment allowlist, and a socket to another host is refused.
 - [ ] AC5: A connection that cannot be opened or closes early makes the step fail or the case BLOCKED with the close code and reason.
 

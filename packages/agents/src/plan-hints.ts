@@ -9,6 +9,7 @@ const PLACES: Readonly<Record<string, string>> = {
   permissions: 'belongs to the case: "browser": {"permissions": [...]} next to "steps"',
   clock: 'belongs to the case: "browser": {"clock": "<ISO time>"} next to "steps"',
   service_workers: 'belongs to the case: "browser": {"service_workers": true} next to "steps"',
+  websocket: 'goes directly into the step\'s expect ("websocket": {"received": [..]}), not into "elements"',
   manifest: 'goes directly into the step\'s expect ("manifest": {"short_name": ..}), not into "elements"',
   browser: 'belongs to the case, next to "steps", not to a step or its expect',
   dialog:

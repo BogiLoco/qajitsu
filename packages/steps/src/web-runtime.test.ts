@@ -377,6 +377,98 @@ describe("web actions in the trusted runtime (REQ-EXEC-38..40, REQ-EXEC-56, ADR-
     );
   });
 
+  it("REQ-EXEC-47/AC3+AC4: a WebSocket message is looked for by the parent on the planned socket; frames are masked evidence", async () => {
+    const plan = planWith({
+      expect: {
+        description: "d",
+        websocket: { url: "/ws/chat", sent: ["hi"], received: ["Support received: hi"] },
+      },
+    });
+    const asked: unknown[][] = [];
+    const { driver } = fakeDriver({
+      socketFrame: (direction: string, text: string, url: string | undefined, ms: number) => {
+        asked.push([direction, text, url, ms]);
+        return Promise.resolve(direction === "sent" ? `{"text":"hi"}` : undefined);
+      },
+      takeSocketFrames: () => [{ url: "shop/ws/chat", direction: "sent", text: `{"text":"hi ${SECRET}"}` }],
+    });
+    const rt = runtimeFor(plan, driver, { waitTimeoutMs: 1000 });
+    rt.beginStep("S1");
+    await rt.context.ui.goto("/app/chat");
+    await rt.verify("S1", "websocket.sent.0");
+    await rt.verify("S1", "websocket.received.0");
+    await rt.endStep("S1");
+    const record = await rt.finish();
+    expect(asked).toEqual([
+      ["sent", "hi", "/ws/chat", 1000],
+      ["received", "Support received: hi", "/ws/chat", 1000],
+    ]);
+    expect(record.assertions.map((a) => [a.field, a.actual, a.pass])).toEqual([
+      ["websocket.sent.0", "hi", true],
+      ["websocket.received.0", "(no received WebSocket message contains it)", false],
+    ]);
+    expect(String(record.evidence.find((e) => e.name === "S1-websocket.json")?.content)).toContain("hi ***");
+    // Without an open page there is nothing to listen to.
+    const closed = runtimeFor(plan, fakeDriver().driver);
+    closed.beginStep("S1");
+    await expect(closed.verify("S1", "websocket.sent.0")).rejects.toThrow("needs an open page");
+  });
+
+  it("REQ-EVD-09/AC1+AC2: a failed step gets what went wrong in its traffic; every reached endpoint is recorded", async () => {
+    const plan = planWith({ expect: { description: "d", elements: { "testid:total": { text: "10" } } } }, {});
+    const batches = [
+      [
+        { method: "GET", url: "/app/cart", resourceType: "document", sameOrigin: true, status: 200 },
+        {
+          method: "POST",
+          url: `/orders?token=${SECRET}`,
+          resourceType: "fetch",
+          sameOrigin: true,
+          status: 500,
+        },
+        { method: "GET", url: "/cart", resourceType: "fetch", sameOrigin: true, status: 200 },
+      ],
+    ];
+    const { driver } = fakeDriver({
+      property: () => Promise.resolve("9"),
+      takeNetwork: () => batches.shift() ?? [],
+    });
+    const rt = runtimeFor(plan, driver);
+    rt.beginStep("S1");
+    await rt.context.ui.goto("/app/cart");
+    await rt.verify("S1", "elements.testid:total.text");
+    await rt.endStep("S1");
+    const record = await rt.finish();
+    expect(record.steps[0]?.network).toEqual([
+      { kind: "server-error", method: "POST", url: "/orders?token=***", status: 500 },
+    ]);
+    const file = record.evidence.find((e) => e.name === "S1-network.json");
+    expect(JSON.parse(String(file?.content))).toEqual({
+      requests: 3,
+      problems: [{ kind: "server-error", method: "POST", url: "/orders?token=***", status: 500 }],
+    });
+    expect(record.requests).toEqual([
+      { method: "GET", path: "/app/cart", status: 200 },
+      { method: "POST", path: "/orders", status: 500 },
+      { method: "GET", path: "/cart", status: 200 },
+    ]);
+    // A step that passed keeps its traffic out of the failure evidence.
+    const ok = fakeDriver({
+      property: () => Promise.resolve("10"),
+      takeNetwork: () => [{ method: "GET", url: "/x", resourceType: "fetch", sameOrigin: true, status: 503 }],
+    });
+    const passed = runtimeFor(plan, ok.driver);
+    passed.beginStep("S1");
+    await passed.context.ui.goto("/app/cart");
+    await passed.verify("S1", "elements.testid:total.text");
+    await passed.endStep("S1");
+    const r2 = await passed.finish();
+    // INV-1 / REQ-EVD-09/AC7: a 503 the page shrugged off never fails the step; only the planned checks decide.
+    expect(r2.outcome).toBe("passed");
+    expect(r2.steps[0]?.network).toBeUndefined();
+    expect(r2.evidence.some((e) => e.name.endsWith("-network.json"))).toBe(false);
+  });
+
   it("REQ-EXEC-38..40 + ADR-0013: a driver without a web action refuses it with the reason, on mobile as not available yet", async () => {
     const without = fakeDriver({ pointer: undefined, download: undefined, switchPage: undefined });
     const web = runtimeFor(planWith({ expect: { description: "d" } }), without.driver);

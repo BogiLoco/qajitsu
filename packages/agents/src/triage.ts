@@ -46,6 +46,8 @@ For each case suggest the most likely cause:
 - test-bug: the test itself is wrong (wrong selector, wrong step order, a wait that is too short) while the app looks right;
 - environment: the environment was not usable (service down, timeouts, 5xx from a dependency, missing configuration);
 - data: test data was missing or in the wrong state (unknown product, account locked, previous run left data).
+A failed step may list "network": the requests of the page that went wrong in that step (5xx, 4xx, timeouts,
+connection errors, requests refused by the allowlist, CORS blocks, redirects to a login page), summarised by code.
 ${UNTRUSTED_DATA_RULES}
 Cite the evidence your suggestion rests on, using only what is listed: {"kind":"step","ref":"S1"},
 {"kind":"assertion","ref":"S1.status"}, {"kind":"evidence","ref":"<evidence path>"}, {"kind":"log","ref":"<log file>"}.

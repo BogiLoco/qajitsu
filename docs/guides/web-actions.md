@@ -7,7 +7,7 @@ plan, and the values a check compares are read by the runner, never handed over 
 Requirements: REQ-EXEC-05 (web testing), REQ-EXEC-38 (uploads and downloads), REQ-EXEC-39 (frames, pop-ups, tabs),
 REQ-EXEC-40 (pointer, keyboard, scroll), REQ-EXEC-56 (Shadow DOM, canvas), REQ-EXEC-61 (dialogs, time, permissions,
 HTTP authentication), REQ-EXEC-64 (selectors narrowed by context), REQ-EXEC-65 (service workers, offline, installable
-apps).
+apps), REQ-EXEC-47/AC3 (WebSocket messages of the page), REQ-EVD-09 (analysis of the recorded traffic).
 
 ## Actions
 
@@ -90,6 +90,7 @@ Besides `elements.<selector>.<visible|enabled|checked|text|value>`, `texts`, `vi
 | `state.<path>`                                    | the application's test hook, `window.__QA_STATE__` by default (`web.test_state`): an object or a function returning one |
 | `manifest.<name\|short_name\|start_url\|display>` | the web app manifest the page links, fetched by the runner from an allowlisted origin                                   |
 | `manifest.icons`, `manifest.controlled`           | how many icons it lists; whether a service worker controls the page (the case must allow service workers)               |
+| `websocket.received.<n>`, `websocket.sent.<n>`    | frames of the page's WebSockets in the step (on sockets whose URL contains `websocket.url`), recorded by the runner     |
 | `visual` with `element`                           | a screenshot of one element (a canvas, a chart) compared with its baseline                                              |
 
 A check with nothing to compare never passes: no download in the step, no dialog, a page without the test hook, or
@@ -97,6 +98,13 @@ content that cannot be read is a failed check or BLOCKED with the reason.
 
 ## Evidence and safety
 
+- **The traffic explains failures.** Every request of the page is tied to the step that sent it. A failed or blocked
+  step lists the requests that went wrong (5xx and 4xx responses, timeouts, connection errors, requests the allowlist
+  refused, CORS blocks, redirects to a login page) in `S1-network.json`, next to the failure in the report and, as
+  structured data, for the failure hints. The report also shows which case reached which endpoint of the change.
+  None of this changes a status or a count.
+- **WebSocket frames** of the page pass through the runner and are kept per step (`S1-websocket.json`, masked);
+  sockets to hosts outside the allowlist are closed.
 - Uploaded and downloaded files are evidence with their SHA-256 in the manifest. Text is masked before it is stored;
   a binary file whose extracted text holds a secret is kept only as its masked text. Downloads over 100 MB are refused
   before they are read.
@@ -120,6 +128,6 @@ these values; they are masked like every secret.
 ## Not covered yet
 
 - Several users in one case (REQ-EXEC-62) and mobile web emulation with touch (REQ-EXEC-63).
-- WebSocket messages of the page (REQ-EXEC-47), the clipboard's content, printing.
+- Sockets a step opens itself and server-sent events (REQ-EXEC-47/AC1+AC2), the clipboard's content, printing.
 - Service workers in Firefox and WebKit, push notifications and the install prompt itself.
 - Closed shadow roots are named only in Chromium.

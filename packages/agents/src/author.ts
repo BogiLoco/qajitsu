@@ -114,6 +114,8 @@ Rules (checked by code; a violating spec is rejected):
   network and ui.setOffline(false) brings it back (offline pages, queued actions and their sync). A step whose expect
   has "manifest" checks the installable app:
   verify("<step id>", "manifest.<name|short_name|start_url|display|icons|controlled>", undefined, plan.expect(...)).
+  A step whose expect has "websocket" checks the page's socket messages after the action that causes them:
+  verify("<step id>", "websocket.<received|sent>.<n>", undefined, plan.expect(...)).
   These are web only.
 - Selectors, the most stable first: testid:<id> (the project's test id; in a native app the accessibility id, on
   Android also the resource id), role:<role>:<accessible name>, label:<text>, placeholder:<text>, alt:<text>,

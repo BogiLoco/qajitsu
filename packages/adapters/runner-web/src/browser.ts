@@ -12,6 +12,7 @@ import {
   type EvidenceItem,
   type UiDriver,
   type UiProperty,
+  type UiRequest,
 } from "@qajitsu/steps";
 import {
   browserEngine,
@@ -32,6 +33,7 @@ import {
   type FrameLocator,
   type Locator,
   type Page,
+  type Request,
 } from "playwright-core";
 
 /** Settings of the web runner (REQ-EXEC-05, REQ-EVD-02, REQ-EVD-06). */
@@ -333,6 +335,8 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
       // Navigations a page was refused, so a pop-up to another host is named (REQ-EXEC-39/AC3).
       const blockedNavigation = new Map<Page, string>();
       let lastBlocked: { origin: string; at: number } | undefined;
+      /** Requests the allowlist refused (REQ-EVD-09/AC1): named as such, not as a connection error. */
+      const refusedRequests = new WeakSet<Request>();
       await context.route("**/*", (route) => {
         const request = route.request();
         if (allowed(request.url())) {
@@ -348,14 +352,35 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
             // A pop-up's first navigation or a worker's request may have no page yet.
           }
         }
+        refusedRequests.add(request);
         void route.abort("blockedbyclient");
       });
       // WebSockets bypass page.route; check them against the same allowlist.
+      // REQ-EXEC-47/AC3+AC4: frames of allowed sockets pass through the parent, which records them for checks.
+      const frames: { url: string; direction: "received" | "sent"; text: string }[] = [];
+      const frameText = (m: string | Buffer): string =>
+        (typeof m === "string" ? m : `(binary, ${String(m.length)} bytes)`).slice(0, 20_000);
       await context.routeWebSocket(/.*/, (ws) => {
         const wsUrl = new URL(ws.url());
         const httpOrigin = `${wsUrl.protocol === "wss:" ? "https:" : "http:"}//${wsUrl.host}`;
-        if (input.allowedOrigins.includes(httpOrigin)) ws.connectToServer();
-        else void ws.close({ code: 1008, reason: "blocked by QAJitsu allowlist" });
+        if (!input.allowedOrigins.includes(httpOrigin)) {
+          void ws.close({ code: 1008, reason: "blocked by QAJitsu allowlist" });
+          return;
+        }
+        const server = ws.connectToServer();
+        const url = masker.maskText(`${wsUrl.host}${wsUrl.pathname}`);
+        const keep = (direction: "received" | "sent", m: string | Buffer): void => {
+          frames.push({ url, direction, text: frameText(m) });
+          if (frames.length > 2000) frames.shift();
+        };
+        ws.onMessage((m) => {
+          keep("sent", m);
+          server.send(m);
+        });
+        server.onMessage((m) => {
+          keep("received", m);
+          ws.send(m);
+        });
       });
       await context.tracing.start({ screenshots: true, snapshots: true });
       // REQ-EXEC-61/AC2: the case starts at the plan's time; time flows from there and steps can move it forward.
@@ -411,6 +436,71 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
           return url;
         }
       };
+      // REQ-EVD-09: every request of the page, in the order it was sent, read by the parent and masked; the runtime
+      // takes them at the end of each step. Bodies are never kept.
+      type Traffic = { -readonly [K in keyof UiRequest]: UiRequest[K] };
+      const traffic: Traffic[] = [];
+      const entries = new WeakMap<Request, Traffic>();
+      const rawUrls = new Map<Traffic, string>();
+      const appOrigin = new URL(input.baseUrl).origin;
+      context.on("request", (rq) => {
+        const url = rq.url();
+        if (/^(data|blob|about):/.test(url)) return;
+        const entry: Traffic = {
+          method: rq.method(),
+          url: masker.maskText(pathOf(url)),
+          resourceType: rq.resourceType(),
+          sameOrigin: (() => {
+            try {
+              return new URL(url).origin === appOrigin;
+            } catch {
+              return false;
+            }
+          })(),
+        };
+        traffic.push(entry);
+        entries.set(rq, entry);
+        rawUrls.set(entry, url);
+        if (traffic.length > 5000) traffic.shift();
+      });
+      context.on("response", (res) => {
+        const entry = entries.get(res.request());
+        if (!entry) return;
+        entry.status = res.status();
+        const location = res.headers()["location"];
+        if (location !== undefined)
+          try {
+            entry.location = masker.maskText(pathOf(new URL(location, res.url()).toString()));
+          } catch {
+            entry.location = masker.maskText(location.slice(0, 300));
+          }
+      });
+      context.on("requestfailed", (rq) => {
+        const entry = entries.get(rq);
+        if (!entry) return;
+        if (refusedRequests.has(rq)) entry.refused = true;
+        else entry.failure = rq.failure()?.errorText ?? "failed";
+      });
+      // The browser names a CORS block only on the console: the request it names is marked.
+      const markCors = (text: string): void => {
+        const blocked = /(?:at|from) '([^']+)'(?: from origin '[^']+')? has been blocked by CORS policy/.exec(
+          text,
+        )?.[1];
+        if (blocked === undefined) return;
+        for (const entry of [...rawUrls.keys()].reverse())
+          if (rawUrls.get(entry) === blocked) {
+            entry.cors = true;
+            return;
+          }
+      };
+      page.on("console", (m) => {
+        if (m.type() === "error") markCors(m.text());
+      });
+      context.on("page", (pg) => {
+        pg.on("console", (m) => {
+          if (m.type() === "error") markCors(m.text());
+        });
+      });
       if (want.console !== false) {
         page.on("console", (m) => {
           if (m.type() === "error")
@@ -681,6 +771,26 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
           dialogPolicy = policy;
         },
         takeDialogs: () => dialogs.splice(0),
+        socketFrame: async (direction, text, url, waitMs) => {
+          const deadline = Date.now() + waitMs;
+          for (;;) {
+            const hit = frames.find(
+              (f) =>
+                f.direction === direction &&
+                (url === undefined || f.url.includes(url)) &&
+                f.text.includes(text),
+            );
+            if (hit) return hit.text;
+            if (Date.now() >= deadline) return undefined;
+            await new Promise((r) => setTimeout(r, 100));
+          }
+        },
+        takeSocketFrames: () => frames.splice(0).map((f) => ({ ...f, text: masker.maskText(f.text) })),
+        takeNetwork: () => {
+          const taken = traffic.splice(0);
+          for (const t of taken) rawUrls.delete(t);
+          return taken;
+        },
         advanceTime: async (ms) => {
           if (!clockInstalled) {
             await context.clock.install();

@@ -299,7 +299,7 @@ function planBrowsers(d: DetectedTool, input: PlanInput): PlanStep {
     ? wantedBrowsers
     : (d.system?.missing ?? wantedBrowsers).filter((b) => wantedBrowsers.includes(b));
   if (d.system && missing.length === 0)
-    return step("browsers", "use-system", "installed in Playwright's cache", {
+    return step("browsers", "use-system", `installed (${d.system.where})`, {
       version: d.system.version ?? "",
     });
   return step("browsers", reinstall ? "reinstall" : "install", reinstall ? "--reinstall" : "not installed", {

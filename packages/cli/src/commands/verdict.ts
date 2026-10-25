@@ -5,6 +5,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readManifest } from "@qajitsu/adapter-evidence-local";
 import {
+  AnalysisSchema,
   APPROVED_PLAN_FILE,
   AuditRecordSchema,
   CanaryRecordSchema,
@@ -48,6 +49,7 @@ import {
   applyVerificationChecks,
   checkApprovalRecords,
   computeDecision,
+  endpointReach,
   formatDecision,
   type DecisionResult,
   checkManifest,
@@ -531,6 +533,19 @@ export async function computeVerdict(
         evidencePath,
       };
     });
+  // REQ-EVD-09/AC2: which case reached which endpoint of the change, from the requests the runner recorded.
+  const analysis = AnalysisSchema.safeParse(
+    JSON.parse(await readFile(ws.path("analysis.json"), "utf8").catch(() => "null")) as unknown,
+  );
+  const reached = new Map(
+    [...results]
+      .filter(([, r]) => r.attempts.some((a) => a.requests !== undefined))
+      .map(([id, r]) => [id, r.attempts.flatMap((a) => a.requests ?? [])] as const),
+  );
+  const endpoints =
+    analysis.success && analysis.data.endpoints.length > 0 && reached.size > 0
+      ? endpointReach(analysis.data.endpoints, reached)
+      : undefined;
   const attempts: Record<string, ReportAttempt[]> = {};
   for (const [id, r] of results) {
     attempts[id] = r.attempts.map((a) => ({
@@ -538,6 +553,8 @@ export async function computeVerdict(
       outcome: a.outcome,
       error: a.error,
       assertions: a.assertions,
+      // REQ-EVD-09/AC1: what went wrong in the traffic of the failed steps, next to the failure.
+      network: a.steps.flatMap((s) => (s.network ? [{ stepId: s.id, problems: s.network }] : [])),
       // REQ-EVD-08/AC5: the screenshots that mark where the step failed come first.
       evidence: annotatedFirst(
         manifest.filter((m) => a.evidence.includes(m.path)),
@@ -621,6 +638,7 @@ export async function computeVerdict(
       checks: checkNotes,
       observations,
       fixCheck,
+      endpoints,
     });
   const secretGate = gateNoSecrets(
     [

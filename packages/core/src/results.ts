@@ -30,6 +30,19 @@ export const CaseAttemptSchema = z.strictObject({
         ok: z.boolean(),
         error: z.string().optional(),
         url: z.string().optional(),
+        /** What went wrong in the step's traffic (REQ-EVD-09/AC1), built by code from the page's requests. */
+        network: z
+          .array(
+            z.strictObject({
+              kind: z.string().max(40),
+              method: z.string().max(10),
+              url: z.string().max(2000),
+              status: z.number().int().optional(),
+              detail: z.string().max(300).optional(),
+            }),
+          )
+          .max(20)
+          .optional(),
       }),
     )
     .default([]),
@@ -44,6 +57,17 @@ export const CaseAttemptSchema = z.strictObject({
   /** The attempt ran a spec changed by the healer (REQ-EXEC-09). */
   healed: z.boolean().optional(),
   durationMs: z.number().nonnegative().optional(),
+  /** The application's API endpoints the page reached (REQ-EVD-09/AC2), recorded by the runner. */
+  requests: z
+    .array(
+      z.strictObject({
+        method: z.string().max(10),
+        path: z.string().max(2000),
+        status: z.number().int().optional(),
+      }),
+    )
+    .max(500)
+    .optional(),
   /** The browser of a web attempt with its exact version, recorded by the runner (REQ-EXEC-66/AC3). */
   browser: z.strictObject({ name: z.string().max(40), version: z.string().max(60) }).optional(),
 });

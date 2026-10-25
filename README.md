@@ -1152,7 +1152,11 @@ verification: { auditor: optional, canary: true, triage: on }
 ## 10. Additional features
 
 - **API, web, mixed and mobile tests.** Web runs in Chromium (Firefox and WebKit configurable) with a screenshot per
-  step, full-page screenshot, DOM, video and trace on failure, HAR and console log. Mixed cases combine API and UI.
+  step, full-page screenshot, DOM, video and trace on failure, HAR and console log. The recorded traffic is read by
+  code: a failed step lists the requests that went wrong (5xx, 4xx, timeouts, allowlist refusals, CORS, redirects to
+  login) next to the failure and for the failure hints, and the report shows which case reached which endpoint of the
+  change. The page's WebSocket messages can be checked (`websocket.received`, `websocket.sent`). Mixed cases combine
+  API and UI.
   Android runs through Appium on an emulator QAJitsu starts; iOS through a device farm. [docs/guides/mobile.md](docs/guides/mobile.md)
 - **Real web pages, not only forms.** Uploads (file inputs, file choosers, drop zones; files from `.qa/fixtures/` or
   generated from the plan) and downloads checked by name, type, size, hash and content (CSV, JSON, XLSX, PDF);

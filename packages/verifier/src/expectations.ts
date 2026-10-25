@@ -19,6 +19,8 @@ export function plannedFields(expect: Expectation): string[] {
     ...(expect.dialog?.type === undefined ? [] : ["dialog.type"]),
     ...(expect.dialog?.message === undefined ? [] : ["dialog.message"]),
     ...Object.keys(expect.state ?? {}).map((path) => `state.${path}`),
+    ...(expect.websocket?.received ?? []).map((_, i) => `websocket.received.${String(i)}`),
+    ...(expect.websocket?.sent ?? []).map((_, i) => `websocket.sent.${String(i)}`),
     ...Object.entries(expect.manifest ?? {})
       .filter(([, v]) => v !== undefined)
       .map(([part]) => `manifest.${part}`),

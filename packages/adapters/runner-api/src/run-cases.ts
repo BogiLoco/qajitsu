@@ -265,13 +265,17 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
         outcome: record.outcome,
         assertions: [...record.assertions],
         ...(record.error === undefined ? {} : { error: record.error }),
-        steps: [...record.steps],
+        steps: record.steps.map(({ network, ...s }) => ({
+          ...s,
+          ...(network ? { network: [...network] } : {}),
+        })),
         evidence: evidencePaths,
         startedAt: started.toISOString(),
         durationMs: options.now().getTime() - started.getTime(),
         ...(healed ? { healed: true } : {}),
         ...(specSha256 === undefined ? {} : { specSha256 }),
         ...(record.browser ? { browser: record.browser } : {}),
+        ...(record.requests ? { requests: [...record.requests] } : {}),
       },
     };
   };

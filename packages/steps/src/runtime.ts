@@ -14,6 +14,13 @@ import type {
 } from "@qajitsu/core";
 import type { Masker } from "./masking.js";
 import {
+  diagnoseNetwork,
+  reachedEndpoints,
+  type NetworkProblem,
+  type ReachedEndpoint,
+  type UiRequest,
+} from "./network.js";
+import {
   assertSelector,
   pngDimensions,
   type UiClient,
@@ -251,6 +258,8 @@ function expectationOf(planCase: TestCase, stepId: string, field: string, path: 
     const key = rest.join(".");
     if (!e.state || !(key in e.state)) throw new Error(`plan.expect('${path}'): no expected state '${key}'`);
     value = e.state[key];
+  } else if (kind === "websocket" && rest.length === 2 && (rest[0] === "received" || rest[0] === "sent")) {
+    value = e.websocket?.[rest[0]]?.[Number(rest[1])];
   } else if (kind === "manifest" && rest.length === 1) {
     const part = rest[0] ?? "";
     if (!["name", "short_name", "start_url", "display", "icons", "controlled"].includes(part))
@@ -307,7 +316,9 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   const planCase = plan.cases.find((c) => c.id === caseId);
   if (!planCase) throw new Error(`${caseId} is not in the approved plan`);
   const stepIds = new Set(planCase.steps.map((s) => s.id));
-  const steps: { id: string; ok: boolean; error?: string; url?: string }[] = [];
+  const steps: { id: string; ok: boolean; error?: string; url?: string; network?: NetworkProblem[] }[] = [];
+  /** Every request the page sent (REQ-EVD-09), as the parent saw it, masked by the driver. */
+  const traffic: UiRequest[] = [];
   const assertions: AssertionRecord[] = [];
   const media: EvidenceItem[] = [];
   const calls: {
@@ -457,11 +468,33 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         failure ??= unanswered;
       }
     }
+    // REQ-EXEC-47/AC4: the page's WebSocket frames of the step are evidence, masked.
+    const frames = driver?.takeSocketFrames?.() ?? [];
+    if (frames.length > 0)
+      media.push({
+        stepId,
+        kind: "log",
+        name: `${stepId}-websocket.json`,
+        content: `${JSON.stringify(maskValue(frames), null, 2)}\n`,
+      });
+    // REQ-EVD-09/AC1: the requests the step sent; what went wrong is shown next to a failed or blocked step.
+    const sent = driver?.takeNetwork?.() ?? [];
+    traffic.push(...sent);
+    const failedHere = error !== undefined || assertions.some((a) => a.stepId === stepId && !a.pass);
+    const problems = failedHere ? (maskValue(diagnoseNetwork(sent)) as NetworkProblem[]) : [];
+    if (problems.length > 0)
+      media.push({
+        stepId,
+        kind: "log",
+        name: `${stepId}-network.json`,
+        content: `${JSON.stringify({ requests: sent.length, problems }, null, 2)}\n`,
+      });
     steps.push({
       id: stepId,
       ok: error === undefined,
       ...(error === undefined ? {} : { error: masker.maskText(error) }),
       ...(driver ? { url: masker.maskText(driver.url()) } : {}),
+      ...(problems.length > 0 ? { network: problems } : {}),
     });
     currentStep = undefined;
     // REQ-EXEC-61/AC1: every dialog of the step is evidence, with how it was answered.
@@ -1036,6 +1069,22 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       });
       return;
     }
+    if (kind === "websocket") {
+      // REQ-EXEC-47/AC3: a frame of the page's WebSockets in this step, recorded by the parent; none in time fails.
+      const expected = expectationOf(planCase, stepId, field, `${caseId}.${stepId}.${field}`);
+      if (!driver)
+        throw new Error(`verify('${stepId}', '${field}') needs an open page: call ui.goto() first`);
+      const direction = rest[0] === "sent" ? "sent" : "received";
+      const url = planCase.steps.find((x) => x.id === stepId)?.expect.websocket?.url;
+      const found = await need(driver, "socketFrame", `verify('${stepId}', 'websocket.*')`)(
+        direction,
+        String(expected),
+        url,
+        waitMs,
+      );
+      record(expected, found === undefined ? `(no ${direction} WebSocket message contains it)` : expected);
+      return;
+    }
     if (kind === "manifest") {
       // REQ-EXEC-65/AC3: the page's manifest and its service worker, read by the parent; no manifest never passes.
       const expected = expectationOf(planCase, stepId, field, `${caseId}.${stepId}.${field}`);
@@ -1121,7 +1170,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
           : "(text not found in the response)";
     else
       throw new Error(
-        `verify('${stepId}', '${field}'): only status, fields.<key>, texts.<n>, elements.<selector>.<property>, download.*, state.*, manifest.*, message and visual can be verified`,
+        `verify('${stepId}', '${field}'): only status, fields.<key>, texts.<n>, elements.<selector>.<property>, download.*, state.*, manifest.*, websocket.*, message and visual can be verified`,
       );
     record(expected, actual);
   };
@@ -1285,6 +1334,10 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         steps,
         assertions,
         evidence,
+        // REQ-EVD-09/AC2: the application's endpoints the page reached, for the coverage of the change.
+        ...(traffic.length > 0
+          ? { requests: maskValue(reachedEndpoints(traffic)) as ReachedEndpoint[] }
+          : {}),
       };
     },
   };

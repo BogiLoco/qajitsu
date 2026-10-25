@@ -339,7 +339,50 @@ describe("concrete expected values (REQ-PLAN-09)", () => {
       [
         "S1",
         "elements.testid:offer-status.text",
-        'testid:offer-status shows "Offer active" on the recorded pages, the plan expects "Active": confirm the change makes it so, or use the shown text',
+        'testid:offer-status shows "Offer active" on the recorded pages, the plan expects "Active": confirm the change or an earlier step makes it so, or use the shown text',
+      ],
+    ]);
+    // A case about the time (an offer that ends) without a clock is told to plan one.
+    const timed = checkPlanExpectations(
+      plan(
+        [
+          {
+            action: "Open the offer after it ended",
+            expect: { description: "d", elements: { "testid:offer-status": { text: "Offer ended" } } },
+          },
+        ],
+        "web",
+      ),
+      { snapshot: screens },
+    ).filter((f) => f.kind === "recorded-text");
+    expect(timed[0]?.reason).toContain(
+      'a text that depends on the date needs "browser": {"clock": "<ISO time>"}',
+    );
+    // An invented element for the app manifest is pointed to the manifest check.
+    const invented = checkPlanExpectations(
+      plan([{ expect: { description: "d", elements: { "testid:manifest": { visible: true } } } }], "web"),
+      { snapshot: screens },
+    ).filter((f) => f.kind === "selector");
+    expect(invented[0]?.reason).toBe(
+      'testid:manifest matches no element recorded on the environment\'s pages; the app manifest and its service worker are checked with "manifest": {"short_name": .., "display": .., "controlled": true}',
+    );
+  });
+
+  it("REQ-EXEC-61/AC1: a web step that checks a dialog without saying how to answer it is flagged (dogfood 2026-10-25)", () => {
+    const dialog = { type: "confirm", message: "Delete this address?" };
+    const flags = checkPlanExpectations(
+      plan(
+        [
+          { action: "Confirm the deletion", expect: { description: "d", dialog } },
+          { action: "Cancel", dialog: { action: "dismiss" }, expect: { description: "d", dialog } },
+        ],
+        "web",
+      ),
+    ).filter((f) => f.kind === "dialog");
+    expect(flags.map((f) => [f.stepId, f.reason])).toEqual([
+      [
+        "S1",
+        'the step expects a dialog but does not say how to answer it: add "dialog": {"action": "accept"} or {"action": "dismiss"} to the step (unanswered dialogs are dismissed)',
       ],
     ]);
   });

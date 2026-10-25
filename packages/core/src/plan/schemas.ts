@@ -193,6 +193,18 @@ export const ExpectationSchema = z
     /** The file the step downloads (REQ-EXEC-38/AC2). */
     download: DownloadExpectationSchema.optional(),
     /**
+     * Messages of the page's WebSockets in this step (REQ-EXEC-47/AC3), recorded by the parent: each text must be
+     * contained in a frame the page received (`received`) or sent (`sent`) on a socket whose URL contains `url`.
+     */
+    websocket: z
+      .strictObject({
+        url: z.string().min(1).max(300).optional(),
+        received: z.array(z.string().min(1).max(500)).max(20).optional(),
+        sent: z.array(z.string().min(1).max(500)).max(20).optional(),
+      })
+      .refine((w) => (w.received?.length ?? 0) + (w.sent?.length ?? 0) > 0, "Name a received or sent message")
+      .optional(),
+    /**
      * The page's web app manifest, read by code (REQ-EXEC-65/AC3): its fields, the number of its icons, and whether a
      * service worker controls the page.
      */

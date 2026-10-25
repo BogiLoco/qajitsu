@@ -104,6 +104,42 @@
                 },
                 "url": {
                   "type": "string"
+                },
+                "network": {
+                  "maxItems": 20,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "maxLength": 40
+                      },
+                      "method": {
+                        "type": "string",
+                        "maxLength": 10
+                      },
+                      "url": {
+                        "type": "string",
+                        "maxLength": 2000
+                      },
+                      "status": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "detail": {
+                        "type": "string",
+                        "maxLength": 300
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "method",
+                      "url"
+                    ],
+                    "additionalProperties": false
+                  }
                 }
               },
               "required": [
@@ -133,6 +169,33 @@
           "durationMs": {
             "type": "number",
             "minimum": 0
+          },
+          "requests": {
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "method": {
+                  "type": "string",
+                  "maxLength": 10
+                },
+                "path": {
+                  "type": "string",
+                  "maxLength": 2000
+                },
+                "status": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "method",
+                "path"
+              ],
+              "additionalProperties": false
+            }
           },
           "browser": {
             "type": "object",

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { PlanSchema } from "@qajitsu/core";
 import { describe, expect, it } from "vitest";
-import { checkPlanCoverage, formatCoverageGaps } from "./coverage.js";
+import { checkPlanCoverage, endpointReach, formatCoverageGaps } from "./coverage.js";
 
 const criteria = [
   "GET /cart returns total = sum of (unit price × quantity) for all lines, rounded once to 2 decimals.",
@@ -71,6 +71,64 @@ describe("coverage computed by code (REQ-PLAN-14)", () => {
     });
     expect(checkPlanCoverage(withCancel, { acceptanceCriteria: [], endpoints }).map((g) => g.id)).toEqual([
       "GET /cart",
+    ]);
+  });
+
+  it("REQ-PLAN-14/AC2: a changed page is covered by a web case that opens it; an API case or another page does not count (dogfood 2026-10-25)", () => {
+    const web = (type: string, action: string) =>
+      PlanSchema.parse({
+        schema: 1,
+        ticket: "DEMO-11",
+        version: 1,
+        summary: "s",
+        cases: [
+          {
+            id: "TC-01",
+            title: "Notes",
+            type,
+            priority: "high",
+            source: [{ kind: "ac", id: "AC1" }],
+            evidence: ["screenshot"],
+            steps: [{ id: "S1", action, expect: { description: "d", texts: ["Notes"] } }],
+          },
+        ],
+      });
+    const pages = [{ path: "/app/notes" }];
+    const gaps = (type: string, action: string) =>
+      checkPlanCoverage(web(type, action), { acceptanceCriteria: [], endpoints: pages }).map((g) => g.id);
+    expect(gaps("web", "Navigate to Notes Page (/app/notes)")).toEqual([]);
+    expect(gaps("web", "Open /app/notes, go offline")).toEqual([]);
+    expect(gaps("web", "Open /app/notes-archive")).toEqual(["/app/notes"]);
+    expect(gaps("api", "Open /app/notes")).toEqual(["/app/notes"]);
+  });
+
+  it("REQ-EVD-09/AC2: which case reached which changed endpoint, from recorded requests only", () => {
+    const reached = new Map([
+      [
+        "TC-01",
+        [
+          { method: "POST", path: "/orders/42/cancel" },
+          { method: "GET", path: "/app/notes" },
+        ],
+      ],
+      ["TC-02", [{ method: "GET", path: "/orders/42" }]],
+      ["TC-03", []],
+    ]);
+    expect(
+      endpointReach(
+        [
+          { method: "POST", path: "/orders/{id}/cancel" },
+          { method: "GET", path: "/orders/:id" },
+          { path: "/app/notes" },
+          { method: "DELETE", path: "/orders/{id}" },
+        ],
+        reached,
+      ),
+    ).toEqual([
+      { id: "POST /orders/{id}/cancel", cases: ["TC-01"] },
+      { id: "GET /orders/:id", cases: ["TC-02"] },
+      { id: "/app/notes", cases: ["TC-01"] },
+      { id: "DELETE /orders/{id}", cases: [] },
     ]);
   });
 });

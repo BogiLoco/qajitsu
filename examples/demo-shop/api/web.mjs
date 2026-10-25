@@ -14,6 +14,18 @@ const toast=(text,ok)=>{const t=document.createElement("div");t.className="toast
 <h1>${title}</h1>${body}</body></html>`;
 
 const PAGES = {
+  // The support chat over a WebSocket (REQ-EXEC-47/AC3): the page's messages are checked as they travel.
+  "/app/chat": [
+    "Support chat",
+    `<p>Status: <span data-testid="chat-status">Connecting</span></p>
+<ul data-testid="chat-log" id="log"></ul>
+<p><label>Message <input data-testid="chat-input" id="msg"></label> <button data-testid="chat-send" id="send">Send</button></p>
+<script>const ws=new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host+"/ws/chat");
+const add=(t)=>{const li=document.createElement("li");li.textContent=t;document.getElementById("log").appendChild(li);};
+ws.onopen=()=>{document.querySelector("[data-testid=chat-status]").textContent="Online";};
+ws.onmessage=(e)=>{const m=JSON.parse(e.data);add(m.text);};
+document.getElementById("send").onclick=()=>{const text=document.getElementById("msg").value;ws.send(JSON.stringify({type:"message",text}));add("You: "+text);};</script>`,
+  ],
   // An installable notes page (REQ-EXEC-65): notes written offline wait in a queue and are saved when back online.
   "/app/notes": [
     "Notes",

@@ -62,7 +62,16 @@ export function checkPlanCoverage(
   });
   for (const e of change.endpoints) {
     const id = `${e.method ? `${e.method.toUpperCase()} ` : ""}${e.path}`;
-    const byCase = plan.cases.some((c) => c.steps.some((s) => calls(s.action, e.method, e.path)));
+    // A page path (no method) is covered by a web or mobile case that opens it (dogfood pass 2026-10-25).
+    const opens = (c: Plan["cases"][number]): boolean =>
+      e.method === undefined &&
+      c.type !== "api" &&
+      c.steps.some((s) =>
+        new RegExp(`(^|[\\s("'\`])${e.path.replace(/[.*+?^$()|[\]\\{}]/g, "\\$&")}(?=$|[\\s)"'\`?#,.])`).test(
+          s.action,
+        ),
+      );
+    const byCase = plan.cases.some((c) => opens(c) || c.steps.some((s) => calls(s.action, e.method, e.path)));
     if (!byCase && !excluded(plan, id) && !excluded(plan, e.path)) gaps.push({ kind: "endpoint", id });
   }
   return gaps;
@@ -77,4 +86,44 @@ export function formatCoverageGaps(gaps: readonly CoverageGap[]): string {
     ),
     `  Add a case, or exclude each on purpose in out_of_scope with a reason, e.g. "${gaps[0]?.id ?? "AC1"}: why".`,
   ].join("\n");
+}
+
+/** A changed endpoint and the cases whose pages reached it in the run (REQ-EVD-09/AC2). */
+export interface EndpointReach {
+  /** `POST /orders/{id}/cancel`, or a page path. */
+  readonly id: string;
+  /** Cases whose recorded requests reached it; empty when none did. */
+  readonly cases: readonly string[];
+}
+
+/**
+ * Which case reached which endpoint of the change, from the requests the runner recorded (REQ-EVD-09/AC2): a
+ * templated path matches a real id, an endpoint without a method matches any method. Only recorded traffic counts,
+ * never a model's claim.
+ *
+ * @param endpoints - Endpoints of the change, from the analysis.
+ * @param reached - Requests per case, as the runner recorded them.
+ */
+export function endpointReach(
+  endpoints: readonly { readonly method?: string | undefined; readonly path: string }[],
+  reached: ReadonlyMap<string, readonly { readonly method: string; readonly path: string }[]>,
+): EndpointReach[] {
+  return endpoints.map((e) => {
+    const template = new RegExp(
+      `^${e.path
+        .replace(/[.*+?^$()|[\]\\]/g, "\\$&")
+        .replace(/\\?\{[^}]+\\?\}|:[A-Za-z_]\w*/g, "[^/?]+")}/?$`,
+    );
+    const cases = [...reached]
+      .filter(([, requests]) =>
+        requests.some(
+          (r) =>
+            (e.method === undefined || r.method.toUpperCase() === e.method.toUpperCase()) &&
+            template.test(r.path),
+        ),
+      )
+      .map(([caseId]) => caseId)
+      .sort();
+    return { id: `${e.method ? `${e.method.toUpperCase()} ` : ""}${e.path}`, cases };
+  });
 }

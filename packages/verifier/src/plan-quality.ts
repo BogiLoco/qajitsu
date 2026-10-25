@@ -10,7 +10,7 @@ const CASE_PLATFORMS: Record<string, { readonly platforms: readonly UiPlatform[]
 
 /** Why an expectation of a plan cannot be checked as it is (REQ-PLAN-09). */
 export type PlanFlagKind =
-  "placeholder" | "schema" | "description-only" | "selector" | "account" | "recorded-text";
+  "placeholder" | "schema" | "description-only" | "selector" | "account" | "recorded-text" | "dialog";
 
 /** One expectation a test could not compare with anything meaningful. */
 export interface PlanFlag {
@@ -178,6 +178,12 @@ function fieldProblem(doc: Schema, root: Schema, key: string, value: unknown): s
     : `the response field is ${JSON.stringify(node["type"])}, the plan expects ${jsonType(value)} ${JSON.stringify(value)}`;
 }
 
+/** Words of a case that tie it to the date or time (offers that end, deadlines, countdowns). */
+const TIMELY =
+  /\b(date|time|day|hour|minute|deadline|countdown|expir\w*|ends?|ended|until|before|after|christmas|schedul\w*)\b/i;
+const timeWords = (c: Plan["cases"][number]): string =>
+  [c.title, ...c.steps.flatMap((s) => [s.action, s.expect.description])].join(" ");
+
 /**
  * Expectations of a plan that cannot be checked as they are (REQ-PLAN-09): placeholders instead of values (AC1),
  * fields that do not exist in the OpenAPI response or have another type (AC2), steps with a description only (AC6),
@@ -239,6 +245,13 @@ export function checkPlanExpectations(
           "description-only",
           "the step expects a description only: the test would have nothing to compare",
         );
+      // Dogfood pass 2026-10-25: "Confirm the deletion" planned with the dialog's check only, so it was dismissed.
+      if (c.type === "web" && e.dialog !== undefined && s.dialog === undefined)
+        flag(
+          "dialog",
+          'the step expects a dialog but does not say how to answer it: add "dialog": {"action": "accept"} or {"action": "dismiss"} to the step (unanswered dialogs are dismissed)',
+          "dialog",
+        );
       const values = [
         ...Object.entries(e.fields ?? {}).flatMap(([k, v]) => strings(v, `fields.${k}`)),
         ...(e.texts ?? []).map((t, i) => ({ path: `texts.${String(i)}`, text: t })),
@@ -292,7 +305,7 @@ export function checkPlanExpectations(
           if (nonEmpty.length > 0 && !nonEmpty.includes(state.text))
             flag(
               "recorded-text",
-              `${sel} shows "${nonEmpty[0] ?? ""}" on the recorded pages, the plan expects "${state.text}": confirm the change makes it so, or use the shown text`,
+              `${sel} shows "${nonEmpty[0] ?? ""}" on the recorded pages, the plan expects "${state.text}": confirm the change or an earlier step makes it so, or use the shown text${c.type === "web" && c.browser?.clock === undefined && TIMELY.test(timeWords(c)) ? '; a text that depends on the date needs "browser": {"clock": "<ISO time>"} on the case' : ""}`,
               `elements.${sel}.text`,
               state.text,
             );
@@ -303,7 +316,10 @@ export function checkPlanExpectations(
         }))
           flag(
             "selector",
-            `${sel} matches no element recorded on the environment's pages`,
+            // Dogfood pass 2026-10-25: "testid:manifest" planned for the installable app.
+            /manifest|service.?worker|installable/i.test(sel)
+              ? `${sel} matches no element recorded on the environment's pages; the app manifest and its service worker are checked with "manifest": {"short_name": .., "display": .., "controlled": true}`
+              : `${sel} matches no element recorded on the environment's pages`,
             `elements.${sel}`,
           );
         continue;

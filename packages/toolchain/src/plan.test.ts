@@ -259,7 +259,11 @@ describe("the setup plan (REQ-GEN-06/AC1, AC2, AC4, AC5)", () => {
       {},
       web,
     );
-    expect(ready["browsers"]?.action).toBe("use-system");
+    expect(ready["browsers"]).toMatchObject({
+      action: "use-system",
+      reason: "installed (Playwright cache and the system)",
+      version: "chromium, chrome, msedge-beta",
+    });
     const armLinux = await plan(ports({ os: "linux", arch: "arm64" }, {}), {}, undefined, {}, web);
     expect(armLinux["browsers"]).toMatchObject({
       action: "unsupported",

@@ -34,6 +34,7 @@ describe("element and page inventory (REQ-PLAN-09/AC7)", () => {
       "/app/addresses",
       "/app/board",
       "/app/cart",
+      "/app/chat",
       "/app/checkout",
       "/app/login",
       "/app/notes",

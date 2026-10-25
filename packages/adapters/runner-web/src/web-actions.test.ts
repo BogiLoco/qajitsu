@@ -486,4 +486,65 @@ describe("web actions (REQ-EXEC-38, REQ-EXEC-39, REQ-EXEC-40, REQ-EXEC-56)", () 
       expect(r.record.browser?.version).toMatch(/^\d+\.\d+/);
     },
   );
+
+  it("REQ-EVD-09/AC1: the driver sees every request of the page: errors, allowlist refusals and login redirects", async () => {
+    const app = createServer((req, res) => {
+      if (req.url === "/api/orders") {
+        res.writeHead(500);
+        res.end("boom");
+      } else if (req.url === "/api/account") {
+        res.writeHead(302, { location: "/login?next=/account" });
+        res.end();
+      } else if (req.url === "/login?next=/account") {
+        res.end("login");
+      } else {
+        res.writeHead(200, { "content-type": "text/html" });
+        res.end(
+          `<p data-testid="p">ok</p><script>fetch("/api/orders",{method:"POST"});fetch("/api/account");fetch("http://127.0.0.1:9/track").catch(()=>0);</script>`,
+        );
+      }
+    });
+    await new Promise<void>((done) => app.listen(0, "127.0.0.1", done));
+    const url = `http://127.0.0.1:${String((app.address() as { port: number }).port)}`;
+    cleanups.push(
+      () =>
+        new Promise<void>((done) => {
+          app.close(() => {
+            done();
+          });
+        }),
+    );
+    const d = await driverOn([url]);
+    await d.goto(`${url}/shop`);
+    await d.waitFor("testid:p", "visible");
+    await new Promise((r) => setTimeout(r, 500));
+    const taken = d.takeNetwork?.() ?? [];
+    expect(taken.find((r) => r.url === "/api/account")?.location).toBe("/login?next=/account");
+    const seen = taken.map((r) => [r.method, r.url, r.status ?? r.failure, r.refused === true]);
+    expect(seen).toEqual(
+      expect.arrayContaining([
+        ["GET", "/shop", 200, false],
+        ["POST", "/api/orders", 500, false],
+        ["GET", "/api/account", 302, false],
+        ["GET", "http://127.0.0.1:9/track", undefined, true],
+      ]),
+    );
+    expect(d.takeNetwork?.()).toEqual([]);
+  });
+
+  it("REQ-EXEC-47/AC3+AC4 + REQ-NFR-04/AC1: the page's WebSocket messages are checked and kept; BUG-17 (reply drops the text) is FAILED", async () => {
+    const ok = await attempt("DEMO-12", "TC-01");
+    expect(ok.record.error).toBeUndefined();
+    expect(ok.status).toBe("PASSED");
+    const frames = JSON.parse(
+      String(ok.record.evidence.find((e) => e.name === "S2-websocket.json")?.content),
+    ) as { direction: string; text: string }[];
+    expect(frames.map((f) => f.direction)).toEqual(["sent", "received"]);
+    expect(frames[1]?.text).toContain("Support received: Where is my order?");
+    const bug = await attempt("DEMO-12", "TC-01", "BUG_CHAT_REPLY_DROPS_TEXT");
+    expect(bug.status).toBe("FAILED");
+    expect(bug.record.assertions.filter((a) => !a.pass).map((a) => [a.field, a.actual])).toEqual([
+      ["websocket.received.0", "(no received WebSocket message contains it)"],
+    ]);
+  }, 60_000);
 });

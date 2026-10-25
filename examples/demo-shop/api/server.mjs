@@ -5,6 +5,7 @@
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
+import { upgradeChat } from "./chat.mjs";
 import { serveWeb } from "./web.mjs";
 
 /** Seeded bug flags (BUGS.md). */
@@ -25,6 +26,7 @@ export const BUG_FLAGS = [
   "BUG_DELETE_IGNORES_CANCEL",
   "BUG_OFFER_NEVER_EXPIRES",
   "BUG_OFFLINE_NOTES_LOST",
+  "BUG_CHAT_REPLY_DROPS_TEXT",
 ];
 
 const PRODUCTS = [
@@ -215,6 +217,8 @@ export function startShop(options = {}) {
   const server = createServer((req, res) => {
     void handler(req, res);
   });
+  // The support chat's WebSocket (REQ-EXEC-47 demo).
+  server.on("upgrade", (req, socket) => upgradeChat(req, socket, bugs));
   return new Promise((resolve) => {
     server.listen(options.port ?? 0, options.host ?? "127.0.0.1", () => {
       const address = server.address();

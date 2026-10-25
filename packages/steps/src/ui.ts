@@ -1,4 +1,6 @@
 import type { ScreenBox, UiElementFact } from "@qajitsu/core";
+import type { UiRequest } from "./network.js";
+
 /**
  * Width and height of a PNG from its header, without decoding it; undefined when the bytes are not a PNG.
  *
@@ -108,6 +110,24 @@ export interface UiDriver {
   }[];
   /** Moves the browser's clock forward (REQ-EXEC-61/AC2), firing timers that fall due. */
   readonly advanceTime?: (ms: number) => Promise<void>;
+  /**
+   * Waits for a WebSocket frame of the current step that contains the text (REQ-EXEC-47/AC3), on a socket whose URL
+   * contains `url`; undefined when none came in time. Frames are recorded by the parent, never handed over by a spec.
+   */
+  readonly socketFrame?: (
+    direction: "received" | "sent",
+    text: string,
+    url: string | undefined,
+    timeoutMs: number,
+  ) => Promise<string | undefined>;
+  /** The WebSocket frames since the last call, masked, for the step's evidence (REQ-EXEC-47/AC4). */
+  readonly takeSocketFrames?: () => readonly {
+    readonly url: string;
+    readonly direction: "received" | "sent";
+    readonly text: string;
+  }[];
+  /** The requests the page sent since the last call, masked (REQ-EVD-09); the parent assigns them to the step. */
+  readonly takeNetwork?: () => readonly UiRequest[];
   /** Switches the browser's network off or back on (REQ-EXEC-65/AC2). */
   readonly setOffline?: (offline: boolean) => Promise<void>;
   /**
