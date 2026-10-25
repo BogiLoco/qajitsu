@@ -990,3 +990,53 @@ Chats, shared documents, approvals and auctions need two people at once.
 - [ ] AC1: The browser matrix can name devices (for example `iPhone 15`, `Pixel 8`) whose viewport, device scale, touch, `isMobile` and user agent are emulated, besides plain viewports.
 - [ ] AC2: Taps and swipes work in emulated mobile pages (REQ-EXEC-41 gestures on the web).
 - [ ] AC3: The report names the emulated device; emulation is never presented as a real device test.
+
+### REQ-EXEC-64 · Selectors narrowed by context
+
+- Status: accepted
+- Priority: must
+- Stage: later
+- Related: REQ-EXEC-21, REQ-EXEC-39, REQ-EXEC-09, INV-4
+
+Pages repeat the same element: a Delete button in every row, an Edit link per card. A selector that matches several
+elements cannot be acted on, so the case was BLOCKED although the page was fine.
+
+**Acceptance criteria**
+
+- [ ] AC1: A selector can be a chain of parts separated by `>>`: each part searches inside what the previous one found (`role:row >> role:button:Delete`); frames keep their place in the chain (REQ-EXEC-39).
+- [ ] AC2: A part `has-text:<text>` keeps only what contains that text, and `nth:<n>` keeps the n-th match (1 is the first): `role:row >> has-text:Anna Smith >> role:button:Delete`, `testid:product-card >> nth:2`.
+- [ ] AC3: Plans, static checks, the author's and planner's prompts and the healer know the chain; a chain that still matches several elements names how many it found and how to narrow it.
+- [ ] AC4: Native apps refuse chains until their driver supports them, before anything runs.
+
+### REQ-EXEC-65 · Service workers, offline mode and installable web apps
+
+- Status: accepted
+- Priority: should
+- Stage: later
+- Related: REQ-EXEC-05, REQ-ENV-01, INV-10
+
+QAJitsu blocks service workers because they could reach the network around the allowlist. Progressive web apps and
+offline behaviour could therefore not be tested at all.
+
+**Acceptance criteria**
+
+- [ ] AC1: A web case can allow service workers (`browser.service_workers: true`); this is accepted only in a browser where QAJitsu still sees and checks every request of the worker against the allowlist, otherwise the case is BLOCKED with the reason.
+- [ ] AC2: A step can switch the browser offline and back (`ui.setOffline(true|false)`), so offline pages, queued actions and their sync can be tested.
+- [ ] AC3: The page's web app manifest is read by code and checkable as `manifest.<field>` (name, short_name, start_url, display, icons), and whether a service worker controls the page as `manifest.controlled`.
+
+### REQ-EXEC-66 · Browser channels and versions
+
+- Status: accepted
+- Priority: should
+- Stage: later
+- Related: REQ-EXEC-13, REQ-GEN-06, REQ-GEN-03, REQ-OBS-10, REQ-EXEC-35
+
+Users run Google Chrome, Microsoft Edge and Safari in particular versions; QAJitsu ran only the Chromium, Firefox and
+WebKit builds of its Playwright.
+
+**Acceptance criteria**
+
+- [ ] AC1: The browser matrix accepts branded channels besides the engines: `chrome`, `chrome-beta`, `msedge`, `msedge-beta`.
+- [ ] AC2: `qj setup` installs the channels the matrix names (where the platform allows it) and `qj doctor` checks them with their version; a channel that is not installed makes its combinations BLOCKED with the command that installs it.
+- [ ] AC3: Every attempt records the exact browser name and version it ran in; the report and the matrix name them per combination.
+- [ ] AC4: Specific older versions and real Safari run on a device farm (REQ-EXEC-35); without one they are refused with the reason, never replaced by another browser.
