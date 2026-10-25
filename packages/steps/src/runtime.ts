@@ -18,9 +18,11 @@ import {
   pngDimensions,
   type UiClient,
   type UiDriver,
+  type UiFile,
   type UiOperation,
   type UiProperty,
 } from "./ui.js";
+import { csvRows, generateFile, isTextType, mimeOf, sha256Hex, type DownloadedFile } from "./web-files.js";
 
 /** HTTP methods the API client supports. */
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -148,6 +150,14 @@ export interface CaseRuntimeOptions {
   readonly onScreenshot?: ((stepId: string, png: Uint8Array) => void) | undefined;
   /** Draws numbered red boxes on a copy of a PNG (REQ-EVD-08); provided by the trusted runner. */
   readonly annotate?: ((png: Uint8Array, marks: readonly ScreenMark[]) => Promise<Uint8Array>) | undefined;
+  /** Reads a file of the project's `.qa/fixtures/` for an upload (REQ-EXEC-38/AC1); provided by the orchestrator. */
+  readonly fixture?: ((path: string) => Promise<Uint8Array>) | undefined;
+  /** Text of a downloaded PDF or XLSX file for `download.*` checks (REQ-EXEC-38/AC2); provided by the CLI. */
+  readonly extractText?: ((name: string, data: Uint8Array) => Promise<string | undefined>) | undefined;
+  /** The page's test hook for `state.*` checks (REQ-EXEC-56/AC2); `__QA_STATE__` by default. */
+  readonly testStateHook?: string | undefined;
+  /** How long a download or a new page may take, in ms (15 s by default). */
+  readonly waitTimeoutMs?: number | undefined;
 }
 
 /** The recorder of one attempt. Runs in the trusted process; specs only reach it through these operations. */
@@ -219,6 +229,28 @@ function expectationOf(planCase: TestCase, stepId: string, field: string, path: 
   else if (kind === "elements" && rest.length >= 2) {
     const property = rest.at(-1) as UiProperty;
     value = e.elements?.[rest.slice(0, -1).join(".")]?.[property];
+  } else if (kind === "download" && rest.length >= 1) {
+    const d = e.download;
+    const [part, ...more] = rest;
+    if (part === "texts" && more.length === 1) value = d?.texts?.[Number(more[0])];
+    else if (part === "fields" && more.length > 0) value = d?.fields?.[more.join(".")];
+    else if (part === "size" && more.length === 0)
+      value =
+        d?.min_bytes === undefined && d?.max_bytes === undefined
+          ? undefined
+          : { min_bytes: d.min_bytes, max_bytes: d.max_bytes };
+    else if (
+      (part === "name" || part === "type" || part === "sha256" || part === "rows" || part === "count") &&
+      more.length === 0
+    )
+      value = d?.[part];
+    else throw new Error(`plan.expect('${path}'): unknown download field`);
+  } else if (kind === "dialog" && rest.length === 1 && (rest[0] === "type" || rest[0] === "message")) {
+    value = e.dialog?.[rest[0]];
+  } else if (kind === "state" && rest.length >= 1) {
+    const key = rest.join(".");
+    if (!e.state || !(key in e.state)) throw new Error(`plan.expect('${path}'): no expected state '${key}'`);
+    value = e.state[key];
   } else if (kind === "message" && rest.length === 0) value = e.message;
   else if (kind === "visual" && rest.length === 0) value = e.visual;
   else throw new Error(`plan.expect('${path}'): unknown field`);
@@ -249,7 +281,7 @@ export function createPlanAccessor(plan: Plan, caseId: string): PlanAccessor {
 export const ABSENT = "(absent)";
 
 const ACTION = /^(GET|POST|PUT|PATCH|DELETE)\s+(\/[^\s?]*)/i;
-const PROPERTIES: readonly UiProperty[] = ["visible", "enabled", "checked", "text", "value"];
+const PROPERTIES: readonly UiProperty[] = ["visible", "enabled", "checked", "text", "value", "in_viewport"];
 
 /** True when a concrete path matches a plan path like `/carts/{id}` or `/carts/:id`. */
 const pathMatches = (template: string, path: string): boolean => {
@@ -293,6 +325,57 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     if (!options.ui) throw new Error("This run has no browser; UI actions need the web runner");
     driver ??= await options.ui();
     return driver;
+  };
+  /** A web action the driver must offer (ADR-0013); a native app or another runner refuses it with the reason. */
+  const need = <K extends keyof UiDriver>(d: UiDriver, key: K, what: string): NonNullable<UiDriver[K]> => {
+    const f = d[key];
+    if (f === undefined)
+      throw new Error(
+        `${what} is not available ${planCase.type === "mobile" ? "in native apps yet" : "in this runner"}`,
+      );
+    return f;
+  };
+  const waitMs = options.waitTimeoutMs ?? 15_000;
+  /** What each step downloaded (REQ-EXEC-38/AC2), the last file, and how many (REQ-EXEC-61/AC4). */
+  const downloads = new Map<string, DownloadedFile>();
+  const downloadCount = new Map<string, number>();
+  /** Dialogs each step showed (REQ-EXEC-61/AC1). */
+  const dialogsOf = new Map<string, { type: string; message: string; answer: string }[]>();
+  const collectDialogs = (stepId: string): void => {
+    const shown = driver?.takeDialogs?.() ?? [];
+    if (shown.length > 0) dialogsOf.set(stepId, [...(dialogsOf.get(stepId) ?? []), ...shown]);
+  };
+  /** Every UI action with the page it went to (REQ-EXEC-39/AC2), masked; case evidence `ui-actions.json`. */
+  const actions: Record<string, unknown>[] = [];
+  /** A case file by its plan key (REQ-EXEC-38/AC1): never a path or bytes from the spec. */
+  const caseFile = async (key: string): Promise<UiFile> => {
+    const spec = planCase.files?.[key];
+    if (!spec) throw new Error(`ui.upload: '${key.slice(0, 40)}' is not a file of ${caseId} in the plan`);
+    if ("fixture" in spec) {
+      if (!options.fixture) throw new Error("This run has no fixtures (.qa/fixtures/) for uploads");
+      const name = spec.fixture.split("/").at(-1) ?? spec.fixture;
+      return { name, type: mimeOf(name), data: await options.fixture(spec.fixture) };
+    }
+    return { name: spec.name, type: spec.type, data: generateFile(spec) };
+  };
+  /** A file as evidence: text masked; a binary file whose text holds a secret is kept as its masked text. */
+  const fileEvidence = async (
+    stepId: string,
+    kind: "upload" | "download",
+    file: { name: string; type: string; data: Uint8Array },
+  ): Promise<string | undefined> => {
+    const safe = file.name.replace(/[^\w.-]+/g, "_").slice(-80) || "file";
+    const name = `${stepId}-${kind}-${safe}`;
+    if (isTextType(file.type)) {
+      const text = new TextDecoder().decode(file.data);
+      media.push({ stepId, kind, name, content: masker.maskText(text) });
+      return text;
+    }
+    const text = await options.extractText?.(file.name, file.data).catch(() => undefined);
+    if (text !== undefined && masker.containsSecret(text))
+      media.push({ stepId, kind, name: `${name}.masked.txt`, content: masker.maskText(text) });
+    else media.push({ stepId, kind, name, content: file.data });
+    return text;
   };
 
   const beginStep = (stepId: string): void => {
@@ -376,6 +459,16 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       ...(driver ? { url: masker.maskText(driver.url()) } : {}),
     });
     currentStep = undefined;
+    // REQ-EXEC-61/AC1: every dialog of the step is evidence, with how it was answered.
+    collectDialogs(stepId);
+    const shown = dialogsOf.get(stepId);
+    if (shown && shown.length > 0)
+      media.push({
+        stepId,
+        kind: "log",
+        name: `${stepId}-dialogs.json`,
+        content: `${JSON.stringify(maskValue(shown), null, 2)}\n`,
+      });
     // REQ-EVD-02/AC1: a screenshot after every step of a case that uses the browser.
     if (driver) {
       try {
@@ -467,9 +560,20 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     try {
       await uiAction(operation);
       if ("selector" in operation) addressed = true;
+      const page = driver?.currentPage?.();
+      actions.push(
+        maskValue({
+          stepId: currentStep,
+          ...operation,
+          ...(page ? { page: page.index, url: page.url } : {}),
+        }) as Record<string, unknown>,
+      );
     } catch (error) {
       if (driver && (await unaddressable(driver)))
         throw new Error(`${describeError(error)}; ${NO_ELEMENTS}`, { cause: error });
+      // REQ-EXEC-56/AC1: say why an element cannot be reached when the page explains it.
+      const reason = driver ? await driver.unreachableReason?.().catch(() => undefined) : undefined;
+      if (reason !== undefined) throw new Error(`${describeError(error)}; ${reason}`, { cause: error });
       throw error;
     }
   };
@@ -477,6 +581,8 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     if (currentStep === undefined) throw new Error("UI actions must run inside step()");
     lastAction.set(currentStep, "ui");
     const d = await browser();
+    // REQ-EXEC-61/AC1: dialogs the action opens are answered as the step says.
+    d.setDialogPolicy?.(planCase.steps.find((x) => x.id === currentStep)?.dialog);
     switch (operation.op) {
       case "goto": {
         const url = new URL(operation.path, options.baseUrl);
@@ -511,6 +617,72 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         return;
       case "waitFor":
         await d.waitFor(assertSelector(operation.selector), operation.state);
+        return;
+      case "hover":
+      case "dblclick":
+      case "rightclick":
+        await need(
+          d,
+          "pointer",
+          `ui.${operation.op === "rightclick" ? "rightClick" : operation.op}()`,
+        )(assertSelector(operation.selector), operation.op);
+        return;
+      case "dragTo":
+        await need(
+          d,
+          "dragTo",
+          "ui.dragTo()",
+        )(assertSelector(operation.selector), assertSelector(operation.target));
+        return;
+      case "dragBy":
+        await need(d, "dragBy", "ui.dragBy()")(
+          assertSelector(operation.selector),
+          operation.dx,
+          operation.dy,
+        );
+        return;
+      case "keys":
+        await need(d, "keys", "ui.keys()")(operation.value);
+        return;
+      case "scrollTo":
+        await need(d, "scrollTo", "ui.scrollTo()")(assertSelector(operation.selector));
+        return;
+      case "scrollBy":
+        await need(d, "scrollBy", "ui.scrollBy()")(operation.dx, operation.dy);
+        return;
+      case "scrollUntil": {
+        const limit = planCase.steps.find((x) => x.id === currentStep)?.scroll_limit ?? 20;
+        const r = await need(d, "scrollUntil", "ui.scrollUntil()")(assertSelector(operation.selector), limit);
+        // Not found is not an error of the run: the step's planned check of the element decides (REQ-EXEC-40/AC3).
+        actions.push({ stepId: currentStep, op: "scrollUntil.result", ...r, limit });
+        return;
+      }
+      case "upload": {
+        if (operation.files.length === 0)
+          throw new Error("ui.upload() needs at least one file key of the plan");
+        const files = await Promise.all(operation.files.map((k) => caseFile(k)));
+        await need(d, "upload", "ui.upload()")(assertSelector(operation.selector), files);
+        for (const f of files) await fileEvidence(currentStep, "upload", f);
+        return;
+      }
+      case "download": {
+        const got = await need(d, "download", "ui.download()")(assertSelector(operation.selector), waitMs);
+        const type = mimeOf(got.name);
+        const text = await fileEvidence(currentStep, "download", { name: got.name, type, data: got.data });
+        downloads.set(currentStep, { name: got.name, type, data: got.data, text });
+        downloadCount.set(currentStep, (downloadCount.get(currentStep) ?? 0) + 1);
+        return;
+      }
+      case "switchPage":
+        await need(d, "switchPage", "ui.switchToNewPage()")(operation.to, waitMs);
+        return;
+      case "closePage":
+        await need(d, "closePage", "ui.closePage()")();
+        return;
+      case "advanceTime":
+        if (!Number.isInteger(operation.seconds) || operation.seconds < 1 || operation.seconds > 604_800)
+          throw new Error("ui.advanceTime() takes whole seconds from 1 to 604800 (7 days)");
+        await need(d, "advanceTime", "ui.advanceTime()")(operation.seconds * 1000);
         return;
     }
   };
@@ -686,10 +858,17 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     const visual = options.visual;
     const key = `${caseId}/${stepId}-${spec.name}.${visual.variant}`;
     const threshold = spec.threshold ?? visual.threshold;
-    const actual = await driver.screenshot(
-      false,
-      (spec.mask ?? []).map((m) => assertSelector(m)),
-    );
+    const actual =
+      spec.element === undefined
+        ? await driver.screenshot(
+            false,
+            (spec.mask ?? []).map((m) => assertSelector(m)),
+          )
+        : await need(
+            driver,
+            "elementScreenshot",
+            "a visual check of an element",
+          )(assertSelector(spec.element));
     media.push({ stepId, kind: "screenshot", name: `${stepId}-visual-actual.png`, content: actual });
     const baseline = await visual.baseline(key);
     const expected = { baseline: key, threshold };
@@ -757,12 +936,98 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       });
       return;
     }
+    if (kind === "download") {
+      // REQ-EXEC-38/AC2+AC4: checked by code against the file the step downloaded; none is a failure, never a pass.
+      const expected = expectationOf(planCase, stepId, field, `${caseId}.${stepId}.${field}`);
+      const got = downloads.get(stepId);
+      if (!got) {
+        assertions.push({
+          stepId,
+          field,
+          expected: maskValue(expected),
+          actual: "(no download in this step)",
+          pass: false,
+        });
+        return;
+      }
+      const [part, ...more] = rest;
+      const needText = (): string => {
+        if (got.text === undefined)
+          throw new Error(`verify('${stepId}', '${field}'): the content of ${got.name} cannot be read`);
+        return got.text;
+      };
+      if (part === "count") record(expected, downloadCount.get(stepId) ?? 0);
+      else if (part === "name") record(expected, got.name);
+      else if (part === "sha256") record(expected, sha256Hex(got.data));
+      else if (part === "type") {
+        const ext = /\.([A-Za-z0-9]+)$/.exec(got.name)?.[1]?.toLowerCase();
+        record(expected, expected === ext ? ext : got.type);
+      } else if (part === "size") {
+        const range = expected as { min_bytes?: number; max_bytes?: number };
+        const n = got.data.byteLength;
+        assertions.push({
+          stepId,
+          field,
+          expected: maskValue(expected),
+          actual: n,
+          pass:
+            (range.min_bytes === undefined || n >= range.min_bytes) &&
+            (range.max_bytes === undefined || n <= range.max_bytes),
+        });
+      } else if (part === "rows") record(expected, csvRows(needText()));
+      else if (part === "texts")
+        record(
+          expected,
+          typeof expected === "string" && needText().includes(expected) ? expected : "(text not in the file)",
+        );
+      else if (part === "fields") {
+        const content = needText();
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(content) as unknown;
+        } catch {
+          throw new Error(`verify('${stepId}', '${field}'): ${got.name} is not JSON`);
+        }
+        record(expected, at(parsed, more.join(".")));
+      }
+      return;
+    }
+    if (kind === "dialog") {
+      // REQ-EXEC-61/AC1: the last dialog of the step, read by the parent; none shown is a failure, never a pass.
+      const expected = expectationOf(planCase, stepId, field, `${caseId}.${stepId}.${field}`);
+      collectDialogs(stepId);
+      const last = dialogsOf.get(stepId)?.at(-1);
+      const part = rest[0] === "type" ? "type" : "message";
+      const actual = last?.[part];
+      assertions.push({
+        stepId,
+        field,
+        expected: maskValue(expected),
+        actual: actual === undefined ? "(no dialog in this step)" : maskValue(actual),
+        pass:
+          actual !== undefined &&
+          (part === "type" ? actual === expected : typeof expected === "string" && actual.includes(expected)),
+      });
+      return;
+    }
+    if (kind === "state") {
+      // REQ-EXEC-56/AC2: what the application exposes for tests, read by the parent from the page.
+      const expected = expectationOf(planCase, stepId, field, `${caseId}.${stepId}.${field}`);
+      if (!driver)
+        throw new Error(`verify('${stepId}', '${field}') needs an open page: call ui.goto() first`);
+      const hook = options.testStateHook ?? "__QA_STATE__";
+      const read = await need(driver, "testState", `verify('${stepId}', 'state.*')`)(hook, rest.join("."));
+      if (!read.hook)
+        throw new Error(`verify('${stepId}', '${field}'): the page has no test hook window.${hook}`);
+      record(expected, read.value);
+      return;
+    }
     if (kind === "elements") {
       // elements.<selector>.<property>: read from the live page by the parent.
       const property = rest.at(-1) as UiProperty | undefined;
       if (property === undefined || !PROPERTIES.includes(property) || rest.length < 2) {
         throw new Error(
-          `verify('${stepId}', '${field}'): use elements.<selector>.<visible|enabled|checked|text|value>`,
+          `verify('${stepId}', '${field}'): use elements.<selector>.<visible|enabled|checked|text|value|in_viewport>`,
         );
       }
       const expected = expectationOf(planCase, stepId, field, `${caseId}.${stepId}.${field}`);
@@ -809,7 +1074,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
           : "(text not found in the response)";
     else
       throw new Error(
-        `verify('${stepId}', '${field}'): only status, fields.<key>, texts.<n> and elements.<selector>.<property> can be verified`,
+        `verify('${stepId}', '${field}'): only status, fields.<key>, texts.<n>, elements.<selector>.<property>, download.*, state.*, message and visual can be verified`,
       );
     record(expected, actual);
   };
@@ -852,6 +1117,21 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       waitFor: (selector, state = "visible") => uiOp({ op: "waitFor", selector, state }),
       back: () => uiOp({ op: "back" }),
       as: (alias) => uiOp({ op: "as", alias }),
+      hover: (selector) => uiOp({ op: "hover", selector }),
+      dblclick: (selector) => uiOp({ op: "dblclick", selector }),
+      rightClick: (selector) => uiOp({ op: "rightclick", selector }),
+      dragTo: (selector, target) => uiOp({ op: "dragTo", selector, target }),
+      dragBy: (selector, dx, dy) => uiOp({ op: "dragBy", selector, dx, dy }),
+      keys: (value) => uiOp({ op: "keys", value }),
+      scrollTo: (selector) => uiOp({ op: "scrollTo", selector }),
+      scrollBy: (dx, dy) => uiOp({ op: "scrollBy", dx, dy }),
+      scrollUntil: (selector) => uiOp({ op: "scrollUntil", selector }),
+      upload: (selector, ...files) => uiOp({ op: "upload", selector, files }),
+      download: (selector) => uiOp({ op: "download", selector }),
+      switchToNewPage: () => uiOp({ op: "switchPage", to: "new" }),
+      switchToOpener: () => uiOp({ op: "switchPage", to: "opener" }),
+      closePage: () => uiOp({ op: "closePage" }),
+      advanceTime: (seconds) => uiOp({ op: "advanceTime", seconds }),
     },
     step: async (stepId, fn) => {
       beginStep(stepId);
@@ -892,6 +1172,17 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       for (const id of manualSteps.keys())
         if (!steps.some((s) => s.id === id)) failure ??= `manual step ${id} was not performed`;
       const evidence: EvidenceItem[] = [...media];
+      // REQ-EXEC-39/AC2: which page each action went to, when the case used more than one or new web actions.
+      if (
+        actions.some((a) => a["page"] !== undefined && a["page"] !== 0) ||
+        actions.some((a) => a["op"] === "scrollUntil.result")
+      )
+        evidence.push({
+          stepId: "case",
+          kind: "log",
+          name: "ui-actions.json",
+          content: `${JSON.stringify(actions, null, 2)}\n`,
+        });
       const perStep = new Map<string, number>();
       for (const c of calls) {
         const n = (perStep.get(c.stepId) ?? 0) + 1;

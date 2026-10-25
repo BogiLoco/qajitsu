@@ -345,6 +345,14 @@ export const ProjectConfigSchema = z.strictObject({
        * Browser and viewport matrix (REQ-EXEC-13): web cases run in every combination; the first combination is the
        * primary run. Without it web cases run once in `browser` at 1280×800.
        */
+      /**
+       * The global the application exposes its state on for tests (REQ-EXEC-56/AC2), read by `state.*` checks: an
+       * object or a function returning one, e.g. `window.__QA_STATE__ = () => ({ bars: chart.data })`.
+       */
+      test_state: z
+        .string()
+        .regex(/^[A-Za-z_$][\w$]{0,60}$/)
+        .default("__QA_STATE__"),
       matrix: z
         .strictObject({
           browsers: z.array(z.enum(["chromium", "firefox", "webkit"])).min(1),
@@ -367,6 +375,7 @@ export const ProjectConfigSchema = z.strictObject({
       headless: true,
       action_timeout_ms: 5_000,
       test_id_attribute: "data-testid",
+      test_state: "__QA_STATE__",
     }),
   /** Publishing results to the ticket (REQ-PUB-01..04, REQ-VER-10). */
   publish: z

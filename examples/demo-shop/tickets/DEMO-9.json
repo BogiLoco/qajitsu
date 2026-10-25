@@ -1,0 +1,23 @@
+{
+  "key": "DEMO-9",
+  "type": "Story",
+  "status": "Ready for QA",
+  "summary": "Task board and product reviews",
+  "description": "The task board moves cards between columns by drag and drop, shows a card's details on hover and loads older history while scrolling. Shoppers rate a product with stars; the ratings chart counts every rating.",
+  "acceptanceCriteria": [
+    "Dropping a card on Done moves it into the Done column and the Done count becomes 1.",
+    "Hovering a card shows its owner and due date.",
+    "Scrolling the history loads older events down to the first one, H-50.",
+    "Clicking the fourth star shows 4 / 5 and adds one rating to the four-star bar of the chart."
+  ],
+  "labels": ["board", "reviews", "web"],
+  "components": ["shop-web"],
+  "attachments": [],
+  "comments": [
+    {
+      "author": "designer",
+      "created": "2026-10-20T09:00:00Z",
+      "body": "Test ids: card-1, card-1-details, col-done, done-count, history-H-<n>, star-1..star-5, rating-value. The chart exposes window.__QA_STATE__ for tests."
+    }
+  ]
+}

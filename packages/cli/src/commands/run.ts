@@ -1,3 +1,5 @@
+import { httpCredentialsFor } from "../http-auth.js";
+import { extractDownloadText, readFixture } from "../web-files.js";
 import { warnStageBudgets } from "../timing.js";
 import type { KnowledgePorts } from "./knowledge.js";
 import { runUsage, saveRunUsage } from "../run-usage.js";
@@ -1010,9 +1012,12 @@ async function executeCases(
   // REQ-EXEC-13: the first browser and viewport combination is the primary run.
   const combos = webCombinations(project.config.web);
   const [primary] = combos;
+  // REQ-EXEC-61/AC5: HTTP authentication in front of the environment, for the browser and the API client.
+  const httpCredentials = await httpCredentialsFor(env, session.resolveSecret);
   const executorFor = (combo: WebCombination | undefined): AttemptExecutor =>
     ports.executor ??
     createSandboxExecutor({
+      ...(httpCredentials ? { httpCredentials } : {}),
       // The browser starts only when a spec uses ui.* (REQ-EXEC-05, REQ-EXEC-07).
       browser: createPlaywrightBrowserFactory({
         browser: combo?.browser ?? project.config.web.browser,
@@ -1024,6 +1029,7 @@ async function executeCases(
         actionTimeoutMs: project.config.web.action_timeout_ms,
         testIdAttribute: project.config.web.test_id_attribute,
         webSession: env.profile.web_session,
+        ...(httpCredentials ? { httpCredentials } : {}),
         // REQ-EVD-07/AC5: each passive check can be switched off.
         observations: {
           console: project.config.observations.console,
@@ -1063,6 +1069,10 @@ async function executeCases(
     stopReason: timeStop,
     ...(run.messages ? { messages: run.messages.forCase } : {}),
     visual: visualFor(primaryVariant),
+    // REQ-EXEC-38: uploads read the project's fixtures; downloads are read by trusted code; REQ-EXEC-56: test hook.
+    fixture: (path: string) => readFixture(project.qaDir, path),
+    extractText: extractDownloadText,
+    testStateHook: project.config.web.test_state,
     executor,
     baseUrl: env.baseUrl,
     allowedOrigins: [env.origin],

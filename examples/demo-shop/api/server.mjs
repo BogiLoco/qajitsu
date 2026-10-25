@@ -17,6 +17,13 @@ export const BUG_FLAGS = [
   "BUG_PRICE_FORMAT_LOCALE",
   "BUG_SILENT_500_TOAST",
   "BUG_ANDROID_BACK_EMPTIES_CART",
+  "BUG_AVATAR_LIMIT_TOO_LOW",
+  "BUG_EXPORT_DROPS_LAST_ROW",
+  "BUG_3DS_RESULT_IGNORED",
+  "BUG_DRAG_WRONG_COLUMN",
+  "BUG_RATING_OFF_BY_ONE",
+  "BUG_DELETE_IGNORES_CANCEL",
+  "BUG_OFFER_NEVER_EXPIRES",
 ];
 
 const PRODUCTS = [
@@ -92,6 +99,18 @@ export function createShop(options) {
     if (route === "GET /health") return json(res, 200, { status: "ok" });
     if (route === "GET /version") return json(res, 200, { sha: options.sha ?? "unknown" });
     if (route === "GET /products") return json(res, 200, PRODUCTS);
+    // The board's history, newest first, ten per page (REQ-EXEC-40 demo): H-50 is the oldest event.
+    if (route === "GET /board/history") {
+      const page = Math.max(0, Math.min(4, Number(url.searchParams.get("page") ?? "0") || 0));
+      return json(
+        res,
+        200,
+        Array.from({ length: 10 }, (_, i) => {
+          const n = page * 10 + i + 1;
+          return { id: `H-${String(n)}`, text: `Event ${String(n)}` };
+        }),
+      );
+    }
     // Read by the Android app at start (stage 8); only the app's own behaviour flag is exposed.
     if (route === "GET /app-config")
       return json(res, 200, { backEmptiesCart: bugs.BUG_ANDROID_BACK_EMPTIES_CART });
@@ -117,6 +136,16 @@ export function createShop(options) {
         return json(res, 422, { error: "MARKER_REQUIRED" });
       seeds.push(input.marker);
       return json(res, 201, { markers: seeds });
+    }
+    // Avatar upload (REQ-EXEC-38 demo): PNG up to 2 MB; BUG-09 refuses anything over 100 KB.
+    if (route === "POST /profile/avatar") {
+      if (req.headers["content-type"] !== "image/png") return json(res, 415, { error: "PNG_ONLY" });
+      const limit = bugs.BUG_AVATAR_LIMIT_TOO_LOW ? 100_000 : 2_000_000;
+      let bytes = 0;
+      for await (const chunk of req) bytes += chunk.length;
+      if (bytes > limit) return json(res, 413, { error: "FILE_TOO_LARGE" });
+      const name = String(req.headers["x-file-name"] ?? "avatar.png").slice(0, 100);
+      return json(res, 201, { name, bytes });
     }
     if (route === "GET /cart") return json(res, 200, cartView(s.cart));
     if (route === "POST /cart/lines") {

@@ -36,6 +36,8 @@ const EntrySchema = z.strictObject({
     "dom",
     "manual",
     "message",
+    "upload",
+    "download",
     "other",
   ]),
   bytes: z.number().int().nonnegative(),

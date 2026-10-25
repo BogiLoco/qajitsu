@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import { join } from "node:path";
@@ -8,6 +8,7 @@ import {
   createMasker,
   DEFAULT_SENSITIVE_HEADERS,
   MASK,
+  splitFrames,
   type EvidenceItem,
   type UiDriver,
   type UiProperty,
@@ -21,6 +22,7 @@ import {
   webkit,
   type Browser,
   type BrowserContext,
+  type FrameLocator,
   type Locator,
   type Page,
 } from "playwright-core";
@@ -42,6 +44,10 @@ export interface WebRunnerOptions {
   /** Attribute `testid:` selectors find, e.g. `data-qa` (REQ-EXEC-21/AC1); `data-testid` by default. */
   readonly testIdAttribute?: string;
   readonly viewport?: { readonly width: number; readonly height: number };
+  /** HTTP authentication of the environment (REQ-EXEC-61/AC5), sent when a page asks for it. */
+  readonly httpCredentials?: { readonly username: string; readonly password: string } | undefined;
+  /** Largest download a step reads, in bytes (REQ-EXEC-38/AC2); 100 MB by default. */
+  readonly maxDownloadBytes?: number;
   /** Passive observations (REQ-EVD-07); all on by default. They never change a status. */
   readonly observations?: {
     readonly console?: boolean;
@@ -114,6 +120,15 @@ async function pageElements(page: Page, testIdAttribute: string): Promise<UiElem
  *   `id:<dom id>` or `css:<selector>` (REQ-EXEC-21/AC3).
  */
 export function locate(page: Page, selector: string): Locator {
+  // REQ-EXEC-39/AC1: `frame:<selector> >> ... >> <selector>` finds the element inside (nested) iframes.
+  const { frames, element } = splitFrames(selector);
+  let root: Page | FrameLocator = page;
+  for (const frame of frames) root = locateIn(root, frame).first().contentFrame();
+  return locateIn(root, element);
+}
+
+/** A locator of one selector (no frames) in a page or a frame. */
+function locateIn(page: Page | FrameLocator, selector: string): Locator {
   const i = selector.indexOf(":");
   const kind = selector.slice(0, i);
   const rest = selector.slice(i + 1);
@@ -175,6 +190,48 @@ export function maskHar(text: string, maskText: (t: string) => string): string {
   return maskText(JSON.stringify(har, null, 2));
 }
 
+/** Largest download a step reads (REQ-EXEC-38/AC2): 100 MB. */
+const MAX_DOWNLOAD = 100_000_000;
+
+/** A rectangle as `getBoundingClientRect` returns it (the Node build has no DOM types). */
+interface DOMRectLike {
+  readonly top: number;
+  readonly left: number;
+  readonly bottom: number;
+  readonly right: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** A node of the CDP DOM tree. */
+interface CdpNode {
+  readonly localName?: string;
+  readonly attributes?: readonly string[];
+  readonly shadowRootType?: string;
+  readonly children?: readonly CdpNode[];
+  readonly shadowRoots?: readonly CdpNode[];
+  readonly contentDocument?: CdpNode;
+}
+
+/** Hosts of closed shadow roots in a CDP DOM tree, as `tag#id` or `tag`. */
+export function closedShadowHosts(node: CdpNode, out: string[] = [], depth = 0): string[] {
+  if (depth > 200) return out;
+  for (const root of node.shadowRoots ?? []) {
+    if (root.shadowRootType === "closed") {
+      const attrs = node.attributes ?? [];
+      const id = attrs[attrs.indexOf("id") + 1];
+      out.push(`${node.localName ?? "element"}${attrs.includes("id") && id ? `#${id}` : ""}`);
+    }
+    closedShadowHosts(root, out, depth + 1);
+  }
+  for (const child of node.children ?? []) closedShadowHosts(child, out, depth + 1);
+  if (node.contentDocument) closedShadowHosts(node.contentDocument, out, depth + 1);
+  return out;
+}
+
+const scrollY = (page: Page): Promise<number> =>
+  page.evaluate(() => (globalThis as unknown as { scrollY: number }).scrollY).catch(() => 0);
+
 /**
  * Creates the browser factory of the web runner. One browser context per attempt, with video, HAR,
  * trace and console capture; the parent performs every action (ADR-0004).
@@ -201,9 +258,32 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
         headless: options.headless ?? true,
         ...(options.slowMoMs ? { slowMo: options.slowMoMs } : {}),
       });
+      // REQ-EXEC-61/AC3: the case's browser grants only what its plan names; everything else stays denied.
+      const settings = input.plan.cases.find((c) => c.id === input.caseId)?.browser;
       const context = await browser.newContext({
         baseURL: input.baseUrl,
         viewport: options.viewport ?? { width: 1280, height: 800 },
+        ...(options.httpCredentials
+          ? {
+              httpCredentials: {
+                ...options.httpCredentials,
+                origin: new URL(input.baseUrl).origin,
+                send: "unauthorized" as const,
+              },
+            }
+          : {}),
+        ...(settings?.permissions ? { permissions: [...settings.permissions] } : {}),
+        ...(settings?.geolocation
+          ? {
+              geolocation: {
+                latitude: settings.geolocation.latitude,
+                longitude: settings.geolocation.longitude,
+                ...(settings.geolocation.accuracy === undefined
+                  ? {}
+                  : { accuracy: settings.geolocation.accuracy }),
+              },
+            }
+          : {}),
         // REQ-EXEC-14: a locale run renders numbers, dates and currencies of its locale and time zone.
         ...(input.locale ? { locale: input.locale.name, timezoneId: input.locale.timezone } : {}),
         ...(video === "off"
@@ -220,9 +300,25 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
         if (["data:", "blob:", "about:"].includes(u.protocol)) return true;
         return input.allowedOrigins.includes(u.origin);
       };
+      // Navigations a page was refused, so a pop-up to another host is named (REQ-EXEC-39/AC3).
+      const blockedNavigation = new Map<Page, string>();
+      let lastBlocked: { origin: string; at: number } | undefined;
       await context.route("**/*", (route) => {
-        if (allowed(route.request().url())) void route.continue();
-        else void route.abort("blockedbyclient");
+        const request = route.request();
+        if (allowed(request.url())) {
+          void route.continue();
+          return;
+        }
+        if (request.isNavigationRequest()) {
+          const origin = new URL(request.url()).origin;
+          lastBlocked = { origin, at: Date.now() };
+          try {
+            blockedNavigation.set(request.frame().page(), origin);
+          } catch {
+            // A pop-up's first navigation or a worker's request may have no page yet.
+          }
+        }
+        void route.abort("blockedbyclient");
       });
       // WebSockets bypass page.route; check them against the same allowlist.
       await context.routeWebSocket(/.*/, (ws) => {
@@ -232,10 +328,47 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
         else void ws.close({ code: 1008, reason: "blocked by QAJitsu allowlist" });
       });
       await context.tracing.start({ screenshots: true, snapshots: true });
+      // REQ-EXEC-61/AC2: the case starts at the plan's time; time flows from there and steps can move it forward.
+      let clockInstalled = false;
+      if (settings?.clock !== undefined) {
+        await context.clock.install({ time: new Date(settings.clock) });
+        await context.clock.resume();
+        clockInstalled = true;
+      }
       const page = await context.newPage();
       const console: string[] = [];
-      page.on("console", (m) => console.push(`[${m.type()}] ${m.text()}`));
-      page.on("pageerror", (e) => console.push(`[pageerror] ${e.message}`));
+      // Every page of the case, in the order it opened (REQ-EXEC-39): pop-ups and tabs get the same recording.
+      const pages: Page[] = [page];
+      /** Pages a switch already went to or refused: each pop-up is taken once. */
+      const taken = new Set<Page>([page]);
+      // REQ-EXEC-61/AC1: dialogs are answered as the step says, otherwise dismissed, and always recorded.
+      let dialogPolicy:
+        { readonly action: "accept" | "dismiss"; readonly text?: string | undefined } | undefined;
+      const dialogs: { type: string; message: string; answer: string }[] = [];
+      const wire = (pg: Page): void => {
+        pg.on("console", (m) => console.push(`[${m.type()}] ${m.text()}`));
+        pg.on("pageerror", (e) => console.push(`[pageerror] ${e.message}`));
+        pg.on("dialog", (dialog) => {
+          const accept = dialogPolicy?.action === "accept";
+          dialogs.push({
+            type: dialog.type(),
+            message: dialog.message(),
+            answer: accept
+              ? dialogPolicy?.text !== undefined
+                ? `accepted with text`
+                : "accepted"
+              : "dismissed",
+          });
+          void (accept ? dialog.accept(dialogPolicy?.text) : dialog.dismiss()).catch(() => undefined);
+        });
+      };
+      wire(page);
+      context.on("page", (pg) => {
+        if (!pages.includes(pg)) {
+          pages.push(pg);
+          wire(pg);
+        }
+      });
       // REQ-EVD-07: passive observations, recorded by the parent and masked; they never become assertions.
       const want = options.observations ?? {};
       const pathOf = (url: string): string => {
@@ -283,7 +416,8 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
         });
       }
       started = { browser, context, page, dir, console };
-      const p = page;
+      let p = page;
+      const pageRef = (pg: Page) => ({ index: pages.indexOf(pg), url: pg.url() });
       return {
         goto: async (url) => {
           await p.goto(url, { waitUntil: "load" });
@@ -314,6 +448,24 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
               return (await l.first().innerText({ timeout })).trim();
             case "value":
               return l.first().inputValue({ timeout });
+            case "in_viewport":
+              // Inside the visible part of the window, after scrolling (REQ-EXEC-40/AC2).
+              return (await l.count()) > 0
+                ? l.first().evaluate((el) => {
+                    const r = (
+                      el as unknown as { getBoundingClientRect(): DOMRectLike }
+                    ).getBoundingClientRect();
+                    const w = globalThis as unknown as { innerWidth: number; innerHeight: number };
+                    return (
+                      r.width > 0 &&
+                      r.height > 0 &&
+                      r.bottom > 0 &&
+                      r.right > 0 &&
+                      r.top < w.innerHeight &&
+                      r.left < w.innerWidth
+                    );
+                  })
+                : false;
           }
         },
         useAccount: async (alias) => {
@@ -354,6 +506,192 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
             .boundingBox({ timeout: 1000 })
             .catch(() => null)) ?? undefined,
         elements: () => pageElements(p, testIdAttribute),
+        // REQ-EXEC-40: pointer, keyboard and scroll actions.
+        pointer: async (s, kind) => {
+          const l = locate(p, s);
+          if (kind === "hover") await l.hover();
+          else if (kind === "dblclick") await l.dblclick();
+          else await l.click({ button: "right" });
+        },
+        dragTo: (source, target) => locate(p, source).dragTo(locate(p, target)),
+        dragBy: async (s, dx, dy) => {
+          const box = await locate(p, s).first().boundingBox({ timeout });
+          if (!box) throw new Error(`${s} has no position on the page to drag from`);
+          const x = box.x + box.width / 2;
+          const y = box.y + box.height / 2;
+          await p.mouse.move(x, y);
+          await p.mouse.down();
+          await p.mouse.move(x + dx, y + dy, { steps: 10 });
+          await p.mouse.up();
+        },
+        keys: (combination) => p.keyboard.press(combination),
+        scrollTo: (s) => locate(p, s).first().scrollIntoViewIfNeeded({ timeout }),
+        scrollBy: async (dx, dy) => {
+          await p.mouse.wheel(dx, dy);
+          await p.waitForTimeout(150);
+        },
+        scrollUntil: async (s, limit) => {
+          const l = locate(p, s).first();
+          const height = p.viewportSize()?.height ?? 800;
+          let scrolls = 0;
+          for (;;) {
+            if (await l.isVisible().catch(() => false)) {
+              await l.scrollIntoViewIfNeeded({ timeout }).catch(() => undefined);
+              return { scrolls, found: true, y: await scrollY(p) };
+            }
+            if (scrolls >= limit) return { scrolls, found: false, y: await scrollY(p) };
+            await p.mouse.wheel(0, Math.round(height * 0.8));
+            scrolls += 1;
+            // Lists load more rows when they come into view.
+            await p.waitForLoadState("networkidle", { timeout: 2000 }).catch(() => undefined);
+            await p.waitForTimeout(150);
+          }
+        },
+        // REQ-EXEC-38: a file input gets the files; a button opening a file chooser gets them through it; a drop zone
+        // gets them dropped.
+        upload: async (s, files) => {
+          const l = locate(p, s).first();
+          const payload = files.map((f) => ({ name: f.name, mimeType: f.type, buffer: Buffer.from(f.data) }));
+          const isInput = await l.evaluate((el) => {
+            const e = el as unknown as { tagName: string; type?: string };
+            return e.tagName === "INPUT" && e.type === "file";
+          });
+          if (isInput) {
+            await l.setInputFiles(payload);
+            return;
+          }
+          const chooser = p.waitForEvent("filechooser", { timeout: 1500 }).catch(() => undefined);
+          await l.click();
+          const opened = await chooser;
+          if (opened) {
+            await opened.setFiles(payload);
+            return;
+          }
+          await l.evaluate(
+            (el, list) => {
+              type FileCtor = new (bits: Uint8Array[], name: string, options: { type: string }) => unknown;
+              const w = globalThis as unknown as {
+                DataTransfer: new () => { items: { add(file: unknown): void } };
+                File: FileCtor;
+                DragEvent: new (type: string, init: Record<string, unknown>) => unknown;
+                atob(data: string): string;
+              };
+              const dt = new w.DataTransfer();
+              for (const f of list)
+                dt.items.add(
+                  new w.File([Uint8Array.from(w.atob(f.b64), (c) => c.charCodeAt(0))], f.name, {
+                    type: f.type,
+                  }),
+                );
+              const target = el as unknown as { dispatchEvent(event: unknown): boolean };
+              for (const type of ["dragenter", "dragover", "drop"])
+                target.dispatchEvent(
+                  new w.DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }),
+                );
+            },
+            files.map((f) => ({ name: f.name, type: f.type, b64: Buffer.from(f.data).toString("base64") })),
+          );
+        },
+        download: async (s, waitMs) => {
+          const [d] = await Promise.all([
+            p.waitForEvent("download", { timeout: waitMs }),
+            locate(p, s).first().click(),
+          ]);
+          const failure = await d.failure();
+          if (failure !== null) throw new Error(`the download from ${s} failed: ${failure}`);
+          const path = await d.path();
+          // A download larger than any test needs is refused before it is read into memory.
+          const size = (await stat(path)).size;
+          const limit = options.maxDownloadBytes ?? MAX_DOWNLOAD;
+          if (size > limit)
+            throw new Error(
+              `the download from ${s} has ${String(size)} bytes, more than ${String(limit)} a test reads`,
+            );
+          return { name: d.suggestedFilename(), data: new Uint8Array(await readFile(path)) };
+        },
+        // REQ-EXEC-39/AC2+AC3: pop-ups and tabs.
+        switchPage: async (to, waitMs) => {
+          if (to === "opener") {
+            const opener = await p.opener();
+            if (!opener) throw new Error("this page was not opened by another page");
+            p = opener;
+            await p.bringToFront();
+            return pageRef(p);
+          }
+          // The newest page not taken or refused yet; otherwise the next one that opens.
+          const next =
+            pages.filter((pg) => !taken.has(pg) && pg !== p).at(-1) ??
+            (await context.waitForEvent("page", { timeout: waitMs }).catch(() => undefined));
+          if (next) taken.add(next);
+          if (!next) throw new Error(`no pop-up or tab opened within ${String(waitMs / 1000)} s`);
+          await next.waitForLoadState("load", { timeout: waitMs }).catch(() => undefined);
+          // The pop-up's page, its URL outside the allowlist, or a navigation refused while it opened.
+          const url = next.url();
+          const outside = /^https?:/.test(url) && !allowed(url) ? new URL(url).origin : undefined;
+          const recent =
+            lastBlocked !== undefined && Date.now() - lastBlocked.at < waitMs && !/^https?:/.test(url)
+              ? lastBlocked.origin
+              : undefined;
+          const blocked = blockedNavigation.get(next) ?? outside ?? recent;
+          if (blocked !== undefined)
+            throw new Error(`the pop-up opened ${blocked}, which is not on the environment allowlist`);
+          p = next;
+          await p.bringToFront();
+          return pageRef(p);
+        },
+        closePage: async () => {
+          if (p === page) throw new Error("the first page of the case cannot be closed");
+          const opener = (await p.opener()) ?? page;
+          await p.close();
+          p = opener;
+          return pageRef(p);
+        },
+        currentPage: () => pageRef(p),
+        setDialogPolicy: (policy) => {
+          dialogPolicy = policy;
+        },
+        takeDialogs: () => dialogs.splice(0),
+        advanceTime: async (ms) => {
+          if (!clockInstalled) {
+            await context.clock.install();
+            await context.clock.resume();
+            clockInstalled = true;
+          }
+          await context.clock.fastForward(ms);
+        },
+        // REQ-EXEC-56/AC2: the application's own test state; read here, never passed by the spec.
+        testState: (hook, path) =>
+          p.evaluate(
+            ([h, path]) => {
+              const w = globalThis as unknown as Record<string, unknown>;
+              let v: unknown = w[h];
+              if (v === undefined) return { hook: false, value: undefined };
+              if (typeof v === "function") v = (v as () => unknown)();
+              for (const part of path.match(/[^.[\]]+/g) ?? []) {
+                if (v === null || typeof v !== "object") return { hook: true, value: undefined };
+                v = (v as Record<string, unknown>)[part];
+              }
+              return { hook: true, value: JSON.parse(JSON.stringify(v ?? null)) as unknown };
+            },
+            [hook, path] as const,
+          ),
+        elementScreenshot: async (s) => new Uint8Array(await locate(p, s).first().screenshot({ timeout })),
+        // REQ-EXEC-56/AC1: a closed shadow root is out of reach of every selector; Chromium can tell.
+        unreachableReason: async () => {
+          if (options.browser !== undefined && options.browser !== "chromium") return undefined;
+          const cdp = await context.newCDPSession(p);
+          try {
+            const { root } = (await cdp.send("DOM.getDocument", { depth: -1, pierce: true })) as {
+              root: CdpNode;
+            };
+            const hosts = closedShadowHosts(root);
+            return hosts.length > 0
+              ? `the page has closed shadow roots (in ${hosts.slice(0, 3).join(", ")}), which no selector can reach: ask for an open shadow root or a test id on the host`
+              : undefined;
+          } finally {
+            await cdp.detach().catch(() => undefined);
+          }
+        },
       };
     };
 

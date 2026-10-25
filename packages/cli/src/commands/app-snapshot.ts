@@ -1,3 +1,4 @@
+import { httpCredentialsFor } from "../http-auth.js";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -53,6 +54,7 @@ export function snapshotBrowser(
   session: RunSession,
   env: ResolvedEnvironment,
   ports: SnapshotPorts,
+  httpCredentials?: { readonly username: string; readonly password: string },
 ): BrowserFactory {
   const web = session.project.config.web;
   return (
@@ -64,6 +66,7 @@ export function snapshotBrowser(
       actionTimeoutMs: web.action_timeout_ms,
       testIdAttribute: web.test_id_attribute,
       webSession: env.profile.web_session,
+      ...(httpCredentials ? { httpCredentials } : {}),
       observations: { console: false, httpErrors: false, accessibility: false },
     })
   );
@@ -203,7 +206,7 @@ async function recordForPlanner(
   const scratch = await mkdtemp(join(tmpdir(), "qj-snapshot-"));
   try {
     const screens = await crawlUiSnapshot({
-      factory: snapshotBrowser(session, env, ports),
+      factory: snapshotBrowser(session, env, ports, await httpCredentialsFor(env, session.resolveSecret)),
       login: snapshotLogin(session, env, ports, scratch),
       account,
       baseUrl: env.baseUrl,
@@ -279,7 +282,10 @@ export async function authorSnapshot(
 ): Promise<UiScreen[]> {
   const { masker, events } = session;
   const webFactory =
-    ports.snapshotBrowser ?? (ports.executor ? undefined : snapshotBrowser(session, env, ports));
+    ports.snapshotBrowser ??
+    (ports.executor
+      ? undefined
+      : snapshotBrowser(session, env, ports, await httpCredentialsFor(env, session.resolveSecret)));
   const device = cases.some((c) => c.type === "mobile") ? await options.device?.() : undefined;
   const scratch = await mkdtemp(join(tmpdir(), "qj-snapshot-"));
   try {

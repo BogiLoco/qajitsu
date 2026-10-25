@@ -48,6 +48,8 @@ const Options = z.strictObject({
 });
 
 const Selector = z.string().max(300);
+/** A pixel offset of a drag or scroll. */
+const Offset = z.number().int().min(-20_000).max(20_000);
 const UiOperationSchema = z.discriminatedUnion("op", [
   z.strictObject({ op: z.literal("goto"), path: z.string().max(4096) }),
   z.strictObject({ op: z.enum(["click", "check", "uncheck"]), selector: Selector }),
@@ -59,6 +61,26 @@ const UiOperationSchema = z.discriminatedUnion("op", [
   z.strictObject({ op: z.literal("waitFor"), selector: Selector, state: z.enum(["visible", "hidden"]) }),
   z.strictObject({ op: z.literal("back") }),
   z.strictObject({ op: z.literal("as"), alias: z.string().max(200) }),
+  // REQ-EXEC-38..40 (ADR-0013): web actions; inputs are plan keys and bounded numbers, never paths or bytes.
+  z.strictObject({
+    op: z.enum(["hover", "dblclick", "rightclick", "scrollTo", "scrollUntil", "download"]),
+    selector: Selector,
+  }),
+  z.strictObject({ op: z.literal("dragTo"), selector: Selector, target: Selector }),
+  z.strictObject({ op: z.literal("dragBy"), selector: Selector, dx: Offset, dy: Offset }),
+  z.strictObject({ op: z.literal("scrollBy"), dx: Offset, dy: Offset }),
+  z.strictObject({ op: z.literal("keys"), value: z.string().regex(/^[A-Za-z0-9+_ ,.;'`=/\\[\]-]{1,40}$/) }),
+  z.strictObject({
+    op: z.literal("upload"),
+    selector: Selector,
+    files: z
+      .array(z.string().regex(/^[a-z][a-z0-9_-]{0,40}$/))
+      .min(1)
+      .max(20),
+  }),
+  z.strictObject({ op: z.literal("switchPage"), to: z.enum(["new", "opener"]) }),
+  z.strictObject({ op: z.literal("closePage") }),
+  z.strictObject({ op: z.literal("advanceTime"), seconds: z.number().int().min(1).max(604_800) }),
 ]);
 
 /** A browser for one attempt, created by the web runner (ADR-0004). */
@@ -168,6 +190,8 @@ export function createSandboxExecutor(
     readonly now?: () => number;
     /** Browser per attempt for web and mixed cases (REQ-EXEC-05, REQ-EXEC-07). */
     readonly browser?: BrowserFactory;
+    /** HTTP authentication of the environment for API calls (REQ-EXEC-61/AC5). */
+    readonly httpCredentials?: { readonly username: string; readonly password: string } | undefined;
   } = {},
 ): AttemptExecutor {
   const childScript = options.childScript ?? fileURLToPath(new URL("./child.js", import.meta.url));
@@ -176,7 +200,10 @@ export function createSandboxExecutor(
     let dispose: (() => Promise<void>) | undefined;
     let transport = options.transport;
     if (!transport) {
-      const pw = await createPlaywrightTransport({ timeoutMs: input.timeoutMs });
+      const pw = await createPlaywrightTransport({
+        timeoutMs: input.timeoutMs,
+        ...(options.httpCredentials ? { httpCredentials: options.httpCredentials } : {}),
+      });
       transport = pw.transport;
       dispose = pw.dispose;
     }
@@ -187,6 +214,9 @@ export function createSandboxExecutor(
       ...(input.locale ? { locale: input.locale.name } : {}),
       ...(input.messages ? { messages: input.messages } : {}),
       ...(input.manual ? { manual: input.manual } : {}),
+      ...(input.fixture ? { fixture: input.fixture } : {}),
+      ...(input.extractText ? { extractText: input.extractText } : {}),
+      ...(input.testStateHook ? { testStateHook: input.testStateHook } : {}),
       caseId: input.caseId,
       attempt: input.attempt,
       baseUrl: input.baseUrl,

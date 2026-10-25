@@ -1,0 +1,37 @@
+{
+  "summary": "Card payment with 3-D Secure for DEMO-8.",
+  "cases": [
+    {
+      "id": "TC-01",
+      "title": "A confirmed 3-D Secure payment is shown as paid",
+      "type": "web",
+      "priority": "high",
+      "source": [
+        { "kind": "ac", "id": "AC1" },
+        { "kind": "ac", "id": "AC2" }
+      ],
+      "steps": [
+        {
+          "id": "S1",
+          "action": "Enter a card in the payment iframe and pay",
+          "expect": {
+            "description": "The 3-D Secure window asks to confirm",
+            "elements": { "testid:confirm-3ds": { "visible": true } }
+          }
+        },
+        {
+          "id": "S2",
+          "action": "Confirm in the 3-D Secure window and go back to the payment page",
+          "expect": {
+            "description": "Status Paid",
+            "elements": {
+              "testid:payment-status": { "text": "Paid" },
+              "frame:title:Payment >> testid:widget-status": { "text": "Confirmed" }
+            }
+          }
+        }
+      ],
+      "evidence": ["screenshot"]
+    }
+  ]
+}

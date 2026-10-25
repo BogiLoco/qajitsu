@@ -28,7 +28,44 @@ const FORBIDDEN_GLOBALS = new Set([
   "setInterval",
 ]);
 
-const UI_ACTIONS = new Set(["click", "fill", "check", "uncheck", "select", "press", "waitFor"]);
+const UI_ACTIONS = new Set([
+  "click",
+  "fill",
+  "check",
+  "uncheck",
+  "select",
+  "press",
+  "waitFor",
+  // REQ-EXEC-38..40 (ADR-0013): web actions whose first argument is a selector.
+  "hover",
+  "dblclick",
+  "rightClick",
+  "dragTo",
+  "dragBy",
+  "scrollTo",
+  "scrollUntil",
+  "upload",
+  "download",
+]);
+
+/** Web actions a native app does not offer yet (mobile gestures come with REQ-EXEC-41). */
+const WEB_ONLY = [
+  "hover",
+  "dblclick",
+  "rightClick",
+  "dragTo",
+  "dragBy",
+  "keys",
+  "scrollTo",
+  "scrollBy",
+  "scrollUntil",
+  "upload",
+  "download",
+  "switchToNewPage",
+  "switchToOpener",
+  "closePage",
+  "advanceTime",
+];
 
 /** Selector kinds a native app can resolve (REQ-EXEC-06, REQ-EXEC-21/AC3); `role:` and `css:` exist only in a browser. */
 const NATIVE_SELECTORS = ["testid:", "label:", "text:", "id:", "xpath:"];
@@ -44,12 +81,17 @@ const WEB_SELECTORS = [
   "text:",
   "id:",
   "css:",
+  // REQ-EXEC-39/AC1: an element inside (nested) iframes.
+  "frame:",
 ];
 
 /** `ui` operations that do not exist in a native app, and what to do instead (REQ-EXEC-06). */
 const NATIVE_UNAVAILABLE: Readonly<Record<string, string>> = {
   as: "ui.as() does not exist in a native app: log in through the app's own screens with ui.fill and ui.click",
   select: "ui.select() does not exist in a native app: tap the option with ui.click",
+  ...Object.fromEntries(
+    WEB_ONLY.map((name) => [name, `ui.${name}() is not available in native apps yet: it works in web cases`]),
+  ),
 };
 
 /** Options of the static checks that depend on the project. */
@@ -196,6 +238,7 @@ export function checkSpecSource(
   const stepCalls = new Map<string, number>();
   const verifiedSteps = new Set<string>();
   const verifiedFields = new Set<string>();
+  const downloadSteps = new Set<string>();
   const add = (check: SpecProblem["check"], message: string, node?: ts.Node): void => {
     problems.push({ check, message, ...(node ? { line: lineOf(sf, node) } : {}) });
   };
@@ -294,20 +337,31 @@ export function checkSpecSource(
         if (UI_ACTIONS.has(name) && first && ts.isStringLiteral(first) && first.text.startsWith("xpath:"))
           add("review", `XPath selector '${first.text}' is brittle; prefer testid:, label: or text:`, node);
       }
-      if (
-        !native &&
-        onUi &&
-        name !== undefined &&
-        UI_ACTIONS.has(name) &&
-        first &&
-        ts.isStringLiteral(first) &&
-        !WEB_SELECTORS.some((k) => first.text.startsWith(k))
-      )
-        add(
-          "lint",
-          `'${first.text}' cannot be found in a browser: use testid:, role:, label:, placeholder:, alt:, title:, text:, id: or css:`,
-          node,
-        );
+      const selectorArgs =
+        onUi && name !== undefined && UI_ACTIONS.has(name)
+          ? [first, ...(name === "dragTo" ? [node.arguments[1]] : [])]
+          : [];
+      for (const arg of selectorArgs)
+        if (!native && arg && ts.isStringLiteral(arg) && !WEB_SELECTORS.some((k) => arg.text.startsWith(k)))
+          add(
+            "lint",
+            `'${arg.text}' cannot be found in a browser: use testid:, role:, label:, placeholder:, alt:, title:, text:, id:, css: or frame:<selector> >> <selector>`,
+            node,
+          );
+      // REQ-EXEC-38/AC1: uploads name files of the case's plan, never paths or bytes.
+      if (onUi && name === "upload") {
+        const keys = node.arguments.slice(1);
+        if (keys.length === 0) add("lint", "ui.upload() needs the plan keys of the files to upload", node);
+        for (const k of keys) {
+          if (!ts.isStringLiteral(k)) add("lint", "ui.upload() takes literal file keys of the plan", k);
+          else if (!(k.text in (planCase.files ?? {})))
+            add("coverage", `ui.upload(): '${k.text}' is not a file of ${caseId} in the plan (files)`, k);
+        }
+      }
+      if (onUi && name === "download") {
+        const owner = enclosingStep(node);
+        if (owner !== undefined) downloadSteps.add(owner);
+      }
       if (
         !native &&
         name !== undefined &&
@@ -388,6 +442,12 @@ export function checkSpecSource(
     }
     if (!verifiedSteps.has(step.id))
       add("coverage", `plan step ${step.id} has no verify("${step.id}", ...) call`);
+    // A planned download without ui.download() in its step would always fail as "no download".
+    if (step.expect.download !== undefined && !downloadSteps.has(step.id))
+      add(
+        "coverage",
+        `step ${step.id} expects a download: call ui.download(<selector>) inside step("${step.id}", ...)`,
+      );
     // Every planned expectation is verified; leaving one out would let the spec pass whatever it is.
     for (const field of plannedFields(step.expect))
       if (verifiedSteps.has(step.id) && !verifiedFields.has(`${step.id}.${field}`))
@@ -580,7 +640,26 @@ interface LockedShape {
   flow: string[];
 }
 
-const SELECTOR_ACTIONS = new Set(["click", "check", "uncheck", "waitFor", "fill", "select", "press"]);
+const SELECTOR_ACTIONS = new Set([
+  "click",
+  "check",
+  "uncheck",
+  "waitFor",
+  "fill",
+  "select",
+  "press",
+  "hover",
+  "dblclick",
+  "rightClick",
+  "dragTo",
+  "dragBy",
+  "scrollTo",
+  "scrollUntil",
+  "upload",
+  "download",
+]);
+/** Actions the healer may add or remove like waits: they only bring an element into reach (REQ-EXEC-09). */
+const WAIT_LIKE = new Set(["waitFor", "scrollTo"]);
 
 const lockedShape = (source: string): LockedShape => {
   const sf = ts.createSourceFile("spec.ts", source, ts.ScriptTarget.ES2023, true, ts.ScriptKind.TS);
@@ -623,9 +702,11 @@ const lockedShape = (source: string): LockedShape => {
         // The receiver chain (ui, api.as("user:x")) and every non-selector argument are locked.
         const receiver = node.expression.expression.getText(sf);
         const args = node.arguments.map((a, i) =>
-          SELECTOR_ACTIONS.has(name) && i === 0 ? "<selector>" : a.getText(sf),
+          SELECTOR_ACTIONS.has(name) && (i === 0 || (name === "dragTo" && i === 1))
+            ? "<selector>"
+            : a.getText(sf),
         );
-        if (name !== "waitFor") shape.actions.push(`${receiver}.${name}(${args.join(",")})`);
+        if (!WAIT_LIKE.has(name)) shape.actions.push(`${receiver}.${name}(${args.join(",")})`);
       }
       if (name === "verify")
         shape.verifies.push(`${literal(0)}|${literal(1)}|${node.arguments[3]?.getText(sf) ?? ""}`);
@@ -675,5 +756,24 @@ export function assertionLockDiff(before: string, after: string): SpecProblem[] 
       check: "assertion-lock",
       message: "try/catch was added; failures must not be swallowed",
     });
+  // INV-4: what the spec does (actions with their data) and how it flows stay; only selectors and waits may change.
+  if (!same(a.actions, b.actions))
+    problems.push({
+      check: "assertion-lock",
+      message: `actions changed beyond their selectors: ${diffLine(a.actions, b.actions)}`,
+    });
+  if (!same(a.flow, b.flow))
+    problems.push({
+      check: "assertion-lock",
+      message:
+        "control flow changed (conditions, loops, returns); the healer may change selectors and waits only",
+    });
   return problems;
 }
+
+/** The first difference of two action lists, for the message. */
+const diffLine = (a: readonly string[], b: readonly string[]): string => {
+  const i = a.findIndex((v, j) => v !== b[j]);
+  const at = i < 0 ? Math.min(a.length, b.length) : i;
+  return `${a[at] ?? "(none)"} → ${b[at] ?? "(none)"}`;
+};

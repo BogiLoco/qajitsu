@@ -1,0 +1,82 @@
+{
+  "summary": "Task board and reviews for DEMO-9.",
+  "cases": [
+    {
+      "id": "TC-01",
+      "title": "A card dropped on Done is done",
+      "type": "web",
+      "priority": "high",
+      "source": [{ "kind": "ac", "id": "AC1" }],
+      "steps": [
+        {
+          "id": "S1",
+          "action": "Drag the card onto the Done column",
+          "expect": {
+            "description": "Card in Done, count 1",
+            "elements": {
+              "css:[data-testid=col-done] [data-testid=card-1]": { "visible": true },
+              "testid:done-count": { "text": "1" }
+            }
+          }
+        }
+      ],
+      "evidence": ["screenshot"]
+    },
+    {
+      "id": "TC-02",
+      "title": "Hovering a card shows its details",
+      "type": "web",
+      "priority": "medium",
+      "source": [{ "kind": "ac", "id": "AC2" }],
+      "steps": [
+        {
+          "id": "S1",
+          "action": "Hover the card",
+          "expect": {
+            "description": "Details visible",
+            "elements": { "testid:card-1-details": { "visible": true } }
+          }
+        }
+      ],
+      "evidence": ["screenshot"]
+    },
+    {
+      "id": "TC-03",
+      "title": "Scrolling the history reaches the first event",
+      "type": "web",
+      "priority": "medium",
+      "source": [{ "kind": "ac", "id": "AC3" }],
+      "steps": [
+        {
+          "id": "S1",
+          "action": "Scroll the history until H-50",
+          "scroll_limit": 30,
+          "expect": {
+            "description": "H-50 in view",
+            "elements": { "testid:history-H-50": { "visible": true, "in_viewport": true } }
+          }
+        }
+      ],
+      "evidence": ["screenshot"]
+    },
+    {
+      "id": "TC-04",
+      "title": "Four stars are counted",
+      "type": "web",
+      "priority": "high",
+      "source": [{ "kind": "ac", "id": "AC4" }],
+      "steps": [
+        {
+          "id": "S1",
+          "action": "Click the fourth star",
+          "expect": {
+            "description": "4 / 5 and the four-star bar grows to 6",
+            "elements": { "testid:rating-value": { "text": "4 / 5" } },
+            "state": { "bars.3.value": 6 }
+          }
+        }
+      ],
+      "evidence": ["screenshot"]
+    }
+  ]
+}

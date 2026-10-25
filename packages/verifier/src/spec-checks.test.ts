@@ -404,7 +404,7 @@ describe("manual steps in specs (REQ-EXEC-11)", () => {
       webPlan,
     );
     expect(kinds.map((p) => `${p.check}: ${p.message}`)).toEqual([
-      "lint: 'xpath://b' cannot be found in a browser: use testid:, role:, label:, placeholder:, alt:, title:, text:, id: or css:",
+      "lint: 'xpath://b' cannot be found in a browser: use testid:, role:, label:, placeholder:, alt:, title:, text:, id:, css: or frame:<selector> >> <selector>",
     ]);
   });
 

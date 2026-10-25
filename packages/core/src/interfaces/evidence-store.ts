@@ -15,6 +15,8 @@ export interface EvidenceEntry {
     | "dom"
     | "manual"
     | "message"
+    | "upload"
+    | "download"
     | "other";
   readonly bytes: number;
 }

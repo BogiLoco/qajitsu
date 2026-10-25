@@ -158,6 +158,19 @@ export function renderPlanMarkdown(plan: Plan): string {
     if (c.locales && c.locales.length > 0) out.push(`Also runs in locales: ${c.locales.join(", ")}`, "");
     const data = Object.entries(c.data);
     if (data.length > 0) out.push(`Data: ${data.map(([k, v]) => `${k}=${v}`).join(", ")}`, "");
+    // REQ-EXEC-38/AC1: the reviewer sees every file the case uploads.
+    const files = Object.entries(c.files ?? {});
+    if (files.length > 0)
+      out.push(
+        `Files: ${files
+          .map(([k, f]) =>
+            "fixture" in f
+              ? `${k}=.qa/fixtures/${f.fixture}`
+              : `${k}=${f.name} (${f.type}, ${String(f.bytes)} bytes, generated)`,
+          )
+          .join(", ")}`,
+        "",
+      );
     c.steps.forEach((s) => {
       const details = [
         s.expect.status === undefined ? undefined : `status ${String(s.expect.status)}`,
@@ -167,6 +180,9 @@ export function renderPlanMarkdown(plan: Plan): string {
         s.expect.elements ? `elements ${JSON.stringify(s.expect.elements)}` : undefined,
         s.expect.message ? `message ${JSON.stringify(s.expect.message)}` : undefined,
         s.expect.visual ? `visual ${JSON.stringify(s.expect.visual)}` : undefined,
+        s.expect.download ? `download ${JSON.stringify(s.expect.download)}` : undefined,
+        s.expect.state ? `state ${JSON.stringify(s.expect.state)}` : undefined,
+        s.scroll_limit === undefined ? undefined : `at most ${String(s.scroll_limit)} scrolls`,
         s.expect.by_locale ? `per locale ${JSON.stringify(s.expect.by_locale)}` : undefined,
       ].filter(Boolean);
       out.push(

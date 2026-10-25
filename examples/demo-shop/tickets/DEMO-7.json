@@ -1,0 +1,22 @@
+{
+  "key": "DEMO-7",
+  "type": "Story",
+  "status": "Ready for QA",
+  "summary": "Profile avatar upload and product export",
+  "description": "Shoppers upload a PNG avatar on their profile, by choosing the file or dropping it on the drop zone. Shop staff export the product list as a CSV file.",
+  "acceptanceCriteria": [
+    "A PNG avatar up to 2 MB is accepted; the page shows its file name and size in bytes.",
+    "A file larger than 2 MB is refused with the message File too large.",
+    "Export CSV on the products page downloads products.csv with a header and one row per product."
+  ],
+  "labels": ["profile", "web"],
+  "components": ["shop-web"],
+  "attachments": [],
+  "comments": [
+    {
+      "author": "designer",
+      "created": "2026-10-20T09:00:00Z",
+      "body": "Test ids: avatar-input, avatar-drop, avatar-name, avatar-size, export-csv."
+    }
+  ]
+}

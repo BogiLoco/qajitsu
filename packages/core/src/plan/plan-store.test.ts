@@ -174,6 +174,53 @@ describe("plan store (REQ-PLAN-02, REQ-PLAN-04, REQ-PLAN-06)", () => {
     expect(md).not.toContain("Already covered");
   });
 
+  it("REQ-PLAN-04/AC1 + REQ-EXEC-38: the reviewer sees the files a case uploads, what a download must be, test state and scroll limits", () => {
+    const md = renderPlanMarkdown(
+      parsePlan({
+        schema: 1,
+        ticket: "DEMO-7",
+        version: 1,
+        ...JSON.parse(
+          readFileSync(new URL("../../../../fixtures/plans/demo-7-draft.json", import.meta.url), "utf8"),
+        ),
+      }),
+    );
+    expect(md).toContain("Files: avatar=avatar.png (image/png, 1500000 bytes, generated)");
+    expect(md).toContain('download {"name":"products.csv","type":"csv","texts":["P-3,T-shirt"],"rows":3}');
+    const nine = renderPlanMarkdown(
+      parsePlan({
+        schema: 1,
+        ticket: "DEMO-9",
+        version: 1,
+        ...JSON.parse(
+          readFileSync(new URL("../../../../fixtures/plans/demo-9-draft.json", import.meta.url), "utf8"),
+        ),
+      }),
+    );
+    expect(nine).toContain('state {"bars.3.value":6}');
+    expect(nine).toContain("at most 30 scrolls");
+    const fixture = renderPlanMarkdown(
+      parsePlan({
+        schema: 1,
+        ticket: "DEMO-7",
+        version: 1,
+        cases: [
+          {
+            id: "TC-01",
+            title: "fixture upload",
+            type: "web",
+            priority: "high",
+            source: [{ kind: "ac", id: "AC1" }],
+            files: { photo: { fixture: "images/photo.png" } },
+            steps: [{ id: "S1", action: "upload", expect: { description: "d", texts: ["Saved"] } }],
+            evidence: ["screenshot"],
+          },
+        ],
+      }),
+    );
+    expect(fixture).toContain("Files: photo=.qa/fixtures/images/photo.png");
+  });
+
   it("REQ-PLAN-04/AC1: the reviewer sees element expectations of web and mobile steps", () => {
     const first = draft.cases[0];
     if (!first) throw new Error("fixture");

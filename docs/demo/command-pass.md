@@ -9,6 +9,26 @@ regression suite; and the CI helpers with a recorded GitHub event).
 How to repeat it: copy `examples/demo-shop` into a scratch folder, run `qj init` there with `HOME` pointing at a
 scratch folder, and go through the table top to bottom. Record the date, the commit and every result below.
 
+## Pass of 2026-10-24: web gaps (uploads, downloads, frames, pop-ups, pointer, scroll, Shadow DOM, dialogs, time)
+
+Every new web action was run through the runner and through the whole CLI (fetch, plan, approve, run, publish) on
+DEMO-7..DEMO-10, clean and with each seeded bug (BUG-09..BUG-15), then reviewed critically. What was found and done:
+
+| ID  | Finding                                                                                                                                                                                | Now                                                                                  |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| G1  | the assertion lock collected actions and control flow but compared neither: a healer could change a request body, a typed value or an uploaded file, drop an action or add a condition | both compared; adversarial suite "lying healer" (7 attempts refused)                 |
+| G2  | a step expecting only a download or test state was refused at approval as "description only"                                                                                           | counted as something to compare                                                      |
+| G3  | the plan a person approves did not show the files a case uploads or what a download must contain                                                                                       | shown: files, download, state, scroll limit                                          |
+| G4  | browser dialogs were dismissed silently by the browser, so confirm-gated flows could never go on                                                                                       | answered as the step says, recorded, checkable (`dialog.*`)                          |
+| G5  | no way to test time-dependent pages, browser permissions or location, or staging behind Basic Auth                                                                                     | `browser.clock`, `ui.advanceTime`, `browser.permissions`, `geolocation`, `http_auth` |
+| G6  | a download of any size was read into memory                                                                                                                                            | refused over 100 MB before it is read                                                |
+| G7  | "content cannot be read" of a download was reported as "not JSON"                                                                                                                      | the real reason is reported                                                          |
+| G8  | a second `switchToNewPage` took the same refused pop-up again                                                                                                                          | each pop-up is taken once                                                            |
+| G9  | `ui.scrollUntil` that does not find the element: an error would hide a broken infinite list as BLOCKED                                                                                 | not an error; the planned check fails (FAILED)                                       |
+
+Still open, as requirements: several users in one web case (REQ-EXEC-62), mobile web emulation (REQ-EXEC-63),
+WebSocket messages of the page (REQ-EXEC-47/AC3).
+
 ## Pass of 2026-10-22/23 (third): Jira workflow, cost and time, readiness, reproduce
 
 Probes against `qj workflow sync`, `publish` with a workflow mapping, `fetch` admission, `plan --override-readiness`,

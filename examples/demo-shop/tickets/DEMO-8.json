@@ -1,0 +1,21 @@
+{
+  "key": "DEMO-8",
+  "type": "Story",
+  "status": "Ready for QA",
+  "summary": "Card payment with 3-D Secure",
+  "description": "The payment provider's form is embedded in the payment page as an iframe titled Payment. Pay opens the 3-D Secure window; after the shopper confirms there, the payment page shows the payment as paid.",
+  "acceptanceCriteria": [
+    "Paying with a 16-digit card number opens the 3-D Secure window.",
+    "After Confirm in the 3-D Secure window the payment page shows the status Paid."
+  ],
+  "labels": ["payment", "web"],
+  "components": ["shop-web"],
+  "attachments": [],
+  "comments": [
+    {
+      "author": "designer",
+      "created": "2026-10-20T09:00:00Z",
+      "body": "Test ids: card-number and pay in the widget, confirm-3ds in the 3-D Secure window, payment-status on the page."
+    }
+  ]
+}
