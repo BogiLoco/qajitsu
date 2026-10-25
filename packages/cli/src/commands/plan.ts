@@ -1,3 +1,4 @@
+import { modelForRole } from "@qajitsu/agents";
 import { warnStageBudgets } from "../timing.js";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -389,6 +390,10 @@ export async function runPlan(
       throw new ConfigError("PLAN_DEPTH_INVALID", "--depth must be smoke, standard or full.", {});
     const depth = depthOption?.data ?? DepthSchema.optional().parse(ws.record.data["depth"]);
     if (depthOption?.success) await ws.update({ data: { ...ws.record.data, depth: depthOption.data } });
+    // Every model this command needs is checked before any work: a model that cannot plan is named at once, not after
+    // the analysis and the page recording (dogfood pass 2026-10-25).
+    await modelForRole(session.models, "analyst");
+    await modelForRole(session.models, "planner");
     const knowledge = await loadKnowledge(knowledgeDir(session.project), (t) => masker.containsSecret(t));
     let context = await buildChangeContext(ws, knowledge, {
       indexCache: codeIndexCache(session.project),

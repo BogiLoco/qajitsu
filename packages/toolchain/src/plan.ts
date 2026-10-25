@@ -321,7 +321,13 @@ function planDocker(d: DetectedTool, input: PlanInput): PlanStep {
     return step(
       "docker",
       "manual",
-      `yours (${own.version ?? "unknown"}) is not compatible (needs Docker ${MANIFEST.docker.compatible} with Compose v2); QAJitsu never changes it: update it yourself`,
+      // Name what is missing: a Docker that is new enough without the Compose v2 plugin is not "too old"
+      // (dogfood pass 2026-10-25).
+      own.version !== undefined &&
+        satisfies(own.version.split(",")[0] ?? "", MANIFEST.docker.compatible) &&
+        own.missing.includes("compose")
+        ? `yours (${own.version}) has no Compose v2 plugin (docker compose): install the plugin; QAJitsu never changes Docker itself`
+        : `yours (${own.version ?? "unknown"}) is not compatible (needs Docker ${MANIFEST.docker.compatible} with Compose v2); QAJitsu never changes it: update it yourself`,
       { version: own.version ?? "unknown" },
     );
   if (own.running !== true)

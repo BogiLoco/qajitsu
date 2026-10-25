@@ -476,6 +476,34 @@ export function checkSpecSource(
         `verify("${step.id}", "${field}", ...) checks something step ${step.id} of the plan does not expect; it expects: ${planned.join(", ") || "a description only, nothing a test can compare"}`,
       );
   }
+  // A browser starts on an empty page: an action on an element before any ui.goto() can never find it (dogfood
+  // pass 2026-10-25: the author clicked on about:blank and every attempt timed out).
+  if (planCase.type === "web") {
+    let opened = false;
+    let reported = false;
+    const firstAction = (node: ts.Node): void => {
+      if (reported) return;
+      if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        ts.isIdentifier(node.expression.expression) &&
+        node.expression.expression.text === "ui"
+      ) {
+        const name = node.expression.name.text;
+        if (name === "goto") opened = true;
+        else if (!opened && UI_ACTIONS.has(name)) {
+          add(
+            "lint",
+            `ui.${name}() runs before any page is open: call ui.goto("<path>") first in the step`,
+            node,
+          );
+          reported = true;
+        }
+      }
+      ts.forEachChild(node, firstAction);
+    };
+    firstAction(sf);
+  }
   // A case that runs as a test account logs in as it: without it every call answers 401 and the case would end
   // FAILED as if the product were broken (exploratory testing F21).
   const account = Object.values(planCase.data).find(

@@ -169,4 +169,13 @@ export async function run({ step, verify, plan, ui }: CaseContext): Promise<void
       ),
     ).not.toEqual([]);
   });
+
+  it("REQ-EXEC-05 + REQ-EXEC-03/AC1: a web action before any page is open is refused before the run (dogfood 2026-10-25)", () => {
+    const plan = fixturePlan("DEMO-9");
+    const spec = fixtureSpec("DEMO-9", "TC-02");
+    expect(messages(spec.replace('await ui.goto("/app/board");\n', ""), "TC-02", plan)).toContain(
+      'lint: ui.hover() runs before any page is open: call ui.goto("<path>") first in the step',
+    );
+    expect(messages(spec, "TC-02", plan).filter((m) => m.includes("before any page"))).toEqual([]);
+  });
 });

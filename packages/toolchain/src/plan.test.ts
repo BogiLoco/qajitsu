@@ -277,6 +277,10 @@ describe("the setup plan (REQ-GEN-06/AC1, AC2, AC4, AC5)", () => {
     expect(stopped["docker"]).toMatchObject({ action: "start", source: "colima start" });
     const noCompose = await plan(machine({ ...good, "docker compose version --short": "" }));
     expect(noCompose["docker"]?.action).toBe("manual");
+    // A Docker new enough without Compose v2 names the missing plugin, not "too old" (dogfood 2026-10-25).
+    expect(noCompose["docker"]?.reason).toBe(
+      "yours (27.3.1) has no Compose v2 plugin (docker compose): install the plugin; QAJitsu never changes Docker itself",
+    );
   });
 
   it("REQ-GEN-06/AC1: .qa/toolchain.yaml pins other versions; the user's tool is used only when it matches", async () => {

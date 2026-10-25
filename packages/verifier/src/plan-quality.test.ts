@@ -304,6 +304,46 @@ describe("concrete expected values (REQ-PLAN-09)", () => {
     ).toEqual([]);
   });
 
+  it("REQ-EXEC-22/AC8: an expected text the recorded page shows differently is flagged for a person (dogfood 2026-10-25)", () => {
+    const screens = [
+      {
+        where: "/app/offer",
+        platform: "web" as const,
+        elements: [
+          { testid: "offer-status", text: "Offer active" },
+          { testid: "store", text: "" },
+        ],
+      },
+    ];
+    const flags = checkPlanExpectations(
+      plan(
+        [
+          {
+            expect: {
+              description: "d",
+              elements: {
+                "testid:offer-status": { text: "Active" },
+                "testid:store": { text: "Warsaw" },
+                "testid:missing": { text: "x" },
+              },
+            },
+          },
+          { expect: { description: "d", elements: { "testid:offer-status": { text: "Offer active" } } } },
+        ],
+        "web",
+      ),
+      { snapshot: screens },
+    ).filter((f) => f.kind === "recorded-text");
+    // An empty element (filled later by the page) and an unknown one are not judged by their text.
+    expect(flags.map((f) => [f.stepId, f.field, f.reason])).toEqual([
+      [
+        "S1",
+        "elements.testid:offer-status.text",
+        'testid:offer-status shows "Offer active" on the recorded pages, the plan expects "Active": confirm the change makes it so, or use the shown text',
+      ],
+    ]);
+  });
+
   it("REQ-PLAN-09/AC2: references, allOf, arrays, open objects and every way a call has no schema", () => {
     const doc = {
       paths: {

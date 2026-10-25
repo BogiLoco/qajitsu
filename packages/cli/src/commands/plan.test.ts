@@ -285,6 +285,23 @@ describe("qajitsu plan / approve (REQ-PLAN-01..06, REQ-GEN-05)", () => {
     expect(blocked.err).toContain("[TOKEN_BUDGET_EXCEEDED]");
   });
 
+  it("REQ-LLM-03/AC3: a model that cannot plan is named before any analysis or page recording (dogfood 2026-10-25)", async () => {
+    await fetched();
+    const yaml = join(project, ".qa", "qa.project.yaml");
+    await writeFile(
+      yaml,
+      (await readFile(yaml, "utf8")).replace(
+        "models: { roles: { default: mock/scripted }, token_budget: 100000 }",
+        "models: { providers: { mock: { type: ollama, models: { scripted: { tools: true, structured_output: true, context_window: 40960 } } } }, roles: { default: mock/scripted } }",
+      ),
+    );
+    const refused = await run(["plan", "DEMO-1"], { script: fullScript });
+    expect(refused.exitCode).toBe(3);
+    expect(refused.err).toContain("[MODEL_CAPABILITY_MISSING]");
+    expect(refused.err).toContain("cannot run role 'analyst': missing contextWindow>=64000");
+    expect(refused.out).not.toContain("Analysing the change");
+  });
+
   it("REQ-LLM-09/AC3+AC4: the run's cost budget in dollars stops the planning stage; what it cost is kept", async () => {
     await fetched();
     const yaml = join(project, ".qa", "qa.project.yaml");

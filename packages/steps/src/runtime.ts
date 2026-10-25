@@ -571,6 +571,14 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     } catch (error) {
       if (driver && (await unaddressable(driver)))
         throw new Error(`${describeError(error)}; ${NO_ELEMENTS}`, { cause: error });
+      // A browser starts on an empty page: say so instead of a bare timeout.
+      if (driver && "selector" in operation && driver.url().startsWith("about:blank"))
+        throw new Error(
+          `${describeError(error)}; no page is open: call ui.goto("<path>") before ui.${operation.op}()`,
+          {
+            cause: error,
+          },
+        );
       // REQ-EXEC-64/AC3: a selector that matches several elements says how many and how to narrow it.
       const many = /resolved to (\d+) elements/.exec(describeError(error));
       if (many)

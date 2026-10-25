@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
+import { parse } from "yaml";
 import { afterEach, describe, expect, it } from "vitest";
-import { startShop } from "./server.mjs";
+import { BUG_FLAGS, startShop } from "./server.mjs";
 
 interface Shop {
   url: string;
@@ -101,5 +103,12 @@ describe("demo-shop seeded bugs (REQ-NFR-04, BUGS.md)", () => {
     });
     expect((await call(shop, "GET", "/nope", undefined, token)).status).toBe(404);
     expect((await call(shop, "GET", "/me")).status).toBe(401);
+  });
+
+  it("REQ-NFR-04/AC1: every seeded bug can be switched on in a --build run (dogfood 2026-10-25)", () => {
+    const config = parse(readFileSync(new URL("../.qa/qa.project.yaml", import.meta.url), "utf8")) as {
+      services: { api: { env: Record<string, { overridable?: boolean }> } };
+    };
+    for (const flag of BUG_FLAGS) expect(config.services.api.env[flag]?.overridable, flag).toBe(true);
   });
 });

@@ -1,3 +1,4 @@
+import { withPlacementHint } from "./plan-hints.js";
 import type { Guard } from "@qajitsu/guard";
 import type { ResolvedModel } from "@qajitsu/models";
 import {
@@ -225,7 +226,9 @@ export async function runStructuredAgent<T extends z.ZodType>(
         errors = [...(run.validate?.(parsed.data) ?? [])];
         if (errors.length === 0) return { value: parsed.data, attempts: attempt };
       } else {
-        errors = parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`);
+        errors = parsed.error.issues.map(
+          (i) => `${i.path.join(".") || "(root)"}: ${withPlacementHint(i.path, i.message)}`,
+        );
       }
     } catch (error) {
       errors = [`Answer is not valid JSON: ${error instanceof Error ? error.message : String(error)}`];

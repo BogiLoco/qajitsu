@@ -506,4 +506,16 @@ describe("files of web cases (REQ-EXEC-38)", () => {
       "the selector matches 3 elements: narrow it with ' >> has-text:<text>', ' >> nth:<n>' or a parent element first",
     );
   });
+
+  it("REQ-EXEC-05: an action on the empty page says that no page is open", async () => {
+    const { driver } = fakeDriver({
+      url: () => "about:blank",
+      click: () => Promise.reject(new Error("locator.click: Timeout 5000ms exceeded")),
+    });
+    const rt = runtimeFor(planWith({ expect: { description: "d" } }), driver);
+    rt.beginStep("S1");
+    await expect(rt.uiOp({ op: "click", selector: "testid:delete-1" })).rejects.toThrow(
+      'no page is open: call ui.goto("<path>") before ui.click()',
+    );
+  });
 });

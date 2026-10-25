@@ -1,5 +1,5 @@
 import { httpCredentialsFor } from "../http-auth.js";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRemoteEnvProvider } from "@qajitsu/adapter-env-remote";
@@ -104,7 +104,7 @@ export function snapshotLogin(
 
 /**
  * Records the environment's pages for the planner (REQ-EXEC-22/AC7): when the run has no code of the application
- * (only a tests repository or none), or when asked with `--snapshot`. An earlier recording of the run is reused unless
+ * (only a tests repository or none), when its change shows no diff, or when asked with `--snapshot`. An earlier recording of the run is reused unless
  * asked again. Without a reachable environment the planner works without it and the person is told (AC6).
  *
  * @returns The recorded pages, or undefined.
@@ -119,7 +119,20 @@ export async function planSnapshot(
   const saved = await readPlanSnapshot(ws);
   if (saved && !options.force && options.build !== true) return saved;
   const hasCode = Object.values(ws.record.repos).some((r) => r.role !== "tests");
-  if (hasCode && !options.force && options.build !== true) return undefined;
+  // Code without a visible change (a branch named by --ref with no diff) shows the planner nothing of the pages either
+  // (dogfood pass 2026-10-25: it guessed every text), so the pages are recorded then too.
+  const diffs = (await readdir(ws.path("repos")).catch(() => [] as string[])).filter((f) =>
+    f.endsWith(".diff"),
+  );
+  const changeShown = await Promise.all(
+    diffs.map((f) =>
+      stat(ws.path("repos", f)).then(
+        (x) => x.size > 0,
+        () => false,
+      ),
+    ),
+  ).then((sizes) => sizes.some(Boolean));
+  if (hasCode && changeShown && !options.force && options.build !== true) return undefined;
   if (options.build !== true)
     return recordForPlanner(session, io, ports, { env: options.env, force: options.force });
   // REQ-EXEC-22/AC9: the environment (and the app) are started from the worktree only to record what they show.

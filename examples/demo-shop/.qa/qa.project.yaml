@@ -60,6 +60,14 @@ services:
       BUG_SILENT_500_TOAST: { value: "0", overridable: true }
       # BUG-08: the Android app asks the API whether back from checkout empties the cart (DEMO-6).
       BUG_ANDROID_BACK_EMPTIES_CART: { value: "0", overridable: true }
+      # Web gaps (BUG-09..BUG-15, DEMO-7..DEMO-10).
+      BUG_AVATAR_LIMIT_TOO_LOW: { value: "0", overridable: true }
+      BUG_EXPORT_DROPS_LAST_ROW: { value: "0", overridable: true }
+      BUG_3DS_RESULT_IGNORED: { value: "0", overridable: true }
+      BUG_DRAG_WRONG_COLUMN: { value: "0", overridable: true }
+      BUG_RATING_OFF_BY_ONE: { value: "0", overridable: true }
+      BUG_DELETE_IGNORES_CANCEL: { value: "0", overridable: true }
+      BUG_OFFER_NEVER_EXPIRES: { value: "0", overridable: true }
     health: { http: /health, timeout_s: 180 }
 
 build:

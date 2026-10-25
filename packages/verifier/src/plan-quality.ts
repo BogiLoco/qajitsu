@@ -9,7 +9,8 @@ const CASE_PLATFORMS: Record<string, { readonly platforms: readonly UiPlatform[]
 };
 
 /** Why an expectation of a plan cannot be checked as it is (REQ-PLAN-09). */
-export type PlanFlagKind = "placeholder" | "schema" | "description-only" | "selector" | "account";
+export type PlanFlagKind =
+  "placeholder" | "schema" | "description-only" | "selector" | "account" | "recorded-text";
 
 /** One expectation a test could not compare with anything meaningful. */
 export interface PlanFlag {
@@ -279,6 +280,23 @@ export function checkPlanExpectations(
         (x) => target?.platforms.includes(x.platform) === true,
       );
       if (recorded.length > 0) {
+        // An expected text the recorded page shows differently: a guess, or what the change is about; a person
+        // confirms which (dogfood pass 2026-10-25: "Active" planned, "Offer active" shown, a false FAILED).
+        for (const [sel, state] of Object.entries(e.elements ?? {})) {
+          const id = /^testid:([^\s>]+)$/.exec(sel)?.[1];
+          if (id === undefined || state.text === undefined) continue;
+          const shown = recorded.flatMap((x) =>
+            x.elements.filter((el) => el.testid === id).map((el) => el.text ?? ""),
+          );
+          const nonEmpty = shown.filter((t) => t !== "");
+          if (nonEmpty.length > 0 && !nonEmpty.includes(state.text))
+            flag(
+              "recorded-text",
+              `${sel} shows "${nonEmpty[0] ?? ""}" on the recorded pages, the plan expects "${state.text}": confirm the change makes it so, or use the shown text`,
+              `elements.${sel}.text`,
+              state.text,
+            );
+        }
         for (const sel of unknownSelectors(Object.keys(e.elements ?? {}), c.type, {
           screens: recorded,
           inventory: options.inventory,

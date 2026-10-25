@@ -61,6 +61,45 @@ describe("pages of the environment for the planner (REQ-EXEC-22/AC7+AC8)", () =>
     );
   });
 
+  it("REQ-EXEC-22/AC7: a change without a diff (a branch named by --ref) gets the pages recorded for the planner; a change with one does not (dogfood 2026-10-25)", async () => {
+    const browser = createPlaywrightBrowserFactory({
+      video: "off",
+      webSession: { storage: "sessionStorage", key: "token" },
+      actionTimeoutMs: 3000,
+    });
+    const web = await createDemoPipeline({ ticket: "DEMO-4", ports: { snapshotBrowser: browser } });
+    cleanups.push(web.cleanup);
+    await web.run(["fetch", "DEMO-4", "--ref", "shop=main"]);
+    const draft = await readFile(
+      new URL("../../../../fixtures/plans/demo-4-draft.json", import.meta.url),
+      "utf8",
+    );
+    const planned = await web.run(["plan", "DEMO-4"], { script: [{ text: analysis }, { text: draft }] });
+    expect(planned.out).toMatch(/Recorded \d+ page\(s\) or screen\(s\) of local for the planner\./);
+    const api = await createDemoPipeline({ ports: { snapshotBrowser: browser } });
+    cleanups.push(api.cleanup);
+    await api.run(["fetch", "DEMO-1"]);
+    const apiPlan = await api.run(["plan", "DEMO-1"], {
+      script: [
+        {
+          text: JSON.stringify({
+            summary: "Cart.",
+            change_type: ["api"],
+            endpoints: [{ method: "GET", path: "/cart", source: [{ kind: "ac", id: "AC1" }] }],
+            confidence: "high",
+          }),
+        },
+        {
+          text: await readFile(
+            new URL("../../../../fixtures/plans/demo-1-draft.json", import.meta.url),
+            "utf8",
+          ),
+        },
+      ],
+    });
+    expect(apiPlan.out).not.toContain("for the planner");
+  });
+
   it("REQ-EXEC-22/AC7 + REQ-EXEC-23/AC1: before planning, the first screen of an installed app is recorded too", async () => {
     let stopped = false;
     const client = {

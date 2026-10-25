@@ -1,3 +1,4 @@
+import { withPlacementHint } from "./plan-hints.js";
 import type { McpClientLike, McpServers } from "./mcp.js";
 import { writeFile } from "node:fs/promises";
 import {
@@ -343,7 +344,8 @@ export async function runPlanner(
     validate: (answer) => {
       const draft = coverageAsQuestions(answer, sources);
       const plan = PlanSchema.safeParse({ schema: 1, ticket: context.ticket.key, version: 1, ...draft });
-      if (!plan.success) return plan.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
+      if (!plan.success)
+        return plan.error.issues.map((i) => `${i.path.join(".")}: ${withPlacementHint(i.path, i.message)}`);
       // REQ-CTX-06/AC2: claimed existing coverage must name real tests of the tests repository.
       const errors = [
         ...issuesAsErrors(checkPlanSources(plan.data, sources)),
