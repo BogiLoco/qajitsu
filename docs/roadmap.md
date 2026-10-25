@@ -365,6 +365,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-VER-22](requirements/verification.md#req-ver-22--cross-layer-consistency-checks) Cross-layer consistency checks (could, proposed, AC 0/3)
 - [REQ-EVD-07](requirements/evidence.md#req-evd-07--passive-observations-during-tests) Passive observations during tests (should, implemented, AC 5/5)
 - [REQ-EVD-08](requirements/evidence.md#req-evd-08--failure-screenshots-mark-the-failing-element) Failure screenshots mark the failing element (should, implemented, AC 5/5)
+- [REQ-EVD-09](requirements/evidence.md#req-evd-09--analysis-of-the-recorded-network-traffic) Analysis of the recorded network traffic (should, accepted, AC 0/7)
 - [REQ-PUB-05](requirements/publishing.md#req-pub-05--optional-integrations) Optional integrations (could, deferred, AC 1/4)
 - [REQ-PUB-07](requirements/publishing.md#req-pub-07--bug-reports-from-failed-cases) Bug reports from failed cases (should, implemented, AC 5/5)
 - [REQ-PUB-08](requirements/publishing.md#req-pub-08--promote-ticket-cases-to-the-regression-suite) Promote ticket cases to the regression suite (should, implemented, AC 4/4)
