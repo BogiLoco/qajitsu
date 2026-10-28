@@ -85,6 +85,29 @@ const UiOperationSchema = z.discriminatedUnion("op", [
   z.strictObject({ op: z.literal("setOffline"), offline: z.boolean() }),
   z.strictObject({ op: z.literal("fillCode"), selector: Selector }),
   z.strictObject({ op: z.literal("session"), name: z.string().regex(/^[a-z][a-z0-9_-]{0,40}$/) }),
+  // REQ-EXEC-41, REQ-EXEC-63/AC2: gestures, their numbers checked again by the runtime.
+  z.strictObject({
+    op: z.literal("gesture"),
+    gesture: z.discriminatedUnion("kind", [
+      z.strictObject({ kind: z.literal("tap"), selector: Selector }),
+      z.strictObject({ kind: z.literal("doubleTap"), selector: Selector }),
+      z.strictObject({ kind: z.literal("longPress"), selector: Selector, seconds: z.number() }),
+      z.strictObject({
+        kind: z.literal("swipe"),
+        selector: Selector.optional(),
+        direction: z.enum(["up", "down", "left", "right"]),
+        distance: z.number(),
+        speed: z.enum(["slow", "normal", "fast"]),
+      }),
+      z.strictObject({
+        kind: z.literal("pinch"),
+        selector: Selector.optional(),
+        direction: z.enum(["in", "out"]),
+        scale: z.number(),
+      }),
+      z.strictObject({ kind: z.literal("pullToRefresh") }),
+    ]),
+  }),
   z.strictObject({
     op: z.literal("fillSecret"),
     selector: Selector,

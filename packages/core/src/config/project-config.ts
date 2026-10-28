@@ -406,6 +406,14 @@ export const ProjectConfigSchema = z.strictObject({
             )
             .min(1)
             .default([{ name: "desktop", width: 1280, height: 800 }]),
+          /**
+           * Emulated devices besides the viewports (REQ-EXEC-63/AC1), by Playwright's names (`iPhone 15`, `Pixel 7`):
+           * viewport, scale, touch, `isMobile` and user agent. Reports call them emulated, never real devices.
+           */
+          devices: z
+            .array(z.string().regex(/^[A-Za-z0-9][\w .+()-]{1,40}$/, "a device name such as iPhone 15"))
+            .max(10)
+            .default([]),
         })
         .optional(),
     })
@@ -988,6 +996,8 @@ export interface WebCombination {
   readonly id: string;
   readonly browser: WebBrowser;
   readonly viewport: { readonly name: string; readonly width: number; readonly height: number };
+  /** The emulated device of the combination (REQ-EXEC-63/AC1); its viewport comes from the device. */
+  readonly device?: string | undefined;
 }
 
 /**
@@ -996,8 +1006,24 @@ export interface WebCombination {
  */
 export function webCombinations(web: ProjectConfig["web"]): WebCombination[] {
   const viewports = web.matrix?.viewports ?? [{ name: "desktop", width: 1280, height: 800 }];
-  return (web.matrix?.browsers ?? [web.browser]).flatMap((browser) =>
+  const slug = (s: string): string =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+  return (web.matrix?.browsers ?? [web.browser]).flatMap((browser) => [
     // `chrome@118` names its folder `chrome-118-desktop`.
-    viewports.map((viewport) => ({ id: `${browser.replace("@", "-")}-${viewport.name}`, browser, viewport })),
-  );
+    ...viewports.map((viewport) => ({
+      id: `${browser.replace("@", "-")}-${viewport.name}`,
+      browser,
+      viewport,
+    })),
+    // REQ-EXEC-63/AC1: `chromium-iphone-15`; the viewport is the device's own.
+    ...(web.matrix?.devices ?? []).map((device) => ({
+      id: `${browser.replace("@", "-")}-${slug(device)}`,
+      browser,
+      viewport: { name: slug(device), width: 0, height: 0 },
+      device,
+    })),
+  ]);
 }

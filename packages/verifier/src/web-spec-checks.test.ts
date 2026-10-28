@@ -254,8 +254,24 @@ export async function run({ step, verify, plan, ui }: CaseContext): Promise<void
     const plan = fixturePlan("DEMO-14");
     const spec = fixtureSpec("DEMO-14", "TC-01");
     expect(messages(spec, "TC-01", plan).filter((m) => m.startsWith("lint"))).toEqual([]);
+    expect(messages(spec.replace('ui.session("seller")', "ui.session(who)"), "TC-01", plan)).toContain(
+      `lint: ui.session() takes "main" or a name from TC-01's data whose value is a test account, as a literal`,
+    );
     expect(messages(spec.replace('ui.session("seller")', 'ui.session("admin")'), "TC-01", plan)).toContain(
       `lint: ui.session() takes "main" or a name from TC-01's data whose value is a test account, as a literal`,
     );
+  });
+
+  it("REQ-EXEC-41: a gesture on the whole screen names no element; gestures are selector actions for the healer", () => {
+    const plan = fixturePlan("DEMO-15");
+    const spec = fixtureSpec("DEMO-15", "TC-01");
+    const screen = spec.replace('ui.swipe("testid:slides", "left"', 'ui.swipe("screen", "left"');
+    expect(messages(screen, "TC-01", plan).filter((m) => m.includes("screen"))).toEqual([]);
+    expect(assertionLockDiff(spec, spec.replace('"testid:slides", "left"', '"css:.slides", "left"'))).toEqual(
+      [],
+    );
+    expect(
+      assertionLockDiff(spec, spec.replace('"testid:slides", "left"', '"testid:slides", "right"')),
+    ).not.toEqual([]);
   });
 });

@@ -120,6 +120,9 @@ Rules (checked by code; a violating spec is rejected):
   A step whose expect has "websocket" checks the page's socket messages after the action that causes them:
   verify("<step id>", "websocket.<received|sent>.<n>", undefined, plan.expect(...)).
   These are web only.
+- Touch gestures (web on a phone, native apps): ui.tap(sel), ui.doubleTap(sel), ui.longPress(sel, seconds),
+  ui.swipe(sel or "screen", "left" | "right" | "up" | "down", { distance: 0.6, speed: "normal" }), ui.pinch(sel or
+  "screen", "in" | "out"), ui.pullToRefresh(); in native apps ui.scrollUntil(sel) swipes until the element shows.
 - Selectors, the most stable first: testid:<id> (the project's test id; in a native app the accessibility id, on
   Android also the resource id), role:<role>:<accessible name>, label:<text>, placeholder:<text>, alt:<text>,
   title:<text>, text:<visible text>, id:<id>; css:<selector> (web) and xpath:<path> (native app) only as the last

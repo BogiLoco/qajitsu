@@ -1,4 +1,5 @@
 import type { ScreenBox, UiElementFact } from "@qajitsu/core";
+import type { UiGesture } from "./gestures.js";
 import type { UiRequest } from "./network.js";
 
 /**
@@ -130,6 +131,13 @@ export interface UiDriver {
   readonly takeNetwork?: () => readonly UiRequest[];
   /** A value the driver must mask in everything it records (trace, HAR, logs), e.g. a typed secret (REQ-EXEC-67/AC4). */
   readonly registerSecret?: (value: string) => void;
+  /**
+   * Performs a touch gesture (REQ-EXEC-41, REQ-EXEC-63/AC2) and returns the fingers' paths in the pixels of the
+   * screenshot, for the evidence. A target that cannot be reached is an error, never a gesture somewhere else.
+   */
+  readonly gesture?: (gesture: UiGesture) => Promise<{
+    readonly fingers: readonly (readonly { readonly x: number; readonly y: number }[])[];
+  }>;
   /** Switches the browser's network off or back on (REQ-EXEC-65/AC2). */
   readonly setOffline?: (offline: boolean) => Promise<void>;
   /**
@@ -200,6 +208,30 @@ export interface UiClient {
   readonly switchToOpener: () => Promise<void>;
   /** Closes the current pop-up or tab; actions go back to its opener. */
   readonly closePage: () => Promise<void>;
+  /** Taps an element with a finger (touch screens, emulated mobile pages; REQ-EXEC-41). */
+  readonly tap: (selector: UiSelector) => Promise<void>;
+  readonly doubleTap: (selector: UiSelector) => Promise<void>;
+  /** Holds a finger on an element, 0.3 to 10 seconds (default 1). */
+  readonly longPress: (selector: UiSelector, seconds?: number) => Promise<void>;
+  /**
+   * Swipes over an element or the whole `"screen"`: `distance` is the share of the target the finger travels
+   * (0.1 to 1, default 0.6), `speed` slow, normal (default) or fast.
+   */
+  readonly swipe: (
+    /** A selector, or `"screen"` for the whole screen. */
+    target: UiSelector,
+    direction: "up" | "down" | "left" | "right",
+    options?: { readonly distance?: number; readonly speed?: "slow" | "normal" | "fast" },
+  ) => Promise<void>;
+  /** Pinches an element or the `"screen"`: `in` zooms out, `out` zooms in; `scale` 0.1 to 1 (default 0.6). */
+  readonly pinch: (
+    /** A selector, or `"screen"` for the whole screen. */
+    target: UiSelector,
+    direction: "in" | "out",
+    scale?: number,
+  ) => Promise<void>;
+  /** Drags down from the top of the screen and lets go. */
+  readonly pullToRefresh: () => Promise<void>;
   /** Moves the page's clock forward by seconds (countdowns, expiring offers; REQ-EXEC-61/AC2). */
   readonly advanceTime: (seconds: number) => Promise<void>;
   /** Switches the browser offline (`true`) or back online (`false`): offline pages, queues and sync (REQ-EXEC-65/AC2). */
@@ -213,6 +245,7 @@ export type UiOperation =
   | { readonly op: "fill" | "select" | "press"; readonly selector: UiSelector; readonly value: string }
   | { readonly op: "fillCode"; readonly selector: UiSelector }
   | { readonly op: "session"; readonly name: string }
+  | { readonly op: "gesture"; readonly gesture: UiGesture }
   | {
       readonly op: "fillSecret";
       readonly selector: UiSelector;

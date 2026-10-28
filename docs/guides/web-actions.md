@@ -116,6 +116,21 @@ content that cannot be read is a failed check or BLOCKED with the reason.
 - The healer may change the selectors of every action and add waits or scrolling into view; it can never change what
   an action does (files, typed values, offsets, request bodies) or the control flow. The assertion lock compares both.
 
+## Phones and tablets in the browser
+
+```yaml
+web:
+  matrix:
+    browsers: [chromium]
+    devices: ["iPhone 15", "Pixel 7"] # Playwright's device list: viewport, scale, touch, isMobile, user agent
+```
+
+Each device is a combination of the matrix next to the viewports (`chromium-iphone-15`). Touch gestures work there
+like in native apps (`ui.tap`, `ui.swipe`, `ui.doubleTap`, `ui.longPress`, `ui.pinch`, `ui.pullToRefresh`; see the
+mobile guide), with their paths drawn on the step's screenshot. Reports name these combinations
+`emulated iPhone 15`: emulation shows layout and touch handling, it is never presented as a test on a real device.
+Firefox cannot emulate phones, and gestures on the web need Chromium; both are refused with the reason.
+
 ## Several users in one case
 
 Chats, shared documents, approvals and auctions need two people at once. The case names them in its data and the
@@ -197,7 +212,6 @@ these values; they are masked like every secret.
 
 ## Not covered yet
 
-- Mobile web emulation with touch (REQ-EXEC-63).
 - Sockets a step opens itself and server-sent events (REQ-EXEC-47/AC1+AC2), the clipboard's content, printing.
 - Service workers in Firefox and WebKit, push notifications and the install prompt itself.
 - Closed shadow roots are named only in Chromium.

@@ -8,6 +8,7 @@ import {
   createMasker,
   DEFAULT_SENSITIVE_HEADERS,
   MASK,
+  planGesture,
   selectorParts,
   type EvidenceItem,
   type UiDriver,
@@ -27,6 +28,7 @@ import {
 import { ariaElements } from "./aria.js";
 import {
   chromium,
+  devices,
   firefox,
   selectors,
   webkit,
@@ -61,6 +63,11 @@ export interface WebRunnerOptions {
   /** Attribute `testid:` selectors find, e.g. `data-qa` (REQ-EXEC-21/AC1); `data-testid` by default. */
   readonly testIdAttribute?: string;
   readonly viewport?: { readonly width: number; readonly height: number };
+  /**
+   * An emulated device from Playwright's list (`iPhone 15`, `Pixel 7`; REQ-EXEC-63/AC1): its viewport, scale, touch,
+   * `isMobile` and user agent. Emulation, never a real device.
+   */
+  readonly device?: string | undefined;
   /** HTTP authentication of the environment (REQ-EXEC-61/AC5), sent when a page asks for it. */
   readonly httpCredentials?: { readonly username: string; readonly password: string } | undefined;
   /** Headers the application offers for tests (REQ-EXEC-55/AC4), sent with requests to its own origin only. */
@@ -336,6 +343,16 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
       selectors.setTestIdAttribute(testIdAttribute);
       // REQ-EXEC-61/AC3: the case's browser grants only what its plan names; everything else stays denied.
       const settings = input.plan.cases.find((c) => c.id === input.caseId)?.browser;
+      // REQ-EXEC-63/AC1: the device's emulation; Firefox has no mobile emulation, so it is refused, not ignored.
+      let emulated: Record<string, unknown> = {};
+      if (options.device !== undefined) {
+        const descriptor = devices[options.device];
+        if (!descriptor) throw new Error(`${options.device} is not a device Playwright can emulate`);
+        if (engine === "firefox")
+          throw new Error(`${options.device} cannot be emulated in Firefox: use chromium or webkit`);
+        // The device's own browser is not used: the combination names the browser.
+        emulated = Object.fromEntries(Object.entries(descriptor).filter(([k]) => k !== "defaultBrowserType"));
+      }
       // REQ-EXEC-65/AC1: only Chromium routes a service worker's own requests, so only there they stay on the allowlist.
       if (settings?.service_workers === true && type !== chromium)
         throw new Error(
@@ -351,6 +368,8 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
       const context = await browser.newContext({
         baseURL: input.baseUrl,
         viewport: options.viewport ?? { width: 1280, height: 800 },
+        // REQ-EXEC-63/AC1: an emulated device replaces the viewport with its own, plus touch and user agent.
+        ...emulated,
         ...(options.httpCredentials
           ? {
               httpCredentials: {
@@ -899,6 +918,70 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
         },
         // REQ-EXEC-65/AC2: the whole context goes offline, service workers included.
         setOffline: (offline) => context.setOffline(offline),
+        // REQ-EXEC-41 + REQ-EXEC-63/AC2: touch gestures through Chromium's touch events, relative to their target.
+        gesture: async (g) => {
+          if (type !== chromium)
+            throw new Error(`ui.${g.kind}() on the web needs Chromium; emulated devices run there`);
+          let area: { x: number; y: number; width: number; height: number } | null;
+          if ("selector" in g && g.selector !== undefined) {
+            const target = locate(p, g.selector).first();
+            await target.scrollIntoViewIfNeeded({ timeout });
+            area = await target.boundingBox({ timeout });
+            if (!area) throw new Error(`${g.selector} is not on the screen, so the gesture cannot reach it`);
+          } else {
+            const size = p.viewportSize() ?? { width: 1280, height: 800 };
+            area = { x: 0, y: 0, width: size.width, height: size.height };
+          }
+          const plan = planGesture(g, area);
+          const cdp = await context.newCDPSession(p);
+          try {
+            await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+            const touch = (
+              type: "touchStart" | "touchMove" | "touchEnd",
+              points: { x: number; y: number }[],
+            ) =>
+              cdp.send("Input.dispatchTouchEvent", {
+                type,
+                touchPoints: points.map((pt, id) => ({ x: pt.x, y: pt.y, id })),
+              });
+            const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+            for (let round = 0; round < plan.repeat; round += 1) {
+              if (round > 0) await pause(120);
+              const start = plan.fingers.map((f) => f.points[0] ?? { x: 0, y: 0 });
+              await touch("touchStart", start);
+              const hold = Math.max(...plan.fingers.map((f) => f.holdMs));
+              if (hold > 0) await pause(hold);
+              const moveMs = Math.max(...plan.fingers.map((f) => f.moveMs));
+              if (moveMs > 0) {
+                const steps = Math.max(5, Math.round(moveMs / 16));
+                for (let i = 1; i <= steps; i += 1) {
+                  const t = i / steps;
+                  await touch(
+                    "touchMove",
+                    plan.fingers.map((f) => {
+                      const a = f.points[0] ?? { x: 0, y: 0 };
+                      const z = f.points.at(-1) ?? a;
+                      return { x: a.x + (z.x - a.x) * t, y: a.y + (z.y - a.y) * t };
+                    }),
+                  );
+                  await pause(moveMs / steps);
+                }
+              }
+              await touch("touchEnd", []);
+            }
+          } finally {
+            await cdp.detach().catch(() => undefined);
+          }
+          // The screenshot has device pixels: the path is scaled the same way.
+          const dpr = await p.evaluate(
+            () => (globalThis as unknown as { devicePixelRatio: number }).devicePixelRatio,
+          );
+          return {
+            fingers: plan.fingers.map((f) =>
+              f.points.map((pt) => ({ x: Math.round(pt.x * dpr), y: Math.round(pt.y * dpr) })),
+            ),
+          };
+        },
         // REQ-EXEC-65/AC3: the page names its manifest; trusted code fetches it from an allowlisted origin.
         manifest: async () => {
           const info = await p.evaluate(async () => {

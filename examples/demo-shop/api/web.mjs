@@ -14,6 +14,23 @@ const toast=(text,ok)=>{const t=document.createElement("div");t.className="toast
 <h1>${title}</h1>${body}</body></html>`;
 
 const PAGES = {
+  // A touch gallery (REQ-EXEC-41, REQ-EXEC-63): swipe between slides, double tap to like, long press to save.
+  "/app/gallery": [
+    "Gallery",
+    `<div data-testid="slides" id="slides" style="width:100%;max-width:360px;height:220px;background:#eef;display:flex;align-items:center;justify-content:center;touch-action:none;user-select:none">
+<span data-testid="slide" id="slide">Slide 1 of 3</span></div>
+<p>Status: <span data-testid="gallery-status" role="status"></span></p>
+<script>let i=0;let x0=0;let x1=0;let pressed=0;let lastTap=0;const n=3;
+const show=()=>{document.getElementById("slide").textContent="Slide "+(i+1)+" of "+n;};
+const el=document.getElementById("slides");const status=(t)=>{document.querySelector("[data-testid=gallery-status]").textContent=t;};
+el.addEventListener("touchstart",(e)=>{x0=x1=e.touches[0].clientX;pressed=Date.now();});
+el.addEventListener("touchmove",(e)=>{x1=e.touches[0].clientX;e.preventDefault();},{passive:false});
+el.addEventListener("touchend",()=>{const dx=x1-x0;const held=Date.now()-pressed;
+const step=window.__BUGS.BUG_SWIPE_SKIPS_SLIDE?2:1;
+if(dx<-40){i=Math.min(n-1,i+step);show();return;}if(dx>40){i=Math.max(0,i-step);show();return;}
+if(held>700){status("Saved to favourites");return;}
+const now=Date.now();if(now-lastTap<400){status("Liked");lastTap=0;}else lastTap=now;});</script>`,
+  ],
   // Messages between two shoppers (REQ-EXEC-62): what one sends, the other sees in their inbox.
   "/app/messages": [
     "Messages",

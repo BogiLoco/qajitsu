@@ -1375,6 +1375,15 @@
                 ],
                 "additionalProperties": false
               }
+            },
+            "devices": {
+              "default": [],
+              "maxItems": 10,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][\\w .+()-]{1,40}$"
+              }
             }
           },
           "required": [

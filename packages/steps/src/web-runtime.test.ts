@@ -433,6 +433,48 @@ describe("web actions in the trusted runtime (REQ-EXEC-38..40, REQ-EXEC-56, ADR-
     expect(JSON.stringify(record)).not.toContain("S3cret-pass!");
   });
 
+  it("REQ-EXEC-41/AC1+AC3: gestures are checked, performed by the driver and drawn on the step's screenshot", async () => {
+    const plan = planWith({ expect: { description: "d", texts: ["x"] } }, {}, "mobile");
+    const asked: unknown[] = [];
+    const marks: unknown[] = [];
+    const { driver } = fakeDriver({
+      gesture: (g: unknown) => {
+        asked.push(g);
+        return Promise.resolve({
+          fingers: [
+            [
+              { x: 300, y: 400 },
+              { x: 100, y: 400 },
+            ],
+          ],
+        });
+      },
+    });
+    const rt = runtimeFor(plan, driver, {
+      annotate: (png, m) => {
+        marks.push(...m);
+        return Promise.resolve(png);
+      },
+    });
+    rt.beginStep("S1");
+    await rt.context.ui.swipe("screen", "left", { speed: "fast" });
+    await rt.context.ui.doubleTap("testid:photo");
+    await expect(rt.context.ui.swipe("screen", "left", { distance: 3 })).rejects.toThrow(
+      "the distance (share of the target) must be between 0.1 and 1",
+    );
+    await expect(rt.context.ui.longPress("testid:photo", 60)).rejects.toThrow("the hold (seconds)");
+    await rt.endStep("S1");
+    const record = await rt.finish();
+    expect(asked).toEqual([
+      { kind: "swipe", direction: "left", distance: 0.6, speed: "fast" },
+      { kind: "doubleTap", selector: "testid:photo" },
+    ]);
+    expect(record.evidence.map((e) => e.name)).toEqual(
+      expect.arrayContaining(["S1-gestures.json", "S1-gestures.png"]),
+    );
+    expect(marks).toHaveLength(4);
+  });
+
   it("REQ-EXEC-62/AC1: sessions are main or an account of the case's data; each opens logged in as its account", async () => {
     const plan = planWith(
       { expect: { description: "d", texts: ["x"] } },
@@ -441,10 +483,15 @@ describe("web actions in the trusted runtime (REQ-EXEC-38..40, REQ-EXEC-56, ADR-
     const used: string[] = [];
     const extra = fakeDriver({ useAccount: (alias: string) => Promise.resolve(void used.push(alias)) });
     const opened: string[] = [];
+    const annotated: unknown[] = [];
     const rt = runtimeFor(plan, fakeDriver().driver, {
       session: (name) => {
         opened.push(name);
         return Promise.resolve(extra.driver);
+      },
+      annotate: (png) => {
+        annotated.push(png);
+        return Promise.resolve(png);
       },
     });
     rt.beginStep("S1");
@@ -455,6 +502,11 @@ describe("web actions in the trusted runtime (REQ-EXEC-38..40, REQ-EXEC-56, ADR-
     expect(used).toEqual(["user:standard"]);
     await expect(rt.context.ui.session("note")).rejects.toThrow("name a test account of TC-01's data");
     await expect(rt.context.ui.session("stranger")).rejects.toThrow("name a test account of TC-01's data");
+    // A step ending in another session gets a screenshot of each session, named after it.
+    await rt.context.ui.goto("/app/messages");
+    await rt.endStep("S1");
+    const shots = (await rt.finish()).evidence.filter((e) => e.kind === "screenshot").map((e) => e.name);
+    expect(shots).toEqual(expect.arrayContaining(["S1-buyer.png"]));
     const single = runtimeFor(plan, fakeDriver().driver);
     single.beginStep("S1");
     await expect(single.context.ui.session("buyer")).rejects.toThrow(

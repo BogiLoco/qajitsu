@@ -1,4 +1,4 @@
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createDemoPipeline, DEMO_PASSWORD } from "../../../../tests/support/cli-pipeline.js";
@@ -72,5 +72,20 @@ describe("the whole qj flow on the new web capabilities", () => {
     expect(journal).toMatch(
       /"event":"case.accounts".*"user:admin".*"user:standard"|"event":"case.accounts".*"user:standard".*"user:admin"/,
     );
+  }, 240_000);
+
+  it("REQ-EXEC-63/AC1..AC3 + REQ-EXEC-41: DEMO-15 gestures pass on the desktop and on an emulated phone; the report says emulated", async () => {
+    const p = await createDemoPipeline({ ticket: "DEMO-15", withShopCode: true });
+    cleanups.push(p.cleanup);
+    const yaml = join(p.project, ".qa", "qa.project.yaml");
+    await writeFile(
+      yaml,
+      `${await readFile(yaml, "utf8")}\nweb: { matrix: { browsers: [chromium], devices: ["iPhone 15"] } }\n`,
+    );
+    const r = await p.executed();
+    expect(r.exitCode).toBe(0);
+    expect(await statuses(p.runDir)).toEqual({ "TC-01": "PASSED", "TC-02": "PASSED" });
+    const matrix = await readFile(join(p.runDir, "report", "matrix.md"), "utf8");
+    expect(matrix).toMatch(/chromium-iphone-15 \(chromium [\d.]+, emulated iPhone 15\) PASSED/);
   }, 240_000);
 });

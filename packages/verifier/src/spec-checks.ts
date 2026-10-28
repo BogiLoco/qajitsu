@@ -48,9 +48,18 @@ const UI_ACTIONS = new Set([
   "scrollUntil",
   "upload",
   "download",
+  // REQ-EXEC-41, REQ-EXEC-63/AC2: gestures on an element, or on the whole "screen".
+  "tap",
+  "doubleTap",
+  "longPress",
+  "swipe",
+  "pinch",
 ]);
 
-/** Web actions a native app does not offer yet (mobile gestures come with REQ-EXEC-41). */
+/** Gestures whose target may be the whole "screen" (REQ-EXEC-41). */
+const GESTURES = new Set(["swipe", "pinch"]);
+
+/** Web actions a native app does not offer yet; gestures and scrolling until an element appears work in both (REQ-EXEC-41). */
 const WEB_ONLY = [
   "hover",
   "dblclick",
@@ -60,7 +69,6 @@ const WEB_ONLY = [
   "keys",
   "scrollTo",
   "scrollBy",
-  "scrollUntil",
   "upload",
   "download",
   "switchToNewPage",
@@ -158,7 +166,14 @@ export function specSelectors(source: string): string[] {
         ts.isPropertyAccessExpression(node.expression) &&
         ts.isIdentifier(node.expression.expression) &&
         node.expression.expression.text === "ui";
-      if (onUi && name !== undefined && UI_ACTIONS.has(name) && first && ts.isStringLiteral(first))
+      if (
+        onUi &&
+        name !== undefined &&
+        UI_ACTIONS.has(name) &&
+        first &&
+        ts.isStringLiteral(first) &&
+        first.text !== "screen"
+      )
         out.push(first.text);
       if (name === "verify" && second && ts.isStringLiteral(second)) {
         const m = /^elements\.(.+)\.(?:visible|enabled|checked|text|value)$/.exec(second.text);
@@ -350,7 +365,10 @@ export function checkSpecSource(
       }
       const selectorArgs =
         onUi && name !== undefined && UI_ACTIONS.has(name)
-          ? [first, ...(name === "dragTo" ? [node.arguments[1]] : [])]
+          ? [first, ...(name === "dragTo" ? [node.arguments[1]] : [])].filter(
+              // A gesture on the whole screen names no element.
+              (a) => !(a && ts.isStringLiteral(a) && a.text === "screen" && GESTURES.has(name)),
+            )
           : [];
       for (const arg of selectorArgs)
         if (!native && arg && ts.isStringLiteral(arg) && !WEB_SELECTORS.some((k) => arg.text.startsWith(k)))
@@ -750,6 +768,11 @@ const SELECTOR_ACTIONS = new Set([
   "scrollUntil",
   "upload",
   "download",
+  "tap",
+  "doubleTap",
+  "longPress",
+  "swipe",
+  "pinch",
 ]);
 /** Actions the healer may add or remove like waits: they only bring an element into reach (REQ-EXEC-09). */
 const WAIT_LIKE = new Set(["waitFor", "scrollTo"]);

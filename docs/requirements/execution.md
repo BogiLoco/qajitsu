@@ -641,7 +641,7 @@ Payment widgets, embedded editors, captchas and many SSO logins live in iframes 
 
 ### REQ-EXEC-41 · Mobile gestures
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: later
 - Related: REQ-EXEC-06, REQ-EXEC-21
@@ -650,9 +650,9 @@ Lists, carousels, pull-to-refresh and maps need gestures.
 
 **Acceptance criteria**
 
-- [ ] AC1: Steps can swipe (direction, distance, speed), scroll until an element is visible with a limit, long press, double tap, pinch and zoom, and pull to refresh, on Android and iOS.
-- [ ] AC2: Gestures address an element or the screen in relative coordinates, so they work across screen sizes of the device matrix (REQ-EXEC-20).
-- [ ] AC3: The evidence shows each gesture's path on the step screenshot; a gesture whose target is not reached fails the step.
+- [x] AC1: Steps can swipe (direction, distance, speed), scroll until an element is visible with a limit, long press, double tap, pinch and zoom, and pull to refresh, on Android and iOS.
+- [x] AC2: Gestures address an element or the screen in relative coordinates, so they work across screen sizes of the device matrix (REQ-EXEC-20).
+- [x] AC3: The evidence shows each gesture's path on the step screenshot; a gesture whose target is not reached fails the step.
 
 ### REQ-EXEC-42 · Mobile: hybrid apps and WebViews
 
@@ -980,16 +980,16 @@ Chats, shared documents, approvals and auctions need two people at once.
 
 ### REQ-EXEC-63 · Mobile web emulation
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-EXEC-13, REQ-EXEC-05
 
 **Acceptance criteria**
 
-- [ ] AC1: The browser matrix can name devices (for example `iPhone 15`, `Pixel 8`) whose viewport, device scale, touch, `isMobile` and user agent are emulated, besides plain viewports.
-- [ ] AC2: Taps and swipes work in emulated mobile pages (REQ-EXEC-41 gestures on the web).
-- [ ] AC3: The report names the emulated device; emulation is never presented as a real device test.
+- [x] AC1: The browser matrix can name devices (for example `iPhone 15`, `Pixel 8`) whose viewport, device scale, touch, `isMobile` and user agent are emulated, besides plain viewports.
+- [x] AC2: Taps and swipes work in emulated mobile pages (REQ-EXEC-41 gestures on the web).
+- [x] AC3: The report names the emulated device; emulation is never presented as a real device test.
 
 ### REQ-EXEC-64 · Selectors narrowed by context
 

@@ -206,9 +206,16 @@ export async function computeVerdict(
   const combos = webCombinations(session.project.config.web);
   const perCombination = new Map<string, { combo: string; status: TestStatus }[]>();
   // REQ-EXEC-66/AC3: a combination is named with the exact browser its last attempt ran in.
+  // REQ-EXEC-63/AC3: an emulated device is named as emulated, never as a real one.
+  const emulatedIn = new Map(combos.filter((c) => c.device !== undefined).map((c) => [c.id, c.device]));
   const ranIn = (file: CaseResultFile | undefined, id: string): string => {
     const b = file?.attempts.at(-1)?.browser;
-    return b ? `${id} (${b.name} ${b.version})` : id;
+    const device = emulatedIn.get(id);
+    const parts = [
+      b ? `${b.name} ${b.version}` : undefined,
+      device ? `emulated ${device}` : undefined,
+    ].filter((x) => x !== undefined);
+    return parts.length > 0 ? `${id} (${parts.join(", ")})` : id;
   };
   const matrixResults: { name: string; text: string }[] = [];
   for (const combo of combos.slice(1)) {

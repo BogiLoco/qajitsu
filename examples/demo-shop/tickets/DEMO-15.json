@@ -1,0 +1,22 @@
+{
+  "key": "DEMO-15",
+  "type": "Story",
+  "status": "Ready for QA",
+  "summary": "Touch gallery on phones",
+  "description": "On phones the gallery on /app/gallery is used with the finger: swiping left shows the next slide, swiping right the previous one, a double tap likes the picture and a long press saves it to favourites.",
+  "acceptanceCriteria": [
+    "Swiping left on Slide 1 of 3 shows Slide 2 of 3; swiping right goes back.",
+    "A double tap shows Liked.",
+    "A long press shows Saved to favourites."
+  ],
+  "labels": ["gallery", "mobile-web"],
+  "components": ["shop-web"],
+  "attachments": [],
+  "comments": [
+    {
+      "author": "designer",
+      "created": "2026-10-28T09:00:00Z",
+      "body": "Test ids: slides, slide, gallery-status."
+    }
+  ]
+}

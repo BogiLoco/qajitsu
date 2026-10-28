@@ -1031,7 +1031,11 @@ async function executeCases(
           combo && browserEngine(combo.browser) !== undefined
             ? (combo.browser as LocalBrowser)
             : project.config.web.browser,
-        ...(combo ? { viewport: { width: combo.viewport.width, height: combo.viewport.height } } : {}),
+        ...(combo?.device !== undefined
+          ? { device: combo.device }
+          : combo
+            ? { viewport: { width: combo.viewport.width, height: combo.viewport.height } }
+            : {}),
         video: project.config.web.video,
         // REQ-EXEC-16/AC2: --headed shows the browser, --slow-mo slows every action down.
         headless: headlessFor(project.config.web.headless, live),

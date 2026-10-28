@@ -13,6 +13,7 @@ import type {
   VisualCheck,
   TestCase,
 } from "@qajitsu/core";
+import { checkGesture } from "./gestures.js";
 import type { Masker } from "./masking.js";
 import {
   diagnoseNetwork,
@@ -325,6 +326,11 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   if (!planCase) throw new Error(`${caseId} is not in the approved plan`);
   const stepIds = new Set(planCase.steps.map((s) => s.id));
   const steps: { id: string; ok: boolean; error?: string; url?: string; network?: NetworkProblem[] }[] = [];
+  /** The gestures of each step with their fingers' paths, drawn on the step's screenshot (REQ-EXEC-41/AC3). */
+  const gesturesOf = new Map<
+    string,
+    { kind: string; fingers: readonly (readonly { x: number; y: number }[])[] }[]
+  >();
   /** Fields `ui.fillSecret` typed into, masked in every screenshot of the case (REQ-EXEC-67/AC4). */
   const secretFields = new Set<string>();
   /** Every request the page sent (REQ-EVD-09), as the parent saw it, masked by the driver. */
@@ -543,6 +549,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         media.push({ stepId, kind: "screenshot", name: `${stepId}.png`, content: png });
         // The red boxes are drawn from the active page's elements: only when that is the main session.
         if (activeSession === "main") await annotateStep(stepId, png);
+        await drawGestures(stepId, png);
         // REQ-OBS-09: the live view gets its own copy; what it does with it cannot change the evidence.
         try {
           options.onScreenshot?.(stepId, png.slice());
@@ -849,6 +856,17 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
           throw new Error("ui.advanceTime() takes whole seconds from 1 to 604800 (7 days)");
         await need(d, "advanceTime", "ui.advanceTime()")(operation.seconds * 1000);
         return;
+      case "gesture": {
+        // REQ-EXEC-41 + REQ-EXEC-63/AC2: checked here, performed by the driver, drawn on the step's screenshot.
+        const g = operation.gesture;
+        checkGesture(g);
+        if ("selector" in g && g.selector !== undefined) assertSelector(g.selector);
+        const done = await need(d, "gesture", `ui.${g.kind}()`)(g);
+        const list = gesturesOf.get(currentStep) ?? [];
+        list.push({ kind: g.kind, fingers: done.fingers });
+        gesturesOf.set(currentStep, list);
+        return;
+      }
       case "setOffline":
         // REQ-EXEC-65/AC2: the browser's whole network goes off or comes back; the page sees it as a real outage.
         if (typeof operation.offline !== "boolean")
@@ -948,6 +966,33 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
    * baseline the baseline copy shows the changed regions (AC2). The original screenshot is never changed and nothing
    * here changes an assertion or a status (AC4).
    */
+  /** REQ-EXEC-41/AC3: each gesture's path on a copy of the step's screenshot, its points numbered in order. */
+  const drawGestures = async (stepId: string, png: Uint8Array): Promise<void> => {
+    const done = gesturesOf.get(stepId);
+    if (!done || done.length === 0) return;
+    media.push({
+      stepId,
+      kind: "log",
+      name: `${stepId}-gestures.json`,
+      content: `${JSON.stringify(done, null, 2)}\n`,
+    });
+    if (!options.annotate) return;
+    const marks: ScreenMark[] = [];
+    for (const g of done)
+      for (const finger of g.fingers)
+        for (const p of finger)
+          marks.push({ n: marks.length + 1, box: { x: p.x - 10, y: p.y - 10, width: 20, height: 20 } });
+    try {
+      media.push({
+        stepId,
+        kind: "screenshot",
+        name: `${stepId}-gestures.png`,
+        content: await options.annotate(png, marks),
+      });
+    } catch {
+      // The plain screenshot and the path in the JSON stay.
+    }
+  };
   const annotateStep = async (stepId: string, png: Uint8Array): Promise<void> => {
     if (!options.annotate || !driver) return;
     const elementFails = assertions.filter(
@@ -1321,6 +1366,27 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       fillSecret: (selector, alias, field) => uiOp({ op: "fillSecret", selector, alias, field }),
       fillCode: (selector) => uiOp({ op: "fillCode", selector }),
       session: (name) => uiOp({ op: "session", name }),
+      tap: (selector) => uiOp({ op: "gesture", gesture: { kind: "tap", selector } }),
+      doubleTap: (selector) => uiOp({ op: "gesture", gesture: { kind: "doubleTap", selector } }),
+      longPress: (selector, seconds = 1) =>
+        uiOp({ op: "gesture", gesture: { kind: "longPress", selector, seconds } }),
+      swipe: (target, direction, opts = {}) =>
+        uiOp({
+          op: "gesture",
+          gesture: {
+            kind: "swipe",
+            ...(target === "screen" ? {} : { selector: target }),
+            direction,
+            distance: opts.distance ?? 0.6,
+            speed: opts.speed ?? "normal",
+          },
+        }),
+      pinch: (target, direction, scale = 0.6) =>
+        uiOp({
+          op: "gesture",
+          gesture: { kind: "pinch", ...(target === "screen" ? {} : { selector: target }), direction, scale },
+        }),
+      pullToRefresh: () => uiOp({ op: "gesture", gesture: { kind: "pullToRefresh" } }),
       check: (selector) => uiOp({ op: "check", selector }),
       uncheck: (selector) => uiOp({ op: "uncheck", selector }),
       select: (selector, value) => uiOp({ op: "select", selector, value }),

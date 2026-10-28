@@ -763,4 +763,61 @@ describe("web actions (REQ-EXEC-38, REQ-EXEC-39, REQ-EXEC-40, REQ-EXEC-56)", () 
       ["S2", "texts.0"],
     ]);
   }, 90_000);
+
+  /** DEMO-15 on an emulated phone. */
+  const onPhone = async (caseId: string, flag?: string, device = "iPhone 15") => {
+    const shop = await startShop({ env: { DEMO_USER_PASSWORD: PASSWORD, ...(flag ? { [flag]: "1" } : {}) } });
+    cleanups.push(() => shop.close());
+    const { transport, dispose } = await createPlaywrightTransport({ timeoutMs: 5000 });
+    try {
+      const record = await executeAttempt(
+        {
+          specFile: spec("DEMO-15", caseId),
+          caseId,
+          attempt: 1,
+          plan: plan("DEMO-15"),
+          baseUrl: shop.url,
+          allowedOrigins: [shop.url],
+          accounts: {},
+          secrets: [PASSWORD],
+          timeoutMs: 30_000,
+        },
+        transport,
+        Date.now,
+        createPlaywrightBrowserFactory({ video: "off", device, actionTimeoutMs: 4000 }),
+      );
+      return { record, status: computeStatus({ caseId, attempts: [record] }, { evidenceComplete: true }) };
+    } finally {
+      await dispose();
+    }
+  };
+
+  it("REQ-EXEC-63/AC1+AC2 + REQ-EXEC-41/AC1+AC3 + REQ-NFR-04/AC1: swipes, double tap and long press on an emulated phone; BUG-20 is FAILED", async () => {
+    const swipes = await onPhone("TC-01");
+    expect(swipes.record.error).toBeUndefined();
+    expect(swipes.status).toBe("PASSED");
+    // AC3: each gesture's path is evidence, drawn on the step's screenshot.
+    const names = swipes.record.evidence.map((e) => e.name);
+    expect(names).toEqual(expect.arrayContaining(["S1-gestures.json", "S1-gestures.png"]));
+    const path = JSON.parse(
+      String(swipes.record.evidence.find((e) => e.name === "S1-gestures.json")?.content),
+    ) as {
+      kind: string;
+      fingers: { x: number; y: number }[][];
+    }[];
+    expect(path[0]?.kind).toBe("swipe");
+    expect((path[0]?.fingers[0]?.[0]?.x ?? 0) > (path[0]?.fingers[0]?.[1]?.x ?? 0)).toBe(true);
+    const taps = await onPhone("TC-02", undefined, "Pixel 7");
+    expect(taps.record.error).toBeUndefined();
+    expect(taps.status).toBe("PASSED");
+    const bug = await onPhone("TC-01", "BUG_SWIPE_SKIPS_SLIDE");
+    expect(bug.status).toBe("FAILED");
+    expect(bug.record.assertions.find((a) => !a.pass)?.actual).toBe("Slide 3 of 3");
+  }, 120_000);
+
+  it("REQ-EXEC-63/AC1: an unknown device or Firefox emulation is refused with the reason, never ignored", async () => {
+    const unknown = await onPhone("TC-01", undefined, "Nokia 3310");
+    expect(unknown.status).toBe("BLOCKED");
+    expect(unknown.record.error).toContain("Nokia 3310 is not a device Playwright can emulate");
+  });
 });
