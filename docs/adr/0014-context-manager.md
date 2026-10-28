@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Date: 2026-10-28
-- Related: INV-1, INV-5, INV-8, INV-11, REQ-CTX-05, REQ-CTX-11..18, REQ-LLM-03, REQ-LLM-12, REQ-LLM-15, REQ-VER-16,
+- Related: INV-1, INV-5, INV-8, INV-11, REQ-CTX-05, REQ-CTX-11..19, REQ-LLM-03, REQ-LLM-12, REQ-LLM-15, REQ-VER-16,
   REQ-VER-20
 
 ## Context
@@ -24,9 +24,12 @@ pieces is decided per role, so caching and reproducibility depend on each prompt
    by name (INV-11).
 3. **Roles see what their declaration allows.** The declaration is code, reviewed like the guard. The auditor and any
    judge never see reasoning or transcripts of the roles they judge (INV-1, INV-5).
-4. **Reduction from the cheapest, always recorded:** duplicates, low priority, structure-aware trimming, a summary by
-   a cheap model, a handle the agent can read through a read-only tool. Pinned fragments are never reduced; a context
-   that cannot fit them stops the call.
+4. **Smart before small, code before models, always recorded.** A call that fits is sent as it is. Fragments are
+   ranked by relevance to the task by code; material a role may need is a catalogue of handles it reads through a
+   read-only tool; a change too large for one call is analysed in parts. Reductions are done by code (duplicates,
+   least relevant into the catalogue, structure-aware trimming with the full text behind a handle). Model summaries
+   and loop compaction are the last resort. Pinned fragments are never reduced; a context that cannot fit them stops
+   the call.
 5. **Untrusted data in blocks bounded by a marker drawn per run,** so content cannot close its block.
 6. **Determinism:** fixed sort keys, no time or randomness in the stable part, summaries cached by input hash, and a
    snapshot (fragment hashes, reductions, marker, renderer and profile versions) whose hash goes to the journal.
@@ -43,4 +46,6 @@ pieces is decided per role, so caching and reproducibility depend on each prompt
 - The input limit of REQ-LLM-12/AC4 becomes the budget of REQ-CTX-14: reduce first, stop only when pinned fragments do
   not fit.
 - The audit trail gains one snapshot per call; certificates cover it through the journal.
-- Summaries add model calls; they are cached and their cost is attributed to the role that needed them.
+- Summaries, when they happen at all, add model calls; they are cached and their cost is attributed to the role that
+  needed them.
+- Metrics per role come first, so each later step (relevance, budgets, splitting) is decided on measured data.

@@ -194,6 +194,8 @@ concatenated in each role.
 - [ ] AC2: The layout puts the stable part first (role instructions, project rules, skills, repository context) and the varying part last (ticket, results, the question), so provider caching applies (REQ-LLM-12/AC1).
 - [ ] AC3: Every reduction (duplicate removed, fragment dropped, trimmed, summarised, replaced by a handle) is recorded with the fragment's hash, the reason and the tokens saved; nothing leaves the context silently.
 - [ ] AC4: A fragment replaced by a handle can be read in full by the agent through a read-only tool (`read_context <handle>`); the reads are counted and recorded.
+- [ ] AC5: Context starts small and grows on demand: material a role may need but does not always need (whole files, full logs, knowledge documents, older results) is offered as a catalogue of handles with a one-line description built by code (path, size, what it is), not as content; the agent reads what it needs with the tools.
+- [ ] AC6: Fragments are selected by relevance to the task before any reduction: what the acceptance criteria, the plan's steps and the change name (files, endpoints, selectors, error messages) ranks first, computed by code from the fragments' metadata and text; the ranking and its reasons are part of the snapshot.
 
 ### REQ-CTX-13 · Role isolation of context
 
@@ -217,10 +219,11 @@ concatenated in each role.
 
 **Acceptance criteria**
 
-- [ ] AC1: The budget of a call is the model's good working range (REQ-LLM-15) minus the space for the answer minus a safety margin, split among sources by configured shares; unused shares go to the others.
-- [ ] AC2: Reductions run from the cheapest: duplicates removed, low-priority fragments dropped, then trimming that keeps structure (a diff keeps changed hunks and signatures, a log keeps errors with a few lines around them, recorded traffic keeps method, URL, status and a short body), then a summary by a cheap model with references to the source, then a handle in place of the content.
-- [ ] AC3: Trimming and summaries never touch pinned fragments and never change a number, an expected value or a quoted text of the ticket that a check relies on; a summary is untrusted data like its source.
+- [ ] AC1: The budget of a call is the model's good working range (REQ-LLM-15) minus the space for the answer minus a safety margin; sources may get configured shares, and unused shares go to the others. A call that fits its budget is sent as it is: nothing is reduced ahead of need.
+- [ ] AC2: Reductions are done by code first and in this order: duplicates removed; the least relevant non-pinned fragments moved into the catalogue as handles (REQ-CTX-12/AC5); trimming that keeps structure (a diff keeps changed hunks and signatures, a log keeps errors with a few lines around them, recorded traffic keeps method, URL, status and a short body), with the full text behind a handle.
+- [ ] AC3: Reductions never touch pinned fragments and never change a number, an expected value or a quoted text of the ticket that a check relies on; a summary is untrusted data like its source.
 - [ ] AC4: The budget, the reductions and the final input size are visible per call in the audit trail and in `qj logs`.
+- [ ] AC5: A summary by a model is the last resort: only when the code reductions cannot reach the budget, only for non-pinned fragments, only when the role cannot read handles (no tool use in its model profile) or the project allows it, and always with a handle to the full text. Every summary is recorded with the model that wrote it.
 
 ### REQ-CTX-15 · Untrusted data blocks with a per-run boundary
 
@@ -247,8 +250,8 @@ its end.
 
 **Acceptance criteria**
 
-- [ ] AC1: In an agent loop the last N tool results stay whole; older ones are replaced by summaries with a handle to the full result (REQ-CTX-12/AC4).
-- [ ] AC2: The point at which compaction starts follows from the model's budget, not from a fixed number of turns.
+- [ ] AC1: An agent loop is compacted only when its next call would not fit the budget, never on a fixed number of turns; until then every tool result stays whole.
+- [ ] AC2: Compaction replaces the oldest tool results that the loop no longer refers to by handles with a one-line description built by code (REQ-CTX-12/AC4); the last results and every result the latest turns cite stay whole. Summaries by a model follow REQ-CTX-14/AC5.
 - [ ] AC3: Pinned fragments are never compacted; the compaction is recorded like every other reduction.
 
 ### REQ-CTX-17 · Deterministic context and its snapshot
@@ -276,3 +279,20 @@ its end.
 
 - [ ] AC1: Per role and model the run records input tokens by source, reductions by kind, `read_context` calls and the cache hit rate; `qj metrics` exports them.
 - [ ] AC2: `qj bench --context <policies>` runs the same tickets under different budgets and shares and reports plan quality, detection, cost and time per policy, so a project picks the cheapest policy that keeps quality.
+
+### REQ-CTX-19 · Large changes analysed in parts
+
+- Status: accepted
+- Priority: should
+- Stage: later
+- Related: REQ-CTX-05, REQ-CTX-12, REQ-CTX-14, REQ-PLAN-01, REQ-LLM-15, ADR-0014
+
+A change too large for one call, or for a small local model, is better split into tasks with a clean context each
+than squeezed into one prompt.
+
+**Acceptance criteria**
+
+- [ ] AC1: When the change does not fit the analyst's budget, code splits it into parts (per repository, then per group of related files: a module, an endpoint with its handler and tests) and the analyst studies each part in its own call.
+- [ ] AC2: Each part answers in a structured schema (endpoints, screens, risks, open questions, each with its sources); code merges the parts, removes duplicates and checks every source against the change, as for a single analysis.
+- [ ] AC3: The planner works from the merged analysis and handles into the change, never from the raw diff of every part at once.
+- [ ] AC4: The split, the parts and their snapshots are recorded; the same change splits the same way in every run.
