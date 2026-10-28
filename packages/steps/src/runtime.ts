@@ -4,6 +4,7 @@ import type {
   AttemptRecord,
   CapturedMessage,
   CaseMessages,
+  CredentialLookup,
   EvidenceItem,
   ManualPrompter,
   Plan,
@@ -12,7 +13,15 @@ import type {
   VisualCheck,
   TestCase,
 } from "@qajitsu/core";
+import { checkGesture } from "./gestures.js";
 import type { Masker } from "./masking.js";
+import {
+  diagnoseNetwork,
+  reachedEndpoints,
+  type NetworkProblem,
+  type ReachedEndpoint,
+  type UiRequest,
+} from "./network.js";
 import {
   assertSelector,
   pngDimensions,
@@ -125,6 +134,8 @@ export type { AttemptRecord, EvidenceItem } from "@qajitsu/core";
 
 /** Settings of one case attempt. */
 export interface CaseRuntimeOptions {
+  /** Account secrets for `ui.fillSecret` (REQ-EXEC-67/AC3), held by the parent only. */
+  readonly credential?: CredentialLookup | undefined;
   readonly plan: Plan;
   readonly caseId: string;
   readonly attempt: number;
@@ -138,6 +149,11 @@ export interface CaseRuntimeOptions {
   readonly now: () => number;
   /** Starts the browser on first use; absent for API-only runs (REQ-EXEC-05). */
   readonly ui?: (() => Promise<UiDriver>) | undefined;
+  /**
+   * Opens another browser session of the case by name (REQ-EXEC-62/AC1): its own browser context with its own cookies
+   * and storage, closed and recorded by the runner with the attempt.
+   */
+  readonly session?: ((name: string) => Promise<UiDriver>) | undefined;
   /** Asks a person at manual steps (REQ-EXEC-11); the trusted orchestrator provides it, never a spec or agent. */
   readonly manual?: ManualPrompter | undefined;
   /** The case's message inbox (REQ-ENV-08); read by the trusted runtime only. */
@@ -251,6 +267,13 @@ function expectationOf(planCase: TestCase, stepId: string, field: string, path: 
     const key = rest.join(".");
     if (!e.state || !(key in e.state)) throw new Error(`plan.expect('${path}'): no expected state '${key}'`);
     value = e.state[key];
+  } else if (kind === "websocket" && rest.length === 2 && (rest[0] === "received" || rest[0] === "sent")) {
+    value = e.websocket?.[rest[0]]?.[Number(rest[1])];
+  } else if (kind === "manifest" && rest.length === 1) {
+    const part = rest[0] ?? "";
+    if (!["name", "short_name", "start_url", "display", "icons", "controlled"].includes(part))
+      throw new Error(`plan.expect('${path}'): unknown manifest field`);
+    value = e.manifest?.[part as keyof NonNullable<typeof e.manifest>];
   } else if (kind === "message" && rest.length === 0) value = e.message;
   else if (kind === "visual" && rest.length === 0) value = e.visual;
   else throw new Error(`plan.expect('${path}'): unknown field`);
@@ -302,7 +325,16 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   const planCase = plan.cases.find((c) => c.id === caseId);
   if (!planCase) throw new Error(`${caseId} is not in the approved plan`);
   const stepIds = new Set(planCase.steps.map((s) => s.id));
-  const steps: { id: string; ok: boolean; error?: string; url?: string }[] = [];
+  const steps: { id: string; ok: boolean; error?: string; url?: string; network?: NetworkProblem[] }[] = [];
+  /** The gestures of each step with their fingers' paths, drawn on the step's screenshot (REQ-EXEC-41/AC3). */
+  const gesturesOf = new Map<
+    string,
+    { kind: string; fingers: readonly (readonly { x: number; y: number }[])[] }[]
+  >();
+  /** Fields `ui.fillSecret` typed into, masked in every screenshot of the case (REQ-EXEC-67/AC4). */
+  const secretFields = new Set<string>();
+  /** Every request the page sent (REQ-EVD-09), as the parent saw it, masked by the driver. */
+  const traffic: UiRequest[] = [];
   const assertions: AssertionRecord[] = [];
   const media: EvidenceItem[] = [];
   const calls: {
@@ -321,11 +353,18 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   const lastAction = new Map<string, "api" | "ui">();
   const maskValue = (v: unknown): unknown => masker.maskJson(v);
 
+  /** Browser sessions by name (REQ-EXEC-62); `main` is the case's first one. `driver` is the active session's. */
+  const sessions = new Map<string, UiDriver>();
+  let activeSession = "main";
   const browser = async (): Promise<UiDriver> => {
     if (!options.ui) throw new Error("This run has no browser; UI actions need the web runner");
-    driver ??= await options.ui();
+    if (activeSession === "main" && !sessions.has("main")) sessions.set("main", await options.ui());
+    driver = sessions.get(activeSession);
+    if (!driver) throw new Error(`no browser session ${activeSession}`);
     return driver;
   };
+  /** Every open session's driver, the main one first, with its name. */
+  const openSessions = (): [string, UiDriver][] => [...sessions];
   /** A web action the driver must offer (ADR-0013); a native app or another runner refuses it with the reason. */
   const need = <K extends keyof UiDriver>(d: UiDriver, key: K, what: string): NonNullable<UiDriver[K]> => {
     const f = d[key];
@@ -342,7 +381,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   /** Dialogs each step showed (REQ-EXEC-61/AC1). */
   const dialogsOf = new Map<string, { type: string; message: string; answer: string }[]>();
   const collectDialogs = (stepId: string): void => {
-    const shown = driver?.takeDialogs?.() ?? [];
+    const shown = openSessions().flatMap(([, d]) => d.takeDialogs?.() ?? []);
     if (shown.length > 0) dialogsOf.set(stepId, [...(dialogsOf.get(stepId) ?? []), ...shown]);
   };
   /** Every UI action with the page it went to (REQ-EXEC-39/AC2), masked; case evidence `ui-actions.json`. */
@@ -452,11 +491,33 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         failure ??= unanswered;
       }
     }
+    // REQ-EXEC-47/AC4: the page's WebSocket frames of the step are evidence, masked.
+    const frames = openSessions().flatMap(([, d]) => d.takeSocketFrames?.() ?? []);
+    if (frames.length > 0)
+      media.push({
+        stepId,
+        kind: "log",
+        name: `${stepId}-websocket.json`,
+        content: `${JSON.stringify(maskValue(frames), null, 2)}\n`,
+      });
+    // REQ-EVD-09/AC1: the requests the step sent; what went wrong is shown next to a failed or blocked step.
+    const sent = openSessions().flatMap(([, d]) => d.takeNetwork?.() ?? []);
+    traffic.push(...sent);
+    const failedHere = error !== undefined || assertions.some((a) => a.stepId === stepId && !a.pass);
+    const problems = failedHere ? (maskValue(diagnoseNetwork(sent)) as NetworkProblem[]) : [];
+    if (problems.length > 0)
+      media.push({
+        stepId,
+        kind: "log",
+        name: `${stepId}-network.json`,
+        content: `${JSON.stringify({ requests: sent.length, problems }, null, 2)}\n`,
+      });
     steps.push({
       id: stepId,
       ok: error === undefined,
       ...(error === undefined ? {} : { error: masker.maskText(error) }),
       ...(driver ? { url: masker.maskText(driver.url()) } : {}),
+      ...(problems.length > 0 ? { network: problems } : {}),
     });
     currentStep = undefined;
     // REQ-EXEC-61/AC1: every dialog of the step is evidence, with how it was answered.
@@ -469,12 +530,26 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         name: `${stepId}-dialogs.json`,
         content: `${JSON.stringify(maskValue(shown), null, 2)}\n`,
       });
-    // REQ-EVD-02/AC1: a screenshot after every step of a case that uses the browser.
-    if (driver) {
+    // REQ-EVD-02/AC1: a screenshot after every step of a case that uses the browser; REQ-EXEC-62/AC2: one per
+    // session, named after it.
+    for (const [name, d] of openSessions()) {
+      if (name === "main") continue;
       try {
-        const png = await driver.screenshot(false);
+        const png = await d.screenshot(false, [...secretFields]);
+        media.push({ stepId, kind: "screenshot", name: `${stepId}-${name}.png`, content: png });
+      } catch {
+        // A crashed page has no screenshot.
+      }
+    }
+    const main = sessions.get("main");
+    if (main) {
+      try {
+        // REQ-EXEC-67/AC4: fields that got an account secret are blacked out.
+        const png = await main.screenshot(false, [...secretFields]);
         media.push({ stepId, kind: "screenshot", name: `${stepId}.png`, content: png });
-        await annotateStep(stepId, png);
+        // The red boxes are drawn from the active page's elements: only when that is the main session.
+        if (activeSession === "main") await annotateStep(stepId, png);
+        await drawGestures(stepId, png);
         // REQ-OBS-09: the live view gets its own copy; what it does with it cannot change the evidence.
         try {
           options.onScreenshot?.(stepId, png.slice());
@@ -565,12 +640,28 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         maskValue({
           stepId: currentStep,
           ...operation,
+          ...(sessions.size > 1 || activeSession !== "main" ? { session: activeSession } : {}),
           ...(page ? { page: page.index, url: page.url } : {}),
         }) as Record<string, unknown>,
       );
     } catch (error) {
       if (driver && (await unaddressable(driver)))
         throw new Error(`${describeError(error)}; ${NO_ELEMENTS}`, { cause: error });
+      // A browser starts on an empty page: say so instead of a bare timeout.
+      if (driver && "selector" in operation && driver.url().startsWith("about:blank"))
+        throw new Error(
+          `${describeError(error)}; no page is open: call ui.goto("<path>") before ui.${operation.op}()`,
+          {
+            cause: error,
+          },
+        );
+      // REQ-EXEC-64/AC3: a selector that matches several elements says how many and how to narrow it.
+      const many = /resolved to (\d+) elements/.exec(describeError(error));
+      if (many)
+        throw new Error(
+          `${describeError(error)}; the selector matches ${many[1] ?? "several"} elements: narrow it with ' >> has-text:<text>', ' >> nth:<n>' or a parent element first (role:row >> ...)`,
+          { cause: error },
+        );
       // REQ-EXEC-56/AC1: say why an element cannot be reached when the page explains it.
       const reason = driver ? await driver.unreachableReason?.().catch(() => undefined) : undefined;
       if (reason !== undefined) throw new Error(`${describeError(error)}; ${reason}`, { cause: error });
@@ -580,6 +671,27 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   const uiAction = async (operation: UiOperation): Promise<void> => {
     if (currentStep === undefined) throw new Error("UI actions must run inside step()");
     lastAction.set(currentStep, "ui");
+    if (operation.op === "session") {
+      // REQ-EXEC-62/AC1: `main` is the case's first session; others are named by an account of the case's data and
+      // open logged in as that account, with their own cookies and storage.
+      const name = operation.name;
+      if (name !== "main") {
+        const alias = planCase.data[name];
+        if (alias?.startsWith("user:") !== true)
+          throw new Error(
+            `ui.session('${name.slice(0, 40)}'): name a test account of ${caseId}'s data, e.g. buyer: user:buyer`,
+          );
+        if (!sessions.has(name)) {
+          if (!options.session) throw new Error("This runner cannot open more than one browser session");
+          const opened = await options.session(name);
+          await opened.useAccount(alias);
+          sessions.set(name, opened);
+        }
+      }
+      activeSession = name;
+      await browser();
+      return;
+    }
     const d = await browser();
     // REQ-EXEC-61/AC1: dialogs the action opens are answered as the step says.
     d.setDialogPolicy?.(planCase.steps.find((x) => x.id === currentStep)?.dialog);
@@ -609,6 +721,66 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       case "fill":
         await d.fill(assertSelector(operation.selector), operation.value);
         return;
+      case "fillCode": {
+        // REQ-EXEC-55/AC3: the code comes from the message the plan expects, read by the parent.
+        const selector = assertSelector(operation.selector);
+        const stepId = currentStep;
+        const filter = planCase.steps.find((x) => x.id === stepId)?.expect.message;
+        if (!filter)
+          throw new Error(`ui.fillCode(): the plan expects no message in ${stepId} to take a code from`);
+        if (!waited.has(stepId)) await inboxWait(stepId);
+        const message = waited.get(stepId);
+        if (!message) {
+          // The application sent no code: the planned check of the message fails here, as verify() would.
+          assertions.push({
+            stepId,
+            field: "message",
+            expected: maskValue(filter),
+            actual: "(no message arrived in time)",
+            pass: false,
+          });
+          throw new Error(`ui.fillCode(): no message with a code arrived in ${stepId}`);
+        }
+        const match = new RegExp(filter.code ?? "\\b(\\d{4,8})\\b").exec(
+          `${message.subject ?? ""}\n${message.body}`,
+        );
+        const code = match?.[1] ?? match?.[0];
+        if (code === undefined || code === "")
+          throw new Error(
+            `ui.fillCode(): the message of ${stepId} holds no code matching the plan's pattern`,
+          );
+        masker.register(code);
+        d.registerSecret?.(code);
+        // The message was recorded before the code was known: mask the code in that evidence too.
+        for (const [i, item] of media.entries())
+          if (item.stepId === stepId && item.kind === "message" && typeof item.content === "string")
+            media[i] = { ...item, content: masker.maskText(item.content) };
+        secretFields.add(selector);
+        await d.fill(selector, code);
+        return;
+      }
+      case "fillSecret": {
+        // REQ-EXEC-67/AC3: the value is resolved here, masked everywhere, and never handed back to the spec.
+        const selector = assertSelector(operation.selector);
+        // The sandbox schema checks this too; an in-process caller is held to the same rule.
+        const field: string = operation.field;
+        if (field !== "password" && field !== "username" && field !== "totp")
+          throw new Error('ui.fillSecret() types "password", "username" or "totp" of an account');
+        if (!Object.values(planCase.data).includes(operation.alias))
+          throw new Error(
+            `ui.fillSecret(): '${operation.alias.slice(0, 40)}' is not an account of ${caseId} in the plan`,
+          );
+        const value = options.credential?.(operation.alias, operation.field);
+        if (value === undefined || value === "")
+          throw new Error(
+            `ui.fillSecret(): no ${operation.field} for ${operation.alias} in this environment`,
+          );
+        masker.register(value);
+        d.registerSecret?.(value);
+        secretFields.add(selector);
+        await d.fill(selector, value);
+        return;
+      }
       case "select":
         await d.select(assertSelector(operation.selector), operation.value);
         return;
@@ -683,6 +855,23 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         if (!Number.isInteger(operation.seconds) || operation.seconds < 1 || operation.seconds > 604_800)
           throw new Error("ui.advanceTime() takes whole seconds from 1 to 604800 (7 days)");
         await need(d, "advanceTime", "ui.advanceTime()")(operation.seconds * 1000);
+        return;
+      case "gesture": {
+        // REQ-EXEC-41 + REQ-EXEC-63/AC2: checked here, performed by the driver, drawn on the step's screenshot.
+        const g = operation.gesture;
+        checkGesture(g);
+        if ("selector" in g && g.selector !== undefined) assertSelector(g.selector);
+        const done = await need(d, "gesture", `ui.${g.kind}()`)(g);
+        const list = gesturesOf.get(currentStep) ?? [];
+        list.push({ kind: g.kind, fingers: done.fingers });
+        gesturesOf.set(currentStep, list);
+        return;
+      }
+      case "setOffline":
+        // REQ-EXEC-65/AC2: the browser's whole network goes off or comes back; the page sees it as a real outage.
+        if (typeof operation.offline !== "boolean")
+          throw new Error("ui.setOffline() takes true (offline) or false (back online)");
+        await need(d, "setOffline", "ui.setOffline()")(operation.offline);
         return;
     }
   };
@@ -777,6 +966,33 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
    * baseline the baseline copy shows the changed regions (AC2). The original screenshot is never changed and nothing
    * here changes an assertion or a status (AC4).
    */
+  /** REQ-EXEC-41/AC3: each gesture's path on a copy of the step's screenshot, its points numbered in order. */
+  const drawGestures = async (stepId: string, png: Uint8Array): Promise<void> => {
+    const done = gesturesOf.get(stepId);
+    if (!done || done.length === 0) return;
+    media.push({
+      stepId,
+      kind: "log",
+      name: `${stepId}-gestures.json`,
+      content: `${JSON.stringify(done, null, 2)}\n`,
+    });
+    if (!options.annotate) return;
+    const marks: ScreenMark[] = [];
+    for (const g of done)
+      for (const finger of g.fingers)
+        for (const p of finger)
+          marks.push({ n: marks.length + 1, box: { x: p.x - 10, y: p.y - 10, width: 20, height: 20 } });
+    try {
+      media.push({
+        stepId,
+        kind: "screenshot",
+        name: `${stepId}-gestures.png`,
+        content: await options.annotate(png, marks),
+      });
+    } catch {
+      // The plain screenshot and the path in the JSON stay.
+    }
+  };
   const annotateStep = async (stepId: string, png: Uint8Array): Promise<void> => {
     if (!options.annotate || !driver) return;
     const elementFails = assertions.filter(
@@ -860,10 +1076,10 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     const threshold = spec.threshold ?? visual.threshold;
     const actual =
       spec.element === undefined
-        ? await driver.screenshot(
-            false,
-            (spec.mask ?? []).map((m) => assertSelector(m)),
-          )
+        ? await driver.screenshot(false, [
+            ...(spec.mask ?? []).map((m) => assertSelector(m)),
+            ...secretFields,
+          ])
         : await need(
             driver,
             "elementScreenshot",
@@ -1010,6 +1226,43 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       });
       return;
     }
+    if (kind === "websocket") {
+      // REQ-EXEC-47/AC3: a frame of the page's WebSockets in this step, recorded by the parent; none in time fails.
+      const expected = expectationOf(planCase, stepId, field, `${caseId}.${stepId}.${field}`);
+      if (!driver)
+        throw new Error(`verify('${stepId}', '${field}') needs an open page: call ui.goto() first`);
+      const direction = rest[0] === "sent" ? "sent" : "received";
+      const url = planCase.steps.find((x) => x.id === stepId)?.expect.websocket?.url;
+      const found = await need(driver, "socketFrame", `verify('${stepId}', 'websocket.*')`)(
+        direction,
+        String(expected),
+        url,
+        waitMs,
+      );
+      record(expected, found === undefined ? `(no ${direction} WebSocket message contains it)` : expected);
+      return;
+    }
+    if (kind === "manifest") {
+      // REQ-EXEC-65/AC3: the page's manifest and its service worker, read by the parent; no manifest never passes.
+      const expected = expectationOf(planCase, stepId, field, `${caseId}.${stepId}.${field}`);
+      if (!driver)
+        throw new Error(`verify('${stepId}', '${field}') needs an open page: call ui.goto() first`);
+      const part = rest[0] ?? "";
+      // Blocked service workers never control a page: that would fail the check for a reason of the plan.
+      if (part === "controlled" && planCase.browser?.service_workers !== true)
+        throw new Error(
+          `verify('${stepId}', '${field}'): the case blocks service workers; allow them with "browser": {"service_workers": true}`,
+        );
+      const read = await need(driver, "manifest", `verify('${stepId}', 'manifest.*')`)();
+      let actual: unknown;
+      if (part === "controlled") actual = read.controlled;
+      else if (!read.manifest) actual = "(the page links no readable web app manifest)";
+      else if (part === "icons")
+        actual = Array.isArray(read.manifest["icons"]) ? read.manifest["icons"].length : 0;
+      else actual = read.manifest[part];
+      record(expected, actual);
+      return;
+    }
     if (kind === "state") {
       // REQ-EXEC-56/AC2: what the application exposes for tests, read by the parent from the page.
       const expected = expectationOf(planCase, stepId, field, `${caseId}.${stepId}.${field}`);
@@ -1074,7 +1327,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
           : "(text not found in the response)";
     else
       throw new Error(
-        `verify('${stepId}', '${field}'): only status, fields.<key>, texts.<n>, elements.<selector>.<property>, download.*, state.*, message and visual can be verified`,
+        `verify('${stepId}', '${field}'): only status, fields.<key>, texts.<n>, elements.<selector>.<property>, download.*, state.*, manifest.*, websocket.*, message and visual can be verified`,
       );
     record(expected, actual);
   };
@@ -1110,6 +1363,30 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       goto: (path) => uiOp({ op: "goto", path }),
       click: (selector) => uiOp({ op: "click", selector }),
       fill: (selector, value) => uiOp({ op: "fill", selector, value }),
+      fillSecret: (selector, alias, field) => uiOp({ op: "fillSecret", selector, alias, field }),
+      fillCode: (selector) => uiOp({ op: "fillCode", selector }),
+      session: (name) => uiOp({ op: "session", name }),
+      tap: (selector) => uiOp({ op: "gesture", gesture: { kind: "tap", selector } }),
+      doubleTap: (selector) => uiOp({ op: "gesture", gesture: { kind: "doubleTap", selector } }),
+      longPress: (selector, seconds = 1) =>
+        uiOp({ op: "gesture", gesture: { kind: "longPress", selector, seconds } }),
+      swipe: (target, direction, opts = {}) =>
+        uiOp({
+          op: "gesture",
+          gesture: {
+            kind: "swipe",
+            ...(target === "screen" ? {} : { selector: target }),
+            direction,
+            distance: opts.distance ?? 0.6,
+            speed: opts.speed ?? "normal",
+          },
+        }),
+      pinch: (target, direction, scale = 0.6) =>
+        uiOp({
+          op: "gesture",
+          gesture: { kind: "pinch", ...(target === "screen" ? {} : { selector: target }), direction, scale },
+        }),
+      pullToRefresh: () => uiOp({ op: "gesture", gesture: { kind: "pullToRefresh" } }),
       check: (selector) => uiOp({ op: "check", selector }),
       uncheck: (selector) => uiOp({ op: "uncheck", selector }),
       select: (selector, value) => uiOp({ op: "select", selector, value }),
@@ -1132,6 +1409,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       switchToOpener: () => uiOp({ op: "switchPage", to: "opener" }),
       closePage: () => uiOp({ op: "closePage" }),
       advanceTime: (seconds) => uiOp({ op: "advanceTime", seconds }),
+      setOffline: (offline) => uiOp({ op: "setOffline", offline }),
     },
     step: async (stepId, fn) => {
       beginStep(stepId);
@@ -1175,6 +1453,8 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       // REQ-EXEC-39/AC2: which page each action went to, when the case used more than one or new web actions.
       if (
         actions.some((a) => a["page"] !== undefined && a["page"] !== 0) ||
+        // REQ-EXEC-62/AC2: which session every action went to.
+        actions.some((a) => a["session"] !== undefined) ||
         actions.some((a) => a["op"] === "scrollUntil.result")
       )
         evidence.push({
@@ -1208,7 +1488,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
             stepId: "case",
             kind: "screenshot",
             name: "failure.png",
-            content: await driver.screenshot(true),
+            content: await driver.screenshot(true, [...secretFields]),
           });
           evidence.push({
             stepId: "case",
@@ -1237,6 +1517,10 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         steps,
         assertions,
         evidence,
+        // REQ-EVD-09/AC2: the application's endpoints the page reached, for the coverage of the change.
+        ...(traffic.length > 0
+          ? { requests: maskValue(reachedEndpoints(traffic)) as ReachedEndpoint[] }
+          : {}),
       };
     },
   };

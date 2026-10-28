@@ -8,15 +8,27 @@ import {
   createMasker,
   DEFAULT_SENSITIVE_HEADERS,
   MASK,
-  splitFrames,
+  planGesture,
+  selectorParts,
   type EvidenceItem,
   type UiDriver,
   type UiProperty,
+  type UiRequest,
 } from "@qajitsu/steps";
-import { OBSERVATIONS_FILE, type PassiveObservations, type UiElementFact } from "@qajitsu/core";
+import {
+  browserEngine,
+  OBSERVATIONS_FILE,
+  unzip,
+  zip,
+  type LocalBrowser,
+  type PassiveObservations,
+  type UiElementFact,
+  type WebBrowser,
+} from "@qajitsu/core";
 import { ariaElements } from "./aria.js";
 import {
   chromium,
+  devices,
   firefox,
   selectors,
   webkit,
@@ -25,17 +37,24 @@ import {
   type FrameLocator,
   type Locator,
   type Page,
+  type Request,
 } from "playwright-core";
 
 /** Settings of the web runner (REQ-EXEC-05, REQ-EVD-02, REQ-EVD-06). */
 export interface WebRunnerOptions {
   /** Chromium by default; Firefox and WebKit configurable (REQ-EXEC-05/AC1). */
-  readonly browser?: "chromium" | "firefox" | "webkit";
+  /** An engine of QAJitsu's Playwright or an installed channel such as `chrome` or `msedge` (REQ-EXEC-66/AC1). */
+  readonly browser?: LocalBrowser;
   /** `retain-on-failure` by default, `always` or `off` (REQ-EVD-06/AC1). */
   readonly video?: "retain-on-failure" | "always" | "off";
-  /** Where the app keeps its session token; the framework sets it for `ui.as(alias)` (REQ-CFG-07). */
+  /**
+   * Where the app keeps its session; the framework sets it for `ui.as(alias)` (REQ-CFG-07): a token in storage, or
+   * the login's cookies (REQ-EXEC-67/AC2).
+   */
   readonly webSession?:
-    { readonly storage: "sessionStorage" | "localStorage"; readonly key: string } | undefined;
+    | { readonly storage: "sessionStorage" | "localStorage"; readonly key: string }
+    | { readonly storage: "cookies" }
+    | undefined;
   readonly headless?: boolean;
   /** Delay before every browser action in ms, to watch a headed run (REQ-EXEC-16/AC2). */
   readonly slowMoMs?: number | undefined;
@@ -44,8 +63,15 @@ export interface WebRunnerOptions {
   /** Attribute `testid:` selectors find, e.g. `data-qa` (REQ-EXEC-21/AC1); `data-testid` by default. */
   readonly testIdAttribute?: string;
   readonly viewport?: { readonly width: number; readonly height: number };
+  /**
+   * An emulated device from Playwright's list (`iPhone 15`, `Pixel 7`; REQ-EXEC-63/AC1): its viewport, scale, touch,
+   * `isMobile` and user agent. Emulation, never a real device.
+   */
+  readonly device?: string | undefined;
   /** HTTP authentication of the environment (REQ-EXEC-61/AC5), sent when a page asks for it. */
   readonly httpCredentials?: { readonly username: string; readonly password: string } | undefined;
+  /** Headers the application offers for tests (REQ-EXEC-55/AC4), sent with requests to its own origin only. */
+  readonly testHeaders?: Readonly<Record<string, string>> | undefined;
   /** Largest download a step reads, in bytes (REQ-EXEC-38/AC2); 100 MB by default. */
   readonly maxDownloadBytes?: number;
   /** Passive observations (REQ-EVD-07); all on by default. They never change a status. */
@@ -120,15 +146,25 @@ async function pageElements(page: Page, testIdAttribute: string): Promise<UiElem
  *   `id:<dom id>` or `css:<selector>` (REQ-EXEC-21/AC3).
  */
 export function locate(page: Page, selector: string): Locator {
-  // REQ-EXEC-39/AC1: `frame:<selector> >> ... >> <selector>` finds the element inside (nested) iframes.
-  const { frames, element } = splitFrames(selector);
-  let root: Page | FrameLocator = page;
-  for (const frame of frames) root = locateIn(root, frame).first().contentFrame();
-  return locateIn(root, element);
+  // REQ-EXEC-39 + REQ-EXEC-64: frames, elements inside elements, and the filters has-text: and nth:.
+  let root: Page | FrameLocator | Locator = page;
+  let current: Locator | undefined;
+  for (const part of selectorParts(selector)) {
+    if (part.kind === "frame") {
+      root = locateIn(current ?? root, part.selector)
+        .first()
+        .contentFrame();
+      current = undefined;
+    } else if (part.kind === "element") current = locateIn(current ?? root, part.selector);
+    else if (current && part.kind === "hasText") current = current.filter({ hasText: part.text });
+    else if (current && part.kind === "nth") current = current.nth(part.n - 1);
+  }
+  if (!current) throw new Error(`Selector '${selector.slice(0, 60)}' names no element`);
+  return current;
 }
 
-/** A locator of one selector (no frames) in a page or a frame. */
-function locateIn(page: Page | FrameLocator, selector: string): Locator {
+/** A locator of one selector (no chain) in a page, a frame or inside another element. */
+function locateIn(page: Page | FrameLocator | Locator, selector: string): Locator {
   const i = selector.indexOf(":");
   const kind = selector.slice(0, i);
   const rest = selector.slice(i + 1);
@@ -229,6 +265,54 @@ export function closedShadowHosts(node: CdpNode, out: string[] = [], depth = 0):
   return out;
 }
 
+/**
+ * A Playwright trace with every registered secret masked (INV-8, REQ-EXEC-67/AC4): the trace records the arguments of
+ * every action (a typed password, a session token set into storage) and request headers. Text entries are masked;
+ * images are kept. Sensitive headers and every cookie are masked by name too, so a session the application created
+ * during the test (`Set-Cookie`) is hidden although nobody registered it. A trace that cannot be read is dropped
+ * rather than kept unmasked.
+ */
+export function maskTrace(data: Uint8Array, mask: (text: string) => string): Uint8Array {
+  const sensitive = new Set(DEFAULT_SENSITIVE_HEADERS.map((h) => h.toLowerCase()));
+  const value = /"value":"(?:[^"\\]|\\.)*"/g;
+  const scrub = (text: string): string =>
+    mask(
+      text
+        .replace(/\{"name":"([^"]+)","value":"(?:[^"\\]|\\.)*"/g, (all, name: string) =>
+          sensitive.has(name.toLowerCase()) ? `{"name":"${name}","value":"${MASK}"` : all,
+        )
+        .replace(/"cookies":\[[^\]]*\]/g, (all) => all.replace(value, `"value":"${MASK}"`)),
+    );
+  try {
+    const entries = unzip(data, {
+      maxEntries: 20_000,
+      maxEntryBytes: 200_000_000,
+      maxTotalBytes: 500_000_000,
+    });
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+    return zip(
+      entries.map((e) => {
+        if (/\.(png|jpe?g|webp|gif|woff2?|ttf)$/i.test(e.name)) return e;
+        let text: string;
+        try {
+          text = decoder.decode(e.data);
+        } catch {
+          return e;
+        }
+        const masked = scrub(text);
+        return masked === text ? e : { name: e.name, data: new TextEncoder().encode(masked) };
+      }),
+    );
+  } catch {
+    return zip([
+      {
+        name: "README.txt",
+        data: new TextEncoder().encode("The trace could not be masked and was dropped.\n"),
+      },
+    ]);
+  }
+}
+
 const scrollY = (page: Page): Promise<number> =>
   page.evaluate(() => (globalThis as unknown as { scrollY: number }).scrollY).catch(() => 0);
 
@@ -246,23 +330,46 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
     const masker = createMasker({ secrets: input.secrets });
     const observed: PassiveObservations = { console: [], http: [], accessibility: [] };
     const audits: Promise<void>[] = [];
+    let ran: { readonly name: string; readonly version: string } | undefined;
     let started:
       { browser: Browser; context: BrowserContext; page: Page; dir: string; console: string[] } | undefined;
 
     const start = async (): Promise<UiDriver> => {
       const dir = await mkdtemp(join(tmpdir(), "qj-web-"));
-      const type = options.browser === "firefox" ? firefox : options.browser === "webkit" ? webkit : chromium;
+      const name = options.browser ?? "chromium";
+      const engine = browserEngine(name) ?? "chromium";
+      const type = engine === "firefox" ? firefox : engine === "webkit" ? webkit : chromium;
       // REQ-EXEC-21/AC1: getByTestId finds the project's attribute (one project per process).
       selectors.setTestIdAttribute(testIdAttribute);
-      const browser = await type.launch({
-        headless: options.headless ?? true,
-        ...(options.slowMoMs ? { slowMo: options.slowMoMs } : {}),
-      });
       // REQ-EXEC-61/AC3: the case's browser grants only what its plan names; everything else stays denied.
       const settings = input.plan.cases.find((c) => c.id === input.caseId)?.browser;
+      // REQ-EXEC-63/AC1: the device's emulation; Firefox has no mobile emulation, so it is refused, not ignored.
+      let emulated: Record<string, unknown> = {};
+      if (options.device !== undefined) {
+        const descriptor = devices[options.device];
+        if (!descriptor) throw new Error(`${options.device} is not a device Playwright can emulate`);
+        if (engine === "firefox")
+          throw new Error(`${options.device} cannot be emulated in Firefox: use chromium or webkit`);
+        // The device's own browser is not used: the combination names the browser.
+        emulated = Object.fromEntries(Object.entries(descriptor).filter(([k]) => k !== "defaultBrowserType"));
+      }
+      // REQ-EXEC-65/AC1: only Chromium routes a service worker's own requests, so only there they stay on the allowlist.
+      if (settings?.service_workers === true && type !== chromium)
+        throw new Error(
+          `the case allows service workers, which QAJitsu can keep on the allowlist only in Chromium, not in ${name}: run it on chromium`,
+        );
+      const browser = await type.launch({
+        headless: options.headless ?? true,
+        // REQ-EXEC-66/AC1: a branded browser installed on the machine, driven through Chromium's engine.
+        ...(name === engine ? {} : { channel: name }),
+        ...(options.slowMoMs ? { slowMo: options.slowMoMs } : {}),
+      });
+      ran = { name, version: browser.version() };
       const context = await browser.newContext({
         baseURL: input.baseUrl,
         viewport: options.viewport ?? { width: 1280, height: 800 },
+        // REQ-EXEC-63/AC1: an emulated device replaces the viewport with its own, plus touch and user agent.
+        ...emulated,
         ...(options.httpCredentials
           ? {
               httpCredentials: {
@@ -290,8 +397,9 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
           ? {}
           : { recordVideo: { dir: join(dir, "video"), size: { width: 1280, height: 800 } } }),
         recordHar: { path: join(dir, "network.har"), content: "omit" },
-        // Service workers could fetch outside the route handler (invariant 10).
-        serviceWorkers: "block",
+        // Service workers could fetch outside the route handler (invariant 10); in Chromium the route sees their
+        // requests too, so a case may allow them there (REQ-EXEC-65/AC1).
+        serviceWorkers: settings?.service_workers === true ? "allow" : "block",
       });
       context.setDefaultTimeout(timeout);
       // Navigation and requests stay inside the environment allowlist (invariant 10).
@@ -303,10 +411,16 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
       // Navigations a page was refused, so a pop-up to another host is named (REQ-EXEC-39/AC3).
       const blockedNavigation = new Map<Page, string>();
       let lastBlocked: { origin: string; at: number } | undefined;
+      /** Requests the allowlist refused (REQ-EVD-09/AC1): named as such, not as a connection error. */
+      const refusedRequests = new WeakSet<Request>();
       await context.route("**/*", (route) => {
         const request = route.request();
         if (allowed(request.url())) {
-          void route.continue();
+          const own = new URL(request.url()).origin === new URL(input.baseUrl).origin;
+          const extra = options.testHeaders ?? {};
+          void (own && Object.keys(extra).length > 0
+            ? route.continue({ headers: { ...request.headers(), ...extra } })
+            : route.continue());
           return;
         }
         if (request.isNavigationRequest()) {
@@ -318,14 +432,35 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
             // A pop-up's first navigation or a worker's request may have no page yet.
           }
         }
+        refusedRequests.add(request);
         void route.abort("blockedbyclient");
       });
       // WebSockets bypass page.route; check them against the same allowlist.
+      // REQ-EXEC-47/AC3+AC4: frames of allowed sockets pass through the parent, which records them for checks.
+      const frames: { url: string; direction: "received" | "sent"; text: string }[] = [];
+      const frameText = (m: string | Buffer): string =>
+        (typeof m === "string" ? m : `(binary, ${String(m.length)} bytes)`).slice(0, 20_000);
       await context.routeWebSocket(/.*/, (ws) => {
         const wsUrl = new URL(ws.url());
         const httpOrigin = `${wsUrl.protocol === "wss:" ? "https:" : "http:"}//${wsUrl.host}`;
-        if (input.allowedOrigins.includes(httpOrigin)) ws.connectToServer();
-        else void ws.close({ code: 1008, reason: "blocked by QAJitsu allowlist" });
+        if (!input.allowedOrigins.includes(httpOrigin)) {
+          void ws.close({ code: 1008, reason: "blocked by QAJitsu allowlist" });
+          return;
+        }
+        const server = ws.connectToServer();
+        const url = masker.maskText(`${wsUrl.host}${wsUrl.pathname}`);
+        const keep = (direction: "received" | "sent", m: string | Buffer): void => {
+          frames.push({ url, direction, text: frameText(m) });
+          if (frames.length > 2000) frames.shift();
+        };
+        ws.onMessage((m) => {
+          keep("sent", m);
+          server.send(m);
+        });
+        server.onMessage((m) => {
+          keep("received", m);
+          ws.send(m);
+        });
       });
       await context.tracing.start({ screenshots: true, snapshots: true });
       // REQ-EXEC-61/AC2: the case starts at the plan's time; time flows from there and steps can move it forward.
@@ -381,6 +516,71 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
           return url;
         }
       };
+      // REQ-EVD-09: every request of the page, in the order it was sent, read by the parent and masked; the runtime
+      // takes them at the end of each step. Bodies are never kept.
+      type Traffic = { -readonly [K in keyof UiRequest]: UiRequest[K] };
+      const traffic: Traffic[] = [];
+      const entries = new WeakMap<Request, Traffic>();
+      const rawUrls = new Map<Traffic, string>();
+      const appOrigin = new URL(input.baseUrl).origin;
+      context.on("request", (rq) => {
+        const url = rq.url();
+        if (/^(data|blob|about):/.test(url)) return;
+        const entry: Traffic = {
+          method: rq.method(),
+          url: masker.maskText(pathOf(url)),
+          resourceType: rq.resourceType(),
+          sameOrigin: (() => {
+            try {
+              return new URL(url).origin === appOrigin;
+            } catch {
+              return false;
+            }
+          })(),
+        };
+        traffic.push(entry);
+        entries.set(rq, entry);
+        rawUrls.set(entry, url);
+        if (traffic.length > 5000) traffic.shift();
+      });
+      context.on("response", (res) => {
+        const entry = entries.get(res.request());
+        if (!entry) return;
+        entry.status = res.status();
+        const location = res.headers()["location"];
+        if (location !== undefined)
+          try {
+            entry.location = masker.maskText(pathOf(new URL(location, res.url()).toString()));
+          } catch {
+            entry.location = masker.maskText(location.slice(0, 300));
+          }
+      });
+      context.on("requestfailed", (rq) => {
+        const entry = entries.get(rq);
+        if (!entry) return;
+        if (refusedRequests.has(rq)) entry.refused = true;
+        else entry.failure = rq.failure()?.errorText ?? "failed";
+      });
+      // The browser names a CORS block only on the console: the request it names is marked.
+      const markCors = (text: string): void => {
+        const blocked = /(?:at|from) '([^']+)'(?: from origin '[^']+')? has been blocked by CORS policy/.exec(
+          text,
+        )?.[1];
+        if (blocked === undefined) return;
+        for (const entry of [...rawUrls.keys()].reverse())
+          if (rawUrls.get(entry) === blocked) {
+            entry.cors = true;
+            return;
+          }
+      };
+      page.on("console", (m) => {
+        if (m.type() === "error") markCors(m.text());
+      });
+      context.on("page", (pg) => {
+        pg.on("console", (m) => {
+          if (m.type() === "error") markCors(m.text());
+        });
+      });
       if (want.console !== false) {
         page.on("console", (m) => {
           if (m.type() === "error")
@@ -469,11 +669,45 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
           }
         },
         useAccount: async (alias) => {
+          const origin = new URL(input.baseUrl).origin;
+          // REQ-EXEC-67/AC1+AC2: cookies and storage of the login, for the application's origin only.
+          const state = input.browserStates?.[alias];
+          if (state && (options.webSession?.storage === "cookies" || input.sessions?.[alias] === undefined)) {
+            if (state.cookies.length === 0 && Object.keys(state.localStorage ?? {}).length === 0)
+              throw new Error(`The login of '${alias}' gave the browser no session (no cookies, no storage)`);
+            await context.addCookies(
+              state.cookies.map((c) => ({
+                name: c.name,
+                value: c.value,
+                // The domain of the login is ignored: the session goes to the application only (INV-10).
+                domain: new URL(origin).hostname,
+                path: c.path ?? "/",
+                ...(c.httpOnly === undefined ? {} : { httpOnly: c.httpOnly }),
+                ...(c.secure === undefined ? {} : { secure: c.secure }),
+                ...(c.sameSite === undefined ? {} : { sameSite: c.sameSite }),
+                ...(c.expires === undefined ? {} : { expires: c.expires }),
+              })),
+            );
+            const entries = Object.entries(state.localStorage ?? {});
+            if (entries.length > 0)
+              await context.addInitScript(
+                ([o, items]) => {
+                  const w = globalThis as unknown as {
+                    location: { origin: string };
+                    localStorage: { setItem(key: string, value: string): void };
+                  };
+                  if (w.location.origin === o) for (const [k, v] of items) w.localStorage.setItem(k, v);
+                },
+                [origin, entries] as const,
+              );
+            return;
+          }
+          if (options.webSession?.storage === "cookies")
+            throw new Error(`The login of '${alias}' set no cookies for the browser`);
           const token = input.sessions?.[alias];
           if (token === undefined || !options.webSession)
             throw new Error(`No browser session for '${alias}': set web_session in the environment profile`);
           const { storage, key } = options.webSession;
-          const origin = new URL(input.baseUrl).origin;
           await context.addInitScript(
             ([o, s, k, t]) => {
               // Runs in the page; typed structurally because the Node build has no DOM types.
@@ -651,6 +885,29 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
           dialogPolicy = policy;
         },
         takeDialogs: () => dialogs.splice(0),
+        registerSecret: (value) => {
+          masker.register(value);
+        },
+        socketFrame: async (direction, text, url, waitMs) => {
+          const deadline = Date.now() + waitMs;
+          for (;;) {
+            const hit = frames.find(
+              (f) =>
+                f.direction === direction &&
+                (url === undefined || f.url.includes(url)) &&
+                f.text.includes(text),
+            );
+            if (hit) return hit.text;
+            if (Date.now() >= deadline) return undefined;
+            await new Promise((r) => setTimeout(r, 100));
+          }
+        },
+        takeSocketFrames: () => frames.splice(0).map((f) => ({ ...f, text: masker.maskText(f.text) })),
+        takeNetwork: () => {
+          const taken = traffic.splice(0);
+          for (const t of taken) rawUrls.delete(t);
+          return taken;
+        },
         advanceTime: async (ms) => {
           if (!clockInstalled) {
             await context.clock.install();
@@ -658,6 +915,110 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
             clockInstalled = true;
           }
           await context.clock.fastForward(ms);
+        },
+        // REQ-EXEC-65/AC2: the whole context goes offline, service workers included.
+        setOffline: (offline) => context.setOffline(offline),
+        // REQ-EXEC-41 + REQ-EXEC-63/AC2: touch gestures through Chromium's touch events, relative to their target.
+        gesture: async (g) => {
+          if (type !== chromium)
+            throw new Error(`ui.${g.kind}() on the web needs Chromium; emulated devices run there`);
+          let area: { x: number; y: number; width: number; height: number } | null;
+          if ("selector" in g && g.selector !== undefined) {
+            const target = locate(p, g.selector).first();
+            await target.scrollIntoViewIfNeeded({ timeout });
+            area = await target.boundingBox({ timeout });
+            if (!area) throw new Error(`${g.selector} is not on the screen, so the gesture cannot reach it`);
+          } else {
+            const size = p.viewportSize() ?? { width: 1280, height: 800 };
+            area = { x: 0, y: 0, width: size.width, height: size.height };
+          }
+          const plan = planGesture(g, area);
+          const cdp = await context.newCDPSession(p);
+          try {
+            await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
+            const touch = (
+              type: "touchStart" | "touchMove" | "touchEnd",
+              points: { x: number; y: number }[],
+            ) =>
+              cdp.send("Input.dispatchTouchEvent", {
+                type,
+                touchPoints: points.map((pt, id) => ({ x: pt.x, y: pt.y, id })),
+              });
+            const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+            for (let round = 0; round < plan.repeat; round += 1) {
+              if (round > 0) await pause(120);
+              const start = plan.fingers.map((f) => f.points[0] ?? { x: 0, y: 0 });
+              await touch("touchStart", start);
+              const hold = Math.max(...plan.fingers.map((f) => f.holdMs));
+              if (hold > 0) await pause(hold);
+              const moveMs = Math.max(...plan.fingers.map((f) => f.moveMs));
+              if (moveMs > 0) {
+                const steps = Math.max(5, Math.round(moveMs / 16));
+                for (let i = 1; i <= steps; i += 1) {
+                  const t = i / steps;
+                  await touch(
+                    "touchMove",
+                    plan.fingers.map((f) => {
+                      const a = f.points[0] ?? { x: 0, y: 0 };
+                      const z = f.points.at(-1) ?? a;
+                      return { x: a.x + (z.x - a.x) * t, y: a.y + (z.y - a.y) * t };
+                    }),
+                  );
+                  await pause(moveMs / steps);
+                }
+              }
+              await touch("touchEnd", []);
+            }
+          } finally {
+            await cdp.detach().catch(() => undefined);
+          }
+          // The screenshot has device pixels: the path is scaled the same way.
+          const dpr = await p.evaluate(
+            () => (globalThis as unknown as { devicePixelRatio: number }).devicePixelRatio,
+          );
+          return {
+            fingers: plan.fingers.map((f) =>
+              f.points.map((pt) => ({ x: Math.round(pt.x * dpr), y: Math.round(pt.y * dpr) })),
+            ),
+          };
+        },
+        // REQ-EXEC-65/AC3: the page names its manifest; trusted code fetches it from an allowlisted origin.
+        manifest: async () => {
+          const info = await p.evaluate(async () => {
+            const doc = (globalThis as unknown as { document: { querySelector: (s: string) => unknown } })
+              .document;
+            const link = doc.querySelector('link[rel~="manifest"]') as { href: string } | null;
+            const sw = (
+              globalThis as unknown as {
+                navigator: {
+                  serviceWorker?: {
+                    controller: unknown;
+                    getRegistration: () => Promise<unknown>;
+                    addEventListener: (e: string, f: () => void, o: { once: boolean }) => void;
+                  };
+                };
+              }
+            ).navigator.serviceWorker;
+            // A worker that is still installing takes the page over shortly (clients.claim); wait up to 3 s.
+            if (sw && !sw.controller && (await sw.getRegistration()))
+              await new Promise<void>((done) => {
+                sw.addEventListener("controllerchange", done, { once: true });
+                setTimeout(done, 3000);
+              });
+            return { href: link?.href ?? null, controlled: Boolean(sw?.controller) };
+          });
+          let manifest: Record<string, unknown> | undefined;
+          if (info.href !== null && allowed(info.href)) {
+            try {
+              const res = await context.request.get(info.href, { timeout });
+              const body: unknown = res.ok() ? await res.json() : undefined;
+              if (body !== null && typeof body === "object" && !Array.isArray(body))
+                manifest = body as Record<string, unknown>;
+            } catch {
+              // An unreadable manifest is reported as none; the check then fails.
+            }
+          }
+          return { manifest, controlled: info.controlled };
         },
         // REQ-EXEC-56/AC2: the application's own test state; read here, never passed by the spec.
         testState: (hook, path) =>
@@ -697,6 +1058,8 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
 
     return {
       driver: start,
+      // REQ-EXEC-66/AC3: the exact browser the attempt ran in, once it started.
+      browser: () => ran,
       close: async (failed) => {
         if (!started) return [];
         const { browser, context, page, dir, console } = started;
@@ -718,7 +1081,9 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
               stepId: "case",
               kind: "trace",
               name: "trace.zip",
-              content: new Uint8Array(await readFile(join(dir, "trace.zip"))),
+              content: maskTrace(new Uint8Array(await readFile(join(dir, "trace.zip"))), (t) =>
+                masker.maskText(t),
+              ),
             });
           if (videoPath && (video === "always" || (video === "retain-on-failure" && failed))) {
             items.push({
@@ -756,17 +1121,77 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
   };
 }
 
+const CHANNEL_DIRS: Readonly<Record<string, { mac: string; linux: string; win: string }>> = {
+  chrome: {
+    mac: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    linux: "/opt/google/chrome/chrome",
+    win: "Google\\Chrome\\Application\\chrome.exe",
+  },
+  "chrome-beta": {
+    mac: "/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta",
+    linux: "/opt/google/chrome-beta/chrome",
+    win: "Google\\Chrome Beta\\Application\\chrome.exe",
+  },
+  msedge: {
+    mac: "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+    linux: "/opt/microsoft/msedge/msedge",
+    win: "Microsoft\\Edge\\Application\\msedge.exe",
+  },
+  "msedge-beta": {
+    mac: "/Applications/Microsoft Edge Beta.app/Contents/MacOS/Microsoft Edge Beta",
+    linux: "/opt/microsoft/msedge-beta/msedge",
+    win: "Microsoft\\Edge Beta\\Application\\msedge.exe",
+  },
+};
+
 /**
- * Why a browser cannot run here, or undefined when its Playwright build is installed (REQ-EXEC-13/AC3).
+ * Where Playwright looks for an installed branded browser (REQ-EXEC-66/AC2): the vendor's standard install paths.
+ *
+ * @param channel - `chrome`, `chrome-beta`, `msedge` or `msedge-beta`.
+ * @param os - Platform, `process.platform` by default.
+ * @param env - Environment with `LOCALAPPDATA` and `PROGRAMFILES` on Windows.
+ */
+export function channelExecutables(
+  channel: string,
+  os: NodeJS.Platform = process.platform,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string[] {
+  const dirs = CHANNEL_DIRS[channel];
+  if (!dirs) return [];
+  if (os === "darwin") return [dirs.mac];
+  if (os === "linux") return [dirs.linux];
+  if (os === "win32")
+    return [env["LOCALAPPDATA"], env["PROGRAMFILES"], env["PROGRAMFILES(X86)"]]
+      .filter((d): d is string => d !== undefined && d !== "")
+      .map((d) => `${d}\\${dirs.win}`);
+  return [];
+}
+
+/**
+ * Why a browser cannot run here, or undefined when it is installed (REQ-EXEC-13/AC3, REQ-EXEC-66/AC2+AC4): an engine
+ * of QAJitsu's Playwright, a branded channel on the machine, or a browser only a device farm has, which is refused and
+ * never replaced by another one.
  *
  * @param name - Browser of the matrix.
  * @param exists - File check, injectable for tests.
+ * @param os - Platform, injectable for tests.
  */
 export function browserUnavailable(
-  name: "chromium" | "firefox" | "webkit",
+  name: WebBrowser,
   exists: (path: string) => boolean = existsSync,
+  os: NodeJS.Platform = process.platform,
 ): string | undefined {
-  const type = name === "firefox" ? firefox : name === "webkit" ? webkit : chromium;
+  const engine = browserEngine(name);
+  if (engine === undefined)
+    return `${name} runs only on a device farm (REQ-EXEC-35), which QAJitsu does not drive for web cases yet; it is never replaced by another browser`;
+  if (engine !== name) {
+    if (os === "linux" && process.arch === "arm64")
+      return `${name} has no build for Linux on arm64; use chromium there`;
+    return channelExecutables(name, os).some((p) => exists(p))
+      ? undefined
+      : `${name} is not installed; install it with 'qj setup' (Playwright's 'install ${name}', may ask for an administrator password)`;
+  }
+  const type = engine === "firefox" ? firefox : engine === "webkit" ? webkit : chromium;
   let path: string;
   try {
     path = type.executablePath();

@@ -1,0 +1,39 @@
+{
+  "summary": "Two shoppers exchange a message for DEMO-14.",
+  "cases": [
+    {
+      "id": "TC-01",
+      "title": "A message reaches the recipient, not the sender",
+      "type": "web",
+      "priority": "high",
+      "source": [
+        { "kind": "ac", "id": "AC1" },
+        { "kind": "ac", "id": "AC2" }
+      ],
+      "data": { "buyer": "user:standard", "seller": "user:admin" },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "As the buyer, send Is the mug in stock? to admin",
+          "expect": {
+            "description": "Sent, not in the buyer's inbox",
+            "elements": {
+              "testid:message-status": { "text": "Sent" },
+              "testid:inbox-count": { "text": "0" }
+            }
+          }
+        },
+        {
+          "id": "S2",
+          "action": "As the seller, open the inbox",
+          "expect": {
+            "description": "The buyer's message is there",
+            "elements": { "testid:inbox-count": { "text": "1" } },
+            "texts": ["standard: Is the mug in stock?"]
+          }
+        }
+      ],
+      "evidence": ["screenshot"]
+    }
+  ]
+}

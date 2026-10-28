@@ -1,12 +1,12 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { createPlaywrightTransport, executeAttempt, type AttemptInput } from "@qajitsu/adapter-runner-api";
-import { PlanSchema } from "@qajitsu/core";
+import { PlanSchema, unzip } from "@qajitsu/core";
 import { computeStatus } from "@qajitsu/verifier";
 import { afterEach, describe, expect, it } from "vitest";
 import { startShop } from "../../../../examples/demo-shop/api/server.mjs";
-import { createPlaywrightBrowserFactory } from "./browser.js";
+import { channelExecutables, createPlaywrightBrowserFactory } from "./browser.js";
 
 const PASSWORD = "fictional-demo-password";
 const plan = (ticket: string) =>
@@ -29,7 +29,12 @@ afterEach(async () => {
   for (const c of cleanups.splice(0)) await c();
 });
 
-const attempt = async (ticket: string, caseId: string, flag?: string) => {
+const attempt = async (
+  ticket: string,
+  caseId: string,
+  flag?: string,
+  browserName?: "chromium" | "firefox" | "webkit" | "chrome",
+) => {
   const shop = await startShop({ env: { DEMO_USER_PASSWORD: PASSWORD, ...(flag ? { [flag]: "1" } : {}) } });
   cleanups.push(() => shop.close());
   const login = (await (
@@ -56,6 +61,7 @@ const attempt = async (ticket: string, caseId: string, flag?: string) => {
       video: "off",
       webSession: { storage: "sessionStorage", key: "token" },
       actionTimeoutMs: 4000,
+      ...(browserName ? { browser: browserName } : {}),
     });
     const record = await executeAttempt(input, transport, Date.now, browser);
     return { record, status: computeStatus({ caseId, attempts: [record] }, { evidenceComplete: true }) };
@@ -361,5 +367,457 @@ describe("web actions (REQ-EXEC-38, REQ-EXEC-39, REQ-EXEC-40, REQ-EXEC-56)", () 
     } finally {
       await closeBare();
     }
+  });
+
+  it("REQ-EXEC-64/AC1+AC2: a repeated button is reached through its row; nth picks a match; without narrowing the page says how many", async () => {
+    const r = await attempt("DEMO-10", "TC-04");
+    expect(r.record.error).toBeUndefined();
+    expect(r.status).toBe("PASSED");
+    const d = await driverOn();
+    await d.goto(
+      html(`<table><tr><td>Anna</td><td><button onclick="o.textContent='Anna'">Delete</button></td></tr>
+<tr><td>Bob</td><td><button onclick="o.textContent='Bob'">Delete</button></td></tr></table><span id="o" data-testid="o"></span>`),
+    );
+    await expect(d.click("role:button:Delete")).rejects.toThrow("resolved to 2 elements");
+    await d.click("role:row >> has-text:Bob >> role:button:Delete");
+    expect(await d.property("testid:o", "text")).toBe("Bob");
+    await d.click("role:button:Delete >> nth:1");
+    expect(await d.property("testid:o", "text")).toBe("Anna");
+  });
+
+  it("REQ-EXEC-65/AC1+AC3: an installable page is read from its manifest and controlled by its allowed service worker", async () => {
+    const ok = await attempt("DEMO-11", "TC-01");
+    expect(ok.record.error).toBeUndefined();
+    expect(ok.status).toBe("PASSED");
+    expect(ok.record.assertions.map((a) => [a.field, a.actual])).toEqual([
+      ["manifest.short_name", "Notes"],
+      ["manifest.display", "standalone"],
+      ["manifest.icons", 1],
+      ["manifest.controlled", true],
+    ]);
+  });
+
+  it("REQ-EXEC-65/AC1: service workers outside Chromium are BLOCKED with the reason", async () => {
+    const r = await attempt("DEMO-11", "TC-01", undefined, "firefox");
+    expect(r.status).toBe("BLOCKED");
+    expect(r.record.error).toMatch(/service workers.*only in Chromium, not in firefox/);
+  });
+
+  it("REQ-EXEC-65/AC2 + REQ-NFR-04/AC1: a note written offline is saved back online; BUG-16 (offline notes lost) is FAILED", async () => {
+    const ok = await attempt("DEMO-11", "TC-02");
+    expect(ok.record.error).toBeUndefined();
+    expect(ok.status).toBe("PASSED");
+    const lost = await attempt("DEMO-11", "TC-02", "BUG_OFFLINE_NOTES_LOST");
+    expect(lost.status).toBe("FAILED");
+    expect(lost.record.assertions.filter((a) => !a.pass).map((a) => [a.field, a.actual])).toEqual([
+      ["elements.testid:saved-count.text", "0"],
+    ]);
+  });
+
+  it("REQ-EXEC-65/AC1: an allowed service worker's own requests stay on the allowlist", async () => {
+    const outside: string[] = [];
+    const other = createServer((req, res) => {
+      outside.push(req.url ?? "");
+      res.end("leaked");
+    });
+    await new Promise<void>((done) => other.listen(0, "127.0.0.1", done));
+    const otherUrl = `http://127.0.0.1:${String((other.address() as { port: number }).port)}`;
+    const app = createServer((req, res) => {
+      if (req.url === "/sw.js") {
+        res.writeHead(200, { "content-type": "text/javascript" });
+        res.end(
+          `self.addEventListener("install",(e)=>{self.skipWaiting();e.waitUntil(fetch("${otherUrl}/from-worker").catch(()=>undefined));});self.addEventListener("activate",(e)=>e.waitUntil(self.clients.claim()));`,
+        );
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end(`<p data-testid="p">ok</p><script>navigator.serviceWorker.register("/sw.js");</script>`);
+    });
+    await new Promise<void>((done) => app.listen(0, "127.0.0.1", done));
+    const appUrl = `http://127.0.0.1:${String((app.address() as { port: number }).port)}`;
+    cleanups.push(
+      () =>
+        new Promise<void>((done) => {
+          other.close(() => {
+            done();
+          });
+        }),
+      () =>
+        new Promise<void>((done) => {
+          app.close(() => {
+            done();
+          });
+        }),
+    );
+    const session = createPlaywrightBrowserFactory({ video: "off", actionTimeoutMs: 3000 })({
+      specFile: spec("DEMO-11", "TC-01"),
+      caseId: "TC-01",
+      attempt: 1,
+      plan: plan("DEMO-11"),
+      baseUrl: appUrl,
+      allowedOrigins: [appUrl],
+      accounts: {},
+      secrets: [],
+      timeoutMs: 30_000,
+    });
+    cleanups.push(async () => {
+      await session.close(false);
+    });
+    const d = await session.driver();
+    await d.goto("/");
+    expect((await d.manifest?.())?.controlled).toBe(true);
+    expect(outside).toEqual([]);
+  });
+
+  it("REQ-EXEC-66/AC3: every attempt records the exact browser it ran in", async () => {
+    const r = await attempt("DEMO-11", "TC-02");
+    expect(r.record.browser?.name).toBe("chromium");
+    expect(r.record.browser?.version).toMatch(/^\d+\.\d+/);
+  });
+
+  // Runs where Google Chrome is installed (developer machines, GitHub's runners); elsewhere `qj setup` installs it.
+  it.skipIf(!channelExecutables("chrome").some((p) => existsSync(p)))(
+    "REQ-EXEC-66/AC1+AC3: a case runs in the installed Google Chrome, named with its version",
+    async () => {
+      const r = await attempt("DEMO-11", "TC-01", undefined, "chrome");
+      expect(r.record.error).toBeUndefined();
+      expect(r.status).toBe("PASSED");
+      expect(r.record.browser).toMatchObject({ name: "chrome" });
+      expect(r.record.browser?.version).toMatch(/^\d+\.\d+/);
+    },
+  );
+
+  it("REQ-EVD-09/AC1: the driver sees every request of the page: errors, allowlist refusals and login redirects", async () => {
+    const app = createServer((req, res) => {
+      if (req.url === "/api/orders") {
+        res.writeHead(500);
+        res.end("boom");
+      } else if (req.url === "/api/account") {
+        res.writeHead(302, { location: "/login?next=/account" });
+        res.end();
+      } else if (req.url === "/login?next=/account") {
+        res.end("login");
+      } else {
+        res.writeHead(200, { "content-type": "text/html" });
+        res.end(
+          `<p data-testid="p">ok</p><script>fetch("/api/orders",{method:"POST"});fetch("/api/account");fetch("http://127.0.0.1:9/track").catch(()=>0);</script>`,
+        );
+      }
+    });
+    await new Promise<void>((done) => app.listen(0, "127.0.0.1", done));
+    const url = `http://127.0.0.1:${String((app.address() as { port: number }).port)}`;
+    cleanups.push(
+      () =>
+        new Promise<void>((done) => {
+          app.close(() => {
+            done();
+          });
+        }),
+    );
+    const d = await driverOn([url]);
+    await d.goto(`${url}/shop`);
+    await d.waitFor("testid:p", "visible");
+    await new Promise((r) => setTimeout(r, 500));
+    const taken = d.takeNetwork?.() ?? [];
+    expect(taken.find((r) => r.url === "/api/account")?.location).toBe("/login?next=/account");
+    const seen = taken.map((r) => [r.method, r.url, r.status ?? r.failure, r.refused === true]);
+    expect(seen).toEqual(
+      expect.arrayContaining([
+        ["GET", "/shop", 200, false],
+        ["POST", "/api/orders", 500, false],
+        ["GET", "/api/account", 302, false],
+        ["GET", "http://127.0.0.1:9/track", undefined, true],
+      ]),
+    );
+    expect(d.takeNetwork?.()).toEqual([]);
+  });
+
+  it("REQ-EXEC-47/AC3+AC4 + REQ-NFR-04/AC1: the page's WebSocket messages are checked and kept; BUG-17 (reply drops the text) is FAILED", async () => {
+    const ok = await attempt("DEMO-12", "TC-01");
+    expect(ok.record.error).toBeUndefined();
+    expect(ok.status).toBe("PASSED");
+    const frames = JSON.parse(
+      String(ok.record.evidence.find((e) => e.name === "S2-websocket.json")?.content),
+    ) as { direction: string; text: string }[];
+    expect(frames.map((f) => f.direction)).toEqual(["sent", "received"]);
+    expect(frames[1]?.text).toContain("Support received: Where is my order?");
+    const bug = await attempt("DEMO-12", "TC-01", "BUG_CHAT_REPLY_DROPS_TEXT");
+    expect(bug.status).toBe("FAILED");
+    expect(bug.record.assertions.filter((a) => !a.pass).map((a) => [a.field, a.actual])).toEqual([
+      ["websocket.received.0", "(no received WebSocket message contains it)"],
+    ]);
+  }, 60_000);
+
+  /** DEMO-13 with the session in an HttpOnly cookie, logged in the way the environment login does it. */
+  const signedIn = async (caseId: string, flag?: string) => {
+    const shop = await startShop({ env: { DEMO_USER_PASSWORD: PASSWORD, ...(flag ? { [flag]: "1" } : {}) } });
+    cleanups.push(() => shop.close());
+    const res = await fetch(`${shop.url}/auth/session`, {
+      method: "POST",
+      body: JSON.stringify({ username: "standard", password: PASSWORD }),
+    });
+    const sid = /sid=([0-9a-f]+)/.exec(res.headers.get("set-cookie") ?? "")?.[1] ?? "";
+    const { transport, dispose } = await createPlaywrightTransport({ timeoutMs: 5000 });
+    try {
+      const record = await executeAttempt(
+        {
+          specFile: spec("DEMO-13", caseId),
+          caseId,
+          attempt: 1,
+          plan: plan("DEMO-13"),
+          baseUrl: shop.url,
+          allowedOrigins: [shop.url],
+          accounts: { "user:standard": { cookie: `sid=${sid}` } },
+          browserStates: {
+            "user:standard": {
+              cookies: [{ name: "sid", value: sid, path: "/", httpOnly: true, sameSite: "Lax" }],
+            },
+          },
+          credential: (alias, field) =>
+            alias === "user:standard" ? (field === "password" ? PASSWORD : "standard") : undefined,
+          secrets: [sid, PASSWORD],
+          timeoutMs: 30_000,
+        },
+        transport,
+        Date.now,
+        createPlaywrightBrowserFactory({
+          video: "off",
+          webSession: { storage: "cookies" },
+          actionTimeoutMs: 4000,
+        }),
+      );
+      return { record, status: computeStatus({ caseId, attempts: [record] }, { evidenceComplete: true }) };
+    } finally {
+      await dispose();
+    }
+  };
+
+  it("REQ-EXEC-67/AC3+AC4: a sign-in form gets the account's secrets typed by the runner; nothing records them in clear", async () => {
+    const r = await signedIn("TC-01");
+    expect(r.record.error).toBeUndefined();
+    expect(r.status).toBe("PASSED");
+    for (const item of r.record.evidence) {
+      const text = typeof item.content === "string" ? item.content : new TextDecoder().decode(item.content);
+      expect(text, item.name).not.toContain(PASSWORD);
+    }
+  });
+
+  it("REQ-EXEC-67/AC1+AC2: the login's HttpOnly cookie opens the account page through ui.as", async () => {
+    const r = await signedIn("TC-03");
+    expect(r.record.error).toBeUndefined();
+    expect(r.status).toBe("PASSED");
+  });
+
+  it("REQ-NFR-04/AC1: a wrong password is refused; BUG-18 (any password signs in) is FAILED", async () => {
+    expect((await signedIn("TC-02")).status).toBe("PASSED");
+    const bug = await signedIn("TC-02", "BUG_SIGNIN_ANY_PASSWORD");
+    expect(bug.status).toBe("FAILED");
+    expect(bug.record.assertions.map((a) => [a.field, a.actual])).toEqual([
+      ["elements.testid:signin-result.text", "Signed in"],
+    ]);
+    // The failed attempt keeps its trace; the session cookie the browser was given is masked in it.
+    const trace = bug.record.evidence.find((e) => e.name === "trace.zip")?.content;
+    expect(trace).toBeInstanceOf(Uint8Array);
+    const texts = unzip(trace as Uint8Array, { maxEntries: 20_000, maxEntryBytes: 2e8, maxTotalBytes: 5e8 })
+      .filter((e) => !/\.(png|jpe?g)$/.test(e.name))
+      .map((e) => new TextDecoder().decode(e.data))
+      .join("\n");
+    expect(texts).toContain("signin-username");
+    expect(texts).not.toMatch(/sid=[0-9a-f]{32}/);
+  });
+
+  it("REQ-EXEC-55/AC4: a test header of the application (captcha bypass) goes to its own origin only, from the browser and the API client", async () => {
+    const seen: { where: string; header: string | undefined }[] = [];
+    const listen = (name: string, html: (other: string) => string) => {
+      const server = createServer((req, res) => {
+        seen.push({
+          where: `${name}${req.url ?? ""}`,
+          header: req.headers["x-captcha-bypass"] as string | undefined,
+        });
+        res.writeHead(200, { "content-type": "text/html", "access-control-allow-origin": "*" });
+        res.end(html(""));
+      });
+      return new Promise<string>((done) => {
+        server.listen(0, "127.0.0.1", () => {
+          cleanups.push(
+            () =>
+              new Promise<void>((closed) => {
+                server.close(() => {
+                  closed();
+                });
+              }),
+          );
+          done(`http://127.0.0.1:${String((server.address() as { port: number }).port)}`);
+        });
+      });
+    };
+    const other = await listen("other", () => "ok");
+    const app = await listen(
+      "app",
+      () => `<p data-testid="p">ok</p><script>fetch("${other}/x");fetch("/api")</script>`,
+    );
+    const session = createPlaywrightBrowserFactory({
+      video: "off",
+      testHeaders: { "X-Captcha-Bypass": "bypass-key-123" },
+    })({
+      specFile: spec("DEMO-11", "TC-01"),
+      caseId: "TC-02",
+      attempt: 1,
+      plan: plan("DEMO-11"),
+      baseUrl: app,
+      allowedOrigins: [app, other],
+      accounts: {},
+      secrets: [],
+      timeoutMs: 30_000,
+    });
+    cleanups.push(async () => {
+      await session.close(false);
+    });
+    const d = await session.driver();
+    await d.goto("/");
+    await d.waitFor("testid:p", "visible");
+    await new Promise((r) => setTimeout(r, 500));
+    const { transport, dispose } = await createPlaywrightTransport({
+      timeoutMs: 5000,
+      testHeaders: { origin: app, headers: { "X-Captcha-Bypass": "bypass-key-123" } },
+    });
+    await transport({ method: "GET", url: `${app}/from-api`, headers: {} });
+    await transport({ method: "GET", url: `${other}/from-api`, headers: {} });
+    await dispose();
+    const byWhere = Object.fromEntries(seen.map((x) => [x.where, x.header]));
+    expect(byWhere["app/"]).toBe("bypass-key-123");
+    expect(byWhere["app/api"]).toBe("bypass-key-123");
+    expect(byWhere["app/from-api"]).toBe("bypass-key-123");
+    expect(byWhere["other/x"]).toBeUndefined();
+    expect(byWhere["other/from-api"]).toBeUndefined();
+  });
+
+  it("REQ-EXEC-62/AC1+AC2 + REQ-NFR-04/AC1: two shoppers in one case, each in their own session; BUG-19 (message to sender) is FAILED", async () => {
+    const run = async (flag?: string) => {
+      const shop = await startShop({
+        env: { DEMO_USER_PASSWORD: PASSWORD, ...(flag ? { [flag]: "1" } : {}) },
+      });
+      cleanups.push(() => shop.close());
+      const token = async (username: string) =>
+        (
+          (await (
+            await fetch(`${shop.url}/auth/login`, {
+              method: "POST",
+              body: JSON.stringify({ username, password: PASSWORD }),
+            })
+          ).json()) as { token: string }
+        ).token;
+      const standard = await token("standard");
+      const admin = await token("admin");
+      const { transport, dispose } = await createPlaywrightTransport({ timeoutMs: 5000 });
+      try {
+        const record = await executeAttempt(
+          {
+            specFile: spec("DEMO-14", "TC-01"),
+            caseId: "TC-01",
+            attempt: 1,
+            plan: plan("DEMO-14"),
+            baseUrl: shop.url,
+            allowedOrigins: [shop.url],
+            accounts: {
+              "user:standard": { authorization: `Bearer ${standard}` },
+              "user:admin": { authorization: `Bearer ${admin}` },
+            },
+            sessions: { "user:standard": standard, "user:admin": admin },
+            secrets: [standard, admin, PASSWORD],
+            timeoutMs: 30_000,
+          },
+          transport,
+          Date.now,
+          createPlaywrightBrowserFactory({
+            video: "off",
+            webSession: { storage: "sessionStorage", key: "token" },
+            actionTimeoutMs: 4000,
+          }),
+        );
+        return {
+          record,
+          status: computeStatus({ caseId: "TC-01", attempts: [record] }, { evidenceComplete: true }),
+        };
+      } finally {
+        await dispose();
+      }
+    };
+    const ok = await run();
+    expect(ok.record.error).toBeUndefined();
+    expect(ok.status).toBe("PASSED");
+    const names = ok.record.evidence.map((e) => e.name);
+    expect(names).toEqual(expect.arrayContaining(["S1-buyer.png", "S2-buyer.png", "S2-seller.png"]));
+    const actions = JSON.parse(
+      String(ok.record.evidence.find((e) => e.name === "ui-actions.json")?.content),
+    ) as {
+      op: string;
+      session?: string;
+    }[];
+    expect(actions.filter((a) => a.op === "goto").map((a) => a.session)).toEqual(["buyer", "seller"]);
+    const bug = await run("BUG_MESSAGE_TO_SENDER");
+    expect(bug.status).toBe("FAILED");
+    expect(bug.record.assertions.filter((a) => !a.pass).map((a) => [a.stepId, a.field])).toEqual([
+      ["S1", "elements.testid:inbox-count.text"],
+      ["S2", "elements.testid:inbox-count.text"],
+      ["S2", "texts.0"],
+    ]);
+  }, 90_000);
+
+  /** DEMO-15 on an emulated phone. */
+  const onPhone = async (caseId: string, flag?: string, device = "iPhone 15") => {
+    const shop = await startShop({ env: { DEMO_USER_PASSWORD: PASSWORD, ...(flag ? { [flag]: "1" } : {}) } });
+    cleanups.push(() => shop.close());
+    const { transport, dispose } = await createPlaywrightTransport({ timeoutMs: 5000 });
+    try {
+      const record = await executeAttempt(
+        {
+          specFile: spec("DEMO-15", caseId),
+          caseId,
+          attempt: 1,
+          plan: plan("DEMO-15"),
+          baseUrl: shop.url,
+          allowedOrigins: [shop.url],
+          accounts: {},
+          secrets: [PASSWORD],
+          timeoutMs: 30_000,
+        },
+        transport,
+        Date.now,
+        createPlaywrightBrowserFactory({ video: "off", device, actionTimeoutMs: 4000 }),
+      );
+      return { record, status: computeStatus({ caseId, attempts: [record] }, { evidenceComplete: true }) };
+    } finally {
+      await dispose();
+    }
+  };
+
+  it("REQ-EXEC-63/AC1+AC2 + REQ-EXEC-41/AC1+AC3 + REQ-NFR-04/AC1: swipes, double tap and long press on an emulated phone; BUG-20 is FAILED", async () => {
+    const swipes = await onPhone("TC-01");
+    expect(swipes.record.error).toBeUndefined();
+    expect(swipes.status).toBe("PASSED");
+    // AC3: each gesture's path is evidence, drawn on the step's screenshot.
+    const names = swipes.record.evidence.map((e) => e.name);
+    expect(names).toEqual(expect.arrayContaining(["S1-gestures.json", "S1-gestures.png"]));
+    const path = JSON.parse(
+      String(swipes.record.evidence.find((e) => e.name === "S1-gestures.json")?.content),
+    ) as {
+      kind: string;
+      fingers: { x: number; y: number }[][];
+    }[];
+    expect(path[0]?.kind).toBe("swipe");
+    expect((path[0]?.fingers[0]?.[0]?.x ?? 0) > (path[0]?.fingers[0]?.[1]?.x ?? 0)).toBe(true);
+    const taps = await onPhone("TC-02", undefined, "Pixel 7");
+    expect(taps.record.error).toBeUndefined();
+    expect(taps.status).toBe("PASSED");
+    const bug = await onPhone("TC-01", "BUG_SWIPE_SKIPS_SLIDE");
+    expect(bug.status).toBe("FAILED");
+    expect(bug.record.assertions.find((a) => !a.pass)?.actual).toBe("Slide 3 of 3");
+  }, 120_000);
+
+  it("REQ-EXEC-63/AC1: an unknown device or Firefox emulation is refused with the reason, never ignored", async () => {
+    const unknown = await onPhone("TC-01", undefined, "Nokia 3310");
+    expect(unknown.status).toBe("BLOCKED");
+    expect(unknown.record.error).toContain("Nokia 3310 is not a device Playwright can emulate");
   });
 });

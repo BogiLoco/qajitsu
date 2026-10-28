@@ -83,8 +83,16 @@ describe("static checks of web actions (REQ-EXEC-38..40, REQ-EXEC-56, ADR-0013)"
         description: "d",
         download: { min_bytes: 1, sha256: "a".repeat(64), fields: { "a.b": 1 } },
         state: { "x.y": 1 },
+        manifest: { short_name: "Notes", controlled: true },
       }),
-    ).toEqual(["download.size", "download.sha256", "download.fields.a.b", "state.x.y"]);
+    ).toEqual([
+      "download.size",
+      "download.sha256",
+      "download.fields.a.b",
+      "state.x.y",
+      "manifest.short_name",
+      "manifest.controlled",
+    ]);
   });
 
   it("REQ-EXEC-39/AC1 + REQ-EXEC-40/AC1: frame selectors are browser selectors; both selectors of dragTo are checked", () => {
@@ -100,7 +108,7 @@ describe("static checks of web actions (REQ-EXEC-38..40, REQ-EXEC-56, ADR-0013)"
     ).toEqual([]);
   });
 
-  it("REQ-EXEC-38..40: web actions are refused in a native app until its driver offers them", () => {
+  it("REQ-EXEC-38..40 + REQ-EXEC-64/AC4: web actions and selector chains are refused in a native app until its driver offers them", () => {
     const plan = PlanSchema.parse({
       schema: 1,
       ticket: "DEMO-6",
@@ -130,6 +138,8 @@ export async function run({ step, verify, plan, ui }: CaseContext): Promise<void
     await ui.hover("testid:a");
     await ui.scrollBy(0, 100);
     await ui.switchToNewPage();
+    await ui.setOffline(true);
+    await ui.click("testid:list >> testid:a");
     verify("S1", "elements.testid:a.visible", undefined, plan.expect("TC-01.S1.elements.testid:a.visible"));
   });
 }
@@ -138,6 +148,8 @@ export async function run({ step, verify, plan, ui }: CaseContext): Promise<void
       "lint: ui.hover() is not available in native apps yet: it works in web cases",
       "lint: ui.scrollBy() is not available in native apps yet: it works in web cases",
       "lint: ui.switchToNewPage() is not available in native apps yet: it works in web cases",
+      "lint: ui.setOffline() is not available in native apps yet: it works in web cases",
+      "lint: 'testid:list >> testid:a' is a selector chain, which native apps do not support yet: use one selector",
     ]);
   });
 
@@ -165,6 +177,101 @@ export async function run({ step, verify, plan, ui }: CaseContext): Promise<void
         before,
         before.replace("await ui.dragTo(", 'await ui.hover("testid:card-1");\n    await ui.dragTo('),
       ),
+    ).not.toEqual([]);
+  });
+
+  it("REQ-EXEC-05 + REQ-EXEC-03/AC1: a web action before any page is open is refused before the run (dogfood 2026-10-25)", () => {
+    const plan = fixturePlan("DEMO-9");
+    const spec = fixtureSpec("DEMO-9", "TC-02");
+    expect(messages(spec.replace('await ui.goto("/app/board");\n', ""), "TC-02", plan)).toContain(
+      'lint: ui.hover() runs before any page is open: call ui.goto("<path>") first in the step',
+    );
+    expect(messages(spec, "TC-02", plan).filter((m) => m.includes("before any page"))).toEqual([]);
+  });
+
+  it("REQ-EXEC-67/AC5: ui.fillSecret names an account of the case and a field; the healer may move its selector only", () => {
+    const plan = fixturePlan("DEMO-13");
+    const spec = fixtureSpec("DEMO-13", "TC-01");
+    expect(messages(spec, "TC-01", plan).filter((m) => m.startsWith("lint"))).toEqual([]);
+    // Signing in through the form with the account's secrets counts as running as that account (CLI flow 2026-10-28).
+    expect(messages(spec, "TC-01", plan).filter((m) => m.includes("runs as"))).toEqual([]);
+    expect(
+      messages(spec.replace('"user:standard", "password"', '"user:admin", "password"'), "TC-01", plan),
+    ).toContain("lint: ui.fillSecret() takes an account alias of TC-01 in the plan (data), as a literal");
+    expect(
+      messages(spec.replace('"user:standard", "password"', '"user:standard", "token"'), "TC-01", plan),
+    ).toContain('lint: ui.fillSecret() types "password", "username" or "totp", as a literal');
+    expect(messages(spec.replace('"user:standard", "password"', "alias, field"), "TC-01", plan)).toContain(
+      "lint: ui.fillSecret() takes an account alias of TC-01 in the plan (data), as a literal",
+    );
+    expect(assertionLockDiff(spec, spec.replace('"testid:signin-password"', '"label:Password"'))).toEqual([]);
+    expect(
+      assertionLockDiff(spec, spec.replace('"user:standard", "password"', '"user:standard", "username"')),
+    ).not.toEqual([]);
+  });
+
+  it("REQ-EXEC-55/AC3: ui.fillCode needs the message the plan expects in the same step", () => {
+    const plan = PlanSchema.parse({
+      schema: 1,
+      ticket: "DEMO-13",
+      version: 1,
+      cases: [
+        {
+          id: "TC-01",
+          title: "Two factors",
+          type: "web",
+          priority: "high",
+          source: [{ kind: "ac", id: "AC1" }],
+          evidence: ["screenshot"],
+          steps: [
+            {
+              id: "S1",
+              action: "Ask for a code",
+              expect: { description: "Sent", message: { subject: "Code" } },
+            },
+            { id: "S2", action: "Type it", expect: { description: "In", texts: ["Welcome"] } },
+          ],
+        },
+      ],
+    });
+    const spec = (step: string) => `import type { CaseContext } from "@qajitsu/steps";
+export const caseId = "TC-01";
+export async function run({ step, verify, plan, ui }: CaseContext): Promise<void> {
+  await step("${step}", async () => {
+    await ui.goto("/app/verify");
+    await ui.fillCode("testid:code");
+    verify("${step}", "${step === "S1" ? "message" : "texts.0"}", undefined, plan.expect("TC-01.${step}.${step === "S1" ? "message" : "texts.0"}"));
+  });
+}
+`;
+    expect(messages(spec("S1"), "TC-01", plan).filter((m) => m.includes("fillCode"))).toEqual([]);
+    expect(messages(spec("S2"), "TC-01", plan)).toContain(
+      "lint: ui.fillCode() in S2: the plan expects no message in S2 to take a code from",
+    );
+  });
+
+  it("REQ-EXEC-62/AC1: ui.session names main or an account of the case's data, as a literal", () => {
+    const plan = fixturePlan("DEMO-14");
+    const spec = fixtureSpec("DEMO-14", "TC-01");
+    expect(messages(spec, "TC-01", plan).filter((m) => m.startsWith("lint"))).toEqual([]);
+    expect(messages(spec.replace('ui.session("seller")', "ui.session(who)"), "TC-01", plan)).toContain(
+      `lint: ui.session() takes "main" or a name from TC-01's data whose value is a test account, as a literal`,
+    );
+    expect(messages(spec.replace('ui.session("seller")', 'ui.session("admin")'), "TC-01", plan)).toContain(
+      `lint: ui.session() takes "main" or a name from TC-01's data whose value is a test account, as a literal`,
+    );
+  });
+
+  it("REQ-EXEC-41: a gesture on the whole screen names no element; gestures are selector actions for the healer", () => {
+    const plan = fixturePlan("DEMO-15");
+    const spec = fixtureSpec("DEMO-15", "TC-01");
+    const screen = spec.replace('ui.swipe("testid:slides", "left"', 'ui.swipe("screen", "left"');
+    expect(messages(screen, "TC-01", plan).filter((m) => m.includes("screen"))).toEqual([]);
+    expect(assertionLockDiff(spec, spec.replace('"testid:slides", "left"', '"css:.slides", "left"'))).toEqual(
+      [],
+    );
+    expect(
+      assertionLockDiff(spec, spec.replace('"testid:slides", "left"', '"testid:slides", "right"')),
     ).not.toEqual([]);
   });
 });

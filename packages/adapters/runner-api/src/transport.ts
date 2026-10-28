@@ -11,6 +11,9 @@ export async function createPlaywrightTransport(options: {
   readonly timeoutMs: number;
   /** HTTP authentication of the environment (REQ-EXEC-61/AC5), sent when the server asks for it. */
   readonly httpCredentials?: { readonly username: string; readonly password: string } | undefined;
+  /** Headers the application offers for tests (REQ-EXEC-55/AC4), sent to its origin only. */
+  readonly testHeaders?:
+    { readonly origin: string; readonly headers: Readonly<Record<string, string>> } | undefined;
 }): Promise<{ transport: ApiTransport; dispose: () => Promise<void> }> {
   const context: APIRequestContext = await playwrightRequest.newContext({
     timeout: options.timeoutMs,
@@ -22,7 +25,10 @@ export async function createPlaywrightTransport(options: {
     transport: async (req) => {
       const response = await context.fetch(req.url, {
         method: req.method,
-        headers: { ...req.headers },
+        headers: {
+          ...req.headers,
+          ...(new URL(req.url).origin === options.testHeaders?.origin ? options.testHeaders.headers : {}),
+        },
         ...(req.body === undefined
           ? {}
           : { data: typeof req.body === "string" ? req.body : JSON.stringify(req.body) }),

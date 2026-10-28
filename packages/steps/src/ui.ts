@@ -1,4 +1,7 @@
 import type { ScreenBox, UiElementFact } from "@qajitsu/core";
+import type { UiGesture } from "./gestures.js";
+import type { UiRequest } from "./network.js";
+
 /**
  * Width and height of a PNG from its header, without decoding it; undefined when the bytes are not a PNG.
  *
@@ -108,6 +111,43 @@ export interface UiDriver {
   }[];
   /** Moves the browser's clock forward (REQ-EXEC-61/AC2), firing timers that fall due. */
   readonly advanceTime?: (ms: number) => Promise<void>;
+  /**
+   * Waits for a WebSocket frame of the current step that contains the text (REQ-EXEC-47/AC3), on a socket whose URL
+   * contains `url`; undefined when none came in time. Frames are recorded by the parent, never handed over by a spec.
+   */
+  readonly socketFrame?: (
+    direction: "received" | "sent",
+    text: string,
+    url: string | undefined,
+    timeoutMs: number,
+  ) => Promise<string | undefined>;
+  /** The WebSocket frames since the last call, masked, for the step's evidence (REQ-EXEC-47/AC4). */
+  readonly takeSocketFrames?: () => readonly {
+    readonly url: string;
+    readonly direction: "received" | "sent";
+    readonly text: string;
+  }[];
+  /** The requests the page sent since the last call, masked (REQ-EVD-09); the parent assigns them to the step. */
+  readonly takeNetwork?: () => readonly UiRequest[];
+  /** A value the driver must mask in everything it records (trace, HAR, logs), e.g. a typed secret (REQ-EXEC-67/AC4). */
+  readonly registerSecret?: (value: string) => void;
+  /**
+   * Performs a touch gesture (REQ-EXEC-41, REQ-EXEC-63/AC2) and returns the fingers' paths in the pixels of the
+   * screenshot, for the evidence. A target that cannot be reached is an error, never a gesture somewhere else.
+   */
+  readonly gesture?: (gesture: UiGesture) => Promise<{
+    readonly fingers: readonly (readonly { readonly x: number; readonly y: number }[])[];
+  }>;
+  /** Switches the browser's network off or back on (REQ-EXEC-65/AC2). */
+  readonly setOffline?: (offline: boolean) => Promise<void>;
+  /**
+   * The current page's web app manifest, read by trusted code (REQ-EXEC-65/AC3): undefined when the page links none
+   * or it cannot be read; `controlled` tells whether a service worker controls the page.
+   */
+  readonly manifest?: () => Promise<{
+    readonly manifest: Readonly<Record<string, unknown>> | undefined;
+    readonly controlled: boolean;
+  }>;
   /** Why an element cannot be reached, when the page explains it (a closed shadow root, REQ-EXEC-56/AC1). */
   readonly unreachableReason?: () => Promise<string | undefined>;
 }
@@ -117,6 +157,20 @@ export interface UiClient {
   readonly goto: (path: string) => Promise<void>;
   readonly click: (selector: UiSelector) => Promise<void>;
   readonly fill: (selector: UiSelector, value: string) => Promise<void>;
+  /**
+   * Types an account's secret into a field without the spec knowing it (REQ-EXEC-67/AC3): the parent resolves the
+   * `password` or `username` of the account alias and every record shows only the mask.
+   */
+  readonly fillSecret: (
+    selector: UiSelector,
+    alias: string,
+    field: "password" | "username" | "totp",
+  ) => Promise<void>;
+  /**
+   * Types the one-time code of the message the plan expects in this step (an e-mail or an SMS, REQ-EXEC-55/AC3): the
+   * parent waits for the message, takes the code out of it and types it; nobody sees the code.
+   */
+  readonly fillCode: (selector: UiSelector) => Promise<void>;
   readonly check: (selector: UiSelector) => Promise<void>;
   readonly uncheck: (selector: UiSelector) => Promise<void>;
   readonly select: (selector: UiSelector, value: string) => Promise<void>;
@@ -124,6 +178,11 @@ export interface UiClient {
   readonly waitFor: (selector: UiSelector, state?: "visible" | "hidden") => Promise<void>;
   /** Goes back: browser history, or the Android back button in mobile cases. */
   readonly back: () => Promise<void>;
+  /**
+   * Switches to another browser session of the case (REQ-EXEC-62): `main`, or a name from the case's data whose value
+   * is a test account (`buyer: user:buyer`); a new session opens logged in as that account.
+   */
+  readonly session: (name: string) => Promise<void>;
   /** Opens the app as an account alias, e.g. `user:standard`. */
   readonly as: (alias: string) => Promise<void>;
   readonly hover: (selector: UiSelector) => Promise<void>;
@@ -149,8 +208,34 @@ export interface UiClient {
   readonly switchToOpener: () => Promise<void>;
   /** Closes the current pop-up or tab; actions go back to its opener. */
   readonly closePage: () => Promise<void>;
+  /** Taps an element with a finger (touch screens, emulated mobile pages; REQ-EXEC-41). */
+  readonly tap: (selector: UiSelector) => Promise<void>;
+  readonly doubleTap: (selector: UiSelector) => Promise<void>;
+  /** Holds a finger on an element, 0.3 to 10 seconds (default 1). */
+  readonly longPress: (selector: UiSelector, seconds?: number) => Promise<void>;
+  /**
+   * Swipes over an element or the whole `"screen"`: `distance` is the share of the target the finger travels
+   * (0.1 to 1, default 0.6), `speed` slow, normal (default) or fast.
+   */
+  readonly swipe: (
+    /** A selector, or `"screen"` for the whole screen. */
+    target: UiSelector,
+    direction: "up" | "down" | "left" | "right",
+    options?: { readonly distance?: number; readonly speed?: "slow" | "normal" | "fast" },
+  ) => Promise<void>;
+  /** Pinches an element or the `"screen"`: `in` zooms out, `out` zooms in; `scale` 0.1 to 1 (default 0.6). */
+  readonly pinch: (
+    /** A selector, or `"screen"` for the whole screen. */
+    target: UiSelector,
+    direction: "in" | "out",
+    scale?: number,
+  ) => Promise<void>;
+  /** Drags down from the top of the screen and lets go. */
+  readonly pullToRefresh: () => Promise<void>;
   /** Moves the page's clock forward by seconds (countdowns, expiring offers; REQ-EXEC-61/AC2). */
   readonly advanceTime: (seconds: number) => Promise<void>;
+  /** Switches the browser offline (`true`) or back online (`false`): offline pages, queues and sync (REQ-EXEC-65/AC2). */
+  readonly setOffline: (offline: boolean) => Promise<void>;
 }
 
 /** UI operations sent from a spec to the parent. */
@@ -158,6 +243,15 @@ export type UiOperation =
   | { readonly op: "goto"; readonly path: string }
   | { readonly op: "click" | "check" | "uncheck"; readonly selector: UiSelector }
   | { readonly op: "fill" | "select" | "press"; readonly selector: UiSelector; readonly value: string }
+  | { readonly op: "fillCode"; readonly selector: UiSelector }
+  | { readonly op: "session"; readonly name: string }
+  | { readonly op: "gesture"; readonly gesture: UiGesture }
+  | {
+      readonly op: "fillSecret";
+      readonly selector: UiSelector;
+      readonly alias: string;
+      readonly field: "password" | "username" | "totp";
+    }
   | { readonly op: "waitFor"; readonly selector: UiSelector; readonly state: "visible" | "hidden" }
   | { readonly op: "back" }
   | { readonly op: "as"; readonly alias: string }
@@ -172,7 +266,8 @@ export type UiOperation =
   | { readonly op: "upload"; readonly selector: UiSelector; readonly files: readonly string[] }
   | { readonly op: "switchPage"; readonly to: "new" | "opener" }
   | { readonly op: "closePage" }
-  | { readonly op: "advanceTime"; readonly seconds: number };
+  | { readonly op: "advanceTime"; readonly seconds: number }
+  | { readonly op: "setOffline"; readonly offline: boolean };
 
 /**
  * Selector kinds, the most stable first (REQ-EXEC-21/AC3). The web resolves testid, role, label, text, placeholder,
@@ -205,17 +300,55 @@ export function splitFrames(selector: UiSelector): {
   return { frames: parts.slice(0, -1).map((p) => p.slice("frame:".length)), element: parts.at(-1) ?? "" };
 }
 
+/** One part of a selector chain (REQ-EXEC-39, REQ-EXEC-64). */
+export type SelectorPart =
+  | { readonly kind: "frame"; readonly selector: string }
+  | { readonly kind: "element"; readonly selector: string }
+  | { readonly kind: "hasText"; readonly text: string }
+  | { readonly kind: "nth"; readonly n: number };
+
+const HAS_TEXT = /^has-text:(.+)$/;
+const NTH = /^nth:([1-9]\d{0,2})$/;
+
 /**
- * Validates a selector string: a known kind, optionally inside frames (`frame:<selector> >> ...`, at most 5).
+ * The parts of a selector chain: `frame:<selector>` enters an iframe, an element selector searches inside what the
+ * previous part found, `has-text:<text>` keeps the matches containing that text and `nth:<n>` the n-th match
+ * (1 is the first). For example `role:row >> has-text:Anna Smith >> role:button:Delete`.
+ */
+export function selectorParts(selector: UiSelector): readonly SelectorPart[] {
+  return selector.split(" >> ").map((p): SelectorPart => {
+    if (FRAME.test(p)) return { kind: "frame", selector: p.slice("frame:".length) };
+    const t = HAS_TEXT.exec(p);
+    if (t) return { kind: "hasText", text: t[1] ?? "" };
+    const n = NTH.exec(p);
+    if (n) return { kind: "nth", n: Number(n[1]) };
+    return { kind: "element", selector: p };
+  });
+}
+
+/**
+ * Validates a selector: a known kind, optionally a chain (` >> `) of frames, elements inside elements, and the filters
+ * `has-text:` and `nth:` after an element (REQ-EXEC-39, REQ-EXEC-64); at most 8 parts and 300 characters.
  *
- * @throws {Error} For anything that is not a known selector kind.
+ * @throws {Error} For anything that is not a known selector kind or a valid chain.
  */
 export function assertSelector(selector: string): UiSelector {
-  const parts = selector.split(" >> ");
-  const framesOk = parts.length <= 6 && parts.slice(0, -1).every((p) => FRAME.test(p));
-  if (!framesOk || !SELECTOR.test(parts.at(-1) ?? "") || selector.length > 300)
+  const raw = selector.split(" >> ");
+  const parts = selectorParts(selector);
+  const ok =
+    selector.length <= 300 &&
+    raw.length <= 8 &&
+    parts.every((p, i) => {
+      if (p.kind === "element") return SELECTOR.test(raw[i] ?? "");
+      if (p.kind === "frame") return i < parts.length - 1;
+      // A filter narrows the element right before it (or before another filter).
+      const before = parts[i - 1];
+      return before !== undefined && before.kind !== "frame";
+    }) &&
+    parts.at(-1)?.kind !== "frame";
+  if (!ok)
     throw new Error(
-      `Invalid selector '${selector.slice(0, 60)}': use ${SELECTOR_KINDS.map((k) => `${k}:`).join(", ")}`,
+      `Invalid selector '${selector.slice(0, 60)}': use ${SELECTOR_KINDS.map((k) => `${k}:`).join(", ")}, chained with ' >> ' (frame:, has-text:, nth:)`,
     );
   return selector;
 }

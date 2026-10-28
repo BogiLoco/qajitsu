@@ -1,7 +1,17 @@
 import { execFile } from "node:child_process";
 import { resolve, sep } from "node:path";
 import { z } from "zod";
-import { AdapterError, accountMembers, type EnvProvider, type ResolvedEnvironment } from "@qajitsu/core";
+import {
+  AdapterError,
+  accountMembers,
+  totp,
+  type BrowserCookie,
+  type BrowserLoginFlow,
+  type BrowserState,
+  type CredentialLookup,
+  type EnvProvider,
+  type ResolvedEnvironment,
+} from "@qajitsu/core";
 
 const allowed = (env: ResolvedEnvironment, url: URL): void => {
   if (url.origin !== env.origin) {
@@ -115,6 +125,12 @@ export async function loginAccounts(
     readonly qaDir?: string;
     /** Runs a login script (replaced in tests); default: `execFile` with an argument array. */
     readonly runScript?: ScriptRunner;
+    /** The clock for one-time codes (REQ-EXEC-55/AC1); injected in tests. */
+    readonly now?: () => number;
+    /** Runs a browser login (SSO, REQ-EXEC-55/AC2); provided by the web runner. */
+    readonly browserLogin?: BrowserLoginRunner;
+    /** Sessions of browser logins kept for the run, so cases share one login per account (`reuse`). */
+    readonly sessionCache?: Map<string, BrowserState>;
   },
   /**
    * The pool member to log in per alias (REQ-ENV-09/AC2); only these aliases are logged in. Without it every alias
@@ -125,9 +141,23 @@ export async function loginAccounts(
   accounts: Record<string, Record<string, string>>;
   secrets: string[];
   sessions: Record<string, string>;
+  /** Cookies and storage per alias for the browser (REQ-EXEC-67/AC1). */
+  browserStates: Record<string, BrowserState>;
+  /** The logged-in accounts' secrets for `ui.fillSecret` (REQ-EXEC-67/AC3); never serialised. */
+  credential: CredentialLookup;
 }> {
   const accounts: Record<string, Record<string, string>> = {};
   const sessions: Record<string, string> = {};
+  const browserStates: Record<string, BrowserState> = {};
+  const credentials = new Map<
+    string,
+    {
+      username: string;
+      password: string;
+      totp?: { seed: string; digits: number; period: number; algorithm: "sha1" | "sha256" | "sha512" };
+    }
+  >();
+  const now = deps.now ?? Date.now;
   const secrets: string[] = [];
   const login = env.profile.login;
   const chosen = Object.entries(
@@ -145,22 +175,104 @@ export async function loginAccounts(
       : account.username;
     const password = await deps.resolveSecret(account.password);
     secrets.push(password);
+    // REQ-EXEC-55/AC1: the authenticator's seed is a secret like the password; codes are computed when typed.
+    const totpConfig =
+      account.totp === undefined
+        ? undefined
+        : typeof account.totp === "string"
+          ? { seed: account.totp, digits: 6, period: 30, algorithm: "sha1" as const }
+          : account.totp;
+    const seed = totpConfig ? await deps.resolveSecret(totpConfig.seed) : undefined;
+    if (seed !== undefined) {
+      deps.registerSecret(seed);
+      secrets.push(seed);
+    }
+    credentials.set(alias, {
+      username,
+      password,
+      ...(totpConfig && seed !== undefined ? { totp: { ...totpConfig, seed } } : {}),
+    });
     if (!login)
       throw new AdapterError(
         "ENV_LOGIN_MISSING",
         "Accounts need a login definition in the environment profile.",
         { alias },
       );
+    if ("browser" in login) {
+      // REQ-EXEC-55/AC2: SSO through the browser, run by QAJitsu; one login per account and run when reused.
+      const key = `${alias}#${String(index)}`;
+      let state = login.browser.reuse ? deps.sessionCache?.get(key) : undefined;
+      if (state === undefined) {
+        if (!deps.browserLogin)
+          throw new AdapterError("ENV_LOGIN_FAILED", `The browser login of ${alias} needs the web runner.`, {
+            alias,
+          });
+        const c = credentials.get(alias);
+        const values = {
+          username,
+          password,
+          ...(c?.totp ? { totp: () => totp(c.totp?.seed ?? "", now(), c.totp ?? {}) } : {}),
+        };
+        try {
+          state = await deps.browserLogin(login.browser, values, {
+            baseUrl: env.baseUrl,
+            allowedOrigins: [env.origin, ...login.browser.allow.map((a) => new URL(a).origin)],
+          });
+        } catch (error) {
+          throw new AdapterError(
+            "ENV_LOGIN_FAILED",
+            `Browser login of ${alias} failed: ${error instanceof Error ? error.message.slice(0, 200) : "error"}.`,
+            { alias },
+          );
+        }
+        if (login.browser.reuse) deps.sessionCache?.set(key, state);
+      }
+      if (state.cookies.length === 0 && Object.keys(state.localStorage ?? {}).length === 0)
+        throw new AdapterError("ENV_LOGIN_FAILED", `Browser login of ${alias} left no session.`, { alias });
+      for (const v of [
+        ...state.cookies.map((x) => x.value),
+        ...Object.values(state.localStorage ?? {}),
+      ].filter((x) => x.length >= 6)) {
+        deps.registerSecret(v);
+        secrets.push(v);
+      }
+      browserStates[alias] = state;
+      accounts[alias] = state.cookies.length > 0 ? { cookie: cookieHeader(state.cookies) } : {};
+      continue;
+    }
     if ("script" in login) {
-      const result = await scriptLogin(login, alias, username, password, env, deps);
-      for (const value of [...Object.values(result.headers), ...(result.session ? [result.session] : [])]) {
+      const code = credentials.get(alias)?.totp;
+      const result = await scriptLogin(login, alias, username, password, env, {
+        ...deps,
+        // REQ-EXEC-55/AC1: an SSO script with two factors gets the current code, never the seed.
+        ...(code ? { totpCode: totp(code.seed, now(), code) } : {}),
+      });
+      const cookies = [...(result.cookies ?? []), ...(result.storage_state?.cookies ?? [])];
+      const storage = Object.fromEntries(
+        (result.storage_state?.origins ?? [])
+          .filter((o) => o.origin === env.origin)
+          .flatMap((o) => o.localStorage.map((e) => [e.name, e.value] as const)),
+      );
+      for (const value of [
+        ...Object.values(result.headers),
+        ...(result.session ? [result.session] : []),
+        ...cookies.map((c) => c.value).filter((v) => v.length >= 6),
+        ...Object.values(storage).filter((v) => v.length >= 6),
+      ]) {
         deps.registerSecret(value);
         secrets.push(value);
       }
       accounts[alias] = Object.fromEntries(
         Object.entries(result.headers).map(([name, value]) => [name.toLowerCase(), value]),
       );
+      if (cookies.length > 0 && accounts[alias]["cookie"] === undefined)
+        accounts[alias] = { ...accounts[alias], cookie: cookieHeader(cookies) };
       if (result.session !== undefined) sessions[alias] = result.session;
+      if (cookies.length > 0 || Object.keys(storage).length > 0)
+        browserStates[alias] = {
+          cookies,
+          ...(Object.keys(storage).length > 0 ? { localStorage: storage } : {}),
+        };
       continue;
     }
     let res: Response;
@@ -185,6 +297,19 @@ export async function loginAccounts(
         alias,
         status: res.status,
       });
+    // REQ-EXEC-67/AC2: the cookies the login sets are the session when no token path is configured.
+    const cookies = parseSetCookie(res.headers.getSetCookie());
+    for (const c of cookies.filter((c) => c.value.length >= 6)) {
+      deps.registerSecret(c.value);
+      secrets.push(c.value);
+    }
+    if (cookies.length > 0) browserStates[alias] = { cookies };
+    if (login.token_path === undefined) {
+      if (cookies.length === 0)
+        throw new AdapterError("ENV_LOGIN_FAILED", `Login of ${alias} set no session cookie.`, { alias });
+      accounts[alias] = { cookie: cookieHeader(cookies) };
+      continue;
+    }
     const token = at(await res.json(), login.token_path);
     if (typeof token !== "string" || token === "")
       throw new AdapterError("ENV_LOGIN_FAILED", `Login of ${alias} returned no token.`, { alias });
@@ -193,8 +318,29 @@ export async function loginAccounts(
     accounts[alias] = { [login.header.toLowerCase()]: login.scheme ? `${login.scheme} ${token}` : token };
     sessions[alias] = token;
   }
-  return { accounts, secrets, sessions };
+  return {
+    accounts,
+    secrets,
+    sessions,
+    browserStates,
+    credential: (alias, field) => {
+      const c = credentials.get(alias);
+      if (c === undefined) return undefined;
+      if (field !== "totp") return c[field];
+      return c.totp ? totp(c.totp.seed, now(), c.totp) : undefined;
+    },
+  };
 }
+
+/**
+ * Runs a browser login flow (REQ-EXEC-55/AC2) and returns the session it leaves for the application's origin. Values
+ * are the account's secrets for `{{username}}`, `{{password}}` and `{{totp}}` (a code computed when it is typed).
+ */
+export type BrowserLoginRunner = (
+  flow: BrowserLoginFlow,
+  values: { readonly username: string; readonly password: string; readonly totp?: () => string },
+  where: { readonly baseUrl: string; readonly allowedOrigins: readonly string[] },
+) => Promise<BrowserState>;
 
 /** Runs a login script: command, arguments, environment and timeout; resolves with its stdout. */
 export type ScriptRunner = (
@@ -225,10 +371,74 @@ const runWithExecFile: ScriptRunner = (command, args, options) =>
     );
   });
 
-const ScriptOutputSchema = z.strictObject({
-  headers: z.record(z.string().regex(/^[A-Za-z0-9-]+$/), z.string().min(1)),
-  session: z.string().min(1).optional(),
+const CookieSchema = z.object({
+  name: z.string().min(1).max(200),
+  value: z.string().max(8000),
+  path: z.string().max(500).optional(),
+  httpOnly: z.boolean().optional(),
+  secure: z.boolean().optional(),
+  sameSite: z.enum(["Strict", "Lax", "None"]).optional(),
+  expires: z.number().optional(),
 });
+
+/**
+ * What a login script prints (REQ-GEN-01/AC2, REQ-EXEC-67/AC1): headers for the API client, and for the browser a
+ * token (`session`), `cookies`, or a Playwright `storage_state` (its cookies and the application origin's
+ * `localStorage`). Domains in it are ignored: the browser gets them for the application's origin only.
+ */
+const ScriptOutputSchema = z.strictObject({
+  headers: z.record(z.string().regex(/^[A-Za-z0-9-]+$/), z.string().min(1)).default({}),
+  session: z.string().min(1).optional(),
+  cookies: z.array(CookieSchema).max(100).optional(),
+  storage_state: z
+    .object({
+      cookies: z.array(CookieSchema).max(100).default([]),
+      origins: z
+        .array(
+          z.object({
+            origin: z.string(),
+            localStorage: z.array(z.object({ name: z.string(), value: z.string() })).default([]),
+          }),
+        )
+        .default([]),
+    })
+    .optional(),
+});
+
+/** Cookies of `Set-Cookie` headers (name, value, path, flags, expiry); attributes for other domains are dropped. */
+export function parseSetCookie(headers: readonly string[], now: number = Date.now()): BrowserCookie[] {
+  const out: BrowserCookie[] = [];
+  for (const header of headers) {
+    const [pair = "", ...attrs] = header.split(";").map((p) => p.trim());
+    const eq = pair.indexOf("=");
+    if (eq <= 0) continue;
+    const cookie: { -readonly [K in keyof BrowserCookie]: BrowserCookie[K] } = {
+      name: pair.slice(0, eq),
+      value: pair.slice(eq + 1),
+    };
+    for (const attr of attrs) {
+      const [k = "", v = ""] = attr.split("=").map((x) => x.trim());
+      const key = k.toLowerCase();
+      if (key === "path") cookie.path = v;
+      else if (key === "httponly") cookie.httpOnly = true;
+      else if (key === "secure") cookie.secure = true;
+      else if (key === "samesite" && /^(strict|lax|none)$/i.test(v))
+        cookie.sameSite = ((v[0]?.toUpperCase() ?? "") + v.slice(1).toLowerCase()) as
+          "Strict" | "Lax" | "None";
+      else if (key === "max-age" && /^-?\d+$/.test(v)) cookie.expires = Math.floor(now / 1000) + Number(v);
+      else if (key === "expires" && cookie.expires === undefined) {
+        const t = Date.parse(v);
+        if (!Number.isNaN(t)) cookie.expires = Math.floor(t / 1000);
+      }
+    }
+    out.push(cookie);
+  }
+  return out;
+}
+
+/** The `Cookie` header of a set of cookies, for the API client. */
+const cookieHeader = (cookies: readonly BrowserCookie[]): string =>
+  cookies.map((c) => `${c.name}=${c.value}`).join("; ");
 
 /**
  * Logs one alias in with a script from `.qa/auth/` (REQ-GEN-01/AC2). The script's output and errors are
@@ -242,7 +452,7 @@ async function scriptLogin(
   username: string,
   password: string,
   env: ResolvedEnvironment,
-  deps: { readonly qaDir?: string; readonly runScript?: ScriptRunner },
+  deps: { readonly qaDir?: string; readonly runScript?: ScriptRunner; readonly totpCode?: string },
 ): Promise<z.infer<typeof ScriptOutputSchema>> {
   const failed = (why: string): AdapterError =>
     new AdapterError("ENV_LOGIN_FAILED", `Login script of ${alias} ${why}.`, { alias, script: login.script });
@@ -261,6 +471,7 @@ async function scriptLogin(
         QAJITSU_ALIAS: alias,
         QAJITSU_USERNAME: username,
         QAJITSU_PASSWORD: password,
+        ...(deps.totpCode === undefined ? {} : { QAJITSU_TOTP: deps.totpCode }),
       },
     });
   } catch {

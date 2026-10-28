@@ -3,6 +3,7 @@ import {
   renderCertificateBlock,
   type AssertionRecord,
   type CertificateSummary,
+  type NetworkProblemRecord,
   type Plan,
   type RunObservation,
   type TestStatus,
@@ -28,6 +29,11 @@ export interface ReportAttempt {
   readonly error?: string | undefined;
   readonly assertions: readonly AssertionRecord[];
   readonly evidence: readonly ReportEvidence[];
+  /** What went wrong in the traffic of failed steps (REQ-EVD-09/AC1), built by code. */
+  readonly network?: readonly {
+    readonly stepId: string;
+    readonly problems: readonly NetworkProblemRecord[];
+  }[];
 }
 
 /** Input of {@link renderReportHtml}. */
@@ -87,6 +93,8 @@ export interface ReportInput {
         }[];
       }
     | undefined;
+  /** Which case reached which endpoint of the change in this run (REQ-EVD-09/AC2), from recorded requests. */
+  readonly endpoints?: readonly { readonly id: string; readonly cases: readonly string[] }[] | undefined;
   /** Passive observations, computed by code, never statuses (REQ-EVD-07/AC4). */
   readonly observations?: readonly RunObservation[] | undefined;
   readonly gates: readonly {
@@ -189,7 +197,15 @@ export function renderReportHtml(input: ReportInput): string {
               return `<details id="${id}"><summary>${head}</summary>${e.text === undefined ? "" : `<pre>${esc(e.text)}</pre>`}</details>`;
             })
             .join("");
-          return `<h4>Attempt ${String(a.attempt)}: ${esc(a.outcome)}</h4>${a.error ? `<p class="bad">${esc(a.error)}</p>` : ""}${assertions ? `<table><tr><th>Step</th><th>Field</th><th>Expected</th><th>Actual</th><th></th></tr>${assertions}</table>` : '<p class="muted">No assertions recorded.</p>'}${evidence}`;
+          const network = (a.network ?? [])
+            .flatMap((n) =>
+              n.problems.map(
+                (p) =>
+                  `<li>${esc(n.stepId)}: ${esc(p.method)} ${esc(p.url)} · ${esc(p.kind)}${p.status === undefined ? "" : ` ${String(p.status)}`}${p.detail === undefined ? "" : ` · ${esc(p.detail)}`}</li>`,
+              ),
+            )
+            .join("");
+          return `<h4>Attempt ${String(a.attempt)}: ${esc(a.outcome)}</h4>${a.error ? `<p class="bad">${esc(a.error)}</p>` : ""}${network ? `<p class="muted">Requests that went wrong in the failed steps (from the recorded traffic):</p><ul class="bad">${network}</ul>` : ""}${assertions ? `<table><tr><th>Step</th><th>Field</th><th>Expected</th><th>Actual</th><th></th></tr>${assertions}</table>` : '<p class="muted">No assertions recorded.</p>'}${evidence}`;
         })
         .join("");
       return `<section id="${esc(c.id)}"><h3>${esc(c.id)}: ${esc(c.title)} ${row ? badge(row.status) : ""}</h3><ol>${steps}</ol>${attemptHtml || '<p class="muted">Not run.</p>'}</section>`;
@@ -249,6 +265,13 @@ ${
     ? `<h2>Observations (${String(input.observations.length)}, not test results)</h2>
 <p class="muted">Found by code while the planned steps ran: contract mismatches, console errors, 4xx/5xx responses and accessibility violations. They do not change any status or count.</p>
 <table><tr><th>TC</th><th>Kind</th><th>Observation</th></tr>${input.observations.map((o) => `<tr><td>${esc(o.caseId)}</td><td>${esc(o.kind)}</td><td>${esc(o.text)}</td></tr>`).join("")}</table>`
+    : ""
+}
+${
+  input.endpoints && input.endpoints.length > 0
+    ? `<h2>Endpoints of the change</h2>
+<p class="muted">Which case reached each endpoint the change touches, from the requests recorded in the run.</p>
+<table><tr><th>Endpoint</th><th>Reached by</th></tr>${input.endpoints.map((e) => `<tr class="${e.cases.length > 0 ? "ok" : "bad"}"><td><code>${esc(e.id)}</code></td><td>${e.cases.length > 0 ? esc(e.cases.join(", ")) : "no case reached it"}</td></tr>`).join("")}</table>`
     : ""
 }
 <h2>Matrix</h2><table><tr><th>TC</th><th>Title</th><th>Requirement</th><th>Type</th><th>Status</th><th>Steps OK</th><th>Evidence</th></tr>${matrix}</table>

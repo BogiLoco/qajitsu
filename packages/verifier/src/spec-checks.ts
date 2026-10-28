@@ -30,6 +30,8 @@ const FORBIDDEN_GLOBALS = new Set([
 
 const UI_ACTIONS = new Set([
   "click",
+  "fillSecret",
+  "fillCode",
   "fill",
   "check",
   "uncheck",
@@ -46,9 +48,18 @@ const UI_ACTIONS = new Set([
   "scrollUntil",
   "upload",
   "download",
+  // REQ-EXEC-41, REQ-EXEC-63/AC2: gestures on an element, or on the whole "screen".
+  "tap",
+  "doubleTap",
+  "longPress",
+  "swipe",
+  "pinch",
 ]);
 
-/** Web actions a native app does not offer yet (mobile gestures come with REQ-EXEC-41). */
+/** Gestures whose target may be the whole "screen" (REQ-EXEC-41). */
+const GESTURES = new Set(["swipe", "pinch"]);
+
+/** Web actions a native app does not offer yet; gestures and scrolling until an element appears work in both (REQ-EXEC-41). */
 const WEB_ONLY = [
   "hover",
   "dblclick",
@@ -58,13 +69,14 @@ const WEB_ONLY = [
   "keys",
   "scrollTo",
   "scrollBy",
-  "scrollUntil",
   "upload",
   "download",
   "switchToNewPage",
   "switchToOpener",
   "closePage",
   "advanceTime",
+  "setOffline",
+  "session",
 ];
 
 /** Selector kinds a native app can resolve (REQ-EXEC-06, REQ-EXEC-21/AC3); `role:` and `css:` exist only in a browser. */
@@ -154,7 +166,14 @@ export function specSelectors(source: string): string[] {
         ts.isPropertyAccessExpression(node.expression) &&
         ts.isIdentifier(node.expression.expression) &&
         node.expression.expression.text === "ui";
-      if (onUi && name !== undefined && UI_ACTIONS.has(name) && first && ts.isStringLiteral(first))
+      if (
+        onUi &&
+        name !== undefined &&
+        UI_ACTIONS.has(name) &&
+        first &&
+        ts.isStringLiteral(first) &&
+        first.text !== "screen"
+      )
         out.push(first.text);
       if (name === "verify" && second && ts.isStringLiteral(second)) {
         const m = /^elements\.(.+)\.(?:visible|enabled|checked|text|value)$/.exec(second.text);
@@ -333,13 +352,23 @@ export function checkSpecSource(
             `'${first.text}' cannot be found in a native app: use testid:, label:, text:, id: or xpath:`,
             node,
           );
+        // REQ-EXEC-64/AC4: a native app's driver does not resolve chains yet.
+        if (UI_ACTIONS.has(name) && first && ts.isStringLiteral(first) && first.text.includes(" >> "))
+          add(
+            "lint",
+            `'${first.text}' is a selector chain, which native apps do not support yet: use one selector`,
+            node,
+          );
         // REQ-EXEC-21/AC6: XPath follows the screen's structure and breaks with it.
         if (UI_ACTIONS.has(name) && first && ts.isStringLiteral(first) && first.text.startsWith("xpath:"))
           add("review", `XPath selector '${first.text}' is brittle; prefer testid:, label: or text:`, node);
       }
       const selectorArgs =
         onUi && name !== undefined && UI_ACTIONS.has(name)
-          ? [first, ...(name === "dragTo" ? [node.arguments[1]] : [])]
+          ? [first, ...(name === "dragTo" ? [node.arguments[1]] : [])].filter(
+              // A gesture on the whole screen names no element.
+              (a) => !(a && ts.isStringLiteral(a) && a.text === "screen" && GESTURES.has(name)),
+            )
           : [];
       for (const arg of selectorArgs)
         if (!native && arg && ts.isStringLiteral(arg) && !WEB_SELECTORS.some((k) => arg.text.startsWith(k)))
@@ -357,6 +386,39 @@ export function checkSpecSource(
           else if (!(k.text in (planCase.files ?? {})))
             add("coverage", `ui.upload(): '${k.text}' is not a file of ${caseId} in the plan (files)`, k);
         }
+      }
+      // REQ-EXEC-67/AC5: a secret is named by an account of the case and a field, never passed as a value.
+      if (onUi && name === "fillSecret") {
+        const [, alias, field] = node.arguments;
+        if (!alias || !ts.isStringLiteral(alias) || !Object.values(planCase.data).includes(alias.text))
+          add(
+            "lint",
+            `ui.fillSecret() takes an account alias of ${caseId} in the plan (data), as a literal`,
+            node,
+          );
+        if (!field || !ts.isStringLiteral(field) || !["password", "username", "totp"].includes(field.text))
+          add("lint", 'ui.fillSecret() types "password", "username" or "totp", as a literal', node);
+      }
+      // REQ-EXEC-62/AC1: a session is `main` or a test account the case names in its data.
+      if (onUi && name === "session") {
+        const [arg] = node.arguments;
+        const value = arg && ts.isStringLiteral(arg) ? arg.text : undefined;
+        if (value === undefined || (value !== "main" && !(planCase.data[value] ?? "").startsWith("user:")))
+          add(
+            "lint",
+            `ui.session() takes "main" or a name from ${caseId}'s data whose value is a test account, as a literal`,
+            node,
+          );
+      }
+      // REQ-EXEC-55/AC3: a code is taken from the message the plan expects in the same step.
+      if (onUi && name === "fillCode") {
+        const owner = enclosingStep(node);
+        if (owner !== undefined && planCase.steps.find((x) => x.id === owner)?.expect.message === undefined)
+          add(
+            "lint",
+            `ui.fillCode() in ${owner}: the plan expects no message in ${owner} to take a code from`,
+            node,
+          );
       }
       if (onUi && name === "download") {
         const owner = enclosingStep(node);
@@ -469,6 +531,34 @@ export function checkSpecSource(
         `verify("${step.id}", "${field}", ...) checks something step ${step.id} of the plan does not expect; it expects: ${planned.join(", ") || "a description only, nothing a test can compare"}`,
       );
   }
+  // A browser starts on an empty page: an action on an element before any ui.goto() can never find it (dogfood
+  // pass 2026-10-25: the author clicked on about:blank and every attempt timed out).
+  if (planCase.type === "web") {
+    let opened = false;
+    let reported = false;
+    const firstAction = (node: ts.Node): void => {
+      if (reported) return;
+      if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        ts.isIdentifier(node.expression.expression) &&
+        node.expression.expression.text === "ui"
+      ) {
+        const name = node.expression.name.text;
+        if (name === "goto") opened = true;
+        else if (!opened && UI_ACTIONS.has(name)) {
+          add(
+            "lint",
+            `ui.${name}() runs before any page is open: call ui.goto("<path>") first in the step`,
+            node,
+          );
+          reported = true;
+        }
+      }
+      ts.forEachChild(node, firstAction);
+    };
+    firstAction(sf);
+  }
   // A case that runs as a test account logs in as it: without it every call answers 401 and the case would end
   // FAILED as if the product were broken (exploratory testing F21).
   const account = Object.values(planCase.data).find(
@@ -497,6 +587,25 @@ export function checkSpecSource(
       if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
         const member = node.expression.name.text;
         const [first] = node.arguments;
+        // REQ-EXEC-67/AC3: signing in through the form with the account's secrets uses the account too.
+        const second = node.arguments[1];
+        // REQ-EXEC-62/AC1: a session named after the account opens logged in as it.
+        if (
+          client === "ui" &&
+          member === "session" &&
+          first !== undefined &&
+          ts.isStringLiteral(first) &&
+          planCase.data[first.text] === account
+        )
+          loggedIn.add(account);
+        if (
+          client === "ui" &&
+          member === "fillSecret" &&
+          second !== undefined &&
+          ts.isStringLiteral(second) &&
+          second.text === account
+        )
+          loggedIn.add(second.text);
         if (member === "as" && first !== undefined && ts.isStringLiteral(first) && first.text === account) {
           loggedIn.add(first.text);
           // api.as() returns the logged-in client; a call whose result is dropped logs nobody in.
@@ -642,6 +751,8 @@ interface LockedShape {
 
 const SELECTOR_ACTIONS = new Set([
   "click",
+  "fillSecret",
+  "fillCode",
   "check",
   "uncheck",
   "waitFor",
@@ -657,6 +768,11 @@ const SELECTOR_ACTIONS = new Set([
   "scrollUntil",
   "upload",
   "download",
+  "tap",
+  "doubleTap",
+  "longPress",
+  "swipe",
+  "pinch",
 ]);
 /** Actions the healer may add or remove like waits: they only bring an element into reach (REQ-EXEC-09). */
 const WAIT_LIKE = new Set(["waitFor", "scrollTo"]);

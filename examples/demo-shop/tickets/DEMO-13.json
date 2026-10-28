@@ -1,0 +1,22 @@
+{
+  "key": "DEMO-13",
+  "type": "Story",
+  "status": "Ready for QA",
+  "summary": "Sign in with a session cookie",
+  "description": "Shoppers sign in on /app/signin with their username and password. The session is kept in an HttpOnly cookie; the account page shows who is signed in.",
+  "acceptanceCriteria": [
+    "With the right username and password the shopper is signed in and the account page shows Signed in as <username>.",
+    "A wrong password is refused with Invalid username or password.",
+    "A signed-in shopper opening the account page sees Signed in as <username>."
+  ],
+  "labels": ["auth", "web"],
+  "components": ["shop-web"],
+  "attachments": [],
+  "comments": [
+    {
+      "author": "designer",
+      "created": "2026-10-25T09:00:00Z",
+      "body": "Test ids: signin-username, signin-password, signin-submit, signin-result, account-user."
+    }
+  ]
+}

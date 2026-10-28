@@ -284,12 +284,22 @@ function planBrowsers(d: DetectedTool, input: PlanInput): PlanStep {
     );
   const wantedBrowsers =
     input.needs.browsers.length > 0 ? input.needs.browsers : ["chromium", "firefox", "webkit"];
+  // REQ-EXEC-66/AC2: Google and Microsoft publish no Chrome or Edge for Linux on arm64.
+  if (input.host.os === "linux" && input.host.arch === "arm64") {
+    const none = wantedBrowsers.filter((b) => /^(chrome|msedge)/.test(b));
+    if (none.length > 0)
+      return step(
+        "browsers",
+        "unsupported",
+        `${none.join(", ")} have no build for Linux on arm64; use chromium there`,
+      );
+  }
   const reinstall = input.options.reinstall?.includes("browsers") === true;
   const missing = reinstall
     ? wantedBrowsers
     : (d.system?.missing ?? wantedBrowsers).filter((b) => wantedBrowsers.includes(b));
   if (d.system && missing.length === 0)
-    return step("browsers", "use-system", "installed in Playwright's cache", {
+    return step("browsers", "use-system", `installed (${d.system.where})`, {
       version: d.system.version ?? "",
     });
   return step("browsers", reinstall ? "reinstall" : "install", reinstall ? "--reinstall" : "not installed", {
@@ -321,7 +331,13 @@ function planDocker(d: DetectedTool, input: PlanInput): PlanStep {
     return step(
       "docker",
       "manual",
-      `yours (${own.version ?? "unknown"}) is not compatible (needs Docker ${MANIFEST.docker.compatible} with Compose v2); QAJitsu never changes it: update it yourself`,
+      // Name what is missing: a Docker that is new enough without the Compose v2 plugin is not "too old"
+      // (dogfood pass 2026-10-25).
+      own.version !== undefined &&
+        satisfies(own.version.split(",")[0] ?? "", MANIFEST.docker.compatible) &&
+        own.missing.includes("compose")
+        ? `yours (${own.version}) has no Compose v2 plugin (docker compose): install the plugin; QAJitsu never changes Docker itself`
+        : `yours (${own.version ?? "unknown"}) is not compatible (needs Docker ${MANIFEST.docker.compatible} with Compose v2); QAJitsu never changes it: update it yourself`,
       { version: own.version ?? "unknown" },
     );
   if (own.running !== true)

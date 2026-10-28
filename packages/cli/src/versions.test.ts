@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseProjectConfig } from "@qajitsu/core";
+import { channelExecutables } from "@qajitsu/adapter-runner-web";
 import type { LoadedProject } from "./project.js";
 import {
   formatToolVersions,
@@ -49,6 +50,38 @@ const project = (yaml: Record<string, unknown>): LoadedProject => ({
 });
 
 describe("tool versions (REQ-GEN-03/AC4)", () => {
+  it("REQ-EXEC-66/AC2: a channel of the matrix is listed with the version the browser reports; a missing one says how to install it", async () => {
+    const chrome = channelExecutables("chrome")[0] ?? "";
+    const tools = await toolVersions({
+      qajitsu: "0.4.0",
+      node: "v22.12.0",
+      project: project({
+        test_types: ["web"],
+        web: { browser: "chromium", matrix: { browsers: ["chromium", "chrome", "msedge"] } },
+      }),
+      exec: (cmd, args) =>
+        Promise.resolve(
+          cmd === chrome && args[0] === "--version" ? "Google Chrome 141.0.7390.54" : undefined,
+        ),
+      exists: (p) => p === chrome,
+      playwright: () => ({
+        version: "1.63.0",
+        browsers: [
+          { name: "chromium", version: "153.0", installed: true },
+          { name: "chrome", installed: true },
+          { name: "msedge", installed: false },
+          { name: "chrome-beta", installed: false },
+        ],
+      }),
+    });
+    const by = Object.fromEntries(tools.map((t) => [t.name, t]));
+    expect(by["chrome"]).toMatchObject({ version: "141.0.7390.54", needed: true });
+    expect(by["msedge"]).toMatchObject({ needed: true, install: "qj setup --only browsers" });
+    expect(by["msedge"]?.version).toBeUndefined();
+    // A channel nobody uses and nobody installed is not listed.
+    expect(by["chrome-beta"]).toBeUndefined();
+  });
+
   it("REQ-GEN-03/AC4: reads every tool's version and marks what the project needs", async () => {
     const tools = await toolVersions({
       qajitsu: "0.4.0",
@@ -152,6 +185,14 @@ describe("tool versions (REQ-GEN-03/AC4)", () => {
     expect(qajitsuVersion()).toMatch(/^\d+\.\d+\.\d+/);
     const pw = playwrightInfo();
     expect(pw.version).toMatch(/^\d+\.\d+/);
-    expect(pw.browsers.map((b) => b.name)).toEqual(["chromium", "firefox", "webkit"]);
+    expect(pw.browsers.map((b) => b.name)).toEqual([
+      "chromium",
+      "firefox",
+      "webkit",
+      "chrome",
+      "chrome-beta",
+      "msedge",
+      "msedge-beta",
+    ]);
   });
 });

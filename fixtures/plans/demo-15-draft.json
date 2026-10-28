@@ -1,0 +1,54 @@
+{
+  "summary": "Gestures in the gallery on an emulated phone for DEMO-15.",
+  "cases": [
+    {
+      "id": "TC-01",
+      "title": "Swipes move one slide at a time",
+      "type": "web",
+      "priority": "high",
+      "source": [{ "kind": "ac", "id": "AC1" }],
+      "steps": [
+        {
+          "id": "S1",
+          "action": "Swipe left on the gallery",
+          "expect": {
+            "description": "Next slide",
+            "elements": { "testid:slide": { "text": "Slide 2 of 3" } }
+          }
+        },
+        {
+          "id": "S2",
+          "action": "Swipe right on the gallery",
+          "expect": { "description": "Back", "elements": { "testid:slide": { "text": "Slide 1 of 3" } } }
+        }
+      ],
+      "evidence": ["screenshot"]
+    },
+    {
+      "id": "TC-02",
+      "title": "Double tap likes, long press saves",
+      "type": "web",
+      "priority": "medium",
+      "source": [
+        { "kind": "ac", "id": "AC2" },
+        { "kind": "ac", "id": "AC3" }
+      ],
+      "steps": [
+        {
+          "id": "S1",
+          "action": "Double tap the picture",
+          "expect": { "description": "Liked", "elements": { "testid:gallery-status": { "text": "Liked" } } }
+        },
+        {
+          "id": "S2",
+          "action": "Long press the picture",
+          "expect": {
+            "description": "Saved",
+            "elements": { "testid:gallery-status": { "text": "Saved to favourites" } }
+          }
+        }
+      ],
+      "evidence": ["screenshot"]
+    }
+  ]
+}

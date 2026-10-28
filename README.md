@@ -1073,7 +1073,7 @@ run folder looks like this:
 | `.qa/auth/`                                   | login scripts for logins one request cannot do (forms, cookies, SSO): `login: { script: auth/<file> }` in a profile; values are masked                                                                                                                                                                             |
 | `.qa/stubs/<name>/`                           | WireMock/Mockoon mappings for stubbed dependencies                                                                                                                                                                                                                                                                 |
 | `.qa/bench.yaml`                              | benchmark cases                                                                                                                                                                                                                                                                                                    |
-| `web.matrix` in `qa.project.yaml`             | browsers (`chromium`, `firefox`, `webkit`) and viewports (`{ name, width, height }`) for web cases; the first combination is the primary run                                                                                                                                                                       |
+| `web.matrix` in `qa.project.yaml`             | browsers (`chromium`, `firefox`, `webkit`, `chrome`, `chrome-beta`, `msedge`, `msedge-beta`) and viewports (`{ name, width, height }`) for web cases; the first combination is the primary run                                                                                                                     |
 | `web.test_state` in `qa.project.yaml`         | the global the application exposes its state on for `state.*` checks (`__QA_STATE__` by default): canvas charts, maps, editors                                                                                                                                                                                     |
 | `http_auth` in `.qa/envs/<name>.yaml`         | `{ username, password: secret://... }` for an environment behind HTTP authentication; used by the browser and the API client                                                                                                                                                                                       |
 | `.qa/fixtures/`                               | files web cases upload, named by the plan (`files: { avatar: { fixture: images/avatar.png } }`)                                                                                                                                                                                                                    |
@@ -1152,14 +1152,20 @@ verification: { auditor: optional, canary: true, triage: on }
 ## 10. Additional features
 
 - **API, web, mixed and mobile tests.** Web runs in Chromium (Firefox and WebKit configurable) with a screenshot per
-  step, full-page screenshot, DOM, video and trace on failure, HAR and console log. Mixed cases combine API and UI.
+  step, full-page screenshot, DOM, video and trace on failure, HAR and console log. The recorded traffic is read by
+  code: a failed step lists the requests that went wrong (5xx, 4xx, timeouts, allowlist refusals, CORS, redirects to
+  login) next to the failure and for the failure hints, and the report shows which case reached which endpoint of the
+  change. The page's WebSocket messages can be checked (`websocket.received`, `websocket.sent`). Mixed cases combine
+  API and UI.
   Android runs through Appium on an emulator QAJitsu starts; iOS through a device farm. [docs/guides/mobile.md](docs/guides/mobile.md)
 - **Real web pages, not only forms.** Uploads (file inputs, file choosers, drop zones; files from `.qa/fixtures/` or
   generated from the plan) and downloads checked by name, type, size, hash and content (CSV, JSON, XLSX, PDF);
-  elements inside iframes (`frame:title:Payment >> testid:pay`), pop-ups and new tabs; hover, double and right click,
+  elements inside iframes (`frame:title:Payment >> testid:pay`) and narrowed by their context
+  (`role:row >> has-text:Anna >> role:button:Delete`, `testid:card >> nth:2`), pop-ups and new tabs; hover, double and right click,
   drag and drop, keys, scrolling of infinite lists; Shadow DOM; canvas charts through the application's test hook or
   an element screenshot; browser dialogs answered as the plan says; a fixed start time and moving the clock; browser
-  permissions and location; staging behind HTTP authentication. [docs/guides/web-actions.md](docs/guides/web-actions.md)
+  permissions and location; logins with cookie sessions and account secrets typed by the runner into login forms (`ui.fillSecret`), TOTP codes, codes from e-mails and SMS (`ui.fillCode`), single sign-on through the provider's pages and captcha bypass headers; several users in one case, each in their own browser session (`ui.session("buyer")`); phones and tablets emulated in the browser (`web.matrix.devices`, always reported as emulated) and touch gestures on the web and in native apps (swipe, tap, long press, pinch, pull to refresh); installable apps (manifest, service worker in Chromium) and offline mode; staging behind
+  HTTP authentication. [docs/guides/web-actions.md](docs/guides/web-actions.md)
 - **Built environments (`--build`).** Docker Compose from the change's worktree with a generated overlay (labels,
   dynamic ports), managed processes, WireMock/Mockoon stubs (listed in the report as not real), health checks, seed
   hook, variables from templates and secrets, cleanup policy. The compose file of the change is checked before it
@@ -1245,8 +1251,11 @@ verification: { auditor: optional, canary: true, triage: on }
   [docs/guides/models-and-verification.md](docs/guides/models-and-verification.md)
 - **Browser and viewport matrix.** `web: { matrix: { browsers: [chromium, firefox, webkit], viewports: [...] } }`
   runs web cases in every combination; the matrix, report and ticket comment show the status per combination, and a
-  case is PASSED only when all of them passed. A missing browser is BLOCKED with the install command; cases with
-  manual steps run in the first combination only.
+  case is PASSED only when all of them passed. Besides the engines the matrix takes Google Chrome and Microsoft Edge
+  (`chrome`, `chrome-beta`, `msedge`, `msedge-beta`), installed by `qj setup` and listed with their versions by
+  `qj doctor`; every combination is named with the exact browser version it ran in. A missing browser is BLOCKED with
+  the install command; real Safari and older versions (`safari`, `chrome@118`) need a device farm and are BLOCKED
+  without one, never replaced by another browser. Cases with manual steps run in the first combination only.
 - **Test depth, estimate and budget.** `qj plan --depth smoke|standard|full` keeps cases by risk and records why;
   every run starts with an estimate of time and model use from past runs; `budget: { max_minutes, max_cost_usd }`
   stops a run gracefully with NOT_RUN for what is left.

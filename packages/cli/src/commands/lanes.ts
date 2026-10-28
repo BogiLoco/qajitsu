@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loginAccounts } from "@qajitsu/adapter-env-remote";
+import { createBrowserLogin } from "@qajitsu/adapter-runner-web";
 import type { BrowserFactory, LoginContext, RunCasesOptions } from "@qajitsu/adapter-runner-api";
 import {
   accountsUsedBy,
@@ -9,6 +10,7 @@ import {
   type CaseResultFile,
   type Plan,
   type ResolvedEnvironment,
+  type BrowserState,
 } from "@qajitsu/core";
 import type { RunSession } from "../session.js";
 import type { PreparedMobile } from "./mobile.js";
@@ -46,8 +48,16 @@ export function accountLogin(
   env: ResolvedEnvironment,
   leases: AccountLeases,
   deps: Parameters<typeof loginAccounts>[1],
+  /** Accounts a case names in its data (its sessions, REQ-EXEC-62/AC3), leased besides those its spec names. */
+  caseAliases: (caseId: string) => readonly string[] = () => [],
 ): RunCasesOptions["login"] {
   const aliases = Object.keys(env.profile.accounts);
+  // REQ-EXEC-55/AC2: SSO logins run in a browser; with `reuse` one login serves every case of this run.
+  const withBrowser: Parameters<typeof loginAccounts>[1] = {
+    ...deps,
+    browserLogin: deps.browserLogin ?? createBrowserLogin(),
+    sessionCache: deps.sessionCache ?? new Map<string, BrowserState>(),
+  };
   const used = new Map<string, Promise<string[]>>();
   const aliasesOf = (specFile: string): Promise<string[]> => {
     let found = used.get(specFile);
@@ -61,10 +71,15 @@ export function accountLogin(
     const lease = await leases.acquire({
       caseId: context.caseId,
       lane: context.lane,
-      aliases: await aliasesOf(context.specFile),
+      aliases: [
+        ...new Set([
+          ...(await aliasesOf(context.specFile)),
+          ...caseAliases(context.caseId).filter((a) => aliases.includes(a)),
+        ]),
+      ],
     });
     try {
-      const session = await loginAccounts(env, deps, lease.members);
+      const session = await loginAccounts(env, withBrowser, lease.members);
       return {
         ...session,
         leased: lease.labels,

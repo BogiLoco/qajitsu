@@ -6,6 +6,7 @@
  */
 export {
   browserUnavailable,
+  channelExecutables,
   createPlaywrightBrowserFactory,
   locate,
   maskHar,
@@ -22,3 +23,4 @@ export const ADAPTER = {
   requirements: ["REQ-EXEC-05", "REQ-EVD-02", "REQ-EVD-06"],
   status: "implemented",
 } as const;
+export { createBrowserLogin, type BrowserLoginOptions } from "./browser-login.js";

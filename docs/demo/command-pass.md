@@ -9,6 +9,41 @@ regression suite; and the CI helpers with a recorded GitHub event).
 How to repeat it: copy `examples/demo-shop` into a scratch folder, run `qj init` there with `HOME` pointing at a
 scratch folder, and go through the table top to bottom. Record the date, the commit and every result below.
 
+## Pass of 2026-10-25: QAJitsu testing QAJitsu (dogfood with a local model)
+
+The built `qj` ran the whole flow (init, fetch, plan, approve, run) on DEMO-10 and DEMO-11 in a lab with its own
+`HOME`, the demo shop on a local port and `gemma4:e2b` through Ollama, so every prompt, message and check met a real,
+weak model. Each finding got a regression test, then the flow ran again to confirm the fix.
+
+| ID  | Finding                                                                                                                                          | Now                                                                                  |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| D1  | the author used `ui.click()` before any `ui.goto()`: four attempts timed out on `about:blank`                                                    | static lint before the run, and the runtime error says no page is open               |
+| D2  | the plan guessed texts ("Active" for "Offer active"), which gave a false FAILED                                                                  | expected texts are compared with the recorded pages and flagged for a person         |
+| D3  | a change with no diff recorded no pages for the planner                                                                                          | pages are recorded whenever the change shows nothing                                 |
+| D4  | pages no link reaches (`/app/offer`, `/app/addresses`) were never recorded, so D2 could not fire                                                 | the snapshot visits the pages the code defines; asset paths (`/sw.js`) are not pages |
+| D5  | model repairs failed on misplaced fields: `geolocation` in `elements`, `offer-status` without `testid:`, a selector in `state`, empty `evidence` | the validation error names where the field belongs                                   |
+| D6  | a model that cannot plan (context too small) was refused only after the analysis had run                                                         | refused before anything runs                                                         |
+| D7  | "Confirm the deletion" planned with the dialog's check but no answer, so the dialog would be dismissed                                           | flagged in the plan: "says how to answer it"                                         |
+| D8  | a time-dependent text was planned without a clock                                                                                                | the recorded-text flag says the case needs `browser.clock`                           |
+| D9  | the author's prompt never listed `ui.advanceTime()`                                                                                              | listed, with `ui.setOffline()` and `manifest.*`                                      |
+| D10 | `qj setup` said Docker was too old when only the Compose v2 plugin was missing                                                                   | names the missing plugin                                                             |
+| D11 | a farm-only browser (`safari`) in the matrix would have run on Chromium when the cases ran through an injected executor                          | refused whatever runs the cases, never the primary browser                           |
+
+Second round (2026-10-28), DEMO-11..DEMO-15 through the whole flow, also with `gemma4:e2b` on DEMO-13:
+
+| ID  | Finding                                                                                                                    | Now                                                              |
+| --- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| D12 | a step checking only a WebSocket message or the app manifest was refused at approval as "description only"                 | counted as something to compare                                  |
+| D13 | a text the recorded pages show differently blocked approval of a correct plan ("Offline" appears only after going offline) | shown as a note to confirm, never blocking                       |
+| D14 | a login form signed in with `ui.fillSecret` or a second user's `ui.session` was refused for not calling `ui.as`            | both count as running as the account                             |
+| D15 | the evidence of the message a code came from kept the code in clear                                                        | masked once the code is known                                    |
+| D16 | Playwright traces of failed cases kept session tokens and cookies the application set, unmasked                            | traces masked, sensitive headers and cookies by name             |
+| D17 | the small model left every case's evidence empty in three repairs                                                          | code fills it from the case type                                 |
+| D18 | the planner expected `state.page` from pages that expose no test hook                                                      | snapshots note the hook; such a check is flagged before approval |
+
+Still weak with a 2B model, and left to the person who approves: the planner rarely plans the clock, location or the
+dialog answer on its own; the flags above make each gap visible before approval.
+
 ## Pass of 2026-10-24: web gaps (uploads, downloads, frames, pop-ups, pointer, scroll, Shadow DOM, dialogs, time)
 
 Every new web action was run through the runner and through the whole CLI (fetch, plan, approve, run, publish) on

@@ -8,7 +8,7 @@ import { renderReportHtml } from "./html.js";
 import type { MatrixRow } from "./matrix.js";
 import { chooseSummary, templateSummary, validateSummary } from "./summary.js";
 import { renderMatrixCsv, renderMatrixXlsx } from "./tables.js";
-import { crc32 } from "./zip.js";
+import { crc32 } from "@qajitsu/core";
 
 const rows: MatrixRow[] = [
   {
@@ -236,7 +236,7 @@ describe("summary and the GO / NO-GO decision (REQ-PUB-10/AC4)", () => {
 
 describe("unzip", () => {
   it("round-trips zip() and rejects unsafe entry names", async () => {
-    const { zip, unzip } = await import("./zip.js");
+    const { zip, unzip } = await import("@qajitsu/core");
     const enc = (s: string) => new TextEncoder().encode(s);
     const archive = zip([
       { name: "evidence/a.json", data: enc("{}") },

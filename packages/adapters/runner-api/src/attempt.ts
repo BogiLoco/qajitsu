@@ -10,6 +10,7 @@ import {
   type AttemptRecord,
   type CaseContext,
 } from "@qajitsu/steps";
+import { extraSessions } from "./extra-sessions.js";
 
 /** Everything one attempt needs; sent to the sandboxed child over IPC. Never contains raw config secrets. */
 /** One attempt of one case; the core `AttemptRequest` (ADR-0005). */
@@ -51,6 +52,7 @@ export async function executeAttempt(
   browser?: BrowserFactory,
 ): Promise<AttemptRecord> {
   const session = browser?.(input);
+  const extra = extraSessions(browser, input);
   const masker = createMasker({ secrets: input.secrets });
   const runtime = createCaseRuntime({
     plan: input.plan,
@@ -61,6 +63,7 @@ export async function executeAttempt(
     ...(input.fixture ? { fixture: input.fixture } : {}),
     ...(input.extractText ? { extractText: input.extractText } : {}),
     ...(input.testStateHook ? { testStateHook: input.testStateHook } : {}),
+    ...(input.credential ? { credential: input.credential } : {}),
     caseId: input.caseId,
     attempt: input.attempt,
     baseUrl: input.baseUrl,
@@ -70,6 +73,7 @@ export async function executeAttempt(
     accounts: input.accounts,
     now,
     ...(session ? { ui: session.driver } : {}),
+    ...(extra.open ? { session: extra.open } : {}),
     // REQ-EVD-08: the trusted runner draws the boxes on copies of failure screenshots.
     annotate: annotateImage,
     ...(input.progress
@@ -115,6 +119,10 @@ export async function executeAttempt(
   } catch (error) {
     record = await runtime.finish(error);
   }
-  const media = session ? await session.close(record.outcome !== "passed") : [];
-  return { ...record, evidence: [...record.evidence, ...media] };
+  const media = [
+    ...(session ? await session.close(record.outcome !== "passed") : []),
+    ...(await extra.close(record.outcome !== "passed")),
+  ];
+  const ran = session?.browser?.();
+  return { ...record, evidence: [...record.evidence, ...media], ...(ran ? { browser: ran } : {}) };
 }

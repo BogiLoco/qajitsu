@@ -1,4 +1,4 @@
-import { httpCredentialsFor } from "../http-auth.js";
+import { httpCredentialsFor, testHeadersFor } from "../http-auth.js";
 import { extractDownloadText, readFixture } from "../web-files.js";
 import { warnStageBudgets } from "../timing.js";
 import type { KnowledgePorts } from "./knowledge.js";
@@ -27,6 +27,7 @@ import {
   ConfigError,
   CaseResultFileSchema,
   acquireRunLock,
+  browserEngine,
   createAccountLeases,
   laneWorkers,
   QajitsuError,
@@ -44,6 +45,8 @@ import {
   type UiElementFact,
   type ResolvedEnvironment,
   type VisualCheck,
+  type LocalBrowser,
+  type WebBrowser,
   type WebCombination,
 } from "@qajitsu/core";
 import { createMasker } from "@qajitsu/steps";
@@ -117,7 +120,7 @@ export interface RunPorts extends KnowledgePorts, MessagePorts {
   };
   readonly exit?: (code: number) => void;
   /** Why a browser of the matrix cannot run (replaced in tests); default: its Playwright build is missing. */
-  readonly browserUnavailable?: (browser: "chromium" | "firefox" | "webkit") => string | undefined;
+  readonly browserUnavailable?: (browser: WebBrowser) => string | undefined;
   /** Runs setup and teardown hooks (replaced in tests). */
   readonly hookExec?: HookExec;
   /** Operating system, for the display check of `--headed` (default: the process's). */
@@ -1014,14 +1017,25 @@ async function executeCases(
   const [primary] = combos;
   // REQ-EXEC-61/AC5: HTTP authentication in front of the environment, for the browser and the API client.
   const httpCredentials = await httpCredentialsFor(env, session.resolveSecret);
+  // REQ-EXEC-55/AC4: test mechanisms of the application (a captcha bypass header), for its origin only.
+  const testHeaders = await testHeadersFor(env, session.resolveSecret);
   const executorFor = (combo: WebCombination | undefined): AttemptExecutor =>
     ports.executor ??
     createSandboxExecutor({
       ...(httpCredentials ? { httpCredentials } : {}),
+      testHeaders,
       // The browser starts only when a spec uses ui.* (REQ-EXEC-05, REQ-EXEC-07).
       browser: createPlaywrightBrowserFactory({
-        browser: combo?.browser ?? project.config.web.browser,
-        ...(combo ? { viewport: { width: combo.viewport.width, height: combo.viewport.height } } : {}),
+        // A farm-only browser never reaches here: its combinations are BLOCKED before they run (REQ-EXEC-66/AC4).
+        browser:
+          combo && browserEngine(combo.browser) !== undefined
+            ? (combo.browser as LocalBrowser)
+            : project.config.web.browser,
+        ...(combo?.device !== undefined
+          ? { device: combo.device }
+          : combo
+            ? { viewport: { width: combo.viewport.width, height: combo.viewport.height } }
+            : {}),
         video: project.config.web.video,
         // REQ-EXEC-16/AC2: --headed shows the browser, --slow-mo slows every action down.
         headless: headlessFor(project.config.web.headless, live),
@@ -1030,6 +1044,7 @@ async function executeCases(
         testIdAttribute: project.config.web.test_id_attribute,
         webSession: env.profile.web_session,
         ...(httpCredentials ? { httpCredentials } : {}),
+        testHeaders,
         // REQ-EVD-07/AC5: each passive check can be switched off.
         observations: {
           console: project.config.observations.console,
@@ -1088,6 +1103,11 @@ async function executeCases(
           masker.register(v);
         },
       },
+      // REQ-EXEC-62/AC3: every session of a case holds its own pool account.
+      (caseId) =>
+        Object.values(plan.cases.find((c) => c.id === caseId)?.data ?? {}).filter((v) =>
+          v.startsWith("user:"),
+        ),
     ),
     contract,
     events,
@@ -1202,11 +1222,14 @@ async function executeCases(
           workers: lanes.web,
         }),
       unavailable: (combo) =>
-        ports.browserUnavailable
-          ? ports.browserUnavailable(combo.browser)
-          : ports.executor
-            ? undefined
-            : browserUnavailable(combo.browser),
+        // A farm-only browser is refused whatever runs the cases: it is never replaced (REQ-EXEC-66/AC4).
+        browserEngine(combo.browser) === undefined
+          ? browserUnavailable(combo.browser)
+          : ports.browserUnavailable
+            ? ports.browserUnavailable(combo.browser)
+            : ports.executor
+              ? undefined
+              : browserUnavailable(combo.browser),
     });
   const mobileCases = active.filter((c) => c.type === "mobile" && specs.has(c.id));
   const mobileRan = new Map<string, CaseResultFile>();

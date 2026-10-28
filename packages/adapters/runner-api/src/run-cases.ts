@@ -45,6 +45,8 @@ export interface RunCasesOptions {
     readonly accounts: AttemptInput["accounts"];
     readonly secrets: readonly string[];
     readonly sessions?: Readonly<Record<string, string>>;
+    readonly browserStates?: AttemptInput["browserStates"];
+    readonly credential?: AttemptInput["credential"];
     readonly leased?: Readonly<Record<string, string>>;
     readonly release?: () => void;
   }>;
@@ -202,6 +204,8 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
         accounts: session.accounts,
         secrets: session.secrets,
         ...(session.sessions ? { sessions: session.sessions } : {}),
+        ...(session.browserStates ? { browserStates: session.browserStates } : {}),
+        ...(session.credential ? { credential: session.credential } : {}),
         // A case with manual steps waits for people: its time limit grows by their answer time (REQ-EXEC-11).
         timeoutMs:
           (options.timeoutMs ?? 60_000) +
@@ -265,12 +269,17 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
         outcome: record.outcome,
         assertions: [...record.assertions],
         ...(record.error === undefined ? {} : { error: record.error }),
-        steps: [...record.steps],
+        steps: record.steps.map(({ network, ...s }) => ({
+          ...s,
+          ...(network ? { network: [...network] } : {}),
+        })),
         evidence: evidencePaths,
         startedAt: started.toISOString(),
         durationMs: options.now().getTime() - started.getTime(),
         ...(healed ? { healed: true } : {}),
         ...(specSha256 === undefined ? {} : { specSha256 }),
+        ...(record.browser ? { browser: record.browser } : {}),
+        ...(record.requests ? { requests: [...record.requests] } : {}),
       },
     };
   };

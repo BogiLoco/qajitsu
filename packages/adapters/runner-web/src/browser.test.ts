@@ -11,10 +11,16 @@ import {
   runCases,
   type AttemptInput,
 } from "@qajitsu/adapter-runner-api";
-import { PlanSchema, createEventLog } from "@qajitsu/core";
+import { PlanSchema, createEventLog, unzip, zip } from "@qajitsu/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { startShop } from "../../../../examples/demo-shop/api/server.mjs";
-import { browserUnavailable, createPlaywrightBrowserFactory, maskHar } from "./browser.js";
+import {
+  browserUnavailable,
+  channelExecutables,
+  createPlaywrightBrowserFactory,
+  maskHar,
+  maskTrace,
+} from "./browser.js";
 
 const PASSWORD = "fictional-demo-password";
 const plan = (ticket: string) =>
@@ -405,5 +411,72 @@ describe("browser availability (REQ-EXEC-13/AC3)", () => {
       "firefox is not installed; install it with 'pnpm --filter @qajitsu/cli exec playwright-core install firefox'",
     );
     expect(browserUnavailable("chromium", () => true)).toBeUndefined();
+  });
+
+  it("REQ-EXEC-66/AC1+AC2: a branded channel is found at its vendor's install path, else named with qj setup", () => {
+    expect(channelExecutables("chrome", "darwin")).toEqual([
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    ]);
+    expect(channelExecutables("msedge-beta", "linux")).toEqual(["/opt/microsoft/msedge-beta/msedge"]);
+    expect(
+      channelExecutables("msedge", "win32", {
+        LOCALAPPDATA: "C:\\Users\\u\\AppData\\Local",
+        PROGRAMFILES: "C:\\Program Files",
+      }),
+    ).toEqual([
+      "C:\\Users\\u\\AppData\\Local\\Microsoft\\Edge\\Application\\msedge.exe",
+      "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+    ]);
+    expect(channelExecutables("opera", "darwin")).toEqual([]);
+    const mac = "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge";
+    expect(browserUnavailable("msedge", (p) => p === mac, "darwin")).toBeUndefined();
+    expect(browserUnavailable("chrome-beta", () => false, "darwin")).toBe(
+      "chrome-beta is not installed; install it with 'qj setup' (Playwright's 'install chrome-beta', may ask for an administrator password)",
+    );
+  });
+
+  it("REQ-EXEC-66/AC4: real Safari and specific versions are refused without a device farm, never replaced", () => {
+    for (const name of ["safari", "chrome@118"] as const)
+      expect(browserUnavailable(name, () => true)).toBe(
+        `${name} runs only on a device farm (REQ-EXEC-35), which QAJitsu does not drive for web cases yet; it is never replaced by another browser`,
+      );
+  });
+});
+
+describe("traces kept as evidence (INV-8, REQ-EXEC-67/AC4)", () => {
+  it("REQ-EXEC-67/AC4: secrets in a trace's text entries are masked; images stay; an unreadable trace is dropped", () => {
+    const enc = (t: string) => new TextEncoder().encode(t);
+    const png = new Uint8Array([137, 80, 78, 71, 0, 255, 254]);
+    const trace = zip([
+      { name: "trace.trace", data: enc('{"method":"fill","params":{"value":"pa55-word!"}}\n') },
+      { name: "trace.network", data: enc('{"headers":[{"name":"cookie","value":"sid=0123456789abcdef"}]}') },
+      {
+        name: "resources/entry.json",
+        data: enc('{"response":{"cookies":[{"name":"sid","value":"made-by-the-app"}],"status":200}}'),
+      },
+      { name: "resources/page@1.png", data: png },
+    ]);
+    const masked = unzip(
+      maskTrace(trace, (t) => t.replaceAll("pa55-word!", "***").replaceAll("0123456789abcdef", "***")),
+      { maxEntries: 10, maxEntryBytes: 1_000_000, maxTotalBytes: 1_000_000 },
+    );
+    const text = (n: string) => new TextDecoder().decode(masked.find((e) => e.name === n)?.data);
+    expect(text("trace.trace")).toBe('{"method":"fill","params":{"value":"***"}}\n');
+    // A sensitive header is masked by its name, whatever its value.
+    expect(text("trace.network")).toBe('{"headers":[{"name":"cookie","value":"***"}]}');
+    // A cookie the application set during the test is masked although nobody registered it.
+    expect(text("resources/entry.json")).toBe(
+      '{"response":{"cookies":[{"name":"sid","value":"***"}],"status":200}}',
+    );
+    expect(masked.find((e) => e.name === "resources/page@1.png")?.data).toEqual(png);
+    const dropped = unzip(
+      maskTrace(new Uint8Array([1, 2, 3]), (t) => t),
+      {
+        maxEntries: 10,
+        maxEntryBytes: 1_000_000,
+        maxTotalBytes: 1_000_000,
+      },
+    );
+    expect(dropped.map((e) => e.name)).toEqual(["README.txt"]);
   });
 });

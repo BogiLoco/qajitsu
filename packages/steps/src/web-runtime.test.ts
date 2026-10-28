@@ -3,7 +3,7 @@ import { PlanSchema } from "@qajitsu/core";
 import { describe, expect, it } from "vitest";
 import { createMasker } from "./masking.js";
 import { createCaseRuntime, createPlanAccessor, type CaseRuntimeOptions } from "./runtime.js";
-import { assertSelector, splitFrames } from "./ui.js";
+import { assertSelector, selectorParts, splitFrames } from "./ui.js";
 import type { UiDriver, UiFile } from "./ui.js";
 import { csvRows, generateFile, isTextType, mimeOf } from "./web-files.js";
 
@@ -321,6 +321,394 @@ describe("web actions in the trusted runtime (REQ-EXEC-38..40, REQ-EXEC-56, ADR-
     await expect(closed.verify("S1", "state.bars.3.value")).rejects.toThrow("needs an open page");
   });
 
+  it("REQ-EXEC-65/AC2+AC3: the browser goes offline and back; the manifest is read by the parent and none never passes", async () => {
+    const expect_ = {
+      description: "installable",
+      manifest: { short_name: "Notes", icons: 1, controlled: true },
+    };
+    const sw = planWith({ expect: expect_ }, { browser: { service_workers: true } });
+    const { driver, calls } = fakeDriver({
+      setOffline: (offline: boolean) => Promise.resolve(void calls.push(["setOffline", offline])),
+      manifest: () =>
+        Promise.resolve({ manifest: { short_name: "Notes", icons: [{ src: "/i.png" }] }, controlled: true }),
+    });
+    const rt = runtimeFor(sw, driver);
+    rt.beginStep("S1");
+    await rt.context.ui.goto("/app/notes");
+    await rt.context.ui.setOffline(true);
+    await rt.context.ui.setOffline(false);
+    await expect(rt.uiOp({ op: "setOffline", offline: "yes" as unknown as boolean })).rejects.toThrow(
+      "takes true (offline) or false (back online)",
+    );
+    for (const f of ["manifest.short_name", "manifest.icons", "manifest.controlled"])
+      await rt.verify("S1", f);
+    expect(calls.filter((c) => c[0] === "setOffline")).toEqual([
+      ["setOffline", true],
+      ["setOffline", false],
+    ]);
+    const record = await rt.finish();
+    expect(record.assertions.map((a) => [a.field, a.actual, a.pass])).toEqual([
+      ["manifest.short_name", "Notes", true],
+      ["manifest.icons", 1, true],
+      ["manifest.controlled", true, true],
+    ]);
+    // A page without a manifest fails the check; it is never PASSED.
+    const none = runtimeFor(
+      sw,
+      fakeDriver({ manifest: () => Promise.resolve({ manifest: undefined, controlled: false }) }).driver,
+    );
+    none.beginStep("S1");
+    await none.context.ui.goto("/app/notes");
+    await none.verify("S1", "manifest.short_name");
+    await none.verify("S1", "manifest.controlled");
+    expect((await none.finish()).assertions.map((a) => [a.actual, a.pass])).toEqual([
+      ["(the page links no readable web app manifest)", false],
+      [false, false],
+    ]);
+    // Checking the worker of a case that blocks service workers is the plan's mistake: said, not FAILED.
+    const blocked = runtimeFor(planWith({ expect: expect_ }), driver);
+    blocked.beginStep("S1");
+    await blocked.context.ui.goto("/app/notes");
+    await expect(blocked.verify("S1", "manifest.controlled")).rejects.toThrow(
+      'the case blocks service workers; allow them with "browser": {"service_workers": true}',
+    );
+    expect(() => createPlanAccessor(sw, "TC-01").expect("TC-01.S1.manifest.colour")).toThrow(
+      "unknown manifest field",
+    );
+  });
+
+  it("REQ-EXEC-67/AC3+AC4: the parent types an account secret; reading it back, screenshots and records show only the mask", async () => {
+    const plan = planWith(
+      { expect: { description: "d", elements: { "testid:pw": { value: "x" } } } },
+      { data: { user: "user:standard" } },
+    );
+    const typed: unknown[][] = [];
+    const shots: unknown[][] = [];
+    let fieldValue = "";
+    const { driver } = fakeDriver({
+      fill: (sel: string, value: string) => {
+        typed.push([sel, value]);
+        fieldValue = value;
+        return Promise.resolve();
+      },
+      // A lying spec reads the field back through a check: the parent records only the mask.
+      property: () => Promise.resolve(fieldValue),
+      screenshot: (fullPage: boolean, masks?: readonly string[]) => {
+        shots.push([fullPage, [...(masks ?? [])]]);
+        return Promise.resolve(new Uint8Array([1]));
+      },
+      registerSecret: () => undefined,
+    });
+    const rt = runtimeFor(plan, driver, {
+      credential: (alias, field) =>
+        alias === "user:standard" && field === "password" ? "S3cret-pass!" : undefined,
+    });
+    rt.beginStep("S1");
+    await rt.context.ui.goto("/app/signin");
+    await rt.context.ui.fillSecret("testid:pw", "user:standard", "password");
+    await expect(rt.context.ui.fillSecret("testid:pw", "user:admin", "password")).rejects.toThrow(
+      "'user:admin' is not an account of TC-01 in the plan",
+    );
+    await expect(rt.context.ui.fillSecret("testid:pw", "user:standard", "username")).rejects.toThrow(
+      "no username for user:standard in this environment",
+    );
+    await expect(
+      rt.uiOp({
+        op: "fillSecret",
+        selector: "testid:pw",
+        alias: "user:standard",
+        field: "token" as "password",
+      }),
+    ).rejects.toThrow('types "password", "username" or "totp"');
+    await rt.verify("S1", "elements.testid:pw.value");
+    await rt.endStep("S1");
+    const record = await rt.finish();
+    expect(typed).toEqual([["testid:pw", "S3cret-pass!"]]);
+    expect(record.assertions[0]?.actual).toBe("***");
+    // The step's screenshot and the failure's full page both black the field out.
+    expect(shots).toEqual([
+      [false, ["testid:pw"]],
+      [true, ["testid:pw"]],
+    ]);
+    expect(JSON.stringify(record)).not.toContain("S3cret-pass!");
+  });
+
+  it("REQ-EXEC-41/AC1+AC3: gestures are checked, performed by the driver and drawn on the step's screenshot", async () => {
+    const plan = planWith({ expect: { description: "d", texts: ["x"] } }, {}, "mobile");
+    const asked: unknown[] = [];
+    const marks: unknown[] = [];
+    const { driver } = fakeDriver({
+      gesture: (g: unknown) => {
+        asked.push(g);
+        return Promise.resolve({
+          fingers: [
+            [
+              { x: 300, y: 400 },
+              { x: 100, y: 400 },
+            ],
+          ],
+        });
+      },
+    });
+    const rt = runtimeFor(plan, driver, {
+      annotate: (png, m) => {
+        marks.push(...m);
+        return Promise.resolve(png);
+      },
+    });
+    rt.beginStep("S1");
+    await rt.context.ui.swipe("screen", "left", { speed: "fast" });
+    await rt.context.ui.doubleTap("testid:photo");
+    await expect(rt.context.ui.swipe("screen", "left", { distance: 3 })).rejects.toThrow(
+      "the distance (share of the target) must be between 0.1 and 1",
+    );
+    await expect(rt.context.ui.longPress("testid:photo", 60)).rejects.toThrow("the hold (seconds)");
+    await rt.endStep("S1");
+    const record = await rt.finish();
+    expect(asked).toEqual([
+      { kind: "swipe", direction: "left", distance: 0.6, speed: "fast" },
+      { kind: "doubleTap", selector: "testid:photo" },
+    ]);
+    expect(record.evidence.map((e) => e.name)).toEqual(
+      expect.arrayContaining(["S1-gestures.json", "S1-gestures.png"]),
+    );
+    expect(marks).toHaveLength(4);
+  });
+
+  it("REQ-EXEC-62/AC1: sessions are main or an account of the case's data; each opens logged in as its account", async () => {
+    const plan = planWith(
+      { expect: { description: "d", texts: ["x"] } },
+      { data: { buyer: "user:standard", note: "file:readme" } },
+    );
+    const used: string[] = [];
+    const extra = fakeDriver({ useAccount: (alias: string) => Promise.resolve(void used.push(alias)) });
+    const opened: string[] = [];
+    const annotated: unknown[] = [];
+    const rt = runtimeFor(plan, fakeDriver().driver, {
+      session: (name) => {
+        opened.push(name);
+        return Promise.resolve(extra.driver);
+      },
+      annotate: (png) => {
+        annotated.push(png);
+        return Promise.resolve(png);
+      },
+    });
+    rt.beginStep("S1");
+    await rt.context.ui.session("buyer");
+    await rt.context.ui.session("main");
+    await rt.context.ui.session("buyer");
+    expect(opened).toEqual(["buyer"]);
+    expect(used).toEqual(["user:standard"]);
+    await expect(rt.context.ui.session("note")).rejects.toThrow("name a test account of TC-01's data");
+    await expect(rt.context.ui.session("stranger")).rejects.toThrow("name a test account of TC-01's data");
+    // A step ending in another session gets a screenshot of each session, named after it.
+    await rt.context.ui.goto("/app/messages");
+    await rt.endStep("S1");
+    const shots = (await rt.finish()).evidence.filter((e) => e.kind === "screenshot").map((e) => e.name);
+    expect(shots).toEqual(expect.arrayContaining(["S1-buyer.png"]));
+    const single = runtimeFor(plan, fakeDriver().driver);
+    single.beginStep("S1");
+    await expect(single.context.ui.session("buyer")).rejects.toThrow(
+      "cannot open more than one browser session",
+    );
+  });
+
+  it("REQ-EXEC-55/AC1+AC3: one-time codes from the authenticator or from the step's message are typed by the parent and masked", async () => {
+    const plan = planWith(
+      {
+        expect: {
+          description: "d",
+          message: { to: "inbox", subject: "Your code", code: "code: (\\d{6})" },
+          elements: { "testid:code": { value: "x" } },
+        },
+      },
+      { data: { user: "user:standard" } },
+    );
+    const incoming = [
+      {
+        id: "m1",
+        kind: "email" as const,
+        receivedAt: new Date(Date.now() + 1000).toISOString(),
+        to: "inbox@mail.local",
+        subject: "Your code",
+        body: "Hello, your code: 482913. It expires in 5 minutes.",
+      },
+    ];
+    let typedValue = "";
+    const typed: string[] = [];
+    const { driver } = fakeDriver({
+      fill: (_sel: string, value: string) => {
+        typed.push(value);
+        typedValue = value;
+        return Promise.resolve();
+      },
+      property: () => Promise.resolve(typedValue),
+      registerSecret: () => undefined,
+    });
+    const messages = (list: typeof incoming) => ({
+      timeoutMs: 50,
+      pollMs: 10,
+      inbox: () => Promise.resolve({ id: "b", email: "inbox@mail.local", url: "https://hooks.local/b" }),
+      capture: {
+        createInbox: () => Promise.reject(new Error("unused")),
+        deleteInbox: () => Promise.resolve(),
+        messages: () => Promise.resolve(list),
+      },
+    });
+    const rt = runtimeFor(plan, driver, {
+      messages: messages(incoming),
+      credential: (alias, field) => (alias === "user:standard" && field === "totp" ? "123456" : undefined),
+    });
+    rt.beginStep("S1");
+    await rt.context.ui.goto("/app/verify");
+    await rt.context.ui.fillSecret("testid:otp", "user:standard", "totp");
+    await rt.context.ui.fillCode("testid:code");
+    await rt.verify("S1", "elements.testid:code.value");
+    await rt.endStep("S1");
+    const record = await rt.finish();
+    expect(typed).toEqual(["123456", "482913"]);
+    expect(record.assertions[0]?.actual).toBe("***");
+    expect(JSON.stringify(record)).not.toContain("482913");
+    expect(JSON.stringify(record)).not.toContain("123456");
+    // The default pattern takes the first 4 to 8 digits; a message without a code is said, never guessed.
+    const plain = planWith({ expect: { description: "d", message: { subject: "Your code" } } });
+    const codeTyped: string[] = [];
+    const codeDriver = fakeDriver({
+      registerSecret: () => undefined,
+      fill: (_s: string, v: string) => Promise.resolve(void codeTyped.push(v)),
+    });
+    const withCode = runtimeFor(plain, codeDriver.driver, {
+      messages: messages([{ ...incoming[0], body: "Use 7731 to sign in" } as (typeof incoming)[number]]),
+    });
+    withCode.beginStep("S1");
+    await withCode.context.ui.goto("/app/verify");
+    await withCode.context.ui.fillCode("testid:code");
+    expect(codeTyped).toEqual(["7731"]);
+    const noCode = runtimeFor(plain, fakeDriver().driver, {
+      messages: messages([{ ...incoming[0], body: "Welcome back" } as (typeof incoming)[number]]),
+    });
+    noCode.beginStep("S1");
+    await noCode.context.ui.goto("/app/verify");
+    await expect(noCode.context.ui.fillCode("testid:code")).rejects.toThrow(
+      "the message of S1 holds no code matching the plan's pattern",
+    );
+    // A step whose plan expects no message has nothing to take a code from.
+    const noMessage = runtimeFor(
+      planWith({ expect: { description: "d", texts: ["x"] } }),
+      fakeDriver().driver,
+    );
+    noMessage.beginStep("S1");
+    await noMessage.context.ui.goto("/app/verify");
+    await expect(noMessage.context.ui.fillCode("testid:code")).rejects.toThrow(
+      "the plan expects no message in S1 to take a code from",
+    );
+    // No message in time: the planned check of the message fails (FAILED), the code is never guessed.
+    const none = runtimeFor(plan, fakeDriver().driver, { messages: messages([]), now: Date.now });
+    none.beginStep("S1");
+    await none.context.ui.goto("/app/verify");
+    await expect(none.context.ui.fillCode("testid:code")).rejects.toThrow(
+      "no message with a code arrived in S1",
+    );
+    const r2 = await none.finish();
+    expect(r2.outcome).toBe("failed");
+    expect(r2.assertions.map((a) => [a.field, a.actual, a.pass])).toEqual([
+      ["message", "(no message arrived in time)", false],
+    ]);
+  });
+
+  it("REQ-EXEC-47/AC3+AC4: a WebSocket message is looked for by the parent on the planned socket; frames are masked evidence", async () => {
+    const plan = planWith({
+      expect: {
+        description: "d",
+        websocket: { url: "/ws/chat", sent: ["hi"], received: ["Support received: hi"] },
+      },
+    });
+    const asked: unknown[][] = [];
+    const { driver } = fakeDriver({
+      socketFrame: (direction: string, text: string, url: string | undefined, ms: number) => {
+        asked.push([direction, text, url, ms]);
+        return Promise.resolve(direction === "sent" ? `{"text":"hi"}` : undefined);
+      },
+      takeSocketFrames: () => [{ url: "shop/ws/chat", direction: "sent", text: `{"text":"hi ${SECRET}"}` }],
+    });
+    const rt = runtimeFor(plan, driver, { waitTimeoutMs: 1000 });
+    rt.beginStep("S1");
+    await rt.context.ui.goto("/app/chat");
+    await rt.verify("S1", "websocket.sent.0");
+    await rt.verify("S1", "websocket.received.0");
+    await rt.endStep("S1");
+    const record = await rt.finish();
+    expect(asked).toEqual([
+      ["sent", "hi", "/ws/chat", 1000],
+      ["received", "Support received: hi", "/ws/chat", 1000],
+    ]);
+    expect(record.assertions.map((a) => [a.field, a.actual, a.pass])).toEqual([
+      ["websocket.sent.0", "hi", true],
+      ["websocket.received.0", "(no received WebSocket message contains it)", false],
+    ]);
+    expect(String(record.evidence.find((e) => e.name === "S1-websocket.json")?.content)).toContain("hi ***");
+    // Without an open page there is nothing to listen to.
+    const closed = runtimeFor(plan, fakeDriver().driver);
+    closed.beginStep("S1");
+    await expect(closed.verify("S1", "websocket.sent.0")).rejects.toThrow("needs an open page");
+  });
+
+  it("REQ-EVD-09/AC1+AC2: a failed step gets what went wrong in its traffic; every reached endpoint is recorded", async () => {
+    const plan = planWith({ expect: { description: "d", elements: { "testid:total": { text: "10" } } } }, {});
+    const batches = [
+      [
+        { method: "GET", url: "/app/cart", resourceType: "document", sameOrigin: true, status: 200 },
+        {
+          method: "POST",
+          url: `/orders?token=${SECRET}`,
+          resourceType: "fetch",
+          sameOrigin: true,
+          status: 500,
+        },
+        { method: "GET", url: "/cart", resourceType: "fetch", sameOrigin: true, status: 200 },
+      ],
+    ];
+    const { driver } = fakeDriver({
+      property: () => Promise.resolve("9"),
+      takeNetwork: () => batches.shift() ?? [],
+    });
+    const rt = runtimeFor(plan, driver);
+    rt.beginStep("S1");
+    await rt.context.ui.goto("/app/cart");
+    await rt.verify("S1", "elements.testid:total.text");
+    await rt.endStep("S1");
+    const record = await rt.finish();
+    expect(record.steps[0]?.network).toEqual([
+      { kind: "server-error", method: "POST", url: "/orders?token=***", status: 500 },
+    ]);
+    const file = record.evidence.find((e) => e.name === "S1-network.json");
+    expect(JSON.parse(String(file?.content))).toEqual({
+      requests: 3,
+      problems: [{ kind: "server-error", method: "POST", url: "/orders?token=***", status: 500 }],
+    });
+    expect(record.requests).toEqual([
+      { method: "GET", path: "/app/cart", status: 200 },
+      { method: "POST", path: "/orders", status: 500 },
+      { method: "GET", path: "/cart", status: 200 },
+    ]);
+    // A step that passed keeps its traffic out of the failure evidence.
+    const ok = fakeDriver({
+      property: () => Promise.resolve("10"),
+      takeNetwork: () => [{ method: "GET", url: "/x", resourceType: "fetch", sameOrigin: true, status: 503 }],
+    });
+    const passed = runtimeFor(plan, ok.driver);
+    passed.beginStep("S1");
+    await passed.context.ui.goto("/app/cart");
+    await passed.verify("S1", "elements.testid:total.text");
+    await passed.endStep("S1");
+    const r2 = await passed.finish();
+    // INV-1 / REQ-EVD-09/AC7: a 503 the page shrugged off never fails the step; only the planned checks decide.
+    expect(r2.outcome).toBe("passed");
+    expect(r2.steps[0]?.network).toBeUndefined();
+    expect(r2.evidence.some((e) => e.name.endsWith("-network.json"))).toBe(false);
+  });
+
   it("REQ-EXEC-38..40 + ADR-0013: a driver without a web action refuses it with the reason, on mobile as not available yet", async () => {
     const without = fakeDriver({ pointer: undefined, download: undefined, switchPage: undefined });
     const web = runtimeFor(planWith({ expect: { description: "d" } }), without.driver);
@@ -468,8 +856,54 @@ describe("files of web cases (REQ-EXEC-38)", () => {
     });
     expect(splitFrames("testid:a")).toEqual({ frames: [], element: "testid:a" });
     expect(() => assertSelector("frame:role:x >> testid:a")).toThrow("Invalid selector");
-    expect(() => assertSelector("testid:a >> testid:b")).toThrow("Invalid selector");
-    expect(() => assertSelector(`${"frame:css:f >> ".repeat(6)}testid:a`)).toThrow("Invalid selector");
+    // REQ-EXEC-64: an element inside an element is a chain now.
+    expect(assertSelector("testid:a >> testid:b")).toBe("testid:a >> testid:b");
+    expect(() => assertSelector(`${"frame:css:f >> ".repeat(8)}testid:a`)).toThrow("Invalid selector");
     expect(() => assertSelector("frame:title:Pay >> ")).toThrow("Invalid selector");
+  });
+
+  it("REQ-EXEC-64/AC1+AC2+AC3: chains of elements and filters are parsed and validated; several matches say how to narrow", async () => {
+    expect(
+      selectorParts("frame:title:Pay >> role:row >> has-text:Anna Smith >> role:button:Delete >> nth:2"),
+    ).toEqual([
+      { kind: "frame", selector: "title:Pay" },
+      { kind: "element", selector: "role:row" },
+      { kind: "hasText", text: "Anna Smith" },
+      { kind: "element", selector: "role:button:Delete" },
+      { kind: "nth", n: 2 },
+    ]);
+    expect(assertSelector("testid:card >> nth:2")).toBe("testid:card >> nth:2");
+    for (const bad of [
+      "has-text:Anna",
+      "nth:2",
+      "frame:title:Pay >> nth:1",
+      "testid:a >> nth:0",
+      "testid:a >> frame:title:x",
+      `${"testid:a >> ".repeat(8)}testid:b`,
+    ])
+      expect(() => assertSelector(bad), bad).toThrow("Invalid selector");
+    const { driver } = fakeDriver({
+      click: () =>
+        Promise.reject(
+          new Error("strict mode violation: getByRole('button', { name: 'Delete' }) resolved to 3 elements"),
+        ),
+    });
+    const rt = runtimeFor(planWith({ expect: { description: "d" } }), driver);
+    rt.beginStep("S1");
+    await expect(rt.uiOp({ op: "click", selector: "role:button:Delete" })).rejects.toThrow(
+      "the selector matches 3 elements: narrow it with ' >> has-text:<text>', ' >> nth:<n>' or a parent element first",
+    );
+  });
+
+  it("REQ-EXEC-05: an action on the empty page says that no page is open", async () => {
+    const { driver } = fakeDriver({
+      url: () => "about:blank",
+      click: () => Promise.reject(new Error("locator.click: Timeout 5000ms exceeded")),
+    });
+    const rt = runtimeFor(planWith({ expect: { description: "d" } }), driver);
+    rt.beginStep("S1");
+    await expect(rt.uiOp({ op: "click", selector: "testid:delete-1" })).rejects.toThrow(
+      'no page is open: call ui.goto("<path>") before ui.click()',
+    );
   });
 });

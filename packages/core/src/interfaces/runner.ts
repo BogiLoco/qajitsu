@@ -59,6 +59,15 @@ export interface EvidenceItem {
   readonly content: string | Uint8Array;
 }
 
+/** A request that went wrong in a step (REQ-EVD-09/AC1). */
+export interface NetworkProblemRecord {
+  readonly kind: string;
+  readonly method: string;
+  readonly url: string;
+  readonly status?: number | undefined;
+  readonly detail?: string | undefined;
+}
+
 /** Everything one attempt produced, recorded by the trusted parent (ADR-0004); statuses are computed from it. */
 export interface AttemptRecord {
   readonly caseId: string;
@@ -71,9 +80,15 @@ export interface AttemptRecord {
     readonly ok: boolean;
     readonly error?: string;
     readonly url?: string;
+    /** What went wrong in the step's traffic (REQ-EVD-09/AC1), built by code. */
+    readonly network?: readonly NetworkProblemRecord[];
   }[];
   readonly assertions: readonly AssertionRecord[];
   readonly evidence: readonly EvidenceItem[];
+  /** The application's API endpoints the page reached (REQ-EVD-09/AC2). */
+  readonly requests?: readonly { readonly method: string; readonly path: string; readonly status?: number }[];
+  /** The browser of a web attempt with its exact version (REQ-EXEC-66/AC3). */
+  readonly browser?: { readonly name: string; readonly version: string };
 }
 
 /** Result of comparing a screenshot with its baseline (REQ-EXEC-12). */
@@ -126,6 +141,8 @@ export interface UiScreen {
   /** Account alias the page was opened as, if any. */
   readonly account?: string | undefined;
   readonly elements: readonly UiElementFact[];
+  /** Whether the page exposes the application's test hook for `state.*` checks (REQ-EXEC-56/AC2). */
+  readonly testHook?: boolean | undefined;
 }
 
 /** A numbered box drawn on a copy of a screenshot (REQ-EVD-08). */
@@ -178,6 +195,30 @@ export type ManualPrompter = (
 ) => Promise<ManualAnswer | undefined>;
 
 /** One attempt of one case of the approved plan (REQ-EXEC-04..06). */
+/** A cookie a login hands the browser (REQ-EXEC-67/AC1); it is set for the application's origin only. */
+export interface BrowserCookie {
+  readonly name: string;
+  readonly value: string;
+  readonly path?: string | undefined;
+  readonly httpOnly?: boolean | undefined;
+  readonly secure?: boolean | undefined;
+  readonly sameSite?: "Strict" | "Lax" | "None" | undefined;
+  /** Unix time in seconds; absent for a session cookie. */
+  readonly expires?: number | undefined;
+}
+
+/** What a login hands the browser besides a token: cookies and `localStorage` entries (REQ-EXEC-67/AC1). */
+export interface BrowserState {
+  readonly cookies: readonly BrowserCookie[];
+  readonly localStorage?: Readonly<Record<string, string>> | undefined;
+}
+
+/**
+ * An account's secret for `ui.fillSecret` (REQ-EXEC-67/AC3, REQ-EXEC-55/AC1), resolved by the trusted parent only;
+ * `totp` is the account's current one-time code.
+ */
+export type CredentialLookup = (alias: string, field: "username" | "password" | "totp") => string | undefined;
+
 export interface AttemptRequest {
   readonly specFile: string;
   readonly caseId: string;
@@ -192,6 +233,10 @@ export interface AttemptRequest {
   readonly timeoutMs: number;
   /** Raw session tokens per alias for the browser (never sent to the spec; REQ-CFG-07). */
   readonly sessions?: Readonly<Record<string, string>>;
+  /** Cookies and storage per alias for the browser (REQ-EXEC-67/AC1), never sent to the spec. */
+  readonly browserStates?: Readonly<Record<string, BrowserState>>;
+  /** Account secrets for `ui.fillSecret` (REQ-EXEC-67/AC3); a function, so the values are never serialised. */
+  readonly credential?: CredentialLookup;
   /** Asks a person at manual steps (REQ-EXEC-11); absent means manual steps cannot be answered (BLOCKED). */
   readonly manual?: ManualPrompter;
   /** The case's message inbox (REQ-ENV-08); absent means message steps cannot run (BLOCKED). */

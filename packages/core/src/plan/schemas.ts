@@ -118,12 +118,22 @@ const ElementStateSchema = z.strictObject({
  * An element selector of an expectation: `testid:`, `role:`, `label:`, `text:` or `css:`, optionally inside frames
  * (`frame:<selector> >> testid:pay`, REQ-EXEC-39/AC1); no dots, they separate the property in `verify()` fields.
  */
-const ElementKeySchema = z
-  .string()
-  .regex(
-    /^(frame:(testid|title|id|css):[^.>]+ >> )*(testid|role|label|text|css):[^.]+$/,
-    "Selector like testid:place-order or frame:title:Payment >> testid:pay (no dots)",
+const ElementKeySchema = z.string().refine((key) => {
+  const parts = key.split(" >> ");
+  const last = parts.at(-1) ?? "";
+  return (
+    !key.includes(".") &&
+    parts.length <= 8 &&
+    /^(testid|role|label|text|css):.+$|^has-text:.+$|^nth:[1-9]\d{0,2}$/.test(last) &&
+    parts
+      .slice(0, -1)
+      .every((p) =>
+        /^(frame:(testid|title|id|css):.+|(testid|role|label|text|css|has-text):.+|nth:[1-9]\d{0,2})$/.test(
+          p,
+        ),
+      )
   );
+}, "Selector like testid:place-order, frame:title:Payment >> testid:pay or role:row >> has-text:Anna >> role:button:Delete (no dots)");
 
 /** What a downloaded file must be (REQ-EXEC-38/AC2); every given part is checked by code. */
 const DownloadExpectationSchema = z.strictObject({
@@ -183,6 +193,32 @@ export const ExpectationSchema = z
     /** The file the step downloads (REQ-EXEC-38/AC2). */
     download: DownloadExpectationSchema.optional(),
     /**
+     * Messages of the page's WebSockets in this step (REQ-EXEC-47/AC3), recorded by the parent: each text must be
+     * contained in a frame the page received (`received`) or sent (`sent`) on a socket whose URL contains `url`.
+     */
+    websocket: z
+      .strictObject({
+        url: z.string().min(1).max(300).optional(),
+        received: z.array(z.string().min(1).max(500)).max(20).optional(),
+        sent: z.array(z.string().min(1).max(500)).max(20).optional(),
+      })
+      .refine((w) => (w.received?.length ?? 0) + (w.sent?.length ?? 0) > 0, "Name a received or sent message")
+      .optional(),
+    /**
+     * The page's web app manifest, read by code (REQ-EXEC-65/AC3): its fields, the number of its icons, and whether a
+     * service worker controls the page.
+     */
+    manifest: z
+      .strictObject({
+        name: z.string().min(1).max(200).optional(),
+        short_name: z.string().min(1).max(100).optional(),
+        start_url: z.string().min(1).max(500).optional(),
+        display: z.enum(["fullscreen", "standalone", "minimal-ui", "browser"]).optional(),
+        icons: z.number().int().min(0).max(100).optional(),
+        controlled: z.boolean().optional(),
+      })
+      .optional(),
+    /**
      * State the application exposes for tests (REQ-EXEC-56/AC2), read by the framework from the page's test hook
      * (`web.test_state`, default `window.__QA_STATE__`) by path: canvas charts, maps, editors.
      */
@@ -197,6 +233,23 @@ export const ExpectationSchema = z
         subject: z.string().min(1).max(300).optional(),
         body: z.string().min(1).max(500).optional(),
         within_s: z.number().int().min(1).max(3600).optional(),
+        /**
+         * Where the one-time code is in the message, as a regular expression whose first group (or whole match) is
+         * the code (REQ-EXEC-55/AC3); default: the first group of 4 to 8 digits. Used by `ui.fillCode`.
+         */
+        code: z
+          .string()
+          .min(1)
+          .max(200)
+          .refine((r) => {
+            try {
+              new RegExp(r);
+              return true;
+            } catch {
+              return false;
+            }
+          }, "A valid regular expression")
+          .optional(),
       })
       .optional(),
     /**
@@ -270,6 +323,11 @@ export const TestCaseSchema = z.strictObject({
   browser: z
     .strictObject({
       clock: z.iso.datetime({ offset: true }).optional(),
+      /**
+       * Lets the application register service workers (REQ-EXEC-65/AC1); only in a browser where QAJitsu still checks
+       * every request of the worker against the allowlist (Chromium), otherwise the case is BLOCKED.
+       */
+      service_workers: z.boolean().optional(),
       permissions: z
         .array(
           z.enum([

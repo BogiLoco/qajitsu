@@ -12,8 +12,11 @@ const HttpLoginSchema = z.strictObject({
   method: z.enum(["POST", "PUT"]).default("POST"),
   path: z.string().startsWith("/"),
   body: z.record(z.string(), z.unknown()),
-  /** Dotted path of the token in the JSON response. */
-  token_path: z.string().min(1),
+  /**
+   * Dotted path of the token in the JSON response. Without it the session is the cookies the login sets
+   * (`Set-Cookie`, REQ-EXEC-67/AC2): sent as `Cookie` by the API client and loaded into the browser.
+   */
+  token_path: z.string().min(1).optional(),
   header: z.string().default("authorization"),
   scheme: z.string().default("Bearer"),
 });
@@ -31,7 +34,43 @@ const ScriptLoginSchema = z.strictObject({
   timeout_s: z.number().int().min(1).max(300).default(30),
 });
 
-const LoginSchema = z.union([HttpLoginSchema, ScriptLoginSchema]);
+/** One action of a browser login; `value` may hold `{{username}}`, `{{password}}` or `{{totp}}`. */
+const BrowserLoginStepSchema = z.union([
+  z.strictObject({ fill: z.string().min(1).max(300), value: z.string().min(1).max(300) }),
+  z.strictObject({ click: z.string().min(1).max(300) }),
+  z.strictObject({ press: z.string().min(1).max(300), key: z.string().min(1).max(40) }),
+  z.strictObject({ wait_for: z.string().min(1).max(300) }),
+]);
+
+/**
+ * A login through the browser (REQ-EXEC-55/AC2): SSO pages of an identity provider (OIDC, SAML, Azure AD, Okta,
+ * Keycloak) with redirects and pop-ups, run by QAJitsu with the account's secrets. Its cookies and storage become the
+ * session; with `reuse` one login serves every case of a run. The provider's origins must be in the allowlist.
+ */
+const BrowserLoginSchema = z.strictObject({
+  browser: z.strictObject({
+    /** Path of the application that starts the login, e.g. `/login` or `/oauth2/authorization/okta`. */
+    start: z.string().startsWith("/"),
+    steps: z.array(BrowserLoginStepSchema).min(1).max(30),
+    /** When the login is done: back on a path of the application, and/or an element shown. */
+    done: z
+      .strictObject({
+        path: z.string().startsWith("/").optional(),
+        selector: z.string().min(1).max(300).optional(),
+      })
+      .refine((d) => d.path !== undefined || d.selector !== undefined, "Name a path or a selector"),
+    /** Origins of the identity provider the browser may visit during the login. */
+    allow: z.array(z.url()).max(10).default([]),
+    timeout_s: z.number().int().min(5).max(300).default(60),
+    /** One login per account and run, shared by its cases (default), or a new one per attempt. */
+    reuse: z.boolean().default(true),
+  }),
+});
+
+/** A browser login as configured (REQ-EXEC-55/AC2). */
+export type BrowserLoginFlow = z.infer<typeof BrowserLoginSchema>["browser"];
+
+const LoginSchema = z.union([HttpLoginSchema, ScriptLoginSchema, BrowserLoginSchema]);
 
 /** Lanes a run executes cases in (REQ-EXEC-19). */
 export const LANES = ["api", "web", "mobile"] as const;
@@ -47,6 +86,21 @@ const AccountSchema = z.strictObject({
   login_extra: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}),
   /** Lanes that may use this account, e.g. `[mobile]` for an app that allows one session per user (REQ-ENV-09/AC3). */
   lanes: z.array(z.enum(LANES)).min(1).optional(),
+  /**
+   * The account's authenticator for two-factor logins (REQ-EXEC-55/AC1): the base32 seed as a `secret://` reference,
+   * with the application's digits, period and algorithm. Codes are computed by QAJitsu at the moment they are typed.
+   */
+  totp: z
+    .union([
+      z.string().regex(/^secret:\/\/[a-z0-9-]+\/.+$/, "TOTP seeds must be secret:// references"),
+      z.strictObject({
+        seed: z.string().regex(/^secret:\/\/[a-z0-9-]+\/.+$/, "TOTP seeds must be secret:// references"),
+        digits: z.number().int().min(6).max(8).default(6),
+        period: z.number().int().min(15).max(120).default(30),
+        algorithm: z.enum(["sha1", "sha256", "sha512"]).default("sha1"),
+      }),
+    ])
+    .optional(),
 });
 
 /** A test account as configured. */
@@ -91,9 +145,15 @@ export const EnvProfileSchema = z.strictObject({
     )
     .default({}),
   login: LoginSchema.optional(),
-  /** Where the web app keeps the session token; the framework sets it for `ui.as(alias)` (REQ-CFG-07). */
+  /**
+   * Where the web app keeps its session; the framework sets it for `ui.as(alias)` (REQ-CFG-07): a token in
+   * `sessionStorage` or `localStorage` under `key`, or the login's cookies (REQ-EXEC-67/AC2).
+   */
   web_session: z
-    .strictObject({ storage: z.enum(["sessionStorage", "localStorage"]), key: z.string().min(1) })
+    .union([
+      z.strictObject({ storage: z.enum(["sessionStorage", "localStorage"]), key: z.string().min(1) }),
+      z.strictObject({ storage: z.literal("cookies") }),
+    ])
     .optional(),
   /**
    * HTTP authentication in front of the environment (REQ-EXEC-61/AC5), e.g. a staging site behind Basic Auth: sent by
@@ -105,6 +165,14 @@ export const EnvProfileSchema = z.strictObject({
       password: z.string().regex(/^secret:\/\/[a-z0-9-]+\/.+$/, "Passwords must be secret:// references"),
     })
     .optional(),
+  /**
+   * Headers the application offers for tests, sent to its own origin only by the browser, the API client and the
+   * browser login (REQ-EXEC-55/AC4), e.g. a captcha bypass: `{ X-Captcha-Bypass: secret://vault/staging#bypass }`.
+   * QAJitsu never solves captchas; without such a mechanism the step stays manual.
+   */
+  test_headers: z
+    .record(z.string().regex(/^[A-Za-z0-9-]{1,60}$/, "a header name"), z.string().min(1).max(2000))
+    .default({}),
   /** Feature flags of this environment, available to plans and specs as data. */
   flags: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).default({}),
 });
@@ -200,6 +268,20 @@ export async function resolveEnvironment(options: {
       origin,
       allowed,
     });
+  }
+  // REQ-EXEC-55/AC2 + INV-10: an SSO login visits only identity providers the project allows.
+  const login = profile.login;
+  for (const idp of login && "browser" in login ? login.browser.allow : []) {
+    const idpOrigin = new URL(idp).origin;
+    if (!allowed.includes(idpOrigin))
+      throw new ConfigError(
+        "ENV_NOT_ALLOWED",
+        `The login's identity provider ${idpOrigin} is not in environments.allowlist.`,
+        {
+          origin: idpOrigin,
+          allowed,
+        },
+      );
   }
   if (profile.production && !config.environments.allow_production) {
     throw new ConfigError(

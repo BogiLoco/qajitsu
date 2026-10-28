@@ -5,6 +5,7 @@ import {
   type EvidenceItem,
   type UiDriver,
   type UiProperty,
+  planGesture,
 } from "@qajitsu/steps";
 import { pageSourceElements } from "./page-source.js";
 
@@ -33,6 +34,9 @@ export interface AppiumClient {
   takeScreenshot(): Promise<string>;
   /** Screen size in the units of element rectangles (points on iOS), to scale them to screenshot pixels. */
   getWindowSize?(): Promise<{ width: number; height: number }>;
+  /** W3C pointer actions, for touch gestures (REQ-EXEC-41). */
+  performActions?(actions: readonly Record<string, unknown>[]): Promise<unknown>;
+  releaseActions?(): Promise<unknown>;
   startRecordingScreen(): Promise<unknown>;
   stopRecordingScreen(): Promise<string>;
   getLogs(type: string): Promise<unknown[]>;
@@ -205,6 +209,86 @@ export function createAppiumDeviceFactory(options: MobileRunnerOptions): Browser
         },
         dom: () => c.getPageSource(),
         elements: async () => pageSourceElements(await c.getPageSource(), options.platform),
+        // REQ-EXEC-41: gestures as W3C touch actions, relative to their target, so they fit every screen size.
+        gesture: async (g) => {
+          if (!c.performActions) throw new Error(`ui.${g.kind}() needs an Appium session with W3C actions`);
+          const screenSize = await c.getWindowSize?.().catch(() => undefined);
+          let area: { x: number; y: number; width: number; height: number };
+          if ("selector" in g && g.selector !== undefined) {
+            const el = await find(g.selector);
+            if (!el.getLocation || !el.getSize)
+              throw new Error(`${g.selector} has no position for the gesture`);
+            const [at, size] = await Promise.all([el.getLocation(), el.getSize()]);
+            area = { x: at.x, y: at.y, width: size.width, height: size.height };
+          } else {
+            if (!screenSize) throw new Error(`ui.${g.kind}() needs the screen size from Appium`);
+            area = { x: 0, y: 0, width: screenSize.width, height: screenSize.height };
+          }
+          const plan = planGesture(g, area);
+          const actions = plan.fingers.map((f, i) => {
+            const first = f.points[0] ?? { x: 0, y: 0 };
+            const last = f.points.at(-1) ?? first;
+            const tap = [
+              { type: "pointerMove", duration: 0, x: first.x, y: first.y },
+              { type: "pointerDown", button: 0 },
+              { type: "pause", duration: f.holdMs },
+              ...(f.moveMs > 0 ? [{ type: "pointerMove", duration: f.moveMs, x: last.x, y: last.y }] : []),
+              { type: "pointerUp", button: 0 },
+            ];
+            return {
+              type: "pointer",
+              id: `finger${String(i + 1)}`,
+              parameters: { pointerType: "touch" },
+              actions: Array.from({ length: plan.repeat }, (_, r) =>
+                r === 0 ? tap : [{ type: "pause", duration: 100 }, ...tap],
+              ).flat(),
+            };
+          });
+          await c.performActions(actions);
+          await c.releaseActions?.().catch(() => undefined);
+          // The screenshot may have more pixels than the screen has points (iOS): the path is scaled like boxes.
+          windowWidth ??= screenSize?.width;
+          const scale = shotWidth !== undefined && windowWidth ? shotWidth / windowWidth : 1;
+          return {
+            fingers: plan.fingers.map((f) =>
+              f.points.map((p) => ({ x: Math.round(p.x * scale), y: Math.round(p.y * scale) })),
+            ),
+          };
+        },
+        // REQ-EXEC-41/AC1: scroll until the element is on screen, at most `limit` swipes; not found is no error.
+        scrollUntil: async (s, limit) => {
+          const visible = async () =>
+            (await c.$(appiumLocator(s, options.platform))).isDisplayed().catch(() => false);
+          let scrolls = 0;
+          while (!(await visible()) && scrolls < limit) {
+            const size = await c.getWindowSize?.().catch(() => undefined);
+            if (!size || !c.performActions)
+              throw new Error("scrolling needs the screen size and W3C actions");
+            const plan = planGesture(
+              { kind: "swipe", direction: "up", distance: 0.6, speed: "normal" },
+              { x: 0, y: 0, width: size.width, height: size.height },
+            );
+            const f = plan.fingers[0];
+            const a = f?.points[0] ?? { x: 0, y: 0 };
+            const z = f?.points.at(-1) ?? a;
+            await c.performActions([
+              {
+                type: "pointer",
+                id: "finger1",
+                parameters: { pointerType: "touch" },
+                actions: [
+                  { type: "pointerMove", duration: 0, x: a.x, y: a.y },
+                  { type: "pointerDown", button: 0 },
+                  { type: "pointerMove", duration: f?.moveMs ?? 500, x: z.x, y: z.y },
+                  { type: "pointerUp", button: 0 },
+                ],
+              },
+            ]);
+            await c.releaseActions?.().catch(() => undefined);
+            scrolls += 1;
+          }
+          return { scrolls, found: await visible(), y: 0 };
+        },
         // REQ-EVD-08: the element's rectangle in screen pixels, as on the screenshot.
         bounds: async (s) => {
           const el = await c.$(appiumLocator(s, options.platform));

@@ -48,11 +48,12 @@ describe("browser and viewport matrix (REQ-EXEC-13)", () => {
     );
     const matrix = await readFile(join(p.runDir, "report", "matrix.md"), "utf8");
     expect(matrix).toContain("| Browsers |");
+    // REQ-EXEC-66/AC3: each combination is named with the exact browser it ran in.
     expect(matrix).toMatch(
-      /\| TC-01 \|.*\| PASSED \|.*\| chromium-desktop PASSED, chromium-mobile PASSED \|/,
+      /\| TC-01 \|.*\| PASSED \|.*\| chromium-desktop \(chromium [\d.]+\) PASSED, chromium-mobile \(chromium [\d.]+\) PASSED \|/,
     );
-    expect(await readFile(join(p.runDir, "report", "report.html"), "utf8")).toContain(
-      "Browsers: chromium-desktop PASSED, chromium-mobile PASSED",
+    expect(await readFile(join(p.runDir, "report", "report.html"), "utf8")).toMatch(
+      /Browsers: chromium-desktop \(chromium [\d.]+\) PASSED, chromium-mobile \(chromium [\d.]+\) PASSED/,
     );
   }, 240_000);
 
@@ -81,11 +82,11 @@ describe("browser and viewport matrix (REQ-EXEC-13)", () => {
     expect(r.exitCode).toBe(1);
     expect(await statuses(p.runDir)).toEqual({ "TC-01": "FAILED", "TC-02": "PASSED" });
     expect(await readFile(join(p.runDir, "report", "matrix.md"), "utf8")).toMatch(
-      /\| TC-01 \|.*\| FAILED \|.*\| chromium-desktop PASSED, chromium-mobile FAILED \|/,
+      /\| TC-01 \|.*\| FAILED \|.*\| chromium-desktop \(chromium [\d.]+\) PASSED, chromium-mobile \(chromium [\d.]+\) FAILED \|/,
     );
     const preview = await p.run(["publish", "DEMO-4"], { ask: ["n"] });
-    expect(preview.out).toContain(
-      "Browsers and viewports:\n  TC-01: chromium-desktop PASSED, chromium-mobile FAILED",
+    expect(preview.out).toMatch(
+      /Browsers and viewports:\n {2}TC-01: chromium-desktop \(chromium [\d.]+\) PASSED, chromium-mobile \(chromium [\d.]+\) FAILED/,
     );
   }, 240_000);
 
@@ -99,9 +100,33 @@ describe("browser and viewport matrix (REQ-EXEC-13)", () => {
       "utf8",
     );
     expect(blocked).toContain("firefox is not installed (test)");
-    expect(await readFile(join(p.runDir, "report", "matrix.md"), "utf8")).toContain(
-      "chromium-desktop PASSED, firefox-desktop BLOCKED",
+    expect(await readFile(join(p.runDir, "report", "matrix.md"), "utf8")).toMatch(
+      /chromium-desktop \(chromium [\d.]+\) PASSED, firefox-desktop BLOCKED/,
     );
+  }, 240_000);
+
+  it("REQ-EXEC-66/AC1+AC4: channels are matrix browsers; Safari and versions without a farm are BLOCKED, never replaced", async () => {
+    const p = await createDemoPipeline({ ticket: "DEMO-4" });
+    cleanups.push(p.cleanup);
+    const yaml = join(p.project, ".qa", "qa.project.yaml");
+    await writeFile(
+      yaml,
+      `${await readFile(yaml, "utf8")}\nweb: { matrix: { browsers: [chromium, safari, chrome@118] } }\n`,
+    );
+    const r = await p.executed();
+    expect(r.exitCode).not.toBe(0);
+    expect(await statuses(p.runDir)).toEqual({ "TC-01": "BLOCKED", "TC-02": "BLOCKED" });
+    expect(
+      await readFile(join(p.runDir, "results", "matrix", "chrome-118-desktop", "TC-01.json"), "utf8"),
+    ).toContain("chrome@118 runs only on a device farm (REQ-EXEC-35)");
+    expect(await readFile(join(p.runDir, "report", "matrix.md"), "utf8")).toMatch(
+      /chromium-desktop \(chromium [\d.]+\) PASSED, safari-desktop BLOCKED, chrome-118-desktop BLOCKED/,
+    );
+    await writeFile(
+      yaml,
+      (await readFile(yaml, "utf8")).replace("[chromium, safari, chrome@118]", "[chromium, opera]"),
+    );
+    expect((await p.run(["doctor"])).out).toMatch(/opera|Invalid/);
   }, 240_000);
 
   it.each([

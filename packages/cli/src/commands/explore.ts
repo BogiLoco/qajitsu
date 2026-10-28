@@ -4,7 +4,7 @@ import { runUsage, saveRunUsage } from "../run-usage.js";
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
 import { createRemoteEnvProvider, loginAccounts } from "@qajitsu/adapter-env-remote";
 import type { BrowserFactory } from "@qajitsu/adapter-runner-api";
-import { createPlaywrightBrowserFactory } from "@qajitsu/adapter-runner-web";
+import { createBrowserLogin, createPlaywrightBrowserFactory } from "@qajitsu/adapter-runner-web";
 import { buildChangeContext, runExplorer, type ExplorerReport } from "@qajitsu/agents";
 import {
   CliExploreSessionSchema,
@@ -148,6 +148,7 @@ export async function runExplore(
         ? await loginAccounts(env, {
             fetch: ports.fetch,
             qaDir: project.qaDir,
+            browserLogin: createBrowserLogin(),
             resolveSecret: (r) => session.resolveSecret(r),
             registerSecret: (v) => {
               masker.register(v);
@@ -213,9 +214,11 @@ export async function runExplore(
       accounts: login?.accounts ?? {},
       secrets: login?.secrets ?? [],
       timeoutMs: 30_000,
-      ...(login ? { sessions: login.sessions } : {}),
+      ...(login ? { sessions: login.sessions, browserStates: login.browserStates } : {}),
     });
-    const accounts = login ? Object.keys(login.sessions) : [];
+    const accounts = login
+      ? [...new Set([...Object.keys(login.sessions), ...Object.keys(login.browserStates)])]
+      : [];
     // Exploratory testing F23: each action, rejected answer and observation shows as it happens, as in --cli sessions.
     const watched: EventLog = {
       emit(stage, actor, event, details) {

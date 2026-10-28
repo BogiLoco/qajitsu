@@ -6,25 +6,45 @@
       "title": "Cancelling the deletion keeps the address",
       "type": "web",
       "priority": "high",
-      "source": [{ "kind": "ac", "id": "AC1" }],
+      "source": [
+        {
+          "kind": "ac",
+          "id": "AC1"
+        }
+      ],
       "steps": [
         {
           "id": "S1",
           "action": "Delete the first address and cancel",
-          "dialog": { "action": "dismiss" },
+          "dialog": {
+            "action": "dismiss"
+          },
           "expect": {
             "description": "Asked, address kept",
-            "dialog": { "type": "confirm", "message": "Delete this address?" },
-            "elements": { "testid:address-count": { "text": "2" } }
+            "dialog": {
+              "type": "confirm",
+              "message": "Delete this address?"
+            },
+            "elements": {
+              "testid:address-count": {
+                "text": "2"
+              }
+            }
           }
         },
         {
           "id": "S2",
           "action": "Delete the first address and confirm",
-          "dialog": { "action": "accept" },
+          "dialog": {
+            "action": "accept"
+          },
           "expect": {
             "description": "Address removed",
-            "elements": { "testid:address-count": { "text": "1" } }
+            "elements": {
+              "testid:address-count": {
+                "text": "1"
+              }
+            }
           }
         }
       ],
@@ -35,15 +55,26 @@
       "title": "The offer ends at its end time",
       "type": "web",
       "priority": "high",
-      "source": [{ "kind": "ac", "id": "AC2" }],
-      "browser": { "clock": "2026-12-24T11:58:00Z" },
+      "source": [
+        {
+          "kind": "ac",
+          "id": "AC2"
+        }
+      ],
+      "browser": {
+        "clock": "2026-12-24T11:58:00Z"
+      },
       "steps": [
         {
           "id": "S1",
           "action": "Open the offer two minutes before it ends",
           "expect": {
             "description": "Active",
-            "elements": { "testid:offer-status": { "text": "Offer active" } }
+            "elements": {
+              "testid:offer-status": {
+                "text": "Offer active"
+              }
+            }
           }
         },
         {
@@ -51,7 +82,11 @@
           "action": "Wait three minutes",
           "expect": {
             "description": "Ended",
-            "elements": { "testid:offer-status": { "text": "Offer ended" } }
+            "elements": {
+              "testid:offer-status": {
+                "text": "Offer ended"
+              }
+            }
           }
         }
       ],
@@ -62,13 +97,67 @@
       "title": "The nearest store comes from the location",
       "type": "web",
       "priority": "medium",
-      "source": [{ "kind": "ac", "id": "AC3" }],
-      "browser": { "permissions": ["geolocation"], "geolocation": { "latitude": 52.23, "longitude": 21.01 } },
+      "source": [
+        {
+          "kind": "ac",
+          "id": "AC3"
+        }
+      ],
+      "browser": {
+        "permissions": ["geolocation"],
+        "geolocation": {
+          "latitude": 52.23,
+          "longitude": 21.01
+        }
+      },
       "steps": [
         {
           "id": "S1",
           "action": "Find the nearest store",
-          "expect": { "description": "Warsaw", "elements": { "testid:store": { "text": "Warsaw" } } }
+          "expect": {
+            "description": "Warsaw",
+            "elements": {
+              "testid:store": {
+                "text": "Warsaw"
+              }
+            }
+          }
+        }
+      ],
+      "evidence": ["screenshot"]
+    },
+    {
+      "id": "TC-04",
+      "title": "The office address is deleted by its row",
+      "type": "web",
+      "priority": "medium",
+      "source": [
+        {
+          "kind": "ac",
+          "id": "AC1"
+        }
+      ],
+      "steps": [
+        {
+          "id": "S1",
+          "action": "Delete the Office address and confirm",
+          "dialog": {
+            "action": "accept"
+          },
+          "expect": {
+            "description": "Only Home is left",
+            "elements": {
+              "testid:address-2": {
+                "visible": false
+              },
+              "testid:address-1": {
+                "visible": true
+              },
+              "testid:address-count": {
+                "text": "1"
+              }
+            }
+          }
         }
       ],
       "evidence": ["screenshot"]

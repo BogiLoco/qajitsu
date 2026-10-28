@@ -54,13 +54,35 @@ Rules:
   label:<label text>, placeholder:<text>, alt:<text>, title:<text>, text:<visible text>, id:<id>; never a made-up
   name and without dots. Use test ids found in the code for the case's platform; without them, use the roles, labels
   and texts the recorded pages show. Properties: visible, enabled, checked, in_viewport (booleans), text, value
-  (exact strings). An element inside an iframe: "frame:title:Payment >> testid:iban-field".
+  (exact strings). An element inside an iframe: "frame:title:Payment >> testid:iban-field". An element that
+  repeats (a button per row) is narrowed with a chain: "role:row >> has-text:Anna Smith >> role:button:Delete" or
+  "testid:card >> nth:2" (web only).
 - A web case that uploads files lists them in the case: "files": {"avatar": {"fixture": "images/avatar.png"}} (a file
   of the project's .qa/fixtures/) or {"big": {"name": "big.pdf", "type": "application/pdf", "bytes": 3000000}}
   (generated). A step that downloads a file expects it: "download": {"name": "orders.csv", "type": "csv", "rows": 3,
   "texts": ["ORD-1"], "min_bytes": 10}; JSON files can also expect "fields". Infinite lists: a step may set
   "scroll_limit" (scrolls, default 20). A canvas, chart or map whose state the application exposes for tests is
   expected as "state": {"bars.0.value": 12} (read from the page's test hook).
+- Web cases: before writing the steps, check the ticket for these and plan them explicitly (the test cannot do
+  them otherwise):
+  * a confirmation, alert or prompt the page shows: the step that triggers it gets "dialog": {"action": "accept"}
+    or {"action": "dismiss"} and expects "dialog": {"type": "confirm", "message": "<words of the dialog>"};
+  * a date, deadline, countdown or anything that depends on the time: the case gets "browser": {"clock":
+    "<ISO time shortly before the moment>"} and a later step moves time forward (by at most 7 days);
+  * the user's location, notifications, camera, microphone or clipboard: the case gets "browser": {"permissions":
+    [...], "geolocation": {"latitude": ..., "longitude": ...}};
+  * uploading or downloading files: "files" on the case and "download" in the step's expect;
+  * a login with a second factor: an authenticator code is the account's ("totp" in the environment), a code sent by
+    e-mail or SMS is a step that expects "message": {"to": "...", "subject": "...", "code": "<regex of the code>"};
+    a captcha is never solved: the environment's test mechanism handles it, otherwise the step is "manual": true;
+  * live updates over a WebSocket (chat, notifications, prices): the step expects "websocket": {"url": "/ws/...",
+    "sent": ["<text the page sends>"], "received": ["<text the page receives>"]} (texts are contained in a frame);
+  * an installable app (PWA), offline mode or a service worker: the case gets "browser": {"service_workers": true},
+    a step expects "manifest": {"short_name": "...", "display": "standalone", "controlled": true}, and offline
+    behaviour is a step whose action takes the browser offline and a later one that brings it back;
+  * the same element repeated (a button per row): name it through its container with a chain.
+  Expected texts are the exact words the page shows; when the code or the recorded pages do not show them, write an
+  open question instead of guessing.
 - For a visible layout or design change a web or mobile step can expect "visual": {"name": "checkout", "mask":
   ["testid:date"]}: its screenshot is compared with an approved baseline; mask regions that change on their own. The
   name uses lower-case letters, digits and "-" only (e.g. "checkout-terms").

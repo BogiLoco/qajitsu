@@ -212,8 +212,11 @@ function detectBrowsers(ports: DetectPorts, needs: ToolchainNeeds): SystemTool |
   const wanted = needs.browsers.length > 0 ? needs.browsers : states.map((b) => b.name);
   const missing = wanted.filter((w) => !installed.some((b) => b.name === w));
   return {
-    version: installed.map((b) => `${b.name} ${b.version ?? "?"}`).join(", "),
-    where: "Playwright cache",
+    // A branded channel (REQ-EXEC-66) is the system's browser; `qj doctor` asks it for its version.
+    version: installed.map((b) => (b.version ? `${b.name} ${b.version}` : b.name)).join(", "),
+    where: installed.some((b) => b.version === undefined)
+      ? "Playwright cache and the system"
+      : "Playwright cache",
     compatible: missing.length === 0,
     missing,
   };

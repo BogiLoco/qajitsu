@@ -170,6 +170,47 @@ async function start(m: StartMessage): Promise<void> {
       uncheck: (selector: string) => rpc({ op: "ui", operation: { op: "uncheck", selector } }),
       fill: (selector: string, value: unknown) =>
         rpc({ op: "ui", operation: { op: "fill", selector, value: String(value) } }),
+      // The spec names an account and a field; the parent alone knows the value (REQ-EXEC-67/AC3).
+      fillCode: (selector: string) => rpc({ op: "ui", operation: { op: "fillCode", selector } }),
+      session: (name: unknown) => rpc({ op: "ui", operation: { op: "session", name } }),
+      // Gestures (REQ-EXEC-41): the parent's schema checks every field.
+      tap: (selector: string) =>
+        rpc({ op: "ui", operation: { op: "gesture", gesture: { kind: "tap", selector } } }),
+      doubleTap: (selector: string) =>
+        rpc({ op: "ui", operation: { op: "gesture", gesture: { kind: "doubleTap", selector } } }),
+      longPress: (selector: string, seconds: unknown = 1) =>
+        rpc({ op: "ui", operation: { op: "gesture", gesture: { kind: "longPress", selector, seconds } } }),
+      swipe: (target: string, direction: unknown, opts: { distance?: unknown; speed?: unknown } = {}) =>
+        rpc({
+          op: "ui",
+          operation: {
+            op: "gesture",
+            gesture: {
+              kind: "swipe",
+              ...(target === "screen" ? {} : { selector: target }),
+              direction,
+              distance: opts.distance ?? 0.6,
+              speed: opts.speed ?? "normal",
+            },
+          },
+        }),
+      pinch: (target: string, direction: unknown, scale: unknown = 0.6) =>
+        rpc({
+          op: "ui",
+          operation: {
+            op: "gesture",
+            gesture: {
+              kind: "pinch",
+              ...(target === "screen" ? {} : { selector: target }),
+              direction,
+              scale,
+            },
+          },
+        }),
+      pullToRefresh: () =>
+        rpc({ op: "ui", operation: { op: "gesture", gesture: { kind: "pullToRefresh" } } }),
+      fillSecret: (selector: string, alias: unknown, field: unknown) =>
+        rpc({ op: "ui", operation: { op: "fillSecret", selector, alias, field } }),
       select: (selector: string, value: unknown) =>
         rpc({ op: "ui", operation: { op: "select", selector, value: String(value) } }),
       press: (selector: string, value: unknown) =>
@@ -198,6 +239,8 @@ async function start(m: StartMessage): Promise<void> {
       closePage: () => rpc({ op: "ui", operation: { op: "closePage" } }),
       advanceTime: (seconds: unknown) =>
         rpc({ op: "ui", operation: { op: "advanceTime", seconds: Number(seconds) } }),
+      // The parent's schema refuses anything but a boolean.
+      setOffline: (offline: unknown) => rpc({ op: "ui", operation: { op: "setOffline", offline } }),
     },
     step: async (stepId: string, fn: () => unknown): Promise<void> => {
       await rpc({ op: "beginStep", stepId });

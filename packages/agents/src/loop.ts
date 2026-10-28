@@ -1,3 +1,4 @@
+import { withPlacementHint } from "./plan-hints.js";
 import type { Guard } from "@qajitsu/guard";
 import type { ResolvedModel } from "@qajitsu/models";
 import {
@@ -125,6 +126,11 @@ export interface StructuredRun<T extends z.ZodType> {
   readonly prompt: string;
   readonly schema: T;
   /** Extra deterministic checks (e.g. grounded sources); returned strings are sent back as errors. */
+  /**
+   * Deterministic completion of the answer before validation, for gaps code can fill without changing what the
+   * answer means (dogfood 2026-10-28: a small model left every case's evidence empty in three repairs).
+   */
+  readonly normalize?: (raw: unknown) => unknown;
   readonly validate?: (value: z.infer<T>) => readonly string[];
   readonly tools?: readonly AgentTool[];
   readonly guard?: Guard;
@@ -220,12 +226,15 @@ export async function runStructuredAgent<T extends z.ZodType>(
     );
     let errors: string[];
     try {
-      const parsed = run.schema.safeParse(extractJson(result.text));
+      const raw: unknown = extractJson(result.text);
+      const parsed = run.schema.safeParse(run.normalize ? run.normalize(raw) : raw);
       if (parsed.success) {
         errors = [...(run.validate?.(parsed.data) ?? [])];
         if (errors.length === 0) return { value: parsed.data, attempts: attempt };
       } else {
-        errors = parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`);
+        errors = parsed.error.issues.map(
+          (i) => `${i.path.join(".") || "(root)"}: ${withPlacementHint(i.path, i.message)}`,
+        );
       }
     } catch (error) {
       errors = [`Answer is not valid JSON: ${error instanceof Error ? error.message : String(error)}`];

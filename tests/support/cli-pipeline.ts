@@ -88,17 +88,33 @@ export async function createDemoPipeline(
     approveScript?: Turn[];
     /** Extra environment variables, read at every command (secrets such as a signing key). */
     env?: Record<string, string>;
+    /** The session in an HttpOnly cookie from the sign-in endpoint (REQ-EXEC-67) instead of a token in storage. */
+    cookieSession?: boolean;
+    /** The shop's code in the repository, so the planner gets the code's pages and element ids (REQ-PLAN-09). */
+    withShopCode?: boolean;
   } = {},
 ) {
   const ticket = options.ticket ?? "DEMO-1";
-  const web = ["DEMO-4", "DEMO-5", "DEMO-7", "DEMO-8", "DEMO-9", "DEMO-10"].includes(ticket);
+  const web = [
+    "DEMO-4",
+    "DEMO-5",
+    "DEMO-7",
+    "DEMO-8",
+    "DEMO-9",
+    "DEMO-10",
+    "DEMO-11",
+    "DEMO-12",
+    "DEMO-13",
+    "DEMO-14",
+    "DEMO-15",
+  ].includes(ticket);
   const shop = await startShop({
     env: { DEMO_USER_PASSWORD: DEMO_PASSWORD, ...(options.flag ? { [options.flag]: "1" } : {}) },
   });
-  const { home, project } = await createCliProject([
-    "models: { roles: { default: mock/scripted } }",
-    ...(options.config ?? []),
-  ]);
+  const { home, project } = await createCliProject(
+    ["models: { roles: { default: mock/scripted } }", ...(options.config ?? [])],
+    { withShopApi: options.withShopCode === true },
+  );
   if (ticket !== "DEMO-1") {
     await copyFile(
       new URL(`../../examples/demo-shop/tickets/${ticket}.json`, import.meta.url),
@@ -116,7 +132,9 @@ export async function createDemoPipeline(
   await mkdir(join(project, ".qa", "envs"));
   await writeFile(
     join(project, ".qa", "envs", "local.yaml"),
-    `base_url: ${shop.url}\nweb_session: { storage: sessionStorage, key: token }\naccounts:\n  user:standard: { username: standard, password: secret://env/DEMO_USER_PASSWORD }\nlogin:\n  path: /auth/login\n  body: { username: "{{username}}", password: "{{password}}" }\n  token_path: token\n`,
+    options.cookieSession === true
+      ? `base_url: ${shop.url}\nweb_session: { storage: cookies }\naccounts:\n  user:standard: { username: standard, password: secret://env/DEMO_USER_PASSWORD }\n  user:admin: { username: admin, password: secret://env/DEMO_USER_PASSWORD }\nlogin:\n  path: /auth/session\n  body: { username: "{{username}}", password: "{{password}}" }\n`
+      : `base_url: ${shop.url}\nweb_session: { storage: sessionStorage, key: token }\naccounts:\n  user:standard: { username: standard, password: secret://env/DEMO_USER_PASSWORD }\n  user:admin: { username: admin, password: secret://env/DEMO_USER_PASSWORD }\nlogin:\n  path: /auth/login\n  body: { username: "{{username}}", password: "{{password}}" }\n  token_path: token\n`,
   );
   const run = async (
     args: string[],

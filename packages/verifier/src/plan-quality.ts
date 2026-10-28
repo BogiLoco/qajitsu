@@ -9,7 +9,8 @@ const CASE_PLATFORMS: Record<string, { readonly platforms: readonly UiPlatform[]
 };
 
 /** Why an expectation of a plan cannot be checked as it is (REQ-PLAN-09). */
-export type PlanFlagKind = "placeholder" | "schema" | "description-only" | "selector" | "account";
+export type PlanFlagKind =
+  "placeholder" | "schema" | "description-only" | "selector" | "account" | "recorded-text" | "dialog";
 
 /** One expectation a test could not compare with anything meaningful. */
 export interface PlanFlag {
@@ -177,6 +178,12 @@ function fieldProblem(doc: Schema, root: Schema, key: string, value: unknown): s
     : `the response field is ${JSON.stringify(node["type"])}, the plan expects ${jsonType(value)} ${JSON.stringify(value)}`;
 }
 
+/** Words of a case that tie it to the date or time (offers that end, deadlines, countdowns). */
+const TIMELY =
+  /\b(date|time|day|hour|minute|deadline|countdown|expir\w*|ends?|ended|until|before|after|christmas|schedul\w*)\b/i;
+const timeWords = (c: Plan["cases"][number]): string =>
+  [c.title, ...c.steps.flatMap((s) => [s.action, s.expect.description])].join(" ");
+
 /**
  * Expectations of a plan that cannot be checked as they are (REQ-PLAN-09): placeholders instead of values (AC1),
  * fields that do not exist in the OpenAPI response or have another type (AC2), steps with a description only (AC6),
@@ -232,11 +239,20 @@ export function checkPlanExpectations(
         e.visual !== undefined ||
         e.download !== undefined ||
         e.dialog !== undefined ||
-        e.state !== undefined;
+        e.state !== undefined ||
+        e.websocket !== undefined ||
+        e.manifest !== undefined;
       if (s.manual !== true && !checks)
         flag(
           "description-only",
           "the step expects a description only: the test would have nothing to compare",
+        );
+      // Dogfood pass 2026-10-25: "Confirm the deletion" planned with the dialog's check only, so it was dismissed.
+      if (c.type === "web" && e.dialog !== undefined && s.dialog === undefined)
+        flag(
+          "dialog",
+          'the step expects a dialog but does not say how to answer it: add "dialog": {"action": "accept"} or {"action": "dismiss"} to the step (unanswered dialogs are dismissed)',
+          "dialog",
         );
       const values = [
         ...Object.entries(e.fields ?? {}).flatMap(([k, v]) => strings(v, `fields.${k}`)),
@@ -279,13 +295,46 @@ export function checkPlanExpectations(
         (x) => target?.platforms.includes(x.platform) === true,
       );
       if (recorded.length > 0) {
+        // An expected text the recorded page shows differently: a guess, or what the change is about; a person
+        // confirms which (dogfood pass 2026-10-25: "Active" planned, "Offer active" shown, a false FAILED).
+        for (const [sel, state] of Object.entries(e.elements ?? {})) {
+          const id = /^testid:([^\s>]+)$/.exec(sel)?.[1];
+          if (id === undefined || state.text === undefined) continue;
+          const shown = recorded.flatMap((x) =>
+            x.elements.filter((el) => el.testid === id).map((el) => el.text ?? ""),
+          );
+          const nonEmpty = shown.filter((t) => t !== "");
+          if (nonEmpty.length > 0 && !nonEmpty.includes(state.text))
+            flag(
+              "recorded-text",
+              `${sel} shows "${nonEmpty[0] ?? ""}" on the recorded pages, the plan expects "${state.text}": confirm the change or an earlier step makes it so, or use the shown text${c.type === "web" && c.browser?.clock === undefined && TIMELY.test(timeWords(c)) ? '; a text that depends on the date needs "browser": {"clock": "<ISO time>"} on the case' : ""}`,
+              `elements.${sel}.text`,
+              state.text,
+            );
+        }
+        // A state check needs the application's test hook; no recorded page exposing one means it cannot pass.
+        if (
+          c.type === "web" &&
+          e.state !== undefined &&
+          recorded.some((x) => x.testHook !== undefined) &&
+          recorded.every((x) => x.testHook !== true)
+        )
+          for (const path of Object.keys(e.state))
+            flag(
+              "selector",
+              `state.${path} needs the application's test hook, and no recorded page exposes one: check what the page shows with "elements" or "texts" instead`,
+              `state.${path}`,
+            );
         for (const sel of unknownSelectors(Object.keys(e.elements ?? {}), c.type, {
           screens: recorded,
           inventory: options.inventory,
         }))
           flag(
             "selector",
-            `${sel} matches no element recorded on the environment's pages`,
+            // Dogfood pass 2026-10-25: "testid:manifest" planned for the installable app.
+            /manifest|service.?worker|installable/i.test(sel)
+              ? `${sel} matches no element recorded on the environment's pages; the app manifest and its service worker are checked with "manifest": {"short_name": .., "display": .., "controlled": true}`
+              : `${sel} matches no element recorded on the environment's pages`,
             `elements.${sel}`,
           );
         continue;
@@ -406,6 +455,15 @@ export function formatNumericConversions(conversions: readonly NumericConversion
         `  ~ ${v.caseId} ${v.stepId} ${v.field}: ${JSON.stringify(v.from)} → ${String(v.to)} (${v.where}: number)`,
     )
     .join("\n");
+}
+
+/**
+ * Whether a flag only asks a person to look (shown with the plan, never blocking approval): an expected text the
+ * recorded pages show differently may be guessed, or may be what the change or an earlier step brings about, which
+ * code cannot tell (CLI flow 2026-10-28: "Offline" after the step goes offline).
+ */
+export function isAdvisoryFlag(flag: PlanFlag): boolean {
+  return flag.kind === "recorded-text";
 }
 
 /** The flags as lines for the review (REQ-PLAN-09/AC3). */

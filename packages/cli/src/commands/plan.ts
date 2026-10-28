@@ -1,3 +1,4 @@
+import { modelForRole } from "@qajitsu/agents";
 import { warnStageBudgets } from "../timing.js";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -54,6 +55,7 @@ import {
   convertNumericStrings,
   formatNumericConversions,
   formatPlanFlags,
+  isAdvisoryFlag,
   formatSourceIssues,
   type PlanFlag,
 } from "@qajitsu/verifier";
@@ -389,6 +391,10 @@ export async function runPlan(
       throw new ConfigError("PLAN_DEPTH_INVALID", "--depth must be smoke, standard or full.", {});
     const depth = depthOption?.data ?? DepthSchema.optional().parse(ws.record.data["depth"]);
     if (depthOption?.success) await ws.update({ data: { ...ws.record.data, depth: depthOption.data } });
+    // Every model this command needs is checked before any work: a model that cannot plan is named at once, not after
+    // the analysis and the page recording (dogfood pass 2026-10-25).
+    await modelForRole(session.models, "analyst");
+    await modelForRole(session.models, "planner");
     const knowledge = await loadKnowledge(knowledgeDir(session.project), (t) => masker.containsSecret(t));
     let context = await buildChangeContext(ws, knowledge, {
       indexCache: codeIndexCache(session.project),
@@ -473,6 +479,7 @@ export async function runPlan(
       env: options.env,
       force: options.snapshot === true,
       build: options.build === true,
+      paths: context.ui?.pages,
     });
     if (pages) context = { ...context, snapshot: pages };
     const flagsOf = await planFlagsOf(session, context);
@@ -529,8 +536,16 @@ export async function runPlan(
       if (converted) io.write(`${converted}\n`);
       // REQ-PLAN-09/AC3: what code cannot check, next to the plan.
       const flags = flagsOf(current);
-      if (flags.length > 0)
-        io.write(`Cannot be checked as written (${String(flags.length)}):\n${formatPlanFlags(flags)}\n`);
+      const blocking = flags.filter((f) => !isAdvisoryFlag(f));
+      const advisory = flags.filter((f) => isAdvisoryFlag(f));
+      if (blocking.length > 0)
+        io.write(
+          `Cannot be checked as written (${String(blocking.length)}):\n${formatPlanFlags(blocking)}\n`,
+        );
+      if (advisory.length > 0)
+        io.write(
+          `To confirm against the recorded pages, not blocking (${String(advisory.length)}):\n${formatPlanFlags(advisory)}\n`,
+        );
       // REQ-PLAN-14/AC3: what of the ticket and the change no case covers, next to the plan.
       const gaps = gapsOf(current);
       // REQ-PLAN-16, REQ-LLM-14/AC2: what code found in this version, for the plan and agent metrics.
@@ -714,7 +729,8 @@ export async function runApprove(
       });
     }
     // REQ-PLAN-09/AC4: expectations code cannot check need an explicit confirmation.
-    const flags = (await planFlagsOf(session, context))(plan);
+    // Advisory flags are shown with the plan; only expectations code cannot check block the approval.
+    const flags = (await planFlagsOf(session, context))(plan).filter((f) => !isAdvisoryFlag(f));
     // REQ-PLAN-14/AC4: what no case covers needs its own confirmation.
     const gaps = (await coverageOf(session, context))(plan);
     const checkPerson = (): void => {

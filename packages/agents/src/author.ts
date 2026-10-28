@@ -99,6 +99,9 @@ Rules (checked by code; a violating spec is rejected):
 - Web and mobile steps drive the app only through ui, inside the step: await ui.as("<account alias>") opens it as an
   account, then ui.goto("/path"), ui.click(sel), ui.fill(sel, text), ui.check(sel), ui.uncheck(sel), ui.select(sel,
   value), ui.press(sel, key), ui.waitFor(sel), ui.back(). Open the page before checking anything on it.
+  A login form gets the account's secrets from the framework: ui.fillSecret(sel, "<account alias of the case>",
+  "username" | "password" | "totp") (totp: the authenticator's current code); a code sent by e-mail or SMS in a step
+  whose expect has "message" is typed with ui.fillCode(sel). Never type a password, token or code yourself.
 - Web cases also have: ui.hover(sel), ui.dblclick(sel), ui.rightClick(sel), ui.dragTo(sel, targetSel),
   ui.dragBy(sel, dx, dy), ui.keys("Control+A"), ui.scrollTo(sel), ui.scrollBy(dx, dy), ui.scrollUntil(sel) for
   infinite lists; ui.upload(sel, "<file key>", ...) with the keys of the case's "files" in the plan (never a path or
@@ -106,8 +109,20 @@ Rules (checked by code; a violating spec is rejected):
   verify("<step id>", "download.<name|type|size|sha256|rows|texts.<n>|fields.<key>>", undefined, plan.expect(...))
   in the same step; ui.switchToNewPage() after the action that opened a pop-up or tab, ui.switchToOpener() and
   ui.closePage() to go back. Elements inside iframes: "frame:<selector of the iframe> >> <selector>", for example
-  "frame:title:Payment >> testid:iban-field". A step whose expect has "state" reads the application's test hook:
-  verify("<step id>", "state.<path>", undefined, plan.expect("<case>.<step>.state.<path>")). These are web only.
+  "frame:title:Payment >> testid:iban-field". When a selector matches several elements, narrow it with a chain:
+  "role:row >> has-text:Anna Smith >> role:button:Delete" or "testid:card >> nth:2" (1 is the first).
+  A step whose expect has "state" reads the application's test hook:
+  verify("<step id>", "state.<path>", undefined, plan.expect("<case>.<step>.state.<path>")).
+  ui.advanceTime(seconds) moves the page's clock forward (countdowns, offers that end); ui.setOffline(true) cuts the
+  network and ui.setOffline(false) brings it back (offline pages, queued actions and their sync). A step whose expect
+  has "manifest" checks the installable app:
+  verify("<step id>", "manifest.<name|short_name|start_url|display|icons|controlled>", undefined, plan.expect(...)).
+  A step whose expect has "websocket" checks the page's socket messages after the action that causes them:
+  verify("<step id>", "websocket.<received|sent>.<n>", undefined, plan.expect(...)).
+  These are web only.
+- Touch gestures (web on a phone, native apps): ui.tap(sel), ui.doubleTap(sel), ui.longPress(sel, seconds),
+  ui.swipe(sel or "screen", "left" | "right" | "up" | "down", { distance: 0.6, speed: "normal" }), ui.pinch(sel or
+  "screen", "in" | "out"), ui.pullToRefresh(); in native apps ui.scrollUntil(sel) swipes until the element shows.
 - Selectors, the most stable first: testid:<id> (the project's test id; in a native app the accessibility id, on
   Android also the resource id), role:<role>:<accessible name>, label:<text>, placeholder:<text>, alt:<text>,
   title:<text>, text:<visible text>, id:<id>; css:<selector> (web) and xpath:<path> (native app) only as the last

@@ -6,7 +6,7 @@
 export * from "./matrix.js";
 export * from "./tables.js";
 export * from "./summary.js";
-export { zip, unzip, crc32 } from "./zip.js";
+export { zip, unzip, crc32 } from "@qajitsu/core";
 export * from "./html.js";
 export * from "./jira-comment.js";
 export * from "./graph.js";

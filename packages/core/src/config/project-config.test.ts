@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ConfigError } from "../errors.js";
-import { webCombinations, parseProjectConfig } from "./project-config.js";
+import { browserEngine, webCombinations, parseProjectConfig, type WebBrowser } from "./project-config.js";
 
 const valid = {
   project: "shop",
@@ -200,6 +200,50 @@ describe("web matrix (REQ-EXEC-13)", () => {
       "webkit-mobile",
     ]);
     expect(webCombinations(matrix)[1]?.viewport).toEqual({ name: "mobile", width: 390, height: 844 });
+  });
+
+  it("REQ-EXEC-63/AC1: emulated devices are combinations next to the viewports, named after the device", () => {
+    const base = { project: "demo", jira: { type: "file", tickets_dir: "t", project_key: "DEMO" } };
+    const web = parseProjectConfig({
+      ...base,
+      web: { matrix: { browsers: ["chromium", "webkit"], devices: ["iPhone 15", "Pixel 7"] } },
+    }).web;
+    expect(webCombinations(web).map((c) => [c.id, c.device])).toEqual([
+      ["chromium-desktop", undefined],
+      ["chromium-iphone-15", "iPhone 15"],
+      ["chromium-pixel-7", "Pixel 7"],
+      ["webkit-desktop", undefined],
+      ["webkit-iphone-15", "iPhone 15"],
+      ["webkit-pixel-7", "Pixel 7"],
+    ]);
+    expect(() =>
+      parseProjectConfig({ ...base, web: { matrix: { browsers: ["chromium"], devices: ["../x"] } } }),
+    ).toThrow();
+  });
+
+  it("REQ-EXEC-66/AC1+AC4: channels and farm-only browsers are matrix browsers; the primary one runs here", () => {
+    const base = { project: "demo", jira: { type: "file", tickets_dir: "t", project_key: "DEMO" } };
+    const web = parseProjectConfig({
+      ...base,
+      web: { browser: "msedge", matrix: { browsers: ["chrome", "msedge-beta", "safari", "firefox@128"] } },
+    }).web;
+    expect(web.browser).toBe("msedge");
+    expect(webCombinations(web).map((c) => c.id)).toEqual([
+      "chrome-desktop",
+      "msedge-beta-desktop",
+      "safari-desktop",
+      "firefox-128-desktop",
+    ]);
+    expect(
+      ["chrome", "msedge-beta", "safari", "firefox@128"].map((b) => browserEngine(b as WebBrowser)),
+    ).toEqual(["chromium", "chromium", undefined, undefined]);
+    expect(() =>
+      parseProjectConfig({ ...base, web: { matrix: { browsers: ["safari", "chromium"] } } }),
+    ).toThrow("the first browser is the primary run on this machine");
+    expect(() =>
+      parseProjectConfig({ ...base, web: { matrix: { browsers: ["chromium", "opera"] } } }),
+    ).toThrow();
+    expect(() => parseProjectConfig({ ...base, web: { browser: "safari" } })).toThrow();
   });
 
   describe("approval flow (REQ-PLAN-10)", () => {

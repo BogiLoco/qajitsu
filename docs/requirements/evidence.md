@@ -117,7 +117,7 @@ drawn by code from the failed assertion; it is an extra picture, never a verdict
 
 ### REQ-EVD-09 · Analysis of the recorded network traffic
 
-- Status: accepted
+- Status: in-progress
 - Priority: should
 - Stage: later
 - Related: REQ-EVD-02, REQ-EVD-07, REQ-VER-12, REQ-PLAN-14, REQ-EXEC-04, REQ-PERF-01, INV-1, INV-6, INV-8
@@ -129,8 +129,8 @@ Order (2026-10-25): AC1 and AC2 first; they need no response bodies. AC3..AC6 fo
 
 **Acceptance criteria**
 
-- [ ] AC1: Diagnosis: code ties every request of a web case to the step that sent it and summarises, per failed or blocked step, the requests that went wrong: 5xx and 4xx responses, timeouts and connection errors, requests refused by the allowlist, CORS failures, redirects to a login page. The summary is evidence of the step, shown next to the failure, and given to the failure hints (REQ-VER-12) as structured data only, never as raw traffic.
-- [ ] AC2: Coverage of the change: the endpoints a change touches (from the diff and the API description) are matched with the requests the web cases sent; the coverage matrix (REQ-PLAN-14) lists the touched endpoints no case reached, and the report shows which case reached which endpoint.
+- [x] AC1: Diagnosis: code ties every request of a web case to the step that sent it and summarises, per failed or blocked step, the requests that went wrong: 5xx and 4xx responses, timeouts and connection errors, requests refused by the allowlist, CORS failures, redirects to a login page. The summary is evidence of the step, shown next to the failure, and given to the failure hints (REQ-VER-12) as structured data only, never as raw traffic.
+- [x] AC2: Coverage of the change: the endpoints a change touches (from the diff and the API description) are matched with the requests the web cases sent; the coverage matrix (REQ-PLAN-14) lists the touched endpoints no case reached, and the report shows which case reached which endpoint.
 - [ ] AC3: API contract from the UI: when the project enables response bodies (masked, size-limited, secret-scanned before they are stored), the responses the page received are validated against the API description of the analysed commit; violations are reported as observations.
 - [ ] AC4: Performance per step: the slowest requests, their number and size are shown per step and compared with earlier runs; a budget from the plan or the project gives a warning, never a status.
 - [ ] AC5: Differences between runs: requests that appeared, disappeared or changed status or shape since the last run of the same plan are listed.

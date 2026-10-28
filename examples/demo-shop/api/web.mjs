@@ -1,8 +1,8 @@
 // demo-shop web UI (REQ-NFR-04, stage 5): plain HTML pages served by the API server. Seeded UI bugs are
 // switched on by the server and injected as window.__BUGS (see ../BUGS.md).
 
-const page = (title, body, bugs) => `<!doctype html>
-<html lang="pl"><head><meta charset="utf-8"><title>${title} · demo-shop</title>
+const page = (title, body, bugs, head = "") => `<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><title>${title} · demo-shop</title>${head}
 <style>body{font:15px system-ui;margin:24px}nav a{margin-right:12px}.toast{padding:8px;margin:8px 0}.ok{background:#dafbe1}.err{background:#ffebe9}button[disabled]{opacity:.5}</style>
 <script>window.__BUGS=${JSON.stringify(bugs)};
 const token=()=>sessionStorage.getItem("token");
@@ -14,6 +14,81 @@ const toast=(text,ok)=>{const t=document.createElement("div");t.className="toast
 <h1>${title}</h1>${body}</body></html>`;
 
 const PAGES = {
+  // A touch gallery (REQ-EXEC-41, REQ-EXEC-63): swipe between slides, double tap to like, long press to save.
+  "/app/gallery": [
+    "Gallery",
+    `<div data-testid="slides" id="slides" style="width:100%;max-width:360px;height:220px;background:#eef;display:flex;align-items:center;justify-content:center;touch-action:none;user-select:none">
+<span data-testid="slide" id="slide">Slide 1 of 3</span></div>
+<p>Status: <span data-testid="gallery-status" role="status"></span></p>
+<script>let i=0;let x0=0;let x1=0;let pressed=0;let lastTap=0;const n=3;
+const show=()=>{document.getElementById("slide").textContent="Slide "+(i+1)+" of "+n;};
+const el=document.getElementById("slides");const status=(t)=>{document.querySelector("[data-testid=gallery-status]").textContent=t;};
+el.addEventListener("touchstart",(e)=>{x0=x1=e.touches[0].clientX;pressed=Date.now();});
+el.addEventListener("touchmove",(e)=>{x1=e.touches[0].clientX;e.preventDefault();},{passive:false});
+el.addEventListener("touchend",()=>{const dx=x1-x0;const held=Date.now()-pressed;
+const step=window.__BUGS.BUG_SWIPE_SKIPS_SLIDE?2:1;
+if(dx<-40){i=Math.min(n-1,i+step);show();return;}if(dx>40){i=Math.max(0,i-step);show();return;}
+if(held>700){status("Saved to favourites");return;}
+const now=Date.now();if(now-lastTap<400){status("Liked");lastTap=0;}else lastTap=now;});</script>`,
+  ],
+  // Messages between two shoppers (REQ-EXEC-62): what one sends, the other sees in their inbox.
+  "/app/messages": [
+    "Messages",
+    `<p><label>To <input data-testid="message-to" id="to"></label> <label>Message <input data-testid="message-text" id="text"></label>
+<button data-testid="message-send" id="send">Send</button> <span data-testid="message-status" role="status"></span></p>
+<h2>Inbox</h2><ul data-testid="inbox" id="inbox"></ul><p>Messages: <span data-testid="inbox-count">0</span></p>
+<script>const load=async()=>{const r=await api("/messages");const list=r.ok?await r.json():[];
+document.getElementById("inbox").innerHTML="";for(const m of list){const li=document.createElement("li");li.textContent=m.from+": "+m.text;document.getElementById("inbox").appendChild(li);}
+document.querySelector("[data-testid=inbox-count]").textContent=String(list.length);};
+document.getElementById("send").onclick=async()=>{const r=await api("/messages",{method:"POST",body:JSON.stringify({to:document.getElementById("to").value,text:document.getElementById("text").value})});
+document.querySelector("[data-testid=message-status]").textContent=r.ok?"Sent":"Not sent";await load();};load();</script>`,
+  ],
+  // Sign-in form with a cookie session (REQ-EXEC-67): no token in storage, the browser carries an HttpOnly cookie.
+  "/app/signin": [
+    "Sign in",
+    `<form id="f"><p><label>Username <input data-testid="signin-username" id="u" autocomplete="username"></label></p>
+<p><label>Password <input type="password" data-testid="signin-password" id="p" autocomplete="current-password"></label></p>
+<p><button data-testid="signin-submit">Sign in</button></p></form>
+<p data-testid="signin-result" role="status"></p>
+<script>document.getElementById("f").onsubmit=async(e)=>{e.preventDefault();
+const r=await fetch("/auth/session",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({username:document.getElementById("u").value,password:document.getElementById("p").value})});
+document.querySelector("[data-testid=signin-result]").textContent=r.ok?"Signed in":"Invalid username or password";};</script>`,
+  ],
+  "/app/account": [
+    "Account",
+    `<p data-testid="account-user">Loading</p>
+<script>fetch("/me").then(async(r)=>{document.querySelector("[data-testid=account-user]").textContent=r.ok?"Signed in as "+(await r.json()).username:"Not signed in";});</script>`,
+  ],
+  // The support chat over a WebSocket (REQ-EXEC-47/AC3): the page's messages are checked as they travel.
+  "/app/chat": [
+    "Support chat",
+    `<p>Status: <span data-testid="chat-status">Connecting</span></p>
+<ul data-testid="chat-log" id="log"></ul>
+<p><label>Message <input data-testid="chat-input" id="msg"></label> <button data-testid="chat-send" id="send">Send</button></p>
+<script>const ws=new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host+"/ws/chat");
+const add=(t)=>{const li=document.createElement("li");li.textContent=t;document.getElementById("log").appendChild(li);};
+ws.onopen=()=>{document.querySelector("[data-testid=chat-status]").textContent="Online";};
+ws.onmessage=(e)=>{const m=JSON.parse(e.data);add(m.text);};
+document.getElementById("send").onclick=()=>{const text=document.getElementById("msg").value;ws.send(JSON.stringify({type:"message",text}));add("You: "+text);};</script>`,
+  ],
+  // An installable notes page (REQ-EXEC-65): notes written offline wait in a queue and are saved when back online.
+  "/app/notes": [
+    "Notes",
+    `<p>Connection: <span data-testid="connection">Online</span></p>
+<p><label>Note <input data-testid="note-text" id="note"></label> <button data-testid="add-note" id="add">Add note</button></p>
+<p>Queued: <span data-testid="queued-count">0</span> · Saved: <span data-testid="saved-count">0</span></p>
+<script>let queue=[];let saved=0;const show=()=>{document.querySelector("[data-testid=queued-count]").textContent=String(queue.length);
+document.querySelector("[data-testid=saved-count]").textContent=String(saved);
+document.querySelector("[data-testid=connection]").textContent=navigator.onLine?"Online":"Offline";};
+const save=async(text)=>{const r=await api("/notes",{method:"POST",body:JSON.stringify({text})});if(r.ok)saved++;};
+document.getElementById("add").onclick=async()=>{const text=document.getElementById("note").value;
+if(navigator.onLine)await save(text);else queue.push(text);show();};
+window.addEventListener("offline",show);
+window.addEventListener("online",async()=>{const pending=queue;queue=[];
+if(!window.__BUGS.BUG_OFFLINE_NOTES_LOST)for(const t of pending)await save(t);show();});
+if(navigator.serviceWorker)navigator.serviceWorker.register("/sw.js");show();</script>`,
+    `<link rel="manifest" href="/manifest.webmanifest">`,
+  ],
   "/app/addresses": [
     "Addresses",
     `<ul id="list"><li data-testid="address-1">Home, Warsaw <button data-testid="delete-1">Delete</button></li>
@@ -147,6 +222,26 @@ document.querySelector("[data-testid=widget-status]").textContent="Confirmed";wi
 document.querySelector("[data-testid=3ds-done]").textContent="Confirmed, you can close this window";};</script></body></html>`,
 };
 
+/** The notes page's manifest and service worker (REQ-EXEC-65). */
+const STATIC = {
+  "/manifest.webmanifest": [
+    "application/manifest+json",
+    JSON.stringify({
+      name: "demo-shop notes",
+      short_name: "Notes",
+      start_url: "/app/notes",
+      display: "standalone",
+      icons: [{ src: "/icon-192.png", sizes: "192x192", type: "image/png" }],
+    }),
+  ],
+  "/sw.js": [
+    "text/javascript",
+    `self.addEventListener("install",(e)=>{self.skipWaiting();e.waitUntil(caches.open("notes").then((c)=>c.add("/app/notes")));});
+self.addEventListener("activate",(e)=>e.waitUntil(self.clients.claim()));
+self.addEventListener("fetch",(e)=>{if(e.request.mode==="navigate")e.respondWith(fetch(e.request).catch(()=>caches.match("/app/notes")));});`,
+  ],
+};
+
 /**
  * Serves a UI page, or returns false when the path is not a UI page.
  *
@@ -156,6 +251,12 @@ document.querySelector("[data-testid=3ds-done]").textContent="Confirmed, you can
  */
 export function serveWeb(pathname, bugs, res) {
   // The payment provider's widget and its 3-D Secure window: bare pages without the shop's navigation.
+  const asset = STATIC[pathname];
+  if (asset) {
+    res.writeHead(200, { "content-type": asset[0] });
+    res.end(asset[1]);
+    return true;
+  }
   const widget = WIDGETS[pathname];
   if (widget) {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
@@ -165,6 +266,6 @@ export function serveWeb(pathname, bugs, res) {
   const entry = PAGES[pathname === "/" || pathname === "/app" ? "/app/products" : pathname];
   if (!entry) return false;
   res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-  res.end(page(entry[0], entry[1], bugs));
+  res.end(page(entry[0], entry[1], bugs, entry[2]));
   return true;
 }

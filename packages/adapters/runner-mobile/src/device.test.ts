@@ -207,4 +207,80 @@ describe("Appium device driver (REQ-EXEC-06, REQ-EVD-03)", () => {
     expect(await device()).toEqual({ x: 10, y: 20, width: 100, height: 40 });
     expect(await device(undefined, false)).toBeUndefined();
   });
+
+  it("REQ-EXEC-41/AC1+AC2+AC3: gestures are W3C touch actions relative to their target; scroll until visible stops at its limit", async () => {
+    const { client } = fakeClient();
+    const performed: Record<string, unknown>[][] = [];
+    let displayedAfter = 2;
+    const touch: AppiumClient = {
+      ...client,
+      getWindowSize: () => Promise.resolve({ width: 400, height: 800 }),
+      performActions: (actions) => {
+        performed.push([...actions]);
+        displayedAfter -= 1;
+        return Promise.resolve();
+      },
+      releaseActions: () => Promise.resolve(),
+      $: async (sel) => ({
+        ...(await client.$(sel)),
+        isDisplayed: () => Promise.resolve(sel.includes("far") ? displayedAfter <= 0 : true),
+        getLocation: () => Promise.resolve({ x: 0, y: 100 }),
+        getSize: () => Promise.resolve({ width: 400, height: 200 }),
+      }),
+    };
+    const factory = createAppiumDeviceFactory({
+      platform: "android",
+      connect: () => Promise.resolve(touch),
+      capabilities: {},
+      recording: "off",
+    });
+    const driver = await factory(input).driver();
+    const swiped = await driver.gesture?.({
+      kind: "swipe",
+      selector: "testid:carousel",
+      direction: "left",
+      distance: 0.5,
+      speed: "fast",
+    });
+    expect(performed[0]).toEqual([
+      {
+        type: "pointer",
+        id: "finger1",
+        parameters: { pointerType: "touch" },
+        actions: [
+          { type: "pointerMove", duration: 0, x: 300, y: 200 },
+          { type: "pointerDown", button: 0 },
+          { type: "pause", duration: 0 },
+          { type: "pointerMove", duration: 200, x: 100, y: 200 },
+          { type: "pointerUp", button: 0 },
+        ],
+      },
+    ]);
+    expect(swiped?.fingers).toEqual([
+      [
+        { x: 300, y: 200 },
+        { x: 100, y: 200 },
+      ],
+    ]);
+    // A double tap repeats the tap; a pinch uses two fingers; the screen is the target when no selector is given.
+    await driver.gesture?.({ kind: "doubleTap", selector: "testid:photo" });
+    expect((performed[1]?.[0] as { actions: unknown[] }).actions).toHaveLength(9);
+    await driver.gesture?.({ kind: "pinch", direction: "out", scale: 0.5 });
+    expect(performed[2]).toHaveLength(2);
+    // Scrolling until an element is on screen swipes up the screen until it shows, at most the limit.
+    displayedAfter = 2;
+    expect(await driver.scrollUntil?.("testid:far", 5)).toEqual({ scrolls: 2, found: true, y: 0 });
+    displayedAfter = 10;
+    expect(await driver.scrollUntil?.("testid:far", 3)).toEqual({ scrolls: 3, found: false, y: 0 });
+    // Without W3C actions the gesture is refused with the reason.
+    const plain = createAppiumDeviceFactory({
+      platform: "android",
+      connect: () => Promise.resolve(client),
+      capabilities: {},
+      recording: "off",
+    });
+    await expect(
+      (await plain(input).driver()).gesture?.({ kind: "tap", selector: "testid:x" }),
+    ).rejects.toThrow("needs an Appium session with W3C actions");
+  });
 });

@@ -158,6 +158,21 @@ await step("S3", async () => {
 
 `ui.as(alias)` is not available in native apps: log in through the app's screens with test data aliases.
 
+### Gestures (REQ-EXEC-41)
+
+| Gesture                                                      | What it does                                                  |
+| ------------------------------------------------------------ | ------------------------------------------------------------- |
+| `ui.tap(sel)`, `ui.doubleTap(sel)`, `ui.longPress(sel, 1.5)` | taps, double taps or holds the element (hold 0.3–10 s)        |
+| `ui.swipe(sel \| "screen", "left", { distance, speed })`     | swipes over the element or the screen; `distance` 0.1–1 of it |
+| `ui.pinch(sel \| "screen", "in" \| "out", scale)`            | two fingers together (zoom out) or apart (zoom in)            |
+| `ui.pullToRefresh()`                                         | drags down from the top of the screen                         |
+| `ui.scrollUntil(sel)`                                        | swipes up until the element shows, at most the step's limit   |
+
+Gestures are planned relative to their target, so the same step works on every phone and tablet of the device matrix.
+They run as W3C touch actions through Appium; a target that is not on the screen fails the step. Each gesture's path is
+evidence (`S1-gestures.json`) and is drawn on a copy of the step's screenshot (`S1-gestures.png`). The same gestures
+work in web cases on an emulated phone (`web.matrix.devices`, Chromium).
+
 ## Evidence (REQ-EVD-03)
 
 - a screenshot after every step (`S1.png`, ...), a full screenshot on failure;

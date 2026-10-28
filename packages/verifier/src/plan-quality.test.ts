@@ -7,6 +7,7 @@ import {
   convertNumericStrings,
   formatNumericConversions,
   formatPlanFlags,
+  isAdvisoryFlag,
   isPlaceholder,
 } from "./plan-quality.js";
 import { buildUiInventory } from "./ui-inventory.js";
@@ -135,6 +136,9 @@ describe("concrete expected values (REQ-PLAN-09)", () => {
         // REQ-EXEC-38/AC2 + REQ-EXEC-56/AC2: a download or the application's test state is something to compare.
         { expect: { description: "d", download: { name: "orders.csv" } } },
         { expect: { description: "d", state: { "bars.0": 1 } } },
+        // REQ-EXEC-47/AC3 + REQ-EXEC-65/AC3: socket messages and the app manifest too (found by the CLI flow).
+        { expect: { description: "d", websocket: { received: ["hello"] } } },
+        { expect: { description: "d", manifest: { short_name: "Notes" } } },
       ]),
     );
     expect(flags).toEqual([
@@ -302,6 +306,111 @@ describe("concrete expected values (REQ-PLAN-09)", () => {
         snapshot: screens,
       }),
     ).toEqual([]);
+  });
+
+  it("REQ-EXEC-22/AC8: an expected text the recorded page shows differently is flagged for a person (dogfood 2026-10-25)", () => {
+    const screens = [
+      {
+        where: "/app/offer",
+        platform: "web" as const,
+        elements: [
+          { testid: "offer-status", text: "Offer active" },
+          { testid: "store", text: "" },
+        ],
+      },
+    ];
+    const flags = checkPlanExpectations(
+      plan(
+        [
+          {
+            expect: {
+              description: "d",
+              elements: {
+                "testid:offer-status": { text: "Active" },
+                "testid:store": { text: "Warsaw" },
+                "testid:missing": { text: "x" },
+              },
+            },
+          },
+          { expect: { description: "d", elements: { "testid:offer-status": { text: "Offer active" } } } },
+        ],
+        "web",
+      ),
+      { snapshot: screens },
+    ).filter((f) => f.kind === "recorded-text");
+    // An empty element (filled later by the page) and an unknown one are not judged by their text.
+    expect(flags.map((f) => [f.stepId, f.field, f.reason])).toEqual([
+      [
+        "S1",
+        "elements.testid:offer-status.text",
+        'testid:offer-status shows "Offer active" on the recorded pages, the plan expects "Active": confirm the change or an earlier step makes it so, or use the shown text',
+      ],
+    ]);
+    // It asks a person to look; it never blocks the approval (CLI flow 2026-10-28: "Offline" after going offline).
+    expect(flags.every((f) => isAdvisoryFlag(f))).toBe(true);
+    // A case about the time (an offer that ends) without a clock is told to plan one.
+    const timed = checkPlanExpectations(
+      plan(
+        [
+          {
+            action: "Open the offer after it ended",
+            expect: { description: "d", elements: { "testid:offer-status": { text: "Offer ended" } } },
+          },
+        ],
+        "web",
+      ),
+      { snapshot: screens },
+    ).filter((f) => f.kind === "recorded-text");
+    expect(timed[0]?.reason).toContain(
+      'a text that depends on the date needs "browser": {"clock": "<ISO time>"}',
+    );
+    // An invented element for the app manifest is pointed to the manifest check.
+    const invented = checkPlanExpectations(
+      plan([{ expect: { description: "d", elements: { "testid:manifest": { visible: true } } } }], "web"),
+      { snapshot: screens },
+    ).filter((f) => f.kind === "selector");
+    expect(invented[0]?.reason).toBe(
+      'testid:manifest matches no element recorded on the environment\'s pages; the app manifest and its service worker are checked with "manifest": {"short_name": .., "display": .., "controlled": true}',
+    );
+  });
+
+  it("REQ-EXEC-56/AC2: a state check is flagged when no recorded page exposes the test hook (dogfood 2026-10-28)", () => {
+    const step = [{ expect: { description: "d", state: { page: "/app/account" } } }];
+    const without = [{ where: "/app/signin", platform: "web" as const, elements: [], testHook: false }];
+    expect(
+      checkPlanExpectations(plan(step, "web"), { snapshot: without })
+        .filter((f) => f.field === "state.page")
+        .map((f) => f.reason),
+    ).toEqual([
+      `state.page needs the application's test hook, and no recorded page exposes one: check what the page shows with "elements" or "texts" instead`,
+    ]);
+    // A page with the hook, or a snapshot that did not look, is not judged.
+    for (const snapshot of [
+      [{ where: "/app/chart", platform: "web" as const, elements: [], testHook: true }],
+      [{ where: "/app/chart", platform: "web" as const, elements: [] }],
+    ])
+      expect(
+        checkPlanExpectations(plan(step, "web"), { snapshot }).filter((f) => f.field === "state.page"),
+      ).toEqual([]);
+  });
+
+  it("REQ-EXEC-61/AC1: a web step that checks a dialog without saying how to answer it is flagged (dogfood 2026-10-25)", () => {
+    const dialog = { type: "confirm", message: "Delete this address?" };
+    const flags = checkPlanExpectations(
+      plan(
+        [
+          { action: "Confirm the deletion", expect: { description: "d", dialog } },
+          { action: "Cancel", dialog: { action: "dismiss" }, expect: { description: "d", dialog } },
+        ],
+        "web",
+      ),
+    ).filter((f) => f.kind === "dialog");
+    expect(flags.map((f) => [f.stepId, f.reason])).toEqual([
+      [
+        "S1",
+        'the step expects a dialog but does not say how to answer it: add "dialog": {"action": "accept"} or {"action": "dismiss"} to the step (unanswered dialogs are dismissed)',
+      ],
+    ]);
   });
 
   it("REQ-PLAN-09/AC2: references, allOf, arrays, open objects and every way a call has no schema", () => {

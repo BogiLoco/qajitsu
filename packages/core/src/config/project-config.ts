@@ -169,6 +169,37 @@ const SandboxCommand = z.union([
   }),
 ]);
 
+/** Browser engines QAJitsu's Playwright ships (REQ-EXEC-13). */
+export const WEB_ENGINES = ["chromium", "firefox", "webkit"] as const;
+/** Branded browsers installed on the machine, run through Chromium's engine (REQ-EXEC-66/AC1). */
+export const WEB_CHANNELS = ["chrome", "chrome-beta", "msedge", "msedge-beta"] as const;
+/** A browser QAJitsu can start on this machine: an engine or a branded channel. */
+export type LocalBrowser = (typeof WEB_ENGINES)[number] | (typeof WEB_CHANNELS)[number];
+/**
+ * A browser of the matrix: a local one, or one only a device farm has (REQ-EXEC-66/AC4): real Safari or a specific
+ * major version such as `chrome@118`.
+ */
+export type WebBrowser = LocalBrowser | "safari" | `${"chrome" | "msedge" | "firefox"}@${number}`;
+
+const LocalBrowserSchema = z.enum([...WEB_ENGINES, ...WEB_CHANNELS]);
+const WebBrowserSchema = z.union([
+  LocalBrowserSchema,
+  z
+    .string()
+    .regex(
+      /^(safari|(chrome|msedge|firefox)@\d{2,3})$/,
+      "safari or a browser with a major version, e.g. chrome@118",
+    )
+    .transform((v) => v as WebBrowser),
+]);
+
+/** The engine a local browser runs on; undefined for a browser only a device farm has (REQ-EXEC-66). */
+export function browserEngine(name: WebBrowser): (typeof WEB_ENGINES)[number] | undefined {
+  if ((WEB_ENGINES as readonly string[]).includes(name)) return name as (typeof WEB_ENGINES)[number];
+  if ((WEB_CHANNELS as readonly string[]).includes(name)) return "chromium";
+  return undefined;
+}
+
 export const ProjectConfigSchema = z.strictObject({
   project: z.string().regex(/^[a-z][a-z0-9-]*$/, "Use a lowercase project slug"),
   jira: z
@@ -332,7 +363,8 @@ export const ProjectConfigSchema = z.strictObject({
   /** Web runner (REQ-EXEC-05, REQ-EVD-06). */
   web: z
     .strictObject({
-      browser: z.enum(["chromium", "firefox", "webkit"]).default("chromium"),
+      /** The browser of web cases: an engine of QAJitsu's Playwright or an installed channel (REQ-EXEC-66/AC1). */
+      browser: LocalBrowserSchema.default("chromium"),
       video: z.enum(["retain-on-failure", "always", "off"]).default("retain-on-failure"),
       headless: z.boolean().default(true),
       action_timeout_ms: z.number().int().min(500).max(120_000).default(5_000),
@@ -355,7 +387,15 @@ export const ProjectConfigSchema = z.strictObject({
         .default("__QA_STATE__"),
       matrix: z
         .strictObject({
-          browsers: z.array(z.enum(["chromium", "firefox", "webkit"])).min(1),
+          /** Engines, channels (`chrome`, `msedge-beta`), and on a device farm `safari` or `chrome@118` (REQ-EXEC-66). */
+          browsers: z
+            .array(WebBrowserSchema)
+            .min(1)
+            // The primary run happens on this machine; a farm-only browser there would be replaced silently.
+            .refine((b) => b[0] !== undefined && browserEngine(b[0]) !== undefined, {
+              message:
+                "the first browser is the primary run on this machine: start with chromium, firefox, webkit or a channel",
+            }),
           viewports: z
             .array(
               z.strictObject({
@@ -366,6 +406,14 @@ export const ProjectConfigSchema = z.strictObject({
             )
             .min(1)
             .default([{ name: "desktop", width: 1280, height: 800 }]),
+          /**
+           * Emulated devices besides the viewports (REQ-EXEC-63/AC1), by Playwright's names (`iPhone 15`, `Pixel 7`):
+           * viewport, scale, touch, `isMobile` and user agent. Reports call them emulated, never real devices.
+           */
+          devices: z
+            .array(z.string().regex(/^[A-Za-z0-9][\w .+()-]{1,40}$/, "a device name such as iPhone 15"))
+            .max(10)
+            .default([]),
         })
         .optional(),
     })
@@ -946,8 +994,10 @@ function invalidConfig(source: string, issues: readonly string[]): ConfigError {
 export interface WebCombination {
   /** `<browser>-<viewport>`, e.g. `firefox-mobile`; names result and evidence folders. */
   readonly id: string;
-  readonly browser: "chromium" | "firefox" | "webkit";
+  readonly browser: WebBrowser;
   readonly viewport: { readonly name: string; readonly width: number; readonly height: number };
+  /** The emulated device of the combination (REQ-EXEC-63/AC1); its viewport comes from the device. */
+  readonly device?: string | undefined;
 }
 
 /**
@@ -956,7 +1006,24 @@ export interface WebCombination {
  */
 export function webCombinations(web: ProjectConfig["web"]): WebCombination[] {
   const viewports = web.matrix?.viewports ?? [{ name: "desktop", width: 1280, height: 800 }];
-  return (web.matrix?.browsers ?? [web.browser]).flatMap((browser) =>
-    viewports.map((viewport) => ({ id: `${browser}-${viewport.name}`, browser, viewport })),
-  );
+  const slug = (s: string): string =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "");
+  return (web.matrix?.browsers ?? [web.browser]).flatMap((browser) => [
+    // `chrome@118` names its folder `chrome-118-desktop`.
+    ...viewports.map((viewport) => ({
+      id: `${browser.replace("@", "-")}-${viewport.name}`,
+      browser,
+      viewport,
+    })),
+    // REQ-EXEC-63/AC1: `chromium-iphone-15`; the viewport is the device's own.
+    ...(web.matrix?.devices ?? []).map((device) => ({
+      id: `${browser.replace("@", "-")}-${slug(device)}`,
+      browser,
+      viewport: { name: slug(device), width: 0, height: 0 },
+      device,
+    })),
+  ]);
 }

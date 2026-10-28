@@ -1,5 +1,5 @@
 import { httpCredentialsFor } from "../http-auth.js";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRemoteEnvProvider } from "@qajitsu/adapter-env-remote";
@@ -104,7 +104,7 @@ export function snapshotLogin(
 
 /**
  * Records the environment's pages for the planner (REQ-EXEC-22/AC7): when the run has no code of the application
- * (only a tests repository or none), or when asked with `--snapshot`. An earlier recording of the run is reused unless
+ * (only a tests repository or none), when its change shows no diff, or when asked with `--snapshot`. An earlier recording of the run is reused unless
  * asked again. Without a reachable environment the planner works without it and the person is told (AC6).
  *
  * @returns The recorded pages, or undefined.
@@ -113,15 +113,38 @@ export async function planSnapshot(
   session: RunSession,
   io: CommandIO,
   ports: RuntimePorts & SnapshotPorts,
-  options: { readonly env?: string | undefined; readonly force: boolean; readonly build?: boolean },
+  options: {
+    readonly env?: string | undefined;
+    readonly force: boolean;
+    readonly build?: boolean;
+    /** Pages the code defines, recorded too (dogfood pass 2026-10-25). */
+    readonly paths?: readonly string[] | undefined;
+  },
 ): Promise<UiScreen[] | undefined> {
   const { ws, events, masker } = session;
   const saved = await readPlanSnapshot(ws);
   if (saved && !options.force && options.build !== true) return saved;
   const hasCode = Object.values(ws.record.repos).some((r) => r.role !== "tests");
-  if (hasCode && !options.force && options.build !== true) return undefined;
+  // Code without a visible change (a branch named by --ref with no diff) shows the planner nothing of the pages either
+  // (dogfood pass 2026-10-25: it guessed every text), so the pages are recorded then too.
+  const diffs = (await readdir(ws.path("repos")).catch(() => [] as string[])).filter((f) =>
+    f.endsWith(".diff"),
+  );
+  const changeShown = await Promise.all(
+    diffs.map((f) =>
+      stat(ws.path("repos", f)).then(
+        (x) => x.size > 0,
+        () => false,
+      ),
+    ),
+  ).then((sizes) => sizes.some(Boolean));
+  if (hasCode && changeShown && !options.force && options.build !== true) return undefined;
   if (options.build !== true)
-    return recordForPlanner(session, io, ports, { env: options.env, force: options.force });
+    return recordForPlanner(session, io, ports, {
+      env: options.env,
+      force: options.force,
+      paths: options.paths,
+    });
   // REQ-EXEC-22/AC9: the environment (and the app) are started from the worktree only to record what they show.
   const releaseEnv = await acquireEnvLock(session);
   io.write("Building the environment to record its pages and screens for the planner…\n");
@@ -147,6 +170,7 @@ export async function planSnapshot(
       env: options.env,
       force: true,
       buildBaseUrl: prepared.build.baseUrl,
+      paths: options.paths,
     });
   } finally {
     await prepared.build?.stop().catch(() => undefined);
@@ -176,7 +200,12 @@ async function recordForPlanner(
   session: RunSession,
   io: CommandIO,
   ports: RuntimePorts & SnapshotPorts,
-  options: { readonly env?: string | undefined; readonly force: boolean; readonly buildBaseUrl?: string },
+  options: {
+    readonly env?: string | undefined;
+    readonly force: boolean;
+    readonly buildBaseUrl?: string;
+    readonly paths?: readonly string[] | undefined;
+  },
 ): Promise<UiScreen[] | undefined> {
   const { ws, project, masker, events } = session;
   let env: ResolvedEnvironment;
@@ -211,6 +240,8 @@ async function recordForPlanner(
       account,
       baseUrl: env.baseUrl,
       allowedOrigins: [env.origin],
+      ...(options.paths ? { paths: options.paths } : {}),
+      testStateHook: project.config.web.test_state,
       mask: (v) => masker.maskJson(v),
       emit: (event, details) => {
         events.emit("plan", { kind: "system", name: "orchestrator" }, event, details);

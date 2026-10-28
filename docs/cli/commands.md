@@ -151,7 +151,10 @@ other check passed).
 
 ### `qajitsu setup`
 
-Installs what the project needs, at the versions QAJitsu is tested with (REQ-GEN-06): the browsers of the web matrix,
+Installs what the project needs, at the versions QAJitsu is tested with (REQ-GEN-06): the browsers of the web matrix
+(Playwright's engines, and Google Chrome or Microsoft Edge through Playwright's installer when the matrix names
+`chrome`, `chrome-beta`, `msedge` or `msedge-beta`; that installer may ask for an administrator password, and Linux on
+arm64 has no build of them),
 Docker with Compose for compose services, Java (Eclipse Temurin 17.0.20.1+1) and the Android SDK packages (platform
 tools; platform and build tools for `app.source: build`; emulator, system image and AVD for a configured emulator),
 Appium 3.8.0 with UiAutomator2 8.7.0 / XCUITest 12.16.0 when QAJitsu starts Appium, and Xcode for local iOS.

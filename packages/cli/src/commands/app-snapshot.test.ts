@@ -61,6 +61,45 @@ describe("pages of the environment for the planner (REQ-EXEC-22/AC7+AC8)", () =>
     );
   });
 
+  it("REQ-EXEC-22/AC7: a change without a diff (a branch named by --ref) gets the pages recorded for the planner; a change with one does not (dogfood 2026-10-25)", async () => {
+    const browser = createPlaywrightBrowserFactory({
+      video: "off",
+      webSession: { storage: "sessionStorage", key: "token" },
+      actionTimeoutMs: 3000,
+    });
+    const web = await createDemoPipeline({ ticket: "DEMO-4", ports: { snapshotBrowser: browser } });
+    cleanups.push(web.cleanup);
+    await web.run(["fetch", "DEMO-4", "--ref", "shop=main"]);
+    const draft = await readFile(
+      new URL("../../../../fixtures/plans/demo-4-draft.json", import.meta.url),
+      "utf8",
+    );
+    const planned = await web.run(["plan", "DEMO-4"], { script: [{ text: analysis }, { text: draft }] });
+    expect(planned.out).toMatch(/Recorded \d+ page\(s\) or screen\(s\) of local for the planner\./);
+    const api = await createDemoPipeline({ ports: { snapshotBrowser: browser } });
+    cleanups.push(api.cleanup);
+    await api.run(["fetch", "DEMO-1"]);
+    const apiPlan = await api.run(["plan", "DEMO-1"], {
+      script: [
+        {
+          text: JSON.stringify({
+            summary: "Cart.",
+            change_type: ["api"],
+            endpoints: [{ method: "GET", path: "/cart", source: [{ kind: "ac", id: "AC1" }] }],
+            confidence: "high",
+          }),
+        },
+        {
+          text: await readFile(
+            new URL("../../../../fixtures/plans/demo-1-draft.json", import.meta.url),
+            "utf8",
+          ),
+        },
+      ],
+    });
+    expect(apiPlan.out).not.toContain("for the planner");
+  });
+
   it("REQ-EXEC-22/AC7 + REQ-EXEC-23/AC1: before planning, the first screen of an installed app is recorded too", async () => {
     let stopped = false;
     const client = {
@@ -189,15 +228,21 @@ describe("pages of the environment for the planner (REQ-EXEC-22/AC7+AC8)", () =>
     expect(planned.out).toContain(
       "Building the environment to record its pages and screens for the planner…",
     );
-    expect(planned.out).toContain("Recorded 2 page(s) or screen(s) of build (local) for the planner.");
+    expect(planned.out).toMatch(/Recorded \d+ page\(s\) or screen\(s\) of build \(local\) for the planner\./);
     const runId = (await readRunIndex(join(p.home, "runs"), "DEMO-1" as TicketKey)).latest ?? "";
     const dir = join(p.home, "runs", "DEMO-1", runId);
     const screens = JSON.parse(await readFile(join(dir, "ui", "snapshot.json"), "utf8")) as UiScreen[];
-    expect(screens.map((s) => s.where)).toEqual(["/", "app:start"]);
-    expect(screens[1]?.elements).toEqual([{ role: "TextView", testid: "cart-count", text: "Cart: 0 items" }]);
+    // The start page, the pages the shop's code defines (no link reaches /app/offer), then the app's first screen.
+    expect(screens[0]?.where).toBe("/");
+    expect(screens.map((s) => s.where)).toContain("/app/offer");
+    expect(screens.at(-1)?.where).toBe("app:start");
+    expect(screens.at(-1)?.elements).toEqual([
+      { role: "TextView", testid: "cart-count", text: "Cart: 0 items" },
+    ]);
     expect(stopped).toBe(true);
     // The environment is stopped and its .env files are gone once planning has what it needs.
-    expect(pages).toEqual(["/"]);
+    expect(pages[0]).toBe("/");
+    expect(pages).toContain("/app/offer");
     expect(
       (await readdir(join(dir, "env")).catch(() => [] as string[])).filter((f) => f.endsWith(".env")),
     ).toEqual([]);

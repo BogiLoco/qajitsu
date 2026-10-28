@@ -1,5 +1,5 @@
 import type { BrowserFactory } from "@qajitsu/adapter-runner-api";
-import { accountsUsedBy, type Plan, type UiScreen } from "@qajitsu/core";
+import { accountsUsedBy, type BrowserState, type Plan, type UiScreen } from "@qajitsu/core";
 
 /** Pages recorded per case and per run, so a snapshot stays quick and its prompt section small (REQ-EXEC-22/AC2). */
 const PAGES_PER_CASE = 5;
@@ -42,6 +42,7 @@ export interface UiSnapshotInput {
       readonly accounts: Readonly<Record<string, Readonly<Record<string, string>>>>;
       readonly secrets: readonly string[];
       readonly sessions?: Readonly<Record<string, string>>;
+      readonly browserStates?: Readonly<Record<string, BrowserState>> | undefined;
       readonly release?: () => void;
     }>;
     /** Account aliases of the environment. */
@@ -123,6 +124,8 @@ export async function recordUiSnapshot(input: UiSnapshotInput): Promise<UiScreen
         accounts: login?.accounts ?? {},
         secrets: login?.secrets ?? [],
         ...(login?.sessions ? { sessions: login.sessions } : {}),
+        ...(login?.browserStates ? { browserStates: login.browserStates } : {}),
+        ...(login?.browserStates ? { browserStates: login.browserStates } : {}),
       });
       try {
         const driver = await session.driver();
@@ -176,6 +179,10 @@ export interface UiCrawlInput {
   readonly allowedOrigins: readonly string[];
   /** Pages recorded at most (default 12). */
   readonly maxPages?: number;
+  /** The application's test hook (`web.test_state`), noted per page for `state.*` checks. */
+  readonly testStateHook?: string | undefined;
+  /** Pages to record right after the start page, e.g. the pages the code defines that no link reaches. */
+  readonly paths?: readonly string[];
   readonly mask: UiSnapshotInput["mask"];
   readonly emit: UiSnapshotInput["emit"];
 }
@@ -233,11 +240,13 @@ export async function crawlUiSnapshot(input: UiCrawlInput): Promise<UiScreen[]> 
     accounts: login?.accounts ?? {},
     secrets: login?.secrets ?? [],
     ...(login?.sessions ? { sessions: login.sessions } : {}),
+    ...(login?.browserStates ? { browserStates: login.browserStates } : {}),
   });
   try {
     const driver = await session.driver();
     if (input.account !== undefined) await driver.useAccount(input.account);
-    const queue = ["/"];
+    // The start page, then the pages the code names (an offer page no menu links to), then what links reach.
+    const queue = ["/", ...(input.paths ?? []).filter((p) => /^\/[^\s?#]*$/.test(p) && p !== "/")];
     const seen = new Set(queue);
     while (queue.length > 0 && screens.length < max) {
       const where = queue.shift() ?? "/";
@@ -245,11 +254,19 @@ export async function crawlUiSnapshot(input: UiCrawlInput): Promise<UiScreen[]> 
         await driver.goto(where);
         if (!driver.elements) break;
         const elements = await driver.elements();
+        // Dogfood pass 2026-10-28: a plan expected `state.page` from a page without any test hook.
+        const hook = driver.testState
+          ? await driver
+              .testState(input.testStateHook ?? "__QA_STATE__", "")
+              .then((r) => r.hook)
+              .catch(() => undefined)
+          : undefined;
         const masked = input.mask({
           where,
           platform: "web",
           ...(input.account !== undefined ? { account: input.account } : {}),
           elements: elements.slice(0, ELEMENTS_PER_SCREEN),
+          ...(hook === undefined ? {} : { testHook: hook }),
         }) as UiScreen;
         screens.push(masked);
         input.emit("ui.snapshot", { where, platform: "web", elements: masked.elements.length });

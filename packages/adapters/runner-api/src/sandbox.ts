@@ -17,6 +17,7 @@ import {
 import { z } from "zod";
 import type { AttemptInput } from "./attempt.js";
 import { createPlaywrightTransport } from "./transport.js";
+import { extraSessions } from "./extra-sessions.js";
 
 /** Executes one attempt; the sandbox in production, in-process in unit tests. */
 /** The runner seam from `@qajitsu/core` (ADR-0005). */
@@ -81,12 +82,46 @@ const UiOperationSchema = z.discriminatedUnion("op", [
   z.strictObject({ op: z.literal("switchPage"), to: z.enum(["new", "opener"]) }),
   z.strictObject({ op: z.literal("closePage") }),
   z.strictObject({ op: z.literal("advanceTime"), seconds: z.number().int().min(1).max(604_800) }),
+  z.strictObject({ op: z.literal("setOffline"), offline: z.boolean() }),
+  z.strictObject({ op: z.literal("fillCode"), selector: Selector }),
+  z.strictObject({ op: z.literal("session"), name: z.string().regex(/^[a-z][a-z0-9_-]{0,40}$/) }),
+  // REQ-EXEC-41, REQ-EXEC-63/AC2: gestures, their numbers checked again by the runtime.
+  z.strictObject({
+    op: z.literal("gesture"),
+    gesture: z.discriminatedUnion("kind", [
+      z.strictObject({ kind: z.literal("tap"), selector: Selector }),
+      z.strictObject({ kind: z.literal("doubleTap"), selector: Selector }),
+      z.strictObject({ kind: z.literal("longPress"), selector: Selector, seconds: z.number() }),
+      z.strictObject({
+        kind: z.literal("swipe"),
+        selector: Selector.optional(),
+        direction: z.enum(["up", "down", "left", "right"]),
+        distance: z.number(),
+        speed: z.enum(["slow", "normal", "fast"]),
+      }),
+      z.strictObject({
+        kind: z.literal("pinch"),
+        selector: Selector.optional(),
+        direction: z.enum(["in", "out"]),
+        scale: z.number(),
+      }),
+      z.strictObject({ kind: z.literal("pullToRefresh") }),
+    ]),
+  }),
+  z.strictObject({
+    op: z.literal("fillSecret"),
+    selector: Selector,
+    alias: z.string().regex(/^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$/),
+    field: z.enum(["password", "username", "totp"]),
+  }),
 ]);
 
 /** A browser for one attempt, created by the web runner (ADR-0004). */
 export interface BrowserSession {
   /** Starts the browser on first use. */
   readonly driver: () => Promise<UiDriver>;
+  /** The browser the attempt ran in with its exact version, once started (REQ-EXEC-66/AC3). */
+  readonly browser?: () => { readonly name: string; readonly version: string } | undefined;
   /** Closes the browser and returns case evidence: video, trace, HAR, console log (REQ-EVD-02). */
   readonly close: (failed: boolean) => Promise<EvidenceItem[]>;
 }
@@ -192,6 +227,8 @@ export function createSandboxExecutor(
     readonly browser?: BrowserFactory;
     /** HTTP authentication of the environment for API calls (REQ-EXEC-61/AC5). */
     readonly httpCredentials?: { readonly username: string; readonly password: string } | undefined;
+    /** Headers the application offers for tests, sent to its origin only (REQ-EXEC-55/AC4). */
+    readonly testHeaders?: Readonly<Record<string, string>> | undefined;
   } = {},
 ): AttemptExecutor {
   const childScript = options.childScript ?? fileURLToPath(new URL("./child.js", import.meta.url));
@@ -203,11 +240,15 @@ export function createSandboxExecutor(
       const pw = await createPlaywrightTransport({
         timeoutMs: input.timeoutMs,
         ...(options.httpCredentials ? { httpCredentials: options.httpCredentials } : {}),
+        ...(options.testHeaders && Object.keys(options.testHeaders).length > 0
+          ? { testHeaders: { origin: new URL(input.baseUrl).origin, headers: options.testHeaders } }
+          : {}),
       });
       transport = pw.transport;
       dispose = pw.dispose;
     }
     const session = options.browser?.(input);
+    const extra = extraSessions(options.browser, input);
     const runtime: CaseRuntime = createCaseRuntime({
       plan: input.plan,
       ...(input.visual ? { visual: input.visual } : {}),
@@ -217,6 +258,7 @@ export function createSandboxExecutor(
       ...(input.fixture ? { fixture: input.fixture } : {}),
       ...(input.extractText ? { extractText: input.extractText } : {}),
       ...(input.testStateHook ? { testStateHook: input.testStateHook } : {}),
+      ...(input.credential ? { credential: input.credential } : {}),
       caseId: input.caseId,
       attempt: input.attempt,
       baseUrl: input.baseUrl,
@@ -226,6 +268,7 @@ export function createSandboxExecutor(
       accounts: input.accounts,
       now,
       ...(session ? { ui: session.driver } : {}),
+      ...(extra.open ? { session: extra.open } : {}),
       // REQ-EVD-08: the trusted runner draws the boxes on copies of failure screenshots.
       annotate: annotateImage,
       ...(input.progress
@@ -269,8 +312,16 @@ export function createSandboxExecutor(
           deadline.clear();
           child.kill("SIGKILL");
           void runtime.finish(fatal ?? error).then(async (record) => {
-            const media = session ? await session.close(record.outcome !== "passed").catch(() => []) : [];
-            resolve({ ...record, evidence: [...record.evidence, ...media] });
+            const media = [
+              ...(session ? await session.close(record.outcome !== "passed").catch(() => []) : []),
+              ...(await extra.close(record.outcome !== "passed")),
+            ];
+            const ran = session?.browser?.();
+            resolve({
+              ...record,
+              evidence: [...record.evidence, ...media],
+              ...(ran ? { browser: ran } : {}),
+            });
           });
         };
         const deadline = startDeadline(input.timeoutMs, () => {

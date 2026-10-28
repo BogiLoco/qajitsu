@@ -31,16 +31,22 @@ describe("element and page inventory (REQ-PLAN-09/AC7)", () => {
     expect(byId["testid:cart-count"]?.platforms).toEqual(["android"]);
     // The demo shop's pages, the web gaps' pages included (REQ-EXEC-38..40, REQ-EXEC-56).
     expect(inventory.pages).toEqual([
+      "/app/account",
       "/app/addresses",
       "/app/board",
       "/app/cart",
+      "/app/chat",
       "/app/checkout",
+      "/app/gallery",
       "/app/login",
+      "/app/messages",
+      "/app/notes",
       "/app/offer",
       "/app/pay",
       "/app/products",
       "/app/profile",
       "/app/reviews",
+      "/app/signin",
     ]);
     expect(selectorKnown(inventory, "testid:place-order")).toBe(true);
     expect(selectorKnown(inventory, "testid:price-P-2")).toBe(true);
@@ -101,7 +107,7 @@ describe("element and page inventory (REQ-PLAN-09/AC7)", () => {
     expect(renderUiInventory(inventory)).toContain("- testid:cart (android, web) in Cart.java, web.html");
   });
 
-  it("REQ-PLAN-09/AC7: pages come from links, routers and page maps; an exact id wins over a prefix", () => {
+  it("REQ-PLAN-09/AC7: pages come from links, routers and page maps, assets excluded; an exact id wins over a prefix", () => {
     const found = scanUiSource(
       [
         '<a href="/orders">',
@@ -109,6 +115,8 @@ describe("element and page inventory (REQ-PLAN-09/AC7)", () => {
         '<Route path="/settings" element={x} />',
         'const PAGES = { "/help": [1] };',
         '<a href="/">',
+        '<link rel="manifest" href="/manifest.webmanifest">',
+        'const ASSETS = { "/sw.js": [1] };',
         '<b data-testid="x-">',
         "<b data-testid=\"x-'+n+'\">",
       ].join("\n"),

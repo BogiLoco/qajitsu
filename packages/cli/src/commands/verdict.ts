@@ -5,6 +5,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readManifest } from "@qajitsu/adapter-evidence-local";
 import {
+  AnalysisSchema,
   APPROVED_PLAN_FILE,
   AuditRecordSchema,
   CanaryRecordSchema,
@@ -48,6 +49,7 @@ import {
   applyVerificationChecks,
   checkApprovalRecords,
   computeDecision,
+  endpointReach,
   formatDecision,
   type DecisionResult,
   checkManifest,
@@ -203,6 +205,18 @@ export async function computeVerdict(
   // only when every combination it ran in passed.
   const combos = webCombinations(session.project.config.web);
   const perCombination = new Map<string, { combo: string; status: TestStatus }[]>();
+  // REQ-EXEC-66/AC3: a combination is named with the exact browser its last attempt ran in.
+  // REQ-EXEC-63/AC3: an emulated device is named as emulated, never as a real one.
+  const emulatedIn = new Map(combos.filter((c) => c.device !== undefined).map((c) => [c.id, c.device]));
+  const ranIn = (file: CaseResultFile | undefined, id: string): string => {
+    const b = file?.attempts.at(-1)?.browser;
+    const device = emulatedIn.get(id);
+    const parts = [
+      b ? `${b.name} ${b.version}` : undefined,
+      device ? `emulated ${device}` : undefined,
+    ].filter((x) => x !== undefined);
+    return parts.length > 0 ? `${id} (${parts.join(", ")})` : id;
+  };
   const matrixResults: { name: string; text: string }[] = [];
   for (const combo of combos.slice(1)) {
     const dir = ws.path("results", "matrix", combo.id);
@@ -219,7 +233,7 @@ export async function computeVerdict(
       if (comboResults.has(c.caseId))
         perCombination.set(c.caseId, [
           ...(perCombination.get(c.caseId) ?? []),
-          { combo: combo.id, status: c.status },
+          { combo: ranIn(comboResults.get(c.caseId), combo.id), status: c.status },
         ]);
   }
   // REQ-EXEC-20/AC3: in matrix mode every further device is evaluated by the same code; a mobile case is PASSED only
@@ -288,7 +302,10 @@ export async function computeVerdict(
       return [`${devices[0]} ${primaryStatus}`, ...onDevices.map((o) => `${o.combo} ${o.status}`)].join(", ");
     const others = perCombination.get(caseId);
     return others && combos[0]
-      ? [`${combos[0].id} ${primaryStatus}`, ...others.map((o) => `${o.combo} ${o.status}`)].join(", ")
+      ? [
+          `${ranIn(results.get(caseId), combos[0].id)} ${primaryStatus}`,
+          ...others.map((o) => `${o.combo} ${o.status}`),
+        ].join(", ")
       : undefined;
   };
   // REQ-VER-06, REQ-VER-09: the auditor and the canary can only move PASSED to NEEDS_REVIEW.
@@ -523,6 +540,19 @@ export async function computeVerdict(
         evidencePath,
       };
     });
+  // REQ-EVD-09/AC2: which case reached which endpoint of the change, from the requests the runner recorded.
+  const analysis = AnalysisSchema.safeParse(
+    JSON.parse(await readFile(ws.path("analysis.json"), "utf8").catch(() => "null")) as unknown,
+  );
+  const reached = new Map(
+    [...results]
+      .filter(([, r]) => r.attempts.some((a) => a.requests !== undefined))
+      .map(([id, r]) => [id, r.attempts.flatMap((a) => a.requests ?? [])] as const),
+  );
+  const endpoints =
+    analysis.success && analysis.data.endpoints.length > 0 && reached.size > 0
+      ? endpointReach(analysis.data.endpoints, reached)
+      : undefined;
   const attempts: Record<string, ReportAttempt[]> = {};
   for (const [id, r] of results) {
     attempts[id] = r.attempts.map((a) => ({
@@ -530,6 +560,8 @@ export async function computeVerdict(
       outcome: a.outcome,
       error: a.error,
       assertions: a.assertions,
+      // REQ-EVD-09/AC1: what went wrong in the traffic of the failed steps, next to the failure.
+      network: a.steps.flatMap((s) => (s.network ? [{ stepId: s.id, problems: s.network }] : [])),
       // REQ-EVD-08/AC5: the screenshots that mark where the step failed come first.
       evidence: annotatedFirst(
         manifest.filter((m) => a.evidence.includes(m.path)),
@@ -613,6 +645,7 @@ export async function computeVerdict(
       checks: checkNotes,
       observations,
       fixCheck,
+      endpoints,
     });
   const secretGate = gateNoSecrets(
     [

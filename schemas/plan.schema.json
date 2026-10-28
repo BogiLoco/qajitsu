@@ -298,6 +298,9 @@
                 "format": "date-time",
                 "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
               },
+              "service_workers": {
+                "type": "boolean"
+              },
               "permissions": {
                 "maxItems": 6,
                 "type": "array",
@@ -431,8 +434,7 @@
                     "elements": {
                       "type": "object",
                       "propertyNames": {
-                        "type": "string",
-                        "pattern": "^(frame:(testid|title|id|css):[^.>]+ >> )*(testid|role|label|text|css):[^.]+$"
+                        "type": "string"
                       },
                       "additionalProperties": {
                         "type": "object",
@@ -534,6 +536,73 @@
                       },
                       "additionalProperties": false
                     },
+                    "websocket": {
+                      "type": "object",
+                      "properties": {
+                        "url": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 300
+                        },
+                        "received": {
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          }
+                        },
+                        "sent": {
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 500
+                          }
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "manifest": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "short_name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        },
+                        "start_url": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 500
+                        },
+                        "display": {
+                          "type": "string",
+                          "enum": [
+                            "fullscreen",
+                            "standalone",
+                            "minimal-ui",
+                            "browser"
+                          ]
+                        },
+                        "icons": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        },
+                        "controlled": {
+                          "type": "boolean"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
                     "state": {
                       "type": "object",
                       "propertyNames": {
@@ -564,6 +633,11 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 3600
+                        },
+                        "code": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
                         }
                       },
                       "additionalProperties": false
