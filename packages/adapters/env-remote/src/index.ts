@@ -12,6 +12,7 @@ export {
   compareDeployedSha,
   createRemoteEnvProvider,
   type ScriptRunner,
+  type BrowserLoginRunner,
 } from "./remote.js";
 
 /** Adapter metadata used by `qajitsu doctor` and the adapter table in the docs. */

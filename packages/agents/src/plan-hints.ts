@@ -45,3 +45,34 @@ export function withPlacementHint(path: readonly PropertyKey[], message: string)
     return `${message} (an element key is a selector with its kind: "testid:${key}", "role:button:${key}" or "text:${key}")`;
   return message;
 }
+
+/** Evidence a case collects when its plan names none: what its runner records anyway. */
+const DEFAULT_EVIDENCE: Readonly<Record<string, readonly string[]>> = {
+  api: ["request", "response"],
+  web: ["screenshot"],
+  mobile: ["screenshot"],
+};
+
+/**
+ * Fills the evidence of plan cases that name none (missing or empty), by case type; returns the cases it filled.
+ * Evidence decides no status, so code completes it instead of failing the plan (dogfood pass 2026-10-28).
+ *
+ * @param raw - The planner's answer as parsed JSON, not yet validated.
+ */
+export function fillMissingEvidence(raw: unknown): {
+  readonly value: unknown;
+  readonly filled: readonly string[];
+} {
+  if (raw === null || typeof raw !== "object" || !Array.isArray((raw as { cases?: unknown }).cases))
+    return { value: raw, filled: [] };
+  const filled: string[] = [];
+  const cases = (raw as { cases: unknown[] }).cases.map((c) => {
+    if (c === null || typeof c !== "object") return c;
+    const kase = c as { id?: unknown; type?: unknown; evidence?: unknown };
+    const defaults = typeof kase.type === "string" ? DEFAULT_EVIDENCE[kase.type] : undefined;
+    if (defaults === undefined || (Array.isArray(kase.evidence) && kase.evidence.length > 0)) return c;
+    filled.push(typeof kase.id === "string" ? kase.id : "?");
+    return { ...kase, evidence: [...defaults] };
+  });
+  return { value: { ...raw, cases }, filled };
+}

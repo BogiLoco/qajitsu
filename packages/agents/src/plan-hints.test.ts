@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { withPlacementHint } from "./plan-hints.js";
+import { fillMissingEvidence, withPlacementHint } from "./plan-hints.js";
 
 describe("placement hints for model repairs (REQ-LLM-04/AC2)", () => {
   it("names where a misplaced web field belongs; other errors stay as they are", () => {
@@ -39,5 +39,25 @@ describe("placement hints for model repairs (REQ-LLM-04/AC2)", () => {
     expect(
       withPlacementHint(["cases", 3, "evidence"], "Too small: expected array to have >=1 items"),
     ).toContain('"evidence": ["screenshot"] for web and mobile');
+  });
+
+  it("REQ-LLM-04/AC2: evidence a case names nowhere is filled by code from its type; a named one is kept (dogfood 2026-10-28)", () => {
+    const { value, filled } = fillMissingEvidence({
+      summary: "s",
+      cases: [
+        { id: "TC-01", type: "web", evidence: [] },
+        { id: "TC-02", type: "api" },
+        { id: "TC-03", type: "mobile", evidence: ["video"] },
+        { id: "TC-04", type: "unknown" },
+      ],
+    });
+    expect(filled).toEqual(["TC-01", "TC-02"]);
+    expect((value as { cases: { evidence?: string[] }[] }).cases.map((c) => c.evidence)).toEqual([
+      ["screenshot"],
+      ["request", "response"],
+      ["video"],
+      undefined,
+    ]);
+    expect(fillMissingEvidence("not a plan")).toEqual({ value: "not a plan", filled: [] });
   });
 });

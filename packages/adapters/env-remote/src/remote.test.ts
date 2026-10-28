@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseProjectConfig, resolveEnvironment } from "@qajitsu/core";
+import { parseProjectConfig, resolveEnvironment, type BrowserState } from "@qajitsu/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { startShop } from "../../../../examples/demo-shop/api/server.mjs";
 import { envProviderContract } from "../../../../tests/contract/env-provider.contract.js";
@@ -319,5 +319,59 @@ process.stdout.write(JSON.stringify({
       },
       { name: "theme", value: "dark", expires: Date.parse("Wed, 21 Oct 2026 07:28:00 GMT") / 1000 },
     ]);
+  });
+
+  it("REQ-EXEC-55/AC1+AC2: an SSO login runs once per account and run when reused; it gets the account's TOTP code, never the seed", async () => {
+    const profile = (reuse: boolean) =>
+      `base_url: http://localhost:3000\naccounts:\n  user:standard: { username: standard, password: secret://env/DEMO_USER_PASSWORD, totp: secret://env/DEMO_TOTP_SEED }\nlogin:\n  browser:\n    start: /sso/start\n    steps: [{ fill: "label:Code", value: "{{totp}}" }]\n    done: { path: /app }\n    allow: [https://idp.example.com]\n    reuse: ${String(reuse)}\nweb_session: { storage: cookies }\n`;
+    const calls: unknown[][] = [];
+    const deps = (cache: Map<string, BrowserState>) => ({
+      fetch,
+      now: () => 59_000,
+      resolveSecret: (ref: string) =>
+        Promise.resolve(ref.endsWith("DEMO_TOTP_SEED") ? "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ" : PASSWORD),
+      registerSecret: () => undefined,
+      sessionCache: cache,
+      browserLogin: (
+        flow: { start: string },
+        values: { totp?: () => string },
+        where: { allowedOrigins: readonly string[] },
+      ) => {
+        calls.push([flow.start, values.totp?.(), where.allowedOrigins]);
+        return Promise.resolve({ cookies: [{ name: "sid", value: "sso-session-1234" }] });
+      },
+    });
+    const { qaDir, config } = await project(profile(true), {}, [
+      "http://localhost:3000",
+      "https://idp.example.com",
+    ]);
+    const env = await resolveEnvironment({ config, qaDir });
+    const cache = new Map<string, BrowserState>();
+    const first = await loginAccounts(env, deps(cache));
+    const second = await loginAccounts(env, deps(cache));
+    expect(calls).toEqual([["/sso/start", "287082", ["http://localhost:3000", "https://idp.example.com"]]]);
+    expect(first.accounts["user:standard"]).toEqual({ cookie: "sid=sso-session-1234" });
+    expect(second.browserStates["user:standard"]?.cookies[0]?.value).toBe("sso-session-1234");
+    expect(first.credential("user:standard", "totp")).toBe("287082");
+    expect(first.secrets).toContain("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ");
+    // Without reuse every attempt logs in again.
+    const fresh = await project(profile(false), {}, ["http://localhost:3000", "https://idp.example.com"]);
+    const env2 = await resolveEnvironment({ config: fresh.config, qaDir: fresh.qaDir });
+    await loginAccounts(env2, deps(cache));
+    await loginAccounts(env2, deps(cache));
+    expect(calls).toHaveLength(3);
+    // Without the web runner the login is refused with the alias named.
+    await expect(
+      loginAccounts(env2, {
+        fetch,
+        resolveSecret: () => Promise.resolve(PASSWORD),
+        registerSecret: () => undefined,
+      }),
+    ).rejects.toMatchObject({ code: "ENV_LOGIN_FAILED" });
+    // An identity provider outside the allowlist is refused when the environment is resolved (INV-10).
+    const outside = await project(profile(true), {}, ["http://localhost:3000"]);
+    await expect(resolveEnvironment({ config: outside.config, qaDir: outside.qaDir })).rejects.toMatchObject({
+      code: "ENV_NOT_ALLOWED",
+    });
   });
 });

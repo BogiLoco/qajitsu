@@ -233,6 +233,23 @@ export const ExpectationSchema = z
         subject: z.string().min(1).max(300).optional(),
         body: z.string().min(1).max(500).optional(),
         within_s: z.number().int().min(1).max(3600).optional(),
+        /**
+         * Where the one-time code is in the message, as a regular expression whose first group (or whole match) is
+         * the code (REQ-EXEC-55/AC3); default: the first group of 4 to 8 digits. Used by `ui.fillCode`.
+         */
+        code: z
+          .string()
+          .min(1)
+          .max(200)
+          .refine((r) => {
+            try {
+              new RegExp(r);
+              return true;
+            } catch {
+              return false;
+            }
+          }, "A valid regular expression")
+          .optional(),
       })
       .optional(),
     /**

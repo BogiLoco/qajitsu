@@ -211,8 +211,11 @@ export interface BrowserState {
   readonly localStorage?: Readonly<Record<string, string>> | undefined;
 }
 
-/** An account's secret for `ui.fillSecret` (REQ-EXEC-67/AC3), resolved by the trusted parent only. */
-export type CredentialLookup = (alias: string, field: "username" | "password") => string | undefined;
+/**
+ * An account's secret for `ui.fillSecret` (REQ-EXEC-67/AC3, REQ-EXEC-55/AC1), resolved by the trusted parent only;
+ * `totp` is the account's current one-time code.
+ */
+export type CredentialLookup = (alias: string, field: "username" | "password" | "totp") => string | undefined;
 
 export interface AttemptRequest {
   readonly specFile: string;

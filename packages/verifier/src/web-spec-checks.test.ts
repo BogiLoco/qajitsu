@@ -193,12 +193,14 @@ export async function run({ step, verify, plan, ui }: CaseContext): Promise<void
     const plan = fixturePlan("DEMO-13");
     const spec = fixtureSpec("DEMO-13", "TC-01");
     expect(messages(spec, "TC-01", plan).filter((m) => m.startsWith("lint"))).toEqual([]);
+    // Signing in through the form with the account's secrets counts as running as that account (CLI flow 2026-10-28).
+    expect(messages(spec, "TC-01", plan).filter((m) => m.includes("runs as"))).toEqual([]);
     expect(
       messages(spec.replace('"user:standard", "password"', '"user:admin", "password"'), "TC-01", plan),
     ).toContain("lint: ui.fillSecret() takes an account alias of TC-01 in the plan (data), as a literal");
     expect(
       messages(spec.replace('"user:standard", "password"', '"user:standard", "token"'), "TC-01", plan),
-    ).toContain('lint: ui.fillSecret() types "password" or "username", as a literal');
+    ).toContain('lint: ui.fillSecret() types "password", "username" or "totp", as a literal');
     expect(messages(spec.replace('"user:standard", "password"', "alias, field"), "TC-01", plan)).toContain(
       "lint: ui.fillSecret() takes an account alias of TC-01 in the plan (data), as a literal",
     );
@@ -206,5 +208,45 @@ export async function run({ step, verify, plan, ui }: CaseContext): Promise<void
     expect(
       assertionLockDiff(spec, spec.replace('"user:standard", "password"', '"user:standard", "username"')),
     ).not.toEqual([]);
+  });
+
+  it("REQ-EXEC-55/AC3: ui.fillCode needs the message the plan expects in the same step", () => {
+    const plan = PlanSchema.parse({
+      schema: 1,
+      ticket: "DEMO-13",
+      version: 1,
+      cases: [
+        {
+          id: "TC-01",
+          title: "Two factors",
+          type: "web",
+          priority: "high",
+          source: [{ kind: "ac", id: "AC1" }],
+          evidence: ["screenshot"],
+          steps: [
+            {
+              id: "S1",
+              action: "Ask for a code",
+              expect: { description: "Sent", message: { subject: "Code" } },
+            },
+            { id: "S2", action: "Type it", expect: { description: "In", texts: ["Welcome"] } },
+          ],
+        },
+      ],
+    });
+    const spec = (step: string) => `import type { CaseContext } from "@qajitsu/steps";
+export const caseId = "TC-01";
+export async function run({ step, verify, plan, ui }: CaseContext): Promise<void> {
+  await step("${step}", async () => {
+    await ui.goto("/app/verify");
+    await ui.fillCode("testid:code");
+    verify("${step}", "${step === "S1" ? "message" : "texts.0"}", undefined, plan.expect("TC-01.${step}.${step === "S1" ? "message" : "texts.0"}"));
+  });
+}
+`;
+    expect(messages(spec("S1"), "TC-01", plan).filter((m) => m.includes("fillCode"))).toEqual([]);
+    expect(messages(spec("S2"), "TC-01", plan)).toContain(
+      "lint: ui.fillCode() in S2: the plan expects no message in S2 to take a code from",
+    );
   });
 });

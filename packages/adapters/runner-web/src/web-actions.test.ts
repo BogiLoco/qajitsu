@@ -625,4 +625,70 @@ describe("web actions (REQ-EXEC-38, REQ-EXEC-39, REQ-EXEC-40, REQ-EXEC-56)", () 
     expect(texts).toContain("signin-username");
     expect(texts).not.toMatch(/sid=[0-9a-f]{32}/);
   });
+
+  it("REQ-EXEC-55/AC4: a test header of the application (captcha bypass) goes to its own origin only, from the browser and the API client", async () => {
+    const seen: { where: string; header: string | undefined }[] = [];
+    const listen = (name: string, html: (other: string) => string) => {
+      const server = createServer((req, res) => {
+        seen.push({
+          where: `${name}${req.url ?? ""}`,
+          header: req.headers["x-captcha-bypass"] as string | undefined,
+        });
+        res.writeHead(200, { "content-type": "text/html", "access-control-allow-origin": "*" });
+        res.end(html(""));
+      });
+      return new Promise<string>((done) => {
+        server.listen(0, "127.0.0.1", () => {
+          cleanups.push(
+            () =>
+              new Promise<void>((closed) => {
+                server.close(() => {
+                  closed();
+                });
+              }),
+          );
+          done(`http://127.0.0.1:${String((server.address() as { port: number }).port)}`);
+        });
+      });
+    };
+    const other = await listen("other", () => "ok");
+    const app = await listen(
+      "app",
+      () => `<p data-testid="p">ok</p><script>fetch("${other}/x");fetch("/api")</script>`,
+    );
+    const session = createPlaywrightBrowserFactory({
+      video: "off",
+      testHeaders: { "X-Captcha-Bypass": "bypass-key-123" },
+    })({
+      specFile: spec("DEMO-11", "TC-01"),
+      caseId: "TC-02",
+      attempt: 1,
+      plan: plan("DEMO-11"),
+      baseUrl: app,
+      allowedOrigins: [app, other],
+      accounts: {},
+      secrets: [],
+      timeoutMs: 30_000,
+    });
+    cleanups.push(async () => {
+      await session.close(false);
+    });
+    const d = await session.driver();
+    await d.goto("/");
+    await d.waitFor("testid:p", "visible");
+    await new Promise((r) => setTimeout(r, 500));
+    const { transport, dispose } = await createPlaywrightTransport({
+      timeoutMs: 5000,
+      testHeaders: { origin: app, headers: { "X-Captcha-Bypass": "bypass-key-123" } },
+    });
+    await transport({ method: "GET", url: `${app}/from-api`, headers: {} });
+    await transport({ method: "GET", url: `${other}/from-api`, headers: {} });
+    await dispose();
+    const byWhere = Object.fromEntries(seen.map((x) => [x.where, x.header]));
+    expect(byWhere["app/"]).toBe("bypass-key-123");
+    expect(byWhere["app/api"]).toBe("bypass-key-123");
+    expect(byWhere["app/from-api"]).toBe("bypass-key-123");
+    expect(byWhere["other/x"]).toBeUndefined();
+    expect(byWhere["other/from-api"]).toBeUndefined();
+  });
 });

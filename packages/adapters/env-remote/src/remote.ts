@@ -4,7 +4,9 @@ import { z } from "zod";
 import {
   AdapterError,
   accountMembers,
+  totp,
   type BrowserCookie,
+  type BrowserLoginFlow,
   type BrowserState,
   type CredentialLookup,
   type EnvProvider,
@@ -123,6 +125,12 @@ export async function loginAccounts(
     readonly qaDir?: string;
     /** Runs a login script (replaced in tests); default: `execFile` with an argument array. */
     readonly runScript?: ScriptRunner;
+    /** The clock for one-time codes (REQ-EXEC-55/AC1); injected in tests. */
+    readonly now?: () => number;
+    /** Runs a browser login (SSO, REQ-EXEC-55/AC2); provided by the web runner. */
+    readonly browserLogin?: BrowserLoginRunner;
+    /** Sessions of browser logins kept for the run, so cases share one login per account (`reuse`). */
+    readonly sessionCache?: Map<string, BrowserState>;
   },
   /**
    * The pool member to log in per alias (REQ-ENV-09/AC2); only these aliases are logged in. Without it every alias
@@ -141,7 +149,15 @@ export async function loginAccounts(
   const accounts: Record<string, Record<string, string>> = {};
   const sessions: Record<string, string> = {};
   const browserStates: Record<string, BrowserState> = {};
-  const credentials = new Map<string, { username: string; password: string }>();
+  const credentials = new Map<
+    string,
+    {
+      username: string;
+      password: string;
+      totp?: { seed: string; digits: number; period: number; algorithm: "sha1" | "sha256" | "sha512" };
+    }
+  >();
+  const now = deps.now ?? Date.now;
   const secrets: string[] = [];
   const login = env.profile.login;
   const chosen = Object.entries(
@@ -159,15 +175,78 @@ export async function loginAccounts(
       : account.username;
     const password = await deps.resolveSecret(account.password);
     secrets.push(password);
-    credentials.set(alias, { username, password });
+    // REQ-EXEC-55/AC1: the authenticator's seed is a secret like the password; codes are computed when typed.
+    const totpConfig =
+      account.totp === undefined
+        ? undefined
+        : typeof account.totp === "string"
+          ? { seed: account.totp, digits: 6, period: 30, algorithm: "sha1" as const }
+          : account.totp;
+    const seed = totpConfig ? await deps.resolveSecret(totpConfig.seed) : undefined;
+    if (seed !== undefined) {
+      deps.registerSecret(seed);
+      secrets.push(seed);
+    }
+    credentials.set(alias, {
+      username,
+      password,
+      ...(totpConfig && seed !== undefined ? { totp: { ...totpConfig, seed } } : {}),
+    });
     if (!login)
       throw new AdapterError(
         "ENV_LOGIN_MISSING",
         "Accounts need a login definition in the environment profile.",
         { alias },
       );
+    if ("browser" in login) {
+      // REQ-EXEC-55/AC2: SSO through the browser, run by QAJitsu; one login per account and run when reused.
+      const key = `${alias}#${String(index)}`;
+      let state = login.browser.reuse ? deps.sessionCache?.get(key) : undefined;
+      if (state === undefined) {
+        if (!deps.browserLogin)
+          throw new AdapterError("ENV_LOGIN_FAILED", `The browser login of ${alias} needs the web runner.`, {
+            alias,
+          });
+        const c = credentials.get(alias);
+        const values = {
+          username,
+          password,
+          ...(c?.totp ? { totp: () => totp(c.totp?.seed ?? "", now(), c.totp ?? {}) } : {}),
+        };
+        try {
+          state = await deps.browserLogin(login.browser, values, {
+            baseUrl: env.baseUrl,
+            allowedOrigins: [env.origin, ...login.browser.allow.map((a) => new URL(a).origin)],
+          });
+        } catch (error) {
+          throw new AdapterError(
+            "ENV_LOGIN_FAILED",
+            `Browser login of ${alias} failed: ${error instanceof Error ? error.message.slice(0, 200) : "error"}.`,
+            { alias },
+          );
+        }
+        if (login.browser.reuse) deps.sessionCache?.set(key, state);
+      }
+      if (state.cookies.length === 0 && Object.keys(state.localStorage ?? {}).length === 0)
+        throw new AdapterError("ENV_LOGIN_FAILED", `Browser login of ${alias} left no session.`, { alias });
+      for (const v of [
+        ...state.cookies.map((x) => x.value),
+        ...Object.values(state.localStorage ?? {}),
+      ].filter((x) => x.length >= 6)) {
+        deps.registerSecret(v);
+        secrets.push(v);
+      }
+      browserStates[alias] = state;
+      accounts[alias] = state.cookies.length > 0 ? { cookie: cookieHeader(state.cookies) } : {};
+      continue;
+    }
     if ("script" in login) {
-      const result = await scriptLogin(login, alias, username, password, env, deps);
+      const code = credentials.get(alias)?.totp;
+      const result = await scriptLogin(login, alias, username, password, env, {
+        ...deps,
+        // REQ-EXEC-55/AC1: an SSO script with two factors gets the current code, never the seed.
+        ...(code ? { totpCode: totp(code.seed, now(), code) } : {}),
+      });
       const cookies = [...(result.cookies ?? []), ...(result.storage_state?.cookies ?? [])];
       const storage = Object.fromEntries(
         (result.storage_state?.origins ?? [])
@@ -244,9 +323,24 @@ export async function loginAccounts(
     secrets,
     sessions,
     browserStates,
-    credential: (alias, field) => credentials.get(alias)?.[field],
+    credential: (alias, field) => {
+      const c = credentials.get(alias);
+      if (c === undefined) return undefined;
+      if (field !== "totp") return c[field];
+      return c.totp ? totp(c.totp.seed, now(), c.totp) : undefined;
+    },
   };
 }
+
+/**
+ * Runs a browser login flow (REQ-EXEC-55/AC2) and returns the session it leaves for the application's origin. Values
+ * are the account's secrets for `{{username}}`, `{{password}}` and `{{totp}}` (a code computed when it is typed).
+ */
+export type BrowserLoginRunner = (
+  flow: BrowserLoginFlow,
+  values: { readonly username: string; readonly password: string; readonly totp?: () => string },
+  where: { readonly baseUrl: string; readonly allowedOrigins: readonly string[] },
+) => Promise<BrowserState>;
 
 /** Runs a login script: command, arguments, environment and timeout; resolves with its stdout. */
 export type ScriptRunner = (
@@ -358,7 +452,7 @@ async function scriptLogin(
   username: string,
   password: string,
   env: ResolvedEnvironment,
-  deps: { readonly qaDir?: string; readonly runScript?: ScriptRunner },
+  deps: { readonly qaDir?: string; readonly runScript?: ScriptRunner; readonly totpCode?: string },
 ): Promise<z.infer<typeof ScriptOutputSchema>> {
   const failed = (why: string): AdapterError =>
     new AdapterError("ENV_LOGIN_FAILED", `Login script of ${alias} ${why}.`, { alias, script: login.script });
@@ -377,6 +471,7 @@ async function scriptLogin(
         QAJITSU_ALIAS: alias,
         QAJITSU_USERNAME: username,
         QAJITSU_PASSWORD: password,
+        ...(deps.totpCode === undefined ? {} : { QAJITSU_TOTP: deps.totpCode }),
       },
     });
   } catch {

@@ -668,13 +668,51 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       case "fill":
         await d.fill(assertSelector(operation.selector), operation.value);
         return;
+      case "fillCode": {
+        // REQ-EXEC-55/AC3: the code comes from the message the plan expects, read by the parent.
+        const selector = assertSelector(operation.selector);
+        const stepId = currentStep;
+        const filter = planCase.steps.find((x) => x.id === stepId)?.expect.message;
+        if (!filter)
+          throw new Error(`ui.fillCode(): the plan expects no message in ${stepId} to take a code from`);
+        if (!waited.has(stepId)) await inboxWait(stepId);
+        const message = waited.get(stepId);
+        if (!message) {
+          // The application sent no code: the planned check of the message fails here, as verify() would.
+          assertions.push({
+            stepId,
+            field: "message",
+            expected: maskValue(filter),
+            actual: "(no message arrived in time)",
+            pass: false,
+          });
+          throw new Error(`ui.fillCode(): no message with a code arrived in ${stepId}`);
+        }
+        const match = new RegExp(filter.code ?? "\\b(\\d{4,8})\\b").exec(
+          `${message.subject ?? ""}\n${message.body}`,
+        );
+        const code = match?.[1] ?? match?.[0];
+        if (code === undefined || code === "")
+          throw new Error(
+            `ui.fillCode(): the message of ${stepId} holds no code matching the plan's pattern`,
+          );
+        masker.register(code);
+        d.registerSecret?.(code);
+        // The message was recorded before the code was known: mask the code in that evidence too.
+        for (const [i, item] of media.entries())
+          if (item.stepId === stepId && item.kind === "message" && typeof item.content === "string")
+            media[i] = { ...item, content: masker.maskText(item.content) };
+        secretFields.add(selector);
+        await d.fill(selector, code);
+        return;
+      }
       case "fillSecret": {
         // REQ-EXEC-67/AC3: the value is resolved here, masked everywhere, and never handed back to the spec.
         const selector = assertSelector(operation.selector);
         // The sandbox schema checks this too; an in-process caller is held to the same rule.
         const field: string = operation.field;
-        if (field !== "password" && field !== "username")
-          throw new Error('ui.fillSecret() types "password" or "username" of an account');
+        if (field !== "password" && field !== "username" && field !== "totp")
+          throw new Error('ui.fillSecret() types "password", "username" or "totp" of an account');
         if (!Object.values(planCase.data).includes(operation.alias))
           throw new Error(
             `ui.fillSecret(): '${operation.alias.slice(0, 40)}' is not an account of ${caseId} in the plan`,
@@ -1235,6 +1273,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       click: (selector) => uiOp({ op: "click", selector }),
       fill: (selector, value) => uiOp({ op: "fill", selector, value }),
       fillSecret: (selector, alias, field) => uiOp({ op: "fillSecret", selector, alias, field }),
+      fillCode: (selector) => uiOp({ op: "fillCode", selector }),
       check: (selector) => uiOp({ op: "check", selector }),
       uncheck: (selector) => uiOp({ op: "uncheck", selector }),
       select: (selector, value) => uiOp({ op: "select", selector, value }),

@@ -47,6 +47,14 @@ describe("network diagnosis of a step (REQ-EVD-09/AC1)", () => {
     const problems = diagnoseNetwork(many);
     expect(problems).toHaveLength(20);
     expect(diagnoseNetwork([])).toEqual([]);
+    // A redirect elsewhere is not a login redirect; a redirect without a location is no problem.
+    expect(
+      diagnoseNetwork([
+        req({ url: "/a", status: 302, location: "/app/home" }),
+        req({ url: "/b", status: 301 }),
+        req({ url: "/c", failure: "NS_BINDING_ABORTED" }),
+      ]),
+    ).toEqual([]);
   });
 });
 

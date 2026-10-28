@@ -63,6 +63,8 @@ export interface WebRunnerOptions {
   readonly viewport?: { readonly width: number; readonly height: number };
   /** HTTP authentication of the environment (REQ-EXEC-61/AC5), sent when a page asks for it. */
   readonly httpCredentials?: { readonly username: string; readonly password: string } | undefined;
+  /** Headers the application offers for tests (REQ-EXEC-55/AC4), sent with requests to its own origin only. */
+  readonly testHeaders?: Readonly<Record<string, string>> | undefined;
   /** Largest download a step reads, in bytes (REQ-EXEC-38/AC2); 100 MB by default. */
   readonly maxDownloadBytes?: number;
   /** Passive observations (REQ-EVD-07); all on by default. They never change a status. */
@@ -395,7 +397,11 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
       await context.route("**/*", (route) => {
         const request = route.request();
         if (allowed(request.url())) {
-          void route.continue();
+          const own = new URL(request.url()).origin === new URL(input.baseUrl).origin;
+          const extra = options.testHeaders ?? {};
+          void (own && Object.keys(extra).length > 0
+            ? route.continue({ headers: { ...request.headers(), ...extra } })
+            : route.continue());
           return;
         }
         if (request.isNavigationRequest()) {

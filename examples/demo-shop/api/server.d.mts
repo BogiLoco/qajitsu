@@ -8,10 +8,13 @@ export declare function createShop(options: {
   password: string;
   sha?: string;
   now?: () => number;
+  idpUrl?: string;
 }): (req: IncomingMessage, res: ServerResponse) => Promise<void>;
 
 export declare function startShop(options?: {
   port?: number;
   host?: string;
   env?: Record<string, string | undefined>;
+  /** The demo identity provider for single sign-on (REQ-EXEC-55 demo). */
+  idpUrl?: string;
 }): Promise<{ url: string; close: () => Promise<void> }>;

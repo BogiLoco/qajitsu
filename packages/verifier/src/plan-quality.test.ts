@@ -7,6 +7,7 @@ import {
   convertNumericStrings,
   formatNumericConversions,
   formatPlanFlags,
+  isAdvisoryFlag,
   isPlaceholder,
 } from "./plan-quality.js";
 import { buildUiInventory } from "./ui-inventory.js";
@@ -135,6 +136,9 @@ describe("concrete expected values (REQ-PLAN-09)", () => {
         // REQ-EXEC-38/AC2 + REQ-EXEC-56/AC2: a download or the application's test state is something to compare.
         { expect: { description: "d", download: { name: "orders.csv" } } },
         { expect: { description: "d", state: { "bars.0": 1 } } },
+        // REQ-EXEC-47/AC3 + REQ-EXEC-65/AC3: socket messages and the app manifest too (found by the CLI flow).
+        { expect: { description: "d", websocket: { received: ["hello"] } } },
+        { expect: { description: "d", manifest: { short_name: "Notes" } } },
       ]),
     );
     expect(flags).toEqual([
@@ -342,6 +346,8 @@ describe("concrete expected values (REQ-PLAN-09)", () => {
         'testid:offer-status shows "Offer active" on the recorded pages, the plan expects "Active": confirm the change or an earlier step makes it so, or use the shown text',
       ],
     ]);
+    // It asks a person to look; it never blocks the approval (CLI flow 2026-10-28: "Offline" after going offline).
+    expect(flags.every((f) => isAdvisoryFlag(f))).toBe(true);
     // A case about the time (an offer that ends) without a clock is told to plan one.
     const timed = checkPlanExpectations(
       plan(

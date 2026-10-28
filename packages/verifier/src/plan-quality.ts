@@ -239,7 +239,9 @@ export function checkPlanExpectations(
         e.visual !== undefined ||
         e.download !== undefined ||
         e.dialog !== undefined ||
-        e.state !== undefined;
+        e.state !== undefined ||
+        e.websocket !== undefined ||
+        e.manifest !== undefined;
       if (s.manual !== true && !checks)
         flag(
           "description-only",
@@ -440,6 +442,15 @@ export function formatNumericConversions(conversions: readonly NumericConversion
         `  ~ ${v.caseId} ${v.stepId} ${v.field}: ${JSON.stringify(v.from)} → ${String(v.to)} (${v.where}: number)`,
     )
     .join("\n");
+}
+
+/**
+ * Whether a flag only asks a person to look (shown with the plan, never blocking approval): an expected text the
+ * recorded pages show differently may be guessed, or may be what the change or an earlier step brings about, which
+ * code cannot tell (CLI flow 2026-10-28: "Offline" after the step goes offline).
+ */
+export function isAdvisoryFlag(flag: PlanFlag): boolean {
+  return flag.kind === "recorded-text";
 }
 
 /** The flags as lines for the review (REQ-PLAN-09/AC3). */

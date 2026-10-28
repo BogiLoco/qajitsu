@@ -82,11 +82,12 @@ const UiOperationSchema = z.discriminatedUnion("op", [
   z.strictObject({ op: z.literal("closePage") }),
   z.strictObject({ op: z.literal("advanceTime"), seconds: z.number().int().min(1).max(604_800) }),
   z.strictObject({ op: z.literal("setOffline"), offline: z.boolean() }),
+  z.strictObject({ op: z.literal("fillCode"), selector: Selector }),
   z.strictObject({
     op: z.literal("fillSecret"),
     selector: Selector,
     alias: z.string().regex(/^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$/),
-    field: z.enum(["password", "username"]),
+    field: z.enum(["password", "username", "totp"]),
   }),
 ]);
 
@@ -201,6 +202,8 @@ export function createSandboxExecutor(
     readonly browser?: BrowserFactory;
     /** HTTP authentication of the environment for API calls (REQ-EXEC-61/AC5). */
     readonly httpCredentials?: { readonly username: string; readonly password: string } | undefined;
+    /** Headers the application offers for tests, sent to its origin only (REQ-EXEC-55/AC4). */
+    readonly testHeaders?: Readonly<Record<string, string>> | undefined;
   } = {},
 ): AttemptExecutor {
   const childScript = options.childScript ?? fileURLToPath(new URL("./child.js", import.meta.url));
@@ -212,6 +215,9 @@ export function createSandboxExecutor(
       const pw = await createPlaywrightTransport({
         timeoutMs: input.timeoutMs,
         ...(options.httpCredentials ? { httpCredentials: options.httpCredentials } : {}),
+        ...(options.testHeaders && Object.keys(options.testHeaders).length > 0
+          ? { testHeaders: { origin: new URL(input.baseUrl).origin, headers: options.testHeaders } }
+          : {}),
       });
       transport = pw.transport;
       dispose = pw.dispose;

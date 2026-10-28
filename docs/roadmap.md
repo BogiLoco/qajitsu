@@ -357,7 +357,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-EXEC-52](requirements/execution.md#req-exec-52--maestro-runner-adapter) Maestro runner adapter (should, accepted, AC 0/6)
 - [REQ-EXEC-53](requirements/execution.md#req-exec-53--test-data-per-case) Test data per case (must, accepted, AC 0/4)
 - [REQ-EXEC-54](requirements/execution.md#req-exec-54--shared-environments-rate-limits-and-idempotency) Shared environments: rate limits and idempotency (should, accepted, AC 0/4)
-- [REQ-EXEC-55](requirements/execution.md#req-exec-55--automated-login-one-time-codes-sso-and-captcha-in-test-environments) Automated login: one-time codes, SSO and captcha in test environments (should, accepted, AC 0/4)
+- [REQ-EXEC-55](requirements/execution.md#req-exec-55--automated-login-one-time-codes-sso-and-captcha-in-test-environments) Automated login: one-time codes, SSO and captcha in test environments (should, implemented, AC 4/4)
 - [REQ-EXEC-56](requirements/execution.md#req-exec-56--shadow-dom-and-canvas-content) Shadow DOM and canvas content (could, implemented, AC 3/3)
 - [REQ-EXEC-57](requirements/execution.md#req-exec-57--security-checks-of-a-test-environment) Security checks of a test environment (could, accepted, AC 0/4)
 - [REQ-EXEC-58](requirements/execution.md#req-exec-58--comparing-sounds-by-embeddings) Comparing sounds by embeddings (could, proposed, AC 0/6)

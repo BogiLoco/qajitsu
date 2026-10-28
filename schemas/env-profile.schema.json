@@ -72,6 +72,48 @@
                   ]
                 }
               },
+              "totp": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "seed": {
+                        "type": "string",
+                        "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+                      },
+                      "digits": {
+                        "default": 6,
+                        "type": "integer",
+                        "minimum": 6,
+                        "maximum": 8
+                      },
+                      "period": {
+                        "default": 30,
+                        "type": "integer",
+                        "minimum": 15,
+                        "maximum": 120
+                      },
+                      "algorithm": {
+                        "default": "sha1",
+                        "type": "string",
+                        "enum": [
+                          "sha1",
+                          "sha256",
+                          "sha512"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "seed"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
               "shared": {
                 "default": false,
                 "type": "boolean"
@@ -126,6 +168,48 @@
                           "mobile"
                         ]
                       }
+                    },
+                    "totp": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "seed": {
+                              "type": "string",
+                              "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+                            },
+                            "digits": {
+                              "default": 6,
+                              "type": "integer",
+                              "minimum": 6,
+                              "maximum": 8
+                            },
+                            "period": {
+                              "default": 30,
+                              "type": "integer",
+                              "minimum": 15,
+                              "maximum": 120
+                            },
+                            "algorithm": {
+                              "default": "sha1",
+                              "type": "string",
+                              "enum": [
+                                "sha1",
+                                "sha256",
+                                "sha512"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "seed"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
                     }
                   },
                   "required": [
@@ -210,6 +294,143 @@
             "script"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "browser": {
+              "type": "object",
+              "properties": {
+                "start": {
+                  "type": "string",
+                  "format": "starts_with",
+                  "pattern": "^\\/.*"
+                },
+                "steps": {
+                  "minItems": 1,
+                  "maxItems": 30,
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "fill": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 300
+                          },
+                          "value": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 300
+                          }
+                        },
+                        "required": [
+                          "fill",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "click": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 300
+                          }
+                        },
+                        "required": [
+                          "click"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "press": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 300
+                          },
+                          "key": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 40
+                          }
+                        },
+                        "required": [
+                          "press",
+                          "key"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "wait_for": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 300
+                          }
+                        },
+                        "required": [
+                          "wait_for"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "done": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "format": "starts_with",
+                      "pattern": "^\\/.*"
+                    },
+                    "selector": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 300
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "allow": {
+                  "default": [],
+                  "maxItems": 10,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uri"
+                  }
+                },
+                "timeout_s": {
+                  "default": 60,
+                  "type": "integer",
+                  "minimum": 5,
+                  "maximum": 300
+                },
+                "reuse": {
+                  "default": true,
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "start",
+                "steps",
+                "done"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "browser"
+          ],
+          "additionalProperties": false
         }
       ]
     },
@@ -268,6 +489,19 @@
         "password"
       ],
       "additionalProperties": false
+    },
+    "test_headers": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9-]{1,60}$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000
+      }
     },
     "flags": {
       "default": {},

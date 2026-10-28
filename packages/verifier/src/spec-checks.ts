@@ -31,6 +31,7 @@ const FORBIDDEN_GLOBALS = new Set([
 const UI_ACTIONS = new Set([
   "click",
   "fillSecret",
+  "fillCode",
   "fill",
   "check",
   "uncheck",
@@ -376,8 +377,18 @@ export function checkSpecSource(
             `ui.fillSecret() takes an account alias of ${caseId} in the plan (data), as a literal`,
             node,
           );
-        if (!field || !ts.isStringLiteral(field) || (field.text !== "password" && field.text !== "username"))
-          add("lint", 'ui.fillSecret() types "password" or "username", as a literal', node);
+        if (!field || !ts.isStringLiteral(field) || !["password", "username", "totp"].includes(field.text))
+          add("lint", 'ui.fillSecret() types "password", "username" or "totp", as a literal', node);
+      }
+      // REQ-EXEC-55/AC3: a code is taken from the message the plan expects in the same step.
+      if (onUi && name === "fillCode") {
+        const owner = enclosingStep(node);
+        if (owner !== undefined && planCase.steps.find((x) => x.id === owner)?.expect.message === undefined)
+          add(
+            "lint",
+            `ui.fillCode() in ${owner}: the plan expects no message in ${owner} to take a code from`,
+            node,
+          );
       }
       if (onUi && name === "download") {
         const owner = enclosingStep(node);
@@ -546,6 +557,16 @@ export function checkSpecSource(
       if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
         const member = node.expression.name.text;
         const [first] = node.arguments;
+        // REQ-EXEC-67/AC3: signing in through the form with the account's secrets uses the account too.
+        const second = node.arguments[1];
+        if (
+          client === "ui" &&
+          member === "fillSecret" &&
+          second !== undefined &&
+          ts.isStringLiteral(second) &&
+          second.text === account
+        )
+          loggedIn.add(second.text);
         if (member === "as" && first !== undefined && ts.isStringLiteral(first) && first.text === account) {
           loggedIn.add(first.text);
           // api.as() returns the logged-in client; a call whose result is dropped logs nobody in.
@@ -692,6 +713,7 @@ interface LockedShape {
 const SELECTOR_ACTIONS = new Set([
   "click",
   "fillSecret",
+  "fillCode",
   "check",
   "uncheck",
   "waitFor",

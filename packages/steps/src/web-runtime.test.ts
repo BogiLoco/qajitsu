@@ -419,7 +419,7 @@ describe("web actions in the trusted runtime (REQ-EXEC-38..40, REQ-EXEC-56, ADR-
         alias: "user:standard",
         field: "token" as "password",
       }),
-    ).rejects.toThrow('types "password" or "username"');
+    ).rejects.toThrow('types "password", "username" or "totp"');
     await rt.verify("S1", "elements.testid:pw.value");
     await rt.endStep("S1");
     const record = await rt.finish();
@@ -431,6 +431,109 @@ describe("web actions in the trusted runtime (REQ-EXEC-38..40, REQ-EXEC-56, ADR-
       [true, ["testid:pw"]],
     ]);
     expect(JSON.stringify(record)).not.toContain("S3cret-pass!");
+  });
+
+  it("REQ-EXEC-55/AC1+AC3: one-time codes from the authenticator or from the step's message are typed by the parent and masked", async () => {
+    const plan = planWith(
+      {
+        expect: {
+          description: "d",
+          message: { to: "inbox", subject: "Your code", code: "code: (\\d{6})" },
+          elements: { "testid:code": { value: "x" } },
+        },
+      },
+      { data: { user: "user:standard" } },
+    );
+    const incoming = [
+      {
+        id: "m1",
+        kind: "email" as const,
+        receivedAt: new Date(Date.now() + 1000).toISOString(),
+        to: "inbox@mail.local",
+        subject: "Your code",
+        body: "Hello, your code: 482913. It expires in 5 minutes.",
+      },
+    ];
+    let typedValue = "";
+    const typed: string[] = [];
+    const { driver } = fakeDriver({
+      fill: (_sel: string, value: string) => {
+        typed.push(value);
+        typedValue = value;
+        return Promise.resolve();
+      },
+      property: () => Promise.resolve(typedValue),
+      registerSecret: () => undefined,
+    });
+    const messages = (list: typeof incoming) => ({
+      timeoutMs: 50,
+      pollMs: 10,
+      inbox: () => Promise.resolve({ id: "b", email: "inbox@mail.local", url: "https://hooks.local/b" }),
+      capture: {
+        createInbox: () => Promise.reject(new Error("unused")),
+        deleteInbox: () => Promise.resolve(),
+        messages: () => Promise.resolve(list),
+      },
+    });
+    const rt = runtimeFor(plan, driver, {
+      messages: messages(incoming),
+      credential: (alias, field) => (alias === "user:standard" && field === "totp" ? "123456" : undefined),
+    });
+    rt.beginStep("S1");
+    await rt.context.ui.goto("/app/verify");
+    await rt.context.ui.fillSecret("testid:otp", "user:standard", "totp");
+    await rt.context.ui.fillCode("testid:code");
+    await rt.verify("S1", "elements.testid:code.value");
+    await rt.endStep("S1");
+    const record = await rt.finish();
+    expect(typed).toEqual(["123456", "482913"]);
+    expect(record.assertions[0]?.actual).toBe("***");
+    expect(JSON.stringify(record)).not.toContain("482913");
+    expect(JSON.stringify(record)).not.toContain("123456");
+    // The default pattern takes the first 4 to 8 digits; a message without a code is said, never guessed.
+    const plain = planWith({ expect: { description: "d", message: { subject: "Your code" } } });
+    const codeTyped: string[] = [];
+    const codeDriver = fakeDriver({
+      registerSecret: () => undefined,
+      fill: (_s: string, v: string) => Promise.resolve(void codeTyped.push(v)),
+    });
+    const withCode = runtimeFor(plain, codeDriver.driver, {
+      messages: messages([{ ...incoming[0], body: "Use 7731 to sign in" } as (typeof incoming)[number]]),
+    });
+    withCode.beginStep("S1");
+    await withCode.context.ui.goto("/app/verify");
+    await withCode.context.ui.fillCode("testid:code");
+    expect(codeTyped).toEqual(["7731"]);
+    const noCode = runtimeFor(plain, fakeDriver().driver, {
+      messages: messages([{ ...incoming[0], body: "Welcome back" } as (typeof incoming)[number]]),
+    });
+    noCode.beginStep("S1");
+    await noCode.context.ui.goto("/app/verify");
+    await expect(noCode.context.ui.fillCode("testid:code")).rejects.toThrow(
+      "the message of S1 holds no code matching the plan's pattern",
+    );
+    // A step whose plan expects no message has nothing to take a code from.
+    const noMessage = runtimeFor(
+      planWith({ expect: { description: "d", texts: ["x"] } }),
+      fakeDriver().driver,
+    );
+    noMessage.beginStep("S1");
+    await noMessage.context.ui.goto("/app/verify");
+    await expect(noMessage.context.ui.fillCode("testid:code")).rejects.toThrow(
+      "the plan expects no message in S1 to take a code from",
+    );
+    // No message in time: the planned check of the message fails (FAILED), the code is never guessed.
+    const none = runtimeFor(plan, fakeDriver().driver, { messages: messages([]), now: Date.now });
+    none.beginStep("S1");
+    await none.context.ui.goto("/app/verify");
+    await expect(none.context.ui.fillCode("testid:code")).rejects.toThrow(
+      "no message with a code arrived in S1",
+    );
+    const r2 = await none.finish();
+    expect(r2.outcome).toBe("failed");
+    expect(r2.assertions.map((a) => [a.field, a.actual, a.pass])).toEqual([
+      ["message", "(no message arrived in time)", false],
+    ]);
   });
 
   it("REQ-EXEC-47/AC3+AC4: a WebSocket message is looked for by the parent on the planned socket; frames are masked evidence", async () => {

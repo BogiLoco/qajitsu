@@ -72,6 +72,9 @@ Rules:
   * the user's location, notifications, camera, microphone or clipboard: the case gets "browser": {"permissions":
     [...], "geolocation": {"latitude": ..., "longitude": ...}};
   * uploading or downloading files: "files" on the case and "download" in the step's expect;
+  * a login with a second factor: an authenticator code is the account's ("totp" in the environment), a code sent by
+    e-mail or SMS is a step that expects "message": {"to": "...", "subject": "...", "code": "<regex of the code>"};
+    a captcha is never solved: the environment's test mechanism handles it, otherwise the step is "manual": true;
   * live updates over a WebSocket (chat, notifications, prices): the step expects "websocket": {"url": "/ws/...",
     "sent": ["<text the page sends>"], "received": ["<text the page receives>"]} (texts are contained in a frame);
   * an installable app (PWA), offline mode or a service worker: the case gets "browser": {"service_workers": true},

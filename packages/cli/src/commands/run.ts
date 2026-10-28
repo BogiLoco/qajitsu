@@ -1,4 +1,4 @@
-import { httpCredentialsFor } from "../http-auth.js";
+import { httpCredentialsFor, testHeadersFor } from "../http-auth.js";
 import { extractDownloadText, readFixture } from "../web-files.js";
 import { warnStageBudgets } from "../timing.js";
 import type { KnowledgePorts } from "./knowledge.js";
@@ -1017,10 +1017,13 @@ async function executeCases(
   const [primary] = combos;
   // REQ-EXEC-61/AC5: HTTP authentication in front of the environment, for the browser and the API client.
   const httpCredentials = await httpCredentialsFor(env, session.resolveSecret);
+  // REQ-EXEC-55/AC4: test mechanisms of the application (a captcha bypass header), for its origin only.
+  const testHeaders = await testHeadersFor(env, session.resolveSecret);
   const executorFor = (combo: WebCombination | undefined): AttemptExecutor =>
     ports.executor ??
     createSandboxExecutor({
       ...(httpCredentials ? { httpCredentials } : {}),
+      testHeaders,
       // The browser starts only when a spec uses ui.* (REQ-EXEC-05, REQ-EXEC-07).
       browser: createPlaywrightBrowserFactory({
         // A farm-only browser never reaches here: its combinations are BLOCKED before they run (REQ-EXEC-66/AC4).
@@ -1037,6 +1040,7 @@ async function executeCases(
         testIdAttribute: project.config.web.test_id_attribute,
         webSession: env.profile.web_session,
         ...(httpCredentials ? { httpCredentials } : {}),
+        testHeaders,
         // REQ-EVD-07/AC5: each passive check can be switched off.
         observations: {
           console: project.config.observations.console,

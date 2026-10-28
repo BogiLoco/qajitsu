@@ -42,7 +42,7 @@ const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 /**
  * Creates the demo-shop request handler.
  *
- * @param {{ bugs?: Record<string, boolean>, password: string, sha?: string, now?: () => number }} options
+ * @param {{ bugs?: Record<string, boolean>, password: string, sha?: string, now?: () => number, idpUrl?: string }} options
  * @returns {(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse) => Promise<void>}
  */
 export function createShop(options) {
@@ -62,7 +62,9 @@ export function createShop(options) {
     const header = req.headers["authorization"] ?? "";
     // A bearer token, or the HttpOnly cookie of the sign-in form (REQ-EXEC-67 demo).
     const cookie = /(?:^|;\s*)sid=([0-9a-f]+)/.exec(req.headers["cookie"] ?? "")?.[1] ?? "";
-    const token = header.startsWith("Bearer ") ? header.slice(7) : cookie;
+    const bearer = header.startsWith("Bearer ") ? header.slice(7) : "";
+    // A page that sends an empty or stale bearer still has its cookie session.
+    const token = sessions.has(bearer) ? bearer : cookie;
     const s = sessions.get(token);
     if (!s) return undefined;
     if (s.expiresAt <= now() && !bugs.BUG_AUTH_EXPIRED_TOKEN_OK) return undefined;
@@ -130,6 +132,32 @@ export function createShop(options) {
       const expiresAt = now() + ttl * 1000;
       sessions.set(token, { user: input.username, expiresAt, cart: { lines: new Map(), discounts: [] } });
       return json(res, 200, { token, expires_at: new Date(expiresAt).toISOString() });
+    }
+    // Single sign-on through the demo identity provider (REQ-EXEC-55 demo): start, then redeem the ticket.
+    if (route === "GET /sso/start" && options.idpUrl) {
+      const back = `http://${req.headers.host}/sso/callback`;
+      res.writeHead(302, {
+        location: `${options.idpUrl}/authorize?redirect_uri=${encodeURIComponent(back)}`,
+      });
+      return res.end();
+    }
+    if (route === "GET /sso/callback" && options.idpUrl) {
+      const ticket = url.searchParams.get("ticket") ?? "";
+      const who = await fetch(`${options.idpUrl}/ticket/${encodeURIComponent(ticket)}`).then((r) =>
+        r.ok ? r.json() : undefined,
+      );
+      if (!who) return json(res, 401, { error: "SSO_FAILED" });
+      const token = randomBytes(16).toString("hex");
+      sessions.set(token, {
+        user: who.username,
+        expiresAt: now() + 3600_000,
+        cart: { lines: new Map(), discounts: [] },
+      });
+      res.writeHead(302, {
+        "set-cookie": `sid=${token}; Path=/; HttpOnly; SameSite=Lax`,
+        location: "/app/account",
+      });
+      return res.end();
     }
     // The sign-in form keeps its session in an HttpOnly cookie (REQ-EXEC-67 demo); BUG-18 accepts any password.
     if (route === "POST /auth/session") {
@@ -223,7 +251,7 @@ export function createShop(options) {
 /**
  * Starts the server; flags come from the environment (`BUG_*=1`).
  *
- * @param {{ port?: number, host?: string, env?: Record<string, string | undefined> }} options
+ * @param {{ port?: number, host?: string, env?: Record<string, string | undefined>, idpUrl?: string }} options
  * @returns {Promise<{ url: string, close: () => Promise<void> }>}
  */
 export function startShop(options = {}) {
@@ -231,7 +259,12 @@ export function startShop(options = {}) {
   const password = env.DEMO_USER_PASSWORD;
   if (!password) throw new Error("Set DEMO_USER_PASSWORD (see examples/demo-shop/.env.example).");
   const bugs = Object.fromEntries(BUG_FLAGS.map((f) => [f, env[f] === "1" || env[f] === "true"]));
-  const handler = createShop({ bugs, password, sha: env.DEMO_SHA });
+  const handler = createShop({
+    bugs,
+    password,
+    sha: env.DEMO_SHA,
+    idpUrl: options.idpUrl ?? env.DEMO_IDP_URL,
+  });
   const server = createServer((req, res) => {
     void handler(req, res);
   });

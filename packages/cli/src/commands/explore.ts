@@ -4,7 +4,7 @@ import { runUsage, saveRunUsage } from "../run-usage.js";
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
 import { createRemoteEnvProvider, loginAccounts } from "@qajitsu/adapter-env-remote";
 import type { BrowserFactory } from "@qajitsu/adapter-runner-api";
-import { createPlaywrightBrowserFactory } from "@qajitsu/adapter-runner-web";
+import { createBrowserLogin, createPlaywrightBrowserFactory } from "@qajitsu/adapter-runner-web";
 import { buildChangeContext, runExplorer, type ExplorerReport } from "@qajitsu/agents";
 import {
   CliExploreSessionSchema,
@@ -148,6 +148,7 @@ export async function runExplore(
         ? await loginAccounts(env, {
             fetch: ports.fetch,
             qaDir: project.qaDir,
+            browserLogin: createBrowserLogin(),
             resolveSecret: (r) => session.resolveSecret(r),
             registerSecret: (v) => {
               masker.register(v);

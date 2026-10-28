@@ -153,7 +153,16 @@ export interface UiClient {
    * Types an account's secret into a field without the spec knowing it (REQ-EXEC-67/AC3): the parent resolves the
    * `password` or `username` of the account alias and every record shows only the mask.
    */
-  readonly fillSecret: (selector: UiSelector, alias: string, field: "password" | "username") => Promise<void>;
+  readonly fillSecret: (
+    selector: UiSelector,
+    alias: string,
+    field: "password" | "username" | "totp",
+  ) => Promise<void>;
+  /**
+   * Types the one-time code of the message the plan expects in this step (an e-mail or an SMS, REQ-EXEC-55/AC3): the
+   * parent waits for the message, takes the code out of it and types it; nobody sees the code.
+   */
+  readonly fillCode: (selector: UiSelector) => Promise<void>;
   readonly check: (selector: UiSelector) => Promise<void>;
   readonly uncheck: (selector: UiSelector) => Promise<void>;
   readonly select: (selector: UiSelector, value: string) => Promise<void>;
@@ -197,11 +206,12 @@ export type UiOperation =
   | { readonly op: "goto"; readonly path: string }
   | { readonly op: "click" | "check" | "uncheck"; readonly selector: UiSelector }
   | { readonly op: "fill" | "select" | "press"; readonly selector: UiSelector; readonly value: string }
+  | { readonly op: "fillCode"; readonly selector: UiSelector }
   | {
       readonly op: "fillSecret";
       readonly selector: UiSelector;
       readonly alias: string;
-      readonly field: "password" | "username";
+      readonly field: "password" | "username" | "totp";
     }
   | { readonly op: "waitFor"; readonly selector: UiSelector; readonly state: "visible" | "hidden" }
   | { readonly op: "back" }

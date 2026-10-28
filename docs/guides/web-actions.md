@@ -131,6 +131,39 @@ for the application's origin only, and only its own `localStorage` is used. To t
 types the account's secrets with `ui.fillSecret`: the framework resolves them, and the screenshots black the field
 out. Traces kept as evidence are masked too, including session cookies the application set during the test.
 
+### Two factors, single sign-on and captchas
+
+```yaml
+# .qa/envs/staging.yaml
+accounts:
+  user:standard:
+    username: standard
+    password: secret://vault/staging#password
+    totp: secret://vault/staging#totp-seed # base32 seed of the test account's authenticator
+login:
+  browser: # SSO through the identity provider's pages, run by QAJitsu
+    start: /oauth2/authorization/okta
+    steps:
+      - { fill: "label:Username", value: "{{username}}" }
+      - { fill: "label:Password", value: "{{password}}" }
+      - { fill: "label:Code", value: "{{totp}}" }
+      - { click: "role:button:Sign in" }
+    done: { path: /app }
+    allow: [https://example.okta.com] # must also be in environments.allowlist
+    reuse: true # one login per account and run
+web_session: { storage: cookies }
+test_headers: { X-Captcha-Bypass: secret://vault/staging#captcha-bypass }
+```
+
+- **TOTP** codes are computed by QAJitsu from the seed at the moment they are typed (`ui.fillSecret(sel, alias,
+"totp")`, `{{totp}}` in a browser login, `QAJITSU_TOTP` for login scripts); neither the seed nor a code is shown.
+- **Codes by e-mail or SMS**: a step expects the message (`"message": {"to": ..., "code": "code: (\\d{6})"}`) and
+  types its code with `ui.fillCode(sel)`. No message in time is a failed check of that step, never a guessed code.
+- **SSO**: the browser login goes through the provider's pages and redirects; only the application's own cookies and
+  storage are kept, and only allowlisted provider origins load.
+- **Captchas** are never solved. Use the provider's test keys or a bypass header the application offers
+  (`test_headers`, sent to its own origin only); otherwise the step is manual.
+
 ## Staging behind HTTP authentication
 
 ```yaml
