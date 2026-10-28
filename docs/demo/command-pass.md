@@ -29,6 +29,18 @@ weak model. Each finding got a regression test, then the flow ran again to confi
 | D10 | `qj setup` said Docker was too old when only the Compose v2 plugin was missing                                                                   | names the missing plugin                                                             |
 | D11 | a farm-only browser (`safari`) in the matrix would have run on Chromium when the cases ran through an injected executor                          | refused whatever runs the cases, never the primary browser                           |
 
+Second round (2026-10-28), DEMO-11..DEMO-15 through the whole flow, also with `gemma4:e2b` on DEMO-13:
+
+| ID  | Finding                                                                                                                    | Now                                                              |
+| --- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| D12 | a step checking only a WebSocket message or the app manifest was refused at approval as "description only"                 | counted as something to compare                                  |
+| D13 | a text the recorded pages show differently blocked approval of a correct plan ("Offline" appears only after going offline) | shown as a note to confirm, never blocking                       |
+| D14 | a login form signed in with `ui.fillSecret` or a second user's `ui.session` was refused for not calling `ui.as`            | both count as running as the account                             |
+| D15 | the evidence of the message a code came from kept the code in clear                                                        | masked once the code is known                                    |
+| D16 | Playwright traces of failed cases kept session tokens and cookies the application set, unmasked                            | traces masked, sensitive headers and cookies by name             |
+| D17 | the small model left every case's evidence empty in three repairs                                                          | code fills it from the case type                                 |
+| D18 | the planner expected `state.page` from pages that expose no test hook                                                      | snapshots note the hook; such a check is flagged before approval |
+
 Still weak with a 2B model, and left to the person who approves: the planner rarely plans the clock, location or the
 dialog answer on its own; the flags above make each gap visible before approval.
 
