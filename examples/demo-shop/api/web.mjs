@@ -14,6 +14,18 @@ const toast=(text,ok)=>{const t=document.createElement("div");t.className="toast
 <h1>${title}</h1>${body}</body></html>`;
 
 const PAGES = {
+  // Messages between two shoppers (REQ-EXEC-62): what one sends, the other sees in their inbox.
+  "/app/messages": [
+    "Messages",
+    `<p><label>To <input data-testid="message-to" id="to"></label> <label>Message <input data-testid="message-text" id="text"></label>
+<button data-testid="message-send" id="send">Send</button> <span data-testid="message-status" role="status"></span></p>
+<h2>Inbox</h2><ul data-testid="inbox" id="inbox"></ul><p>Messages: <span data-testid="inbox-count">0</span></p>
+<script>const load=async()=>{const r=await api("/messages");const list=r.ok?await r.json():[];
+document.getElementById("inbox").innerHTML="";for(const m of list){const li=document.createElement("li");li.textContent=m.from+": "+m.text;document.getElementById("inbox").appendChild(li);}
+document.querySelector("[data-testid=inbox-count]").textContent=String(list.length);};
+document.getElementById("send").onclick=async()=>{const r=await api("/messages",{method:"POST",body:JSON.stringify({to:document.getElementById("to").value,text:document.getElementById("text").value})});
+document.querySelector("[data-testid=message-status]").textContent=r.ok?"Sent":"Not sent";await load();};load();</script>`,
+  ],
   // Sign-in form with a cookie session (REQ-EXEC-67): no token in storage, the browser carries an HttpOnly cookie.
   "/app/signin": [
     "Sign in",

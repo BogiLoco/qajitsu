@@ -148,6 +148,11 @@ export interface CaseRuntimeOptions {
   readonly now: () => number;
   /** Starts the browser on first use; absent for API-only runs (REQ-EXEC-05). */
   readonly ui?: (() => Promise<UiDriver>) | undefined;
+  /**
+   * Opens another browser session of the case by name (REQ-EXEC-62/AC1): its own browser context with its own cookies
+   * and storage, closed and recorded by the runner with the attempt.
+   */
+  readonly session?: ((name: string) => Promise<UiDriver>) | undefined;
   /** Asks a person at manual steps (REQ-EXEC-11); the trusted orchestrator provides it, never a spec or agent. */
   readonly manual?: ManualPrompter | undefined;
   /** The case's message inbox (REQ-ENV-08); read by the trusted runtime only. */
@@ -342,11 +347,18 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   const lastAction = new Map<string, "api" | "ui">();
   const maskValue = (v: unknown): unknown => masker.maskJson(v);
 
+  /** Browser sessions by name (REQ-EXEC-62); `main` is the case's first one. `driver` is the active session's. */
+  const sessions = new Map<string, UiDriver>();
+  let activeSession = "main";
   const browser = async (): Promise<UiDriver> => {
     if (!options.ui) throw new Error("This run has no browser; UI actions need the web runner");
-    driver ??= await options.ui();
+    if (activeSession === "main" && !sessions.has("main")) sessions.set("main", await options.ui());
+    driver = sessions.get(activeSession);
+    if (!driver) throw new Error(`no browser session ${activeSession}`);
     return driver;
   };
+  /** Every open session's driver, the main one first, with its name. */
+  const openSessions = (): [string, UiDriver][] => [...sessions];
   /** A web action the driver must offer (ADR-0013); a native app or another runner refuses it with the reason. */
   const need = <K extends keyof UiDriver>(d: UiDriver, key: K, what: string): NonNullable<UiDriver[K]> => {
     const f = d[key];
@@ -363,7 +375,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   /** Dialogs each step showed (REQ-EXEC-61/AC1). */
   const dialogsOf = new Map<string, { type: string; message: string; answer: string }[]>();
   const collectDialogs = (stepId: string): void => {
-    const shown = driver?.takeDialogs?.() ?? [];
+    const shown = openSessions().flatMap(([, d]) => d.takeDialogs?.() ?? []);
     if (shown.length > 0) dialogsOf.set(stepId, [...(dialogsOf.get(stepId) ?? []), ...shown]);
   };
   /** Every UI action with the page it went to (REQ-EXEC-39/AC2), masked; case evidence `ui-actions.json`. */
@@ -474,7 +486,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       }
     }
     // REQ-EXEC-47/AC4: the page's WebSocket frames of the step are evidence, masked.
-    const frames = driver?.takeSocketFrames?.() ?? [];
+    const frames = openSessions().flatMap(([, d]) => d.takeSocketFrames?.() ?? []);
     if (frames.length > 0)
       media.push({
         stepId,
@@ -483,7 +495,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         content: `${JSON.stringify(maskValue(frames), null, 2)}\n`,
       });
     // REQ-EVD-09/AC1: the requests the step sent; what went wrong is shown next to a failed or blocked step.
-    const sent = driver?.takeNetwork?.() ?? [];
+    const sent = openSessions().flatMap(([, d]) => d.takeNetwork?.() ?? []);
     traffic.push(...sent);
     const failedHere = error !== undefined || assertions.some((a) => a.stepId === stepId && !a.pass);
     const problems = failedHere ? (maskValue(diagnoseNetwork(sent)) as NetworkProblem[]) : [];
@@ -512,13 +524,25 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         name: `${stepId}-dialogs.json`,
         content: `${JSON.stringify(maskValue(shown), null, 2)}\n`,
       });
-    // REQ-EVD-02/AC1: a screenshot after every step of a case that uses the browser.
-    if (driver) {
+    // REQ-EVD-02/AC1: a screenshot after every step of a case that uses the browser; REQ-EXEC-62/AC2: one per
+    // session, named after it.
+    for (const [name, d] of openSessions()) {
+      if (name === "main") continue;
+      try {
+        const png = await d.screenshot(false, [...secretFields]);
+        media.push({ stepId, kind: "screenshot", name: `${stepId}-${name}.png`, content: png });
+      } catch {
+        // A crashed page has no screenshot.
+      }
+    }
+    const main = sessions.get("main");
+    if (main) {
       try {
         // REQ-EXEC-67/AC4: fields that got an account secret are blacked out.
-        const png = await driver.screenshot(false, [...secretFields]);
+        const png = await main.screenshot(false, [...secretFields]);
         media.push({ stepId, kind: "screenshot", name: `${stepId}.png`, content: png });
-        await annotateStep(stepId, png);
+        // The red boxes are drawn from the active page's elements: only when that is the main session.
+        if (activeSession === "main") await annotateStep(stepId, png);
         // REQ-OBS-09: the live view gets its own copy; what it does with it cannot change the evidence.
         try {
           options.onScreenshot?.(stepId, png.slice());
@@ -609,6 +633,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         maskValue({
           stepId: currentStep,
           ...operation,
+          ...(sessions.size > 1 || activeSession !== "main" ? { session: activeSession } : {}),
           ...(page ? { page: page.index, url: page.url } : {}),
         }) as Record<string, unknown>,
       );
@@ -639,6 +664,27 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   const uiAction = async (operation: UiOperation): Promise<void> => {
     if (currentStep === undefined) throw new Error("UI actions must run inside step()");
     lastAction.set(currentStep, "ui");
+    if (operation.op === "session") {
+      // REQ-EXEC-62/AC1: `main` is the case's first session; others are named by an account of the case's data and
+      // open logged in as that account, with their own cookies and storage.
+      const name = operation.name;
+      if (name !== "main") {
+        const alias = planCase.data[name];
+        if (alias?.startsWith("user:") !== true)
+          throw new Error(
+            `ui.session('${name.slice(0, 40)}'): name a test account of ${caseId}'s data, e.g. buyer: user:buyer`,
+          );
+        if (!sessions.has(name)) {
+          if (!options.session) throw new Error("This runner cannot open more than one browser session");
+          const opened = await options.session(name);
+          await opened.useAccount(alias);
+          sessions.set(name, opened);
+        }
+      }
+      activeSession = name;
+      await browser();
+      return;
+    }
     const d = await browser();
     // REQ-EXEC-61/AC1: dialogs the action opens are answered as the step says.
     d.setDialogPolicy?.(planCase.steps.find((x) => x.id === currentStep)?.dialog);
@@ -1274,6 +1320,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       fill: (selector, value) => uiOp({ op: "fill", selector, value }),
       fillSecret: (selector, alias, field) => uiOp({ op: "fillSecret", selector, alias, field }),
       fillCode: (selector) => uiOp({ op: "fillCode", selector }),
+      session: (name) => uiOp({ op: "session", name }),
       check: (selector) => uiOp({ op: "check", selector }),
       uncheck: (selector) => uiOp({ op: "uncheck", selector }),
       select: (selector, value) => uiOp({ op: "select", selector, value }),
@@ -1340,6 +1387,8 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       // REQ-EXEC-39/AC2: which page each action went to, when the case used more than one or new web actions.
       if (
         actions.some((a) => a["page"] !== undefined && a["page"] !== 0) ||
+        // REQ-EXEC-62/AC2: which session every action went to.
+        actions.some((a) => a["session"] !== undefined) ||
         actions.some((a) => a["op"] === "scrollUntil.result")
       )
         evidence.push({

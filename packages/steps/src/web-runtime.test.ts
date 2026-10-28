@@ -433,6 +433,35 @@ describe("web actions in the trusted runtime (REQ-EXEC-38..40, REQ-EXEC-56, ADR-
     expect(JSON.stringify(record)).not.toContain("S3cret-pass!");
   });
 
+  it("REQ-EXEC-62/AC1: sessions are main or an account of the case's data; each opens logged in as its account", async () => {
+    const plan = planWith(
+      { expect: { description: "d", texts: ["x"] } },
+      { data: { buyer: "user:standard", note: "file:readme" } },
+    );
+    const used: string[] = [];
+    const extra = fakeDriver({ useAccount: (alias: string) => Promise.resolve(void used.push(alias)) });
+    const opened: string[] = [];
+    const rt = runtimeFor(plan, fakeDriver().driver, {
+      session: (name) => {
+        opened.push(name);
+        return Promise.resolve(extra.driver);
+      },
+    });
+    rt.beginStep("S1");
+    await rt.context.ui.session("buyer");
+    await rt.context.ui.session("main");
+    await rt.context.ui.session("buyer");
+    expect(opened).toEqual(["buyer"]);
+    expect(used).toEqual(["user:standard"]);
+    await expect(rt.context.ui.session("note")).rejects.toThrow("name a test account of TC-01's data");
+    await expect(rt.context.ui.session("stranger")).rejects.toThrow("name a test account of TC-01's data");
+    const single = runtimeFor(plan, fakeDriver().driver);
+    single.beginStep("S1");
+    await expect(single.context.ui.session("buyer")).rejects.toThrow(
+      "cannot open more than one browser session",
+    );
+  });
+
   it("REQ-EXEC-55/AC1+AC3: one-time codes from the authenticator or from the step's message are typed by the parent and masked", async () => {
     const plan = planWith(
       {

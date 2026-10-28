@@ -965,7 +965,7 @@ permissions could not be tested, and staging behind HTTP authentication could no
 
 ### REQ-EXEC-62 · Several users in one web case
 
-- Status: proposed
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-EXEC-05, REQ-ENV-09, REQ-CFG-07
@@ -974,9 +974,9 @@ Chats, shared documents, approvals and auctions need two people at once.
 
 **Acceptance criteria**
 
-- [ ] AC1: A web case can open more than one browser session, each as a test account alias, and switch between them by name (`ui.session("buyer")`).
-- [ ] AC2: Each session has its own cookies and storage; the evidence names the session of every action and screenshot.
-- [ ] AC3: Accounts come from the pool (REQ-ENV-09) so parallel cases never share a user.
+- [x] AC1: A web case can open more than one browser session, each as a test account alias, and switch between them by name (`ui.session("buyer")`).
+- [x] AC2: Each session has its own cookies and storage; the evidence names the session of every action and screenshot.
+- [x] AC3: Accounts come from the pool (REQ-ENV-09) so parallel cases never share a user.
 
 ### REQ-EXEC-63 · Mobile web emulation
 

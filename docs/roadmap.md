@@ -364,7 +364,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-EXEC-59](requirements/execution.md#req-exec-59--contract-testing) Contract testing (should, accepted, AC 0/6)
 - [REQ-EXEC-60](requirements/execution.md#req-exec-60--mocks-on-demand) Mocks on demand (should, accepted, AC 0/6)
 - [REQ-EXEC-61](requirements/execution.md#req-exec-61--web-dialogs-time-permissions-and-protected-environments) Web: dialogs, time, permissions and protected environments (must, implemented, AC 5/5)
-- [REQ-EXEC-62](requirements/execution.md#req-exec-62--several-users-in-one-web-case) Several users in one web case (should, proposed, AC 0/3)
+- [REQ-EXEC-62](requirements/execution.md#req-exec-62--several-users-in-one-web-case) Several users in one web case (should, implemented, AC 3/3)
 - [REQ-EXEC-63](requirements/execution.md#req-exec-63--mobile-web-emulation) Mobile web emulation (should, proposed, AC 0/3)
 - [REQ-EXEC-64](requirements/execution.md#req-exec-64--selectors-narrowed-by-context) Selectors narrowed by context (must, implemented, AC 4/4)
 - [REQ-EXEC-65](requirements/execution.md#req-exec-65--service-workers-offline-mode-and-installable-web-apps) Service workers, offline mode and installable web apps (should, implemented, AC 3/3)

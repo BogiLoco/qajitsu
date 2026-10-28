@@ -691,4 +691,76 @@ describe("web actions (REQ-EXEC-38, REQ-EXEC-39, REQ-EXEC-40, REQ-EXEC-56)", () 
     expect(byWhere["other/x"]).toBeUndefined();
     expect(byWhere["other/from-api"]).toBeUndefined();
   });
+
+  it("REQ-EXEC-62/AC1+AC2 + REQ-NFR-04/AC1: two shoppers in one case, each in their own session; BUG-19 (message to sender) is FAILED", async () => {
+    const run = async (flag?: string) => {
+      const shop = await startShop({
+        env: { DEMO_USER_PASSWORD: PASSWORD, ...(flag ? { [flag]: "1" } : {}) },
+      });
+      cleanups.push(() => shop.close());
+      const token = async (username: string) =>
+        (
+          (await (
+            await fetch(`${shop.url}/auth/login`, {
+              method: "POST",
+              body: JSON.stringify({ username, password: PASSWORD }),
+            })
+          ).json()) as { token: string }
+        ).token;
+      const standard = await token("standard");
+      const admin = await token("admin");
+      const { transport, dispose } = await createPlaywrightTransport({ timeoutMs: 5000 });
+      try {
+        const record = await executeAttempt(
+          {
+            specFile: spec("DEMO-14", "TC-01"),
+            caseId: "TC-01",
+            attempt: 1,
+            plan: plan("DEMO-14"),
+            baseUrl: shop.url,
+            allowedOrigins: [shop.url],
+            accounts: {
+              "user:standard": { authorization: `Bearer ${standard}` },
+              "user:admin": { authorization: `Bearer ${admin}` },
+            },
+            sessions: { "user:standard": standard, "user:admin": admin },
+            secrets: [standard, admin, PASSWORD],
+            timeoutMs: 30_000,
+          },
+          transport,
+          Date.now,
+          createPlaywrightBrowserFactory({
+            video: "off",
+            webSession: { storage: "sessionStorage", key: "token" },
+            actionTimeoutMs: 4000,
+          }),
+        );
+        return {
+          record,
+          status: computeStatus({ caseId: "TC-01", attempts: [record] }, { evidenceComplete: true }),
+        };
+      } finally {
+        await dispose();
+      }
+    };
+    const ok = await run();
+    expect(ok.record.error).toBeUndefined();
+    expect(ok.status).toBe("PASSED");
+    const names = ok.record.evidence.map((e) => e.name);
+    expect(names).toEqual(expect.arrayContaining(["S1-buyer.png", "S2-buyer.png", "S2-seller.png"]));
+    const actions = JSON.parse(
+      String(ok.record.evidence.find((e) => e.name === "ui-actions.json")?.content),
+    ) as {
+      op: string;
+      session?: string;
+    }[];
+    expect(actions.filter((a) => a.op === "goto").map((a) => a.session)).toEqual(["buyer", "seller"]);
+    const bug = await run("BUG_MESSAGE_TO_SENDER");
+    expect(bug.status).toBe("FAILED");
+    expect(bug.record.assertions.filter((a) => !a.pass).map((a) => [a.stepId, a.field])).toEqual([
+      ["S1", "elements.testid:inbox-count.text"],
+      ["S2", "elements.testid:inbox-count.text"],
+      ["S2", "texts.0"],
+    ]);
+  }, 90_000);
 });

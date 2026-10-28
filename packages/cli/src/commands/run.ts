@@ -1099,6 +1099,11 @@ async function executeCases(
           masker.register(v);
         },
       },
+      // REQ-EXEC-62/AC3: every session of a case holds its own pool account.
+      (caseId) =>
+        Object.values(plan.cases.find((c) => c.id === caseId)?.data ?? {}).filter((v) =>
+          v.startsWith("user:"),
+        ),
     ),
     contract,
     events,

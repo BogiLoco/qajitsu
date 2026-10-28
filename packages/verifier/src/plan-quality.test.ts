@@ -374,6 +374,26 @@ describe("concrete expected values (REQ-PLAN-09)", () => {
     );
   });
 
+  it("REQ-EXEC-56/AC2: a state check is flagged when no recorded page exposes the test hook (dogfood 2026-10-28)", () => {
+    const step = [{ expect: { description: "d", state: { page: "/app/account" } } }];
+    const without = [{ where: "/app/signin", platform: "web" as const, elements: [], testHook: false }];
+    expect(
+      checkPlanExpectations(plan(step, "web"), { snapshot: without })
+        .filter((f) => f.field === "state.page")
+        .map((f) => f.reason),
+    ).toEqual([
+      `state.page needs the application's test hook, and no recorded page exposes one: check what the page shows with "elements" or "texts" instead`,
+    ]);
+    // A page with the hook, or a snapshot that did not look, is not judged.
+    for (const snapshot of [
+      [{ where: "/app/chart", platform: "web" as const, elements: [], testHook: true }],
+      [{ where: "/app/chart", platform: "web" as const, elements: [] }],
+    ])
+      expect(
+        checkPlanExpectations(plan(step, "web"), { snapshot }).filter((f) => f.field === "state.page"),
+      ).toEqual([]);
+  });
+
   it("REQ-EXEC-61/AC1: a web step that checks a dialog without saying how to answer it is flagged (dogfood 2026-10-25)", () => {
     const dialog = { type: "confirm", message: "Delete this address?" };
     const flags = checkPlanExpectations(

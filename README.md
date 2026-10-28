@@ -1164,7 +1164,7 @@ verification: { auditor: optional, canary: true, triage: on }
   (`role:row >> has-text:Anna >> role:button:Delete`, `testid:card >> nth:2`), pop-ups and new tabs; hover, double and right click,
   drag and drop, keys, scrolling of infinite lists; Shadow DOM; canvas charts through the application's test hook or
   an element screenshot; browser dialogs answered as the plan says; a fixed start time and moving the clock; browser
-  permissions and location; logins with cookie sessions and account secrets typed by the runner into login forms (`ui.fillSecret`), TOTP codes, codes from e-mails and SMS (`ui.fillCode`), single sign-on through the provider's pages and captcha bypass headers; installable apps (manifest, service worker in Chromium) and offline mode; staging behind
+  permissions and location; logins with cookie sessions and account secrets typed by the runner into login forms (`ui.fillSecret`), TOTP codes, codes from e-mails and SMS (`ui.fillCode`), single sign-on through the provider's pages and captcha bypass headers; several users in one case, each in their own browser session (`ui.session("buyer")`); installable apps (manifest, service worker in Chromium) and offline mode; staging behind
   HTTP authentication. [docs/guides/web-actions.md](docs/guides/web-actions.md)
 - **Built environments (`--build`).** Docker Compose from the change's worktree with a generated overlay (labels,
   dynamic ports), managed processes, WireMock/Mockoon stubs (listed in the report as not real), health checks, seed

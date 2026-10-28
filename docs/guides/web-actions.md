@@ -14,6 +14,7 @@ apps), REQ-EXEC-47/AC3 (WebSocket messages of the page), REQ-EVD-09 (analysis of
 | Action                                                                                 | What it does                                                             |
 | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | `ui.goto(path)`, `ui.back()`, `ui.as(alias)`                                           | open a page, go back, open the app as a test account                     |
+| `ui.session(name)`                                                                     | another browser session as an account of the case's data (`buyer`)       |
 | `ui.fillSecret(sel, alias, "password" \| "username")`                                  | types the account's secret into a login form; nobody sees the value      |
 | `ui.click`, `ui.fill`, `ui.check`, `ui.uncheck`, `ui.select`, `ui.press`, `ui.waitFor` | the basics                                                               |
 | `ui.hover(sel)`, `ui.dblclick(sel)`, `ui.rightClick(sel)`                              | pointer actions: hover menus, tooltips, context menus                    |
@@ -115,6 +116,25 @@ content that cannot be read is a failed check or BLOCKED with the reason.
 - The healer may change the selectors of every action and add waits or scrolling into view; it can never change what
   an action does (files, typed values, offsets, request bodies) or the control flow. The assertion lock compares both.
 
+## Several users in one case
+
+Chats, shared documents, approvals and auctions need two people at once. The case names them in its data and the
+spec switches between them:
+
+```json
+{ "data": { "buyer": "user:standard", "seller": "user:admin" } }
+```
+
+```ts
+await ui.session("buyer"); // opens logged in as user:standard
+await ui.click("testid:message-send");
+await ui.session("seller"); // a second browser: its own cookies and storage, logged in as user:admin
+```
+
+`main` is the case's first session. Each session holds its own pool account, so cases running at the same time never
+share a user; screenshots are named after their session (`S2-seller.png`) and the action log names the session of
+every action.
+
 ## Logging in
 
 `ui.as(alias)` opens the application as a test account with the session its login gave the browser: a token in
@@ -177,7 +197,7 @@ these values; they are masked like every secret.
 
 ## Not covered yet
 
-- Several users in one case (REQ-EXEC-62) and mobile web emulation with touch (REQ-EXEC-63).
+- Mobile web emulation with touch (REQ-EXEC-63).
 - Sockets a step opens itself and server-sent events (REQ-EXEC-47/AC1+AC2), the clipboard's content, printing.
 - Service workers in Firefox and WebKit, push notifications and the install prompt itself.
 - Closed shadow roots are named only in Chromium.

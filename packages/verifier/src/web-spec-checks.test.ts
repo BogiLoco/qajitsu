@@ -249,4 +249,13 @@ export async function run({ step, verify, plan, ui }: CaseContext): Promise<void
       "lint: ui.fillCode() in S2: the plan expects no message in S2 to take a code from",
     );
   });
+
+  it("REQ-EXEC-62/AC1: ui.session names main or an account of the case's data, as a literal", () => {
+    const plan = fixturePlan("DEMO-14");
+    const spec = fixtureSpec("DEMO-14", "TC-01");
+    expect(messages(spec, "TC-01", plan).filter((m) => m.startsWith("lint"))).toEqual([]);
+    expect(messages(spec.replace('ui.session("seller")', 'ui.session("admin")'), "TC-01", plan)).toContain(
+      `lint: ui.session() takes "main" or a name from TC-01's data whose value is a test account, as a literal`,
+    );
+  });
 });

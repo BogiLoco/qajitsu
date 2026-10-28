@@ -48,6 +48,8 @@ export function accountLogin(
   env: ResolvedEnvironment,
   leases: AccountLeases,
   deps: Parameters<typeof loginAccounts>[1],
+  /** Accounts a case names in its data (its sessions, REQ-EXEC-62/AC3), leased besides those its spec names. */
+  caseAliases: (caseId: string) => readonly string[] = () => [],
 ): RunCasesOptions["login"] {
   const aliases = Object.keys(env.profile.accounts);
   // REQ-EXEC-55/AC2: SSO logins run in a browser; with `reuse` one login serves every case of this run.
@@ -69,7 +71,12 @@ export function accountLogin(
     const lease = await leases.acquire({
       caseId: context.caseId,
       lane: context.lane,
-      aliases: await aliasesOf(context.specFile),
+      aliases: [
+        ...new Set([
+          ...(await aliasesOf(context.specFile)),
+          ...caseAliases(context.caseId).filter((a) => aliases.includes(a)),
+        ]),
+      ],
     });
     try {
       const session = await loginAccounts(env, withBrowser, lease.members);

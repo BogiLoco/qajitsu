@@ -170,6 +170,11 @@ export interface UiClient {
   readonly waitFor: (selector: UiSelector, state?: "visible" | "hidden") => Promise<void>;
   /** Goes back: browser history, or the Android back button in mobile cases. */
   readonly back: () => Promise<void>;
+  /**
+   * Switches to another browser session of the case (REQ-EXEC-62): `main`, or a name from the case's data whose value
+   * is a test account (`buyer: user:buyer`); a new session opens logged in as that account.
+   */
+  readonly session: (name: string) => Promise<void>;
   /** Opens the app as an account alias, e.g. `user:standard`. */
   readonly as: (alias: string) => Promise<void>;
   readonly hover: (selector: UiSelector) => Promise<void>;
@@ -207,6 +212,7 @@ export type UiOperation =
   | { readonly op: "click" | "check" | "uncheck"; readonly selector: UiSelector }
   | { readonly op: "fill" | "select" | "press"; readonly selector: UiSelector; readonly value: string }
   | { readonly op: "fillCode"; readonly selector: UiSelector }
+  | { readonly op: "session"; readonly name: string }
   | {
       readonly op: "fillSecret";
       readonly selector: UiSelector;

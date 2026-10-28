@@ -179,6 +179,8 @@ export interface UiCrawlInput {
   readonly allowedOrigins: readonly string[];
   /** Pages recorded at most (default 12). */
   readonly maxPages?: number;
+  /** The application's test hook (`web.test_state`), noted per page for `state.*` checks. */
+  readonly testStateHook?: string | undefined;
   /** Pages to record right after the start page, e.g. the pages the code defines that no link reaches. */
   readonly paths?: readonly string[];
   readonly mask: UiSnapshotInput["mask"];
@@ -252,11 +254,19 @@ export async function crawlUiSnapshot(input: UiCrawlInput): Promise<UiScreen[]> 
         await driver.goto(where);
         if (!driver.elements) break;
         const elements = await driver.elements();
+        // Dogfood pass 2026-10-28: a plan expected `state.page` from a page without any test hook.
+        const hook = driver.testState
+          ? await driver
+              .testState(input.testStateHook ?? "__QA_STATE__", "")
+              .then((r) => r.hook)
+              .catch(() => undefined)
+          : undefined;
         const masked = input.mask({
           where,
           platform: "web",
           ...(input.account !== undefined ? { account: input.account } : {}),
           elements: elements.slice(0, ELEMENTS_PER_SCREEN),
+          ...(hook === undefined ? {} : { testHook: hook }),
         }) as UiScreen;
         screens.push(masked);
         input.emit("ui.snapshot", { where, platform: "web", elements: masked.elements.length });

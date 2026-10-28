@@ -241,6 +241,7 @@ async function recordForPlanner(
       baseUrl: env.baseUrl,
       allowedOrigins: [env.origin],
       ...(options.paths ? { paths: options.paths } : {}),
+      testStateHook: project.config.web.test_state,
       mask: (v) => masker.maskJson(v),
       emit: (event, details) => {
         events.emit("plan", { kind: "system", name: "orchestrator" }, event, details);

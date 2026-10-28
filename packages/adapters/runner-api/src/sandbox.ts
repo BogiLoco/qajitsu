@@ -17,6 +17,7 @@ import {
 import { z } from "zod";
 import type { AttemptInput } from "./attempt.js";
 import { createPlaywrightTransport } from "./transport.js";
+import { extraSessions } from "./extra-sessions.js";
 
 /** Executes one attempt; the sandbox in production, in-process in unit tests. */
 /** The runner seam from `@qajitsu/core` (ADR-0005). */
@@ -83,6 +84,7 @@ const UiOperationSchema = z.discriminatedUnion("op", [
   z.strictObject({ op: z.literal("advanceTime"), seconds: z.number().int().min(1).max(604_800) }),
   z.strictObject({ op: z.literal("setOffline"), offline: z.boolean() }),
   z.strictObject({ op: z.literal("fillCode"), selector: Selector }),
+  z.strictObject({ op: z.literal("session"), name: z.string().regex(/^[a-z][a-z0-9_-]{0,40}$/) }),
   z.strictObject({
     op: z.literal("fillSecret"),
     selector: Selector,
@@ -223,6 +225,7 @@ export function createSandboxExecutor(
       dispose = pw.dispose;
     }
     const session = options.browser?.(input);
+    const extra = extraSessions(options.browser, input);
     const runtime: CaseRuntime = createCaseRuntime({
       plan: input.plan,
       ...(input.visual ? { visual: input.visual } : {}),
@@ -242,6 +245,7 @@ export function createSandboxExecutor(
       accounts: input.accounts,
       now,
       ...(session ? { ui: session.driver } : {}),
+      ...(extra.open ? { session: extra.open } : {}),
       // REQ-EVD-08: the trusted runner draws the boxes on copies of failure screenshots.
       annotate: annotateImage,
       ...(input.progress
@@ -285,7 +289,10 @@ export function createSandboxExecutor(
           deadline.clear();
           child.kill("SIGKILL");
           void runtime.finish(fatal ?? error).then(async (record) => {
-            const media = session ? await session.close(record.outcome !== "passed").catch(() => []) : [];
+            const media = [
+              ...(session ? await session.close(record.outcome !== "passed").catch(() => []) : []),
+              ...(await extra.close(record.outcome !== "passed")),
+            ];
             const ran = session?.browser?.();
             resolve({
               ...record,

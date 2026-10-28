@@ -1,0 +1,21 @@
+{
+  "key": "DEMO-14",
+  "type": "Story",
+  "status": "Ready for QA",
+  "summary": "Messages between shoppers",
+  "description": "A shopper can send a message to another shopper on /app/messages. The message appears in the recipient's inbox, not in the sender's.",
+  "acceptanceCriteria": [
+    "A message sent by one shopper shows up in the recipient's inbox with the sender's name.",
+    "The sender's own inbox does not show the message."
+  ],
+  "labels": ["messages", "web"],
+  "components": ["shop-web"],
+  "attachments": [],
+  "comments": [
+    {
+      "author": "designer",
+      "created": "2026-10-28T09:00:00Z",
+      "body": "Test ids: message-to, message-text, message-send, message-status, inbox, inbox-count."
+    }
+  ]
+}

@@ -312,6 +312,19 @@ export function checkPlanExpectations(
               state.text,
             );
         }
+        // A state check needs the application's test hook; no recorded page exposing one means it cannot pass.
+        if (
+          c.type === "web" &&
+          e.state !== undefined &&
+          recorded.some((x) => x.testHook !== undefined) &&
+          recorded.every((x) => x.testHook !== true)
+        )
+          for (const path of Object.keys(e.state))
+            flag(
+              "selector",
+              `state.${path} needs the application's test hook, and no recorded page exposes one: check what the page shows with "elements" or "texts" instead`,
+              `state.${path}`,
+            );
         for (const sel of unknownSelectors(Object.keys(e.elements ?? {}), c.type, {
           screens: recorded,
           inventory: options.inventory,

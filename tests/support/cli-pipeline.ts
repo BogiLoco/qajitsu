@@ -105,6 +105,7 @@ export async function createDemoPipeline(
     "DEMO-11",
     "DEMO-12",
     "DEMO-13",
+    "DEMO-14",
   ].includes(ticket);
   const shop = await startShop({
     env: { DEMO_USER_PASSWORD: DEMO_PASSWORD, ...(options.flag ? { [options.flag]: "1" } : {}) },
@@ -131,8 +132,8 @@ export async function createDemoPipeline(
   await writeFile(
     join(project, ".qa", "envs", "local.yaml"),
     options.cookieSession === true
-      ? `base_url: ${shop.url}\nweb_session: { storage: cookies }\naccounts:\n  user:standard: { username: standard, password: secret://env/DEMO_USER_PASSWORD }\nlogin:\n  path: /auth/session\n  body: { username: "{{username}}", password: "{{password}}" }\n`
-      : `base_url: ${shop.url}\nweb_session: { storage: sessionStorage, key: token }\naccounts:\n  user:standard: { username: standard, password: secret://env/DEMO_USER_PASSWORD }\nlogin:\n  path: /auth/login\n  body: { username: "{{username}}", password: "{{password}}" }\n  token_path: token\n`,
+      ? `base_url: ${shop.url}\nweb_session: { storage: cookies }\naccounts:\n  user:standard: { username: standard, password: secret://env/DEMO_USER_PASSWORD }\n  user:admin: { username: admin, password: secret://env/DEMO_USER_PASSWORD }\nlogin:\n  path: /auth/session\n  body: { username: "{{username}}", password: "{{password}}" }\n`
+      : `base_url: ${shop.url}\nweb_session: { storage: sessionStorage, key: token }\naccounts:\n  user:standard: { username: standard, password: secret://env/DEMO_USER_PASSWORD }\n  user:admin: { username: admin, password: secret://env/DEMO_USER_PASSWORD }\nlogin:\n  path: /auth/login\n  body: { username: "{{username}}", password: "{{password}}" }\n  token_path: token\n`,
   );
   const run = async (
     args: string[],

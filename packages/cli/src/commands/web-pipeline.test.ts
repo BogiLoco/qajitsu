@@ -62,4 +62,15 @@ describe("the whole qj flow on the new web capabilities", () => {
         (await filesContaining(dir, DEMO_PASSWORD)).filter((f) => !f.startsWith(join(dir, "repos"))),
       ).toEqual([]);
   }, 240_000);
+
+  it("REQ-EXEC-62/AC1..AC3 + REQ-NFR-04/AC1: DEMO-14 (two shoppers) passes with one pool account per session; BUG-19 is FAILED", async () => {
+    const r = await both("DEMO-14", "BUG_MESSAGE_TO_SENDER");
+    expect(r.ok.exitCode).toBe(0);
+    expect(await statuses(r.okDir)).toEqual({ "TC-01": "PASSED" });
+    expect(await statuses(r.bugDir)).toEqual({ "TC-01": "FAILED" });
+    const journal = await readFile(join(r.okDir, "journal", "events.jsonl"), "utf8");
+    expect(journal).toMatch(
+      /"event":"case.accounts".*"user:admin".*"user:standard"|"event":"case.accounts".*"user:standard".*"user:admin"/,
+    );
+  }, 240_000);
 });

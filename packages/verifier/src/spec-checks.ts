@@ -68,6 +68,7 @@ const WEB_ONLY = [
   "closePage",
   "advanceTime",
   "setOffline",
+  "session",
 ];
 
 /** Selector kinds a native app can resolve (REQ-EXEC-06, REQ-EXEC-21/AC3); `role:` and `css:` exist only in a browser. */
@@ -380,6 +381,17 @@ export function checkSpecSource(
         if (!field || !ts.isStringLiteral(field) || !["password", "username", "totp"].includes(field.text))
           add("lint", 'ui.fillSecret() types "password", "username" or "totp", as a literal', node);
       }
+      // REQ-EXEC-62/AC1: a session is `main` or a test account the case names in its data.
+      if (onUi && name === "session") {
+        const [arg] = node.arguments;
+        const value = arg && ts.isStringLiteral(arg) ? arg.text : undefined;
+        if (value === undefined || (value !== "main" && !(planCase.data[value] ?? "").startsWith("user:")))
+          add(
+            "lint",
+            `ui.session() takes "main" or a name from ${caseId}'s data whose value is a test account, as a literal`,
+            node,
+          );
+      }
       // REQ-EXEC-55/AC3: a code is taken from the message the plan expects in the same step.
       if (onUi && name === "fillCode") {
         const owner = enclosingStep(node);
@@ -559,6 +571,15 @@ export function checkSpecSource(
         const [first] = node.arguments;
         // REQ-EXEC-67/AC3: signing in through the form with the account's secrets uses the account too.
         const second = node.arguments[1];
+        // REQ-EXEC-62/AC1: a session named after the account opens logged in as it.
+        if (
+          client === "ui" &&
+          member === "session" &&
+          first !== undefined &&
+          ts.isStringLiteral(first) &&
+          planCase.data[first.text] === account
+        )
+          loggedIn.add(account);
         if (
           client === "ui" &&
           member === "fillSecret" &&

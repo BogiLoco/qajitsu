@@ -28,6 +28,7 @@ export const BUG_FLAGS = [
   "BUG_OFFLINE_NOTES_LOST",
   "BUG_CHAT_REPLY_DROPS_TEXT",
   "BUG_SIGNIN_ANY_PASSWORD",
+  "BUG_MESSAGE_TO_SENDER",
 ];
 
 const PRODUCTS = [
@@ -58,6 +59,8 @@ export function createShop(options) {
     res.writeHead(status, { "content-type": "application/json" });
     res.end(JSON.stringify(body));
   };
+  /** Messages between shoppers (REQ-EXEC-62 demo). */
+  const inbox = [];
   const session = (req) => {
     const header = req.headers["authorization"] ?? "";
     // A bearer token, or the HttpOnly cookie of the sign-in form (REQ-EXEC-67 demo).
@@ -177,6 +180,20 @@ export function createShop(options) {
     const s = session(req);
     if (!s) return json(res, 401, { error: "UNAUTHORIZED" });
     if (route === "GET /me") return json(res, 200, { username: s.user });
+    // Messages between shoppers (REQ-EXEC-62 demo); BUG-19 delivers a message to its sender instead.
+    if (route === "POST /messages") {
+      const input = await body(req);
+      if (typeof input?.to !== "string" || typeof input.text !== "string" || input.text === "")
+        return json(res, 422, { error: "TO_AND_TEXT_REQUIRED" });
+      inbox.push({ from: s.user, to: bugs.BUG_MESSAGE_TO_SENDER ? s.user : input.to, text: input.text });
+      return json(res, 201, { sent: true });
+    }
+    if (route === "GET /messages")
+      return json(
+        res,
+        200,
+        inbox.filter((m) => m.to === s.user),
+      );
     if (route === "POST /admin/seed" || route === "GET /admin/seed") {
       if (s.user !== "admin") return json(res, 403, { error: "FORBIDDEN" });
       if (req.method === "GET") return json(res, 200, { markers: seeds });

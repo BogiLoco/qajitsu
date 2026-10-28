@@ -172,6 +172,7 @@ async function start(m: StartMessage): Promise<void> {
         rpc({ op: "ui", operation: { op: "fill", selector, value: String(value) } }),
       // The spec names an account and a field; the parent alone knows the value (REQ-EXEC-67/AC3).
       fillCode: (selector: string) => rpc({ op: "ui", operation: { op: "fillCode", selector } }),
+      session: (name: unknown) => rpc({ op: "ui", operation: { op: "session", name } }),
       fillSecret: (selector: string, alias: unknown, field: unknown) =>
         rpc({ op: "ui", operation: { op: "fillSecret", selector, alias, field } }),
       select: (selector: string, value: unknown) =>

@@ -141,6 +141,8 @@ export interface UiScreen {
   /** Account alias the page was opened as, if any. */
   readonly account?: string | undefined;
   readonly elements: readonly UiElementFact[];
+  /** Whether the page exposes the application's test hook for `state.*` checks (REQ-EXEC-56/AC2). */
+  readonly testHook?: boolean | undefined;
 }
 
 /** A numbered box drawn on a copy of a screenshot (REQ-EVD-08). */
