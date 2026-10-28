@@ -1,0 +1,62 @@
+{
+  "summary": "Sign-in form and cookie session for DEMO-13.",
+  "cases": [
+    {
+      "id": "TC-01",
+      "title": "The right password signs the shopper in",
+      "type": "web",
+      "priority": "high",
+      "source": [{ "kind": "ac", "id": "AC1" }],
+      "data": { "user": "user:standard" },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "Sign in on /app/signin with the account's username and password",
+          "expect": {
+            "description": "Signed in",
+            "elements": { "testid:account-user": { "text": "Signed in as standard" } }
+          }
+        }
+      ],
+      "evidence": ["screenshot"]
+    },
+    {
+      "id": "TC-02",
+      "title": "A wrong password is refused",
+      "type": "web",
+      "priority": "high",
+      "source": [{ "kind": "ac", "id": "AC2" }],
+      "data": { "user": "user:standard" },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "Sign in with the account's username and a wrong password",
+          "expect": {
+            "description": "Refused",
+            "elements": { "testid:signin-result": { "text": "Invalid username or password" } }
+          }
+        }
+      ],
+      "evidence": ["screenshot"]
+    },
+    {
+      "id": "TC-03",
+      "title": "The login's cookie session opens the account page",
+      "type": "web",
+      "priority": "medium",
+      "source": [{ "kind": "ac", "id": "AC3" }],
+      "data": { "user": "user:standard" },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "Open /app/account as user:standard",
+          "expect": {
+            "description": "Signed in",
+            "elements": { "testid:account-user": { "text": "Signed in as standard" } }
+          }
+        }
+      ],
+      "evidence": ["screenshot"]
+    }
+  ]
+}

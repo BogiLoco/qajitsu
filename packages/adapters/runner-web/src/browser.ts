@@ -17,6 +17,8 @@ import {
 import {
   browserEngine,
   OBSERVATIONS_FILE,
+  unzip,
+  zip,
   type LocalBrowser,
   type PassiveObservations,
   type UiElementFact,
@@ -43,9 +45,14 @@ export interface WebRunnerOptions {
   readonly browser?: LocalBrowser;
   /** `retain-on-failure` by default, `always` or `off` (REQ-EVD-06/AC1). */
   readonly video?: "retain-on-failure" | "always" | "off";
-  /** Where the app keeps its session token; the framework sets it for `ui.as(alias)` (REQ-CFG-07). */
+  /**
+   * Where the app keeps its session; the framework sets it for `ui.as(alias)` (REQ-CFG-07): a token in storage, or
+   * the login's cookies (REQ-EXEC-67/AC2).
+   */
   readonly webSession?:
-    { readonly storage: "sessionStorage" | "localStorage"; readonly key: string } | undefined;
+    | { readonly storage: "sessionStorage" | "localStorage"; readonly key: string }
+    | { readonly storage: "cookies" }
+    | undefined;
   readonly headless?: boolean;
   /** Delay before every browser action in ms, to watch a headed run (REQ-EXEC-16/AC2). */
   readonly slowMoMs?: number | undefined;
@@ -247,6 +254,54 @@ export function closedShadowHosts(node: CdpNode, out: string[] = [], depth = 0):
   for (const child of node.children ?? []) closedShadowHosts(child, out, depth + 1);
   if (node.contentDocument) closedShadowHosts(node.contentDocument, out, depth + 1);
   return out;
+}
+
+/**
+ * A Playwright trace with every registered secret masked (INV-8, REQ-EXEC-67/AC4): the trace records the arguments of
+ * every action (a typed password, a session token set into storage) and request headers. Text entries are masked;
+ * images are kept. Sensitive headers and every cookie are masked by name too, so a session the application created
+ * during the test (`Set-Cookie`) is hidden although nobody registered it. A trace that cannot be read is dropped
+ * rather than kept unmasked.
+ */
+export function maskTrace(data: Uint8Array, mask: (text: string) => string): Uint8Array {
+  const sensitive = new Set(DEFAULT_SENSITIVE_HEADERS.map((h) => h.toLowerCase()));
+  const value = /"value":"(?:[^"\\]|\\.)*"/g;
+  const scrub = (text: string): string =>
+    mask(
+      text
+        .replace(/\{"name":"([^"]+)","value":"(?:[^"\\]|\\.)*"/g, (all, name: string) =>
+          sensitive.has(name.toLowerCase()) ? `{"name":"${name}","value":"${MASK}"` : all,
+        )
+        .replace(/"cookies":\[[^\]]*\]/g, (all) => all.replace(value, `"value":"${MASK}"`)),
+    );
+  try {
+    const entries = unzip(data, {
+      maxEntries: 20_000,
+      maxEntryBytes: 200_000_000,
+      maxTotalBytes: 500_000_000,
+    });
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+    return zip(
+      entries.map((e) => {
+        if (/\.(png|jpe?g|webp|gif|woff2?|ttf)$/i.test(e.name)) return e;
+        let text: string;
+        try {
+          text = decoder.decode(e.data);
+        } catch {
+          return e;
+        }
+        const masked = scrub(text);
+        return masked === text ? e : { name: e.name, data: new TextEncoder().encode(masked) };
+      }),
+    );
+  } catch {
+    return zip([
+      {
+        name: "README.txt",
+        data: new TextEncoder().encode("The trace could not be masked and was dropped.\n"),
+      },
+    ]);
+  }
 }
 
 const scrollY = (page: Page): Promise<number> =>
@@ -589,11 +644,45 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
           }
         },
         useAccount: async (alias) => {
+          const origin = new URL(input.baseUrl).origin;
+          // REQ-EXEC-67/AC1+AC2: cookies and storage of the login, for the application's origin only.
+          const state = input.browserStates?.[alias];
+          if (state && (options.webSession?.storage === "cookies" || input.sessions?.[alias] === undefined)) {
+            if (state.cookies.length === 0 && Object.keys(state.localStorage ?? {}).length === 0)
+              throw new Error(`The login of '${alias}' gave the browser no session (no cookies, no storage)`);
+            await context.addCookies(
+              state.cookies.map((c) => ({
+                name: c.name,
+                value: c.value,
+                // The domain of the login is ignored: the session goes to the application only (INV-10).
+                domain: new URL(origin).hostname,
+                path: c.path ?? "/",
+                ...(c.httpOnly === undefined ? {} : { httpOnly: c.httpOnly }),
+                ...(c.secure === undefined ? {} : { secure: c.secure }),
+                ...(c.sameSite === undefined ? {} : { sameSite: c.sameSite }),
+                ...(c.expires === undefined ? {} : { expires: c.expires }),
+              })),
+            );
+            const entries = Object.entries(state.localStorage ?? {});
+            if (entries.length > 0)
+              await context.addInitScript(
+                ([o, items]) => {
+                  const w = globalThis as unknown as {
+                    location: { origin: string };
+                    localStorage: { setItem(key: string, value: string): void };
+                  };
+                  if (w.location.origin === o) for (const [k, v] of items) w.localStorage.setItem(k, v);
+                },
+                [origin, entries] as const,
+              );
+            return;
+          }
+          if (options.webSession?.storage === "cookies")
+            throw new Error(`The login of '${alias}' set no cookies for the browser`);
           const token = input.sessions?.[alias];
           if (token === undefined || !options.webSession)
             throw new Error(`No browser session for '${alias}': set web_session in the environment profile`);
           const { storage, key } = options.webSession;
-          const origin = new URL(input.baseUrl).origin;
           await context.addInitScript(
             ([o, s, k, t]) => {
               // Runs in the page; typed structurally because the Node build has no DOM types.
@@ -771,6 +860,9 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
           dialogPolicy = policy;
         },
         takeDialogs: () => dialogs.splice(0),
+        registerSecret: (value) => {
+          masker.register(value);
+        },
         socketFrame: async (direction, text, url, waitMs) => {
           const deadline = Date.now() + waitMs;
           for (;;) {
@@ -900,7 +992,9 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
               stepId: "case",
               kind: "trace",
               name: "trace.zip",
-              content: new Uint8Array(await readFile(join(dir, "trace.zip"))),
+              content: maskTrace(new Uint8Array(await readFile(join(dir, "trace.zip"))), (t) =>
+                masker.maskText(t),
+              ),
             });
           if (videoPath && (video === "always" || (video === "retain-on-failure" && failed))) {
             items.push({

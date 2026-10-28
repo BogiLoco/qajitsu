@@ -4,6 +4,7 @@ import type {
   AttemptRecord,
   CapturedMessage,
   CaseMessages,
+  CredentialLookup,
   EvidenceItem,
   ManualPrompter,
   Plan,
@@ -132,6 +133,8 @@ export type { AttemptRecord, EvidenceItem } from "@qajitsu/core";
 
 /** Settings of one case attempt. */
 export interface CaseRuntimeOptions {
+  /** Account secrets for `ui.fillSecret` (REQ-EXEC-67/AC3), held by the parent only. */
+  readonly credential?: CredentialLookup | undefined;
   readonly plan: Plan;
   readonly caseId: string;
   readonly attempt: number;
@@ -317,6 +320,8 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   if (!planCase) throw new Error(`${caseId} is not in the approved plan`);
   const stepIds = new Set(planCase.steps.map((s) => s.id));
   const steps: { id: string; ok: boolean; error?: string; url?: string; network?: NetworkProblem[] }[] = [];
+  /** Fields `ui.fillSecret` typed into, masked in every screenshot of the case (REQ-EXEC-67/AC4). */
+  const secretFields = new Set<string>();
   /** Every request the page sent (REQ-EVD-09), as the parent saw it, masked by the driver. */
   const traffic: UiRequest[] = [];
   const assertions: AssertionRecord[] = [];
@@ -510,7 +515,8 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     // REQ-EVD-02/AC1: a screenshot after every step of a case that uses the browser.
     if (driver) {
       try {
-        const png = await driver.screenshot(false);
+        // REQ-EXEC-67/AC4: fields that got an account secret are blacked out.
+        const png = await driver.screenshot(false, [...secretFields]);
         media.push({ stepId, kind: "screenshot", name: `${stepId}.png`, content: png });
         await annotateStep(stepId, png);
         // REQ-OBS-09: the live view gets its own copy; what it does with it cannot change the evidence.
@@ -662,6 +668,28 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       case "fill":
         await d.fill(assertSelector(operation.selector), operation.value);
         return;
+      case "fillSecret": {
+        // REQ-EXEC-67/AC3: the value is resolved here, masked everywhere, and never handed back to the spec.
+        const selector = assertSelector(operation.selector);
+        // The sandbox schema checks this too; an in-process caller is held to the same rule.
+        const field: string = operation.field;
+        if (field !== "password" && field !== "username")
+          throw new Error('ui.fillSecret() types "password" or "username" of an account');
+        if (!Object.values(planCase.data).includes(operation.alias))
+          throw new Error(
+            `ui.fillSecret(): '${operation.alias.slice(0, 40)}' is not an account of ${caseId} in the plan`,
+          );
+        const value = options.credential?.(operation.alias, operation.field);
+        if (value === undefined || value === "")
+          throw new Error(
+            `ui.fillSecret(): no ${operation.field} for ${operation.alias} in this environment`,
+          );
+        masker.register(value);
+        d.registerSecret?.(value);
+        secretFields.add(selector);
+        await d.fill(selector, value);
+        return;
+      }
       case "select":
         await d.select(assertSelector(operation.selector), operation.value);
         return;
@@ -919,10 +947,10 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     const threshold = spec.threshold ?? visual.threshold;
     const actual =
       spec.element === undefined
-        ? await driver.screenshot(
-            false,
-            (spec.mask ?? []).map((m) => assertSelector(m)),
-          )
+        ? await driver.screenshot(false, [
+            ...(spec.mask ?? []).map((m) => assertSelector(m)),
+            ...secretFields,
+          ])
         : await need(
             driver,
             "elementScreenshot",
@@ -1206,6 +1234,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       goto: (path) => uiOp({ op: "goto", path }),
       click: (selector) => uiOp({ op: "click", selector }),
       fill: (selector, value) => uiOp({ op: "fill", selector, value }),
+      fillSecret: (selector, alias, field) => uiOp({ op: "fillSecret", selector, alias, field }),
       check: (selector) => uiOp({ op: "check", selector }),
       uncheck: (selector) => uiOp({ op: "uncheck", selector }),
       select: (selector, value) => uiOp({ op: "select", selector, value }),
@@ -1305,7 +1334,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
             stepId: "case",
             kind: "screenshot",
             name: "failure.png",
-            content: await driver.screenshot(true),
+            content: await driver.screenshot(true, [...secretFields]),
           });
           evidence.push({
             stepId: "case",

@@ -1,6 +1,6 @@
 import type { MatrixRow } from "./matrix.js";
 import { combinationsTitle, summaryLine } from "./matrix.js";
-import { zip } from "./zip.js";
+import { zip } from "@qajitsu/core";
 
 const HEADER = [
   "TC",

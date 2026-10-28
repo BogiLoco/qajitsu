@@ -70,6 +70,7 @@ services:
       BUG_OFFER_NEVER_EXPIRES: { value: "0", overridable: true }
       BUG_OFFLINE_NOTES_LOST: { value: "0", overridable: true }
       BUG_CHAT_REPLY_DROPS_TEXT: { value: "0", overridable: true }
+      BUG_SIGNIN_ANY_PASSWORD: { value: "0", overridable: true }
     health: { http: /health, timeout_s: 180 }
 
 build:

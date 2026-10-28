@@ -188,8 +188,7 @@
           },
           "required": [
             "path",
-            "body",
-            "token_path"
+            "body"
           ],
           "additionalProperties": false
         },
@@ -215,25 +214,42 @@
       ]
     },
     "web_session": {
-      "type": "object",
-      "properties": {
-        "storage": {
-          "type": "string",
-          "enum": [
-            "sessionStorage",
-            "localStorage"
-          ]
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "storage": {
+              "type": "string",
+              "enum": [
+                "sessionStorage",
+                "localStorage"
+              ]
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "storage",
+            "key"
+          ],
+          "additionalProperties": false
         },
-        "key": {
-          "type": "string",
-          "minLength": 1
+        {
+          "type": "object",
+          "properties": {
+            "storage": {
+              "type": "string",
+              "const": "cookies"
+            }
+          },
+          "required": [
+            "storage"
+          ],
+          "additionalProperties": false
         }
-      },
-      "required": [
-        "storage",
-        "key"
-      ],
-      "additionalProperties": false
+      ]
     },
     "http_auth": {
       "type": "object",

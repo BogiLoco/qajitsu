@@ -61,6 +61,7 @@ export async function executeAttempt(
     ...(input.fixture ? { fixture: input.fixture } : {}),
     ...(input.extractText ? { extractText: input.extractText } : {}),
     ...(input.testStateHook ? { testStateHook: input.testStateHook } : {}),
+    ...(input.credential ? { credential: input.credential } : {}),
     caseId: input.caseId,
     attempt: input.attempt,
     baseUrl: input.baseUrl,

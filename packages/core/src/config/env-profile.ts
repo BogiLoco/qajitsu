@@ -12,8 +12,11 @@ const HttpLoginSchema = z.strictObject({
   method: z.enum(["POST", "PUT"]).default("POST"),
   path: z.string().startsWith("/"),
   body: z.record(z.string(), z.unknown()),
-  /** Dotted path of the token in the JSON response. */
-  token_path: z.string().min(1),
+  /**
+   * Dotted path of the token in the JSON response. Without it the session is the cookies the login sets
+   * (`Set-Cookie`, REQ-EXEC-67/AC2): sent as `Cookie` by the API client and loaded into the browser.
+   */
+  token_path: z.string().min(1).optional(),
   header: z.string().default("authorization"),
   scheme: z.string().default("Bearer"),
 });
@@ -91,9 +94,15 @@ export const EnvProfileSchema = z.strictObject({
     )
     .default({}),
   login: LoginSchema.optional(),
-  /** Where the web app keeps the session token; the framework sets it for `ui.as(alias)` (REQ-CFG-07). */
+  /**
+   * Where the web app keeps its session; the framework sets it for `ui.as(alias)` (REQ-CFG-07): a token in
+   * `sessionStorage` or `localStorage` under `key`, or the login's cookies (REQ-EXEC-67/AC2).
+   */
   web_session: z
-    .strictObject({ storage: z.enum(["sessionStorage", "localStorage"]), key: z.string().min(1) })
+    .union([
+      z.strictObject({ storage: z.enum(["sessionStorage", "localStorage"]), key: z.string().min(1) }),
+      z.strictObject({ storage: z.literal("cookies") }),
+    ])
     .optional(),
   /**
    * HTTP authentication in front of the environment (REQ-EXEC-61/AC5), e.g. a staging site behind Basic Auth: sent by

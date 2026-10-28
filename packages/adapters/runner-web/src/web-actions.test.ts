@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { createPlaywrightTransport, executeAttempt, type AttemptInput } from "@qajitsu/adapter-runner-api";
-import { PlanSchema } from "@qajitsu/core";
+import { PlanSchema, unzip } from "@qajitsu/core";
 import { computeStatus } from "@qajitsu/verifier";
 import { afterEach, describe, expect, it } from "vitest";
 import { startShop } from "../../../../examples/demo-shop/api/server.mjs";
@@ -547,4 +547,82 @@ describe("web actions (REQ-EXEC-38, REQ-EXEC-39, REQ-EXEC-40, REQ-EXEC-56)", () 
       ["websocket.received.0", "(no received WebSocket message contains it)"],
     ]);
   }, 60_000);
+
+  /** DEMO-13 with the session in an HttpOnly cookie, logged in the way the environment login does it. */
+  const signedIn = async (caseId: string, flag?: string) => {
+    const shop = await startShop({ env: { DEMO_USER_PASSWORD: PASSWORD, ...(flag ? { [flag]: "1" } : {}) } });
+    cleanups.push(() => shop.close());
+    const res = await fetch(`${shop.url}/auth/session`, {
+      method: "POST",
+      body: JSON.stringify({ username: "standard", password: PASSWORD }),
+    });
+    const sid = /sid=([0-9a-f]+)/.exec(res.headers.get("set-cookie") ?? "")?.[1] ?? "";
+    const { transport, dispose } = await createPlaywrightTransport({ timeoutMs: 5000 });
+    try {
+      const record = await executeAttempt(
+        {
+          specFile: spec("DEMO-13", caseId),
+          caseId,
+          attempt: 1,
+          plan: plan("DEMO-13"),
+          baseUrl: shop.url,
+          allowedOrigins: [shop.url],
+          accounts: { "user:standard": { cookie: `sid=${sid}` } },
+          browserStates: {
+            "user:standard": {
+              cookies: [{ name: "sid", value: sid, path: "/", httpOnly: true, sameSite: "Lax" }],
+            },
+          },
+          credential: (alias, field) =>
+            alias === "user:standard" ? (field === "password" ? PASSWORD : "standard") : undefined,
+          secrets: [sid, PASSWORD],
+          timeoutMs: 30_000,
+        },
+        transport,
+        Date.now,
+        createPlaywrightBrowserFactory({
+          video: "off",
+          webSession: { storage: "cookies" },
+          actionTimeoutMs: 4000,
+        }),
+      );
+      return { record, status: computeStatus({ caseId, attempts: [record] }, { evidenceComplete: true }) };
+    } finally {
+      await dispose();
+    }
+  };
+
+  it("REQ-EXEC-67/AC3+AC4: a sign-in form gets the account's secrets typed by the runner; nothing records them in clear", async () => {
+    const r = await signedIn("TC-01");
+    expect(r.record.error).toBeUndefined();
+    expect(r.status).toBe("PASSED");
+    for (const item of r.record.evidence) {
+      const text = typeof item.content === "string" ? item.content : new TextDecoder().decode(item.content);
+      expect(text, item.name).not.toContain(PASSWORD);
+    }
+  });
+
+  it("REQ-EXEC-67/AC1+AC2: the login's HttpOnly cookie opens the account page through ui.as", async () => {
+    const r = await signedIn("TC-03");
+    expect(r.record.error).toBeUndefined();
+    expect(r.status).toBe("PASSED");
+  });
+
+  it("REQ-NFR-04/AC1: a wrong password is refused; BUG-18 (any password signs in) is FAILED", async () => {
+    expect((await signedIn("TC-02")).status).toBe("PASSED");
+    const bug = await signedIn("TC-02", "BUG_SIGNIN_ANY_PASSWORD");
+    expect(bug.status).toBe("FAILED");
+    expect(bug.record.assertions.map((a) => [a.field, a.actual])).toEqual([
+      ["elements.testid:signin-result.text", "Signed in"],
+    ]);
+    // The failed attempt keeps its trace; the session cookie the browser was given is masked in it.
+    const trace = bug.record.evidence.find((e) => e.name === "trace.zip")?.content;
+    expect(trace).toBeInstanceOf(Uint8Array);
+    const texts = unzip(trace as Uint8Array, { maxEntries: 20_000, maxEntryBytes: 2e8, maxTotalBytes: 5e8 })
+      .filter((e) => !/\.(png|jpe?g)$/.test(e.name))
+      .map((e) => new TextDecoder().decode(e.data))
+      .join("\n");
+    expect(texts).toContain("signin-username");
+    expect(texts).not.toMatch(/sid=[0-9a-f]{32}/);
+  });
 });

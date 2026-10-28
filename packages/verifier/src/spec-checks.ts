@@ -30,6 +30,7 @@ const FORBIDDEN_GLOBALS = new Set([
 
 const UI_ACTIONS = new Set([
   "click",
+  "fillSecret",
   "fill",
   "check",
   "uncheck",
@@ -366,6 +367,18 @@ export function checkSpecSource(
             add("coverage", `ui.upload(): '${k.text}' is not a file of ${caseId} in the plan (files)`, k);
         }
       }
+      // REQ-EXEC-67/AC5: a secret is named by an account of the case and a field, never passed as a value.
+      if (onUi && name === "fillSecret") {
+        const [, alias, field] = node.arguments;
+        if (!alias || !ts.isStringLiteral(alias) || !Object.values(planCase.data).includes(alias.text))
+          add(
+            "lint",
+            `ui.fillSecret() takes an account alias of ${caseId} in the plan (data), as a literal`,
+            node,
+          );
+        if (!field || !ts.isStringLiteral(field) || (field.text !== "password" && field.text !== "username"))
+          add("lint", 'ui.fillSecret() types "password" or "username", as a literal', node);
+      }
       if (onUi && name === "download") {
         const owner = enclosingStep(node);
         if (owner !== undefined) downloadSteps.add(owner);
@@ -678,6 +691,7 @@ interface LockedShape {
 
 const SELECTOR_ACTIONS = new Set([
   "click",
+  "fillSecret",
   "check",
   "uncheck",
   "waitFor",

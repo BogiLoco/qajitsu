@@ -1040,3 +1040,22 @@ WebKit builds of its Playwright.
 - [x] AC2: `qj setup` installs the channels the matrix names (where the platform allows it) and `qj doctor` checks them with their version; a channel that is not installed makes its combinations BLOCKED with the command that installs it.
 - [x] AC3: Every attempt records the exact browser name and version it ran in; the report and the matrix name them per combination.
 - [x] AC4: Specific older versions and real Safari run on a device farm (REQ-EXEC-35); without one they are refused with the reason, never replaced by another browser.
+
+### REQ-EXEC-67 · Browser sessions from cookies and account secrets typed by the runner
+
+- Status: implemented
+- Priority: must
+- Stage: later
+- Related: REQ-CFG-07, REQ-ENV-09, REQ-EXEC-55, REQ-EXEC-62, INV-2, INV-4, INV-8
+
+`ui.as(alias)` could only put a token into `localStorage` or `sessionStorage`. Applications that keep the session in
+an HttpOnly cookie could not be logged in at all, and a login form could not be tested because a spec never knows a
+password.
+
+**Acceptance criteria**
+
+- [x] AC1: A login (the HTTP login or a script from `.qa/auth/`) can return cookies or a Playwright `storageState`; `ui.as(alias)` loads them into the browser for the application's origin only, so applications with cookie sessions are logged in without a form.
+- [x] AC2: `web_session` can be `cookies` (taken from the login response's `Set-Cookie`) besides `sessionStorage` and `localStorage`; a login that returns no session for the browser makes `ui.as` fail with the reason, never continue anonymously.
+- [x] AC3: A step can type an account's secret into a field without knowing it: `ui.fillSecret(selector, "user:standard", "password" | "username")`. The trusted parent resolves the value from the account; the spec, the agents, the evidence, the trace and the journal see only the mask.
+- [x] AC4: The value typed by `ui.fillSecret` is masked in screenshots of that field, in the DOM snapshot, in the HAR and in the video's metadata; a field whose value would be shown in clear text (not `type=password`) is masked in screenshots too.
+- [x] AC5: The healer may change the selector of `ui.fillSecret`, never the alias or the field; the assertion lock compares both. A spec that passes anything but an alias of the case's data and `password` or `username` is refused statically.

@@ -188,4 +188,23 @@ export async function run({ step, verify, plan, ui }: CaseContext): Promise<void
     );
     expect(messages(spec, "TC-02", plan).filter((m) => m.includes("before any page"))).toEqual([]);
   });
+
+  it("REQ-EXEC-67/AC5: ui.fillSecret names an account of the case and a field; the healer may move its selector only", () => {
+    const plan = fixturePlan("DEMO-13");
+    const spec = fixtureSpec("DEMO-13", "TC-01");
+    expect(messages(spec, "TC-01", plan).filter((m) => m.startsWith("lint"))).toEqual([]);
+    expect(
+      messages(spec.replace('"user:standard", "password"', '"user:admin", "password"'), "TC-01", plan),
+    ).toContain("lint: ui.fillSecret() takes an account alias of TC-01 in the plan (data), as a literal");
+    expect(
+      messages(spec.replace('"user:standard", "password"', '"user:standard", "token"'), "TC-01", plan),
+    ).toContain('lint: ui.fillSecret() types "password" or "username", as a literal');
+    expect(messages(spec.replace('"user:standard", "password"', "alias, field"), "TC-01", plan)).toContain(
+      "lint: ui.fillSecret() takes an account alias of TC-01 in the plan (data), as a literal",
+    );
+    expect(assertionLockDiff(spec, spec.replace('"testid:signin-password"', '"label:Password"'))).toEqual([]);
+    expect(
+      assertionLockDiff(spec, spec.replace('"user:standard", "password"', '"user:standard", "username"')),
+    ).not.toEqual([]);
+  });
 });

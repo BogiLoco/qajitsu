@@ -360,6 +360,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-EXEC-64](requirements/execution.md#req-exec-64--selectors-narrowed-by-context) Selectors narrowed by context (must, implemented, AC 4/4)
 - [REQ-EXEC-65](requirements/execution.md#req-exec-65--service-workers-offline-mode-and-installable-web-apps) Service workers, offline mode and installable web apps (should, implemented, AC 3/3)
 - [REQ-EXEC-66](requirements/execution.md#req-exec-66--browser-channels-and-versions) Browser channels and versions (should, implemented, AC 4/4)
+- [REQ-EXEC-67](requirements/execution.md#req-exec-67--browser-sessions-from-cookies-and-account-secrets-typed-by-the-runner) Browser sessions from cookies and account secrets typed by the runner (must, implemented, AC 5/5)
 - [REQ-VER-11](requirements/verification.md#req-ver-11--bug-fix-verification-fails-before-passes-after) Bug fix verification: fails before, passes after (should, implemented, AC 4/4)
 - [REQ-VER-12](requirements/verification.md#req-ver-12--failure-triage-hints) Failure triage hints (should, implemented, AC 4/4)
 - [REQ-VER-13](requirements/verification.md#req-ver-13--why-a-case-was-blocked) Why a case was BLOCKED (should, implemented, AC 3/3)

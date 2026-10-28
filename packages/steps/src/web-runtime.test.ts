@@ -377,6 +377,62 @@ describe("web actions in the trusted runtime (REQ-EXEC-38..40, REQ-EXEC-56, ADR-
     );
   });
 
+  it("REQ-EXEC-67/AC3+AC4: the parent types an account secret; reading it back, screenshots and records show only the mask", async () => {
+    const plan = planWith(
+      { expect: { description: "d", elements: { "testid:pw": { value: "x" } } } },
+      { data: { user: "user:standard" } },
+    );
+    const typed: unknown[][] = [];
+    const shots: unknown[][] = [];
+    let fieldValue = "";
+    const { driver } = fakeDriver({
+      fill: (sel: string, value: string) => {
+        typed.push([sel, value]);
+        fieldValue = value;
+        return Promise.resolve();
+      },
+      // A lying spec reads the field back through a check: the parent records only the mask.
+      property: () => Promise.resolve(fieldValue),
+      screenshot: (fullPage: boolean, masks?: readonly string[]) => {
+        shots.push([fullPage, [...(masks ?? [])]]);
+        return Promise.resolve(new Uint8Array([1]));
+      },
+      registerSecret: () => undefined,
+    });
+    const rt = runtimeFor(plan, driver, {
+      credential: (alias, field) =>
+        alias === "user:standard" && field === "password" ? "S3cret-pass!" : undefined,
+    });
+    rt.beginStep("S1");
+    await rt.context.ui.goto("/app/signin");
+    await rt.context.ui.fillSecret("testid:pw", "user:standard", "password");
+    await expect(rt.context.ui.fillSecret("testid:pw", "user:admin", "password")).rejects.toThrow(
+      "'user:admin' is not an account of TC-01 in the plan",
+    );
+    await expect(rt.context.ui.fillSecret("testid:pw", "user:standard", "username")).rejects.toThrow(
+      "no username for user:standard in this environment",
+    );
+    await expect(
+      rt.uiOp({
+        op: "fillSecret",
+        selector: "testid:pw",
+        alias: "user:standard",
+        field: "token" as "password",
+      }),
+    ).rejects.toThrow('types "password" or "username"');
+    await rt.verify("S1", "elements.testid:pw.value");
+    await rt.endStep("S1");
+    const record = await rt.finish();
+    expect(typed).toEqual([["testid:pw", "S3cret-pass!"]]);
+    expect(record.assertions[0]?.actual).toBe("***");
+    // The step's screenshot and the failure's full page both black the field out.
+    expect(shots).toEqual([
+      [false, ["testid:pw"]],
+      [true, ["testid:pw"]],
+    ]);
+    expect(JSON.stringify(record)).not.toContain("S3cret-pass!");
+  });
+
   it("REQ-EXEC-47/AC3+AC4: a WebSocket message is looked for by the parent on the planned socket; frames are masked evidence", async () => {
     const plan = planWith({
       expect: {

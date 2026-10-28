@@ -14,6 +14,22 @@ const toast=(text,ok)=>{const t=document.createElement("div");t.className="toast
 <h1>${title}</h1>${body}</body></html>`;
 
 const PAGES = {
+  // Sign-in form with a cookie session (REQ-EXEC-67): no token in storage, the browser carries an HttpOnly cookie.
+  "/app/signin": [
+    "Sign in",
+    `<form id="f"><p><label>Username <input data-testid="signin-username" id="u" autocomplete="username"></label></p>
+<p><label>Password <input type="password" data-testid="signin-password" id="p" autocomplete="current-password"></label></p>
+<p><button data-testid="signin-submit">Sign in</button></p></form>
+<p data-testid="signin-result" role="status"></p>
+<script>document.getElementById("f").onsubmit=async(e)=>{e.preventDefault();
+const r=await fetch("/auth/session",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({username:document.getElementById("u").value,password:document.getElementById("p").value})});
+document.querySelector("[data-testid=signin-result]").textContent=r.ok?"Signed in":"Invalid username or password";};</script>`,
+  ],
+  "/app/account": [
+    "Account",
+    `<p data-testid="account-user">Loading</p>
+<script>fetch("/me").then(async(r)=>{document.querySelector("[data-testid=account-user]").textContent=r.ok?"Signed in as "+(await r.json()).username:"Not signed in";});</script>`,
+  ],
   // The support chat over a WebSocket (REQ-EXEC-47/AC3): the page's messages are checked as they travel.
   "/app/chat": [
     "Support chat",

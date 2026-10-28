@@ -99,6 +99,8 @@ Rules (checked by code; a violating spec is rejected):
 - Web and mobile steps drive the app only through ui, inside the step: await ui.as("<account alias>") opens it as an
   account, then ui.goto("/path"), ui.click(sel), ui.fill(sel, text), ui.check(sel), ui.uncheck(sel), ui.select(sel,
   value), ui.press(sel, key), ui.waitFor(sel), ui.back(). Open the page before checking anything on it.
+  A login form gets the account's secrets from the framework: ui.fillSecret(sel, "<account alias of the case>",
+  "username" | "password"); never type a password, token or code yourself.
 - Web cases also have: ui.hover(sel), ui.dblclick(sel), ui.rightClick(sel), ui.dragTo(sel, targetSel),
   ui.dragBy(sel, dx, dy), ui.keys("Control+A"), ui.scrollTo(sel), ui.scrollBy(dx, dy), ui.scrollUntil(sel) for
   infinite lists; ui.upload(sel, "<file key>", ...) with the keys of the case's "files" in the plan (never a path or

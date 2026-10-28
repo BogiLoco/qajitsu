@@ -128,6 +128,8 @@ export interface UiDriver {
   }[];
   /** The requests the page sent since the last call, masked (REQ-EVD-09); the parent assigns them to the step. */
   readonly takeNetwork?: () => readonly UiRequest[];
+  /** A value the driver must mask in everything it records (trace, HAR, logs), e.g. a typed secret (REQ-EXEC-67/AC4). */
+  readonly registerSecret?: (value: string) => void;
   /** Switches the browser's network off or back on (REQ-EXEC-65/AC2). */
   readonly setOffline?: (offline: boolean) => Promise<void>;
   /**
@@ -147,6 +149,11 @@ export interface UiClient {
   readonly goto: (path: string) => Promise<void>;
   readonly click: (selector: UiSelector) => Promise<void>;
   readonly fill: (selector: UiSelector, value: string) => Promise<void>;
+  /**
+   * Types an account's secret into a field without the spec knowing it (REQ-EXEC-67/AC3): the parent resolves the
+   * `password` or `username` of the account alias and every record shows only the mask.
+   */
+  readonly fillSecret: (selector: UiSelector, alias: string, field: "password" | "username") => Promise<void>;
   readonly check: (selector: UiSelector) => Promise<void>;
   readonly uncheck: (selector: UiSelector) => Promise<void>;
   readonly select: (selector: UiSelector, value: string) => Promise<void>;
@@ -190,6 +197,12 @@ export type UiOperation =
   | { readonly op: "goto"; readonly path: string }
   | { readonly op: "click" | "check" | "uncheck"; readonly selector: UiSelector }
   | { readonly op: "fill" | "select" | "press"; readonly selector: UiSelector; readonly value: string }
+  | {
+      readonly op: "fillSecret";
+      readonly selector: UiSelector;
+      readonly alias: string;
+      readonly field: "password" | "username";
+    }
   | { readonly op: "waitFor"; readonly selector: UiSelector; readonly state: "visible" | "hidden" }
   | { readonly op: "back" }
   | { readonly op: "as"; readonly alias: string }

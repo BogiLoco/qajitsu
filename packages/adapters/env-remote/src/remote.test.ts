@@ -10,6 +10,7 @@ import {
   compareDeployedSha,
   createRemoteEnvProvider,
   loginAccounts,
+  parseSetCookie,
   readDeployedSha,
 } from "./remote.js";
 
@@ -224,6 +225,40 @@ process.stdout.write(JSON.stringify({
       }
     });
 
+    it("REQ-EXEC-67/AC1+AC3: a script's cookies and storage state reach the browser for the application only; secrets stay with the parent", async () => {
+      const { qaDir, env } = await withScript(
+        `process.stdout.write(JSON.stringify({
+  cookies: [{ name: "sid", value: "session-from-sso-123", httpOnly: true }],
+  storage_state: {
+    cookies: [{ name: "csrf", value: "csrf-token-456", domain: "idp.example.com", path: "/" }],
+    origins: [
+      { origin: "http://localhost:3000", localStorage: [{ name: "auth", value: "jwt-local-789" }] },
+      { origin: "https://idp.example.com", localStorage: [{ name: "idp", value: "other-origin-000" }] },
+    ],
+  },
+}));`,
+      );
+      const registered: string[] = [];
+      const result = await loginAccounts(env, deps(qaDir, registered));
+      expect(result.browserStates["user:standard"]).toEqual({
+        cookies: [
+          { name: "sid", value: "session-from-sso-123", httpOnly: true },
+          { name: "csrf", value: "csrf-token-456", path: "/" },
+        ],
+        localStorage: { auth: "jwt-local-789" },
+      });
+      // The API client sends the same session.
+      expect(result.accounts["user:standard"]).toEqual({
+        cookie: "sid=session-from-sso-123; csrf=csrf-token-456",
+      });
+      expect(registered).toEqual(
+        expect.arrayContaining(["session-from-sso-123", "csrf-token-456", "jwt-local-789"]),
+      );
+      expect(result.credential("user:standard", "password")).toBe(PASSWORD);
+      expect(result.credential("user:standard", "username")).toBe("standard");
+      expect(result.credential("user:admin", "password")).toBeUndefined();
+    });
+
     it("REQ-GEN-01/AC2: login scripts must live in .qa/auth/", async () => {
       for (const script of ["../evil.mjs", "auth/../../evil.mjs", "/tmp/x.mjs", "hooks/login.mjs"]) {
         const { qaDir, config } = await project(scriptProfile(script), {}, ["http://localhost:3000"]);
@@ -232,5 +267,57 @@ process.stdout.write(JSON.stringify({
         });
       }
     });
+  });
+
+  it("REQ-EXEC-67/AC2: without a token path the login's Set-Cookie is the session, for the API client and the browser", async () => {
+    const shop = await startShop({ env: { DEMO_USER_PASSWORD: PASSWORD } });
+    cleanups.push(() => shop.close());
+    const profile = `base_url: ${shop.url}\naccounts:\n  user:standard: { username: standard, password: secret://env/DEMO_USER_PASSWORD }\nlogin:\n  path: /auth/session\n  body: { username: "{{username}}", password: "{{password}}" }\nweb_session: { storage: cookies }\n`;
+    const { qaDir, config } = await project(profile, {}, [shop.url]);
+    const env = await resolveEnvironment({ config, qaDir });
+    const result = await loginAccounts(env, {
+      fetch,
+      resolveSecret: () => Promise.resolve(PASSWORD),
+      registerSecret: () => undefined,
+    });
+    const cookie = result.accounts["user:standard"]?.["cookie"] ?? "";
+    expect(cookie).toMatch(/^sid=[0-9a-f]{32}$/);
+    expect(result.browserStates["user:standard"]?.cookies).toEqual([
+      { name: "sid", value: cookie.slice(4), path: "/", httpOnly: true, sameSite: "Lax" },
+    ]);
+    expect(result.sessions).toEqual({});
+    const me = await fetch(`${shop.url}/me`, { headers: { cookie } });
+    expect(await me.json()).toEqual({ username: "standard" });
+    // A wrong password sets no cookie: the login fails with the alias named, nothing else.
+    const bad = await loginAccounts(env, {
+      fetch,
+      resolveSecret: () => Promise.resolve("wrong-password"),
+      registerSecret: () => undefined,
+    }).catch((e: unknown) => e);
+    expect(bad).toMatchObject({ code: "ENV_LOGIN_FAILED" });
+  });
+
+  it("REQ-EXEC-67/AC2: Set-Cookie headers are read with their path, flags and expiry", () => {
+    expect(
+      parseSetCookie(
+        [
+          "sid=abc123; Path=/app; HttpOnly; Secure; SameSite=strict; Max-Age=60",
+          "theme=dark; Expires=Wed, 21 Oct 2026 07:28:00 GMT",
+          "broken",
+        ],
+        1_000_000,
+      ),
+    ).toEqual([
+      {
+        name: "sid",
+        value: "abc123",
+        path: "/app",
+        httpOnly: true,
+        secure: true,
+        sameSite: "Strict",
+        expires: 1060,
+      },
+      { name: "theme", value: "dark", expires: Date.parse("Wed, 21 Oct 2026 07:28:00 GMT") / 1000 },
+    ]);
   });
 });

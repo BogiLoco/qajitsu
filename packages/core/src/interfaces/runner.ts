@@ -193,6 +193,27 @@ export type ManualPrompter = (
 ) => Promise<ManualAnswer | undefined>;
 
 /** One attempt of one case of the approved plan (REQ-EXEC-04..06). */
+/** A cookie a login hands the browser (REQ-EXEC-67/AC1); it is set for the application's origin only. */
+export interface BrowserCookie {
+  readonly name: string;
+  readonly value: string;
+  readonly path?: string | undefined;
+  readonly httpOnly?: boolean | undefined;
+  readonly secure?: boolean | undefined;
+  readonly sameSite?: "Strict" | "Lax" | "None" | undefined;
+  /** Unix time in seconds; absent for a session cookie. */
+  readonly expires?: number | undefined;
+}
+
+/** What a login hands the browser besides a token: cookies and `localStorage` entries (REQ-EXEC-67/AC1). */
+export interface BrowserState {
+  readonly cookies: readonly BrowserCookie[];
+  readonly localStorage?: Readonly<Record<string, string>> | undefined;
+}
+
+/** An account's secret for `ui.fillSecret` (REQ-EXEC-67/AC3), resolved by the trusted parent only. */
+export type CredentialLookup = (alias: string, field: "username" | "password") => string | undefined;
+
 export interface AttemptRequest {
   readonly specFile: string;
   readonly caseId: string;
@@ -207,6 +228,10 @@ export interface AttemptRequest {
   readonly timeoutMs: number;
   /** Raw session tokens per alias for the browser (never sent to the spec; REQ-CFG-07). */
   readonly sessions?: Readonly<Record<string, string>>;
+  /** Cookies and storage per alias for the browser (REQ-EXEC-67/AC1), never sent to the spec. */
+  readonly browserStates?: Readonly<Record<string, BrowserState>>;
+  /** Account secrets for `ui.fillSecret` (REQ-EXEC-67/AC3); a function, so the values are never serialised. */
+  readonly credential?: CredentialLookup;
   /** Asks a person at manual steps (REQ-EXEC-11); absent means manual steps cannot be answered (BLOCKED). */
   readonly manual?: ManualPrompter;
   /** The case's message inbox (REQ-ENV-08); absent means message steps cannot run (BLOCKED). */

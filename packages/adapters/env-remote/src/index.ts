@@ -8,6 +8,7 @@ export {
   checkHealth,
   readDeployedSha,
   loginAccounts,
+  parseSetCookie,
   compareDeployedSha,
   createRemoteEnvProvider,
   type ScriptRunner,

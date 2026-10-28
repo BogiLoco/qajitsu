@@ -14,6 +14,7 @@ apps), REQ-EXEC-47/AC3 (WebSocket messages of the page), REQ-EVD-09 (analysis of
 | Action                                                                                 | What it does                                                             |
 | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | `ui.goto(path)`, `ui.back()`, `ui.as(alias)`                                           | open a page, go back, open the app as a test account                     |
+| `ui.fillSecret(sel, alias, "password" \| "username")`                                  | types the account's secret into a login form; nobody sees the value      |
 | `ui.click`, `ui.fill`, `ui.check`, `ui.uncheck`, `ui.select`, `ui.press`, `ui.waitFor` | the basics                                                               |
 | `ui.hover(sel)`, `ui.dblclick(sel)`, `ui.rightClick(sel)`                              | pointer actions: hover menus, tooltips, context menus                    |
 | `ui.dragTo(sel, target)`, `ui.dragBy(sel, dx, dy)`                                     | drag and drop onto an element or by an offset (kanban, sliders, sorting) |
@@ -113,6 +114,22 @@ content that cannot be read is a failed check or BLOCKED with the reason.
   BLOCKED with the host named. To test a payment provider's sandbox, put its host on the allowlist of that environment.
 - The healer may change the selectors of every action and add waits or scrolling into view; it can never change what
   an action does (files, typed values, offsets, request bodies) or the control flow. The assertion lock compares both.
+
+## Logging in
+
+`ui.as(alias)` opens the application as a test account with the session its login gave the browser: a token in
+`sessionStorage`/`localStorage`, or the login's cookies for applications that keep the session in an HttpOnly cookie.
+
+```yaml
+# .qa/envs/staging.yaml
+login: { path: /auth/session, body: { username: "{{username}}", password: "{{password}}" } } # no token_path: Set-Cookie is the session
+web_session: { storage: cookies }
+```
+
+A login script in `.qa/auth/` (SSO, several steps) can print `cookies` or a Playwright `storage_state`; cookies are set
+for the application's origin only, and only its own `localStorage` is used. To test the login form itself, a step
+types the account's secrets with `ui.fillSecret`: the framework resolves them, and the screenshots black the field
+out. Traces kept as evidence are masked too, including session cookies the application set during the test.
 
 ## Staging behind HTTP authentication
 

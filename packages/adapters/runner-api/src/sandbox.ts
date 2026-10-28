@@ -82,6 +82,12 @@ const UiOperationSchema = z.discriminatedUnion("op", [
   z.strictObject({ op: z.literal("closePage") }),
   z.strictObject({ op: z.literal("advanceTime"), seconds: z.number().int().min(1).max(604_800) }),
   z.strictObject({ op: z.literal("setOffline"), offline: z.boolean() }),
+  z.strictObject({
+    op: z.literal("fillSecret"),
+    selector: Selector,
+    alias: z.string().regex(/^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$/),
+    field: z.enum(["password", "username"]),
+  }),
 ]);
 
 /** A browser for one attempt, created by the web runner (ADR-0004). */
@@ -220,6 +226,7 @@ export function createSandboxExecutor(
       ...(input.fixture ? { fixture: input.fixture } : {}),
       ...(input.extractText ? { extractText: input.extractText } : {}),
       ...(input.testStateHook ? { testStateHook: input.testStateHook } : {}),
+      ...(input.credential ? { credential: input.credential } : {}),
       caseId: input.caseId,
       attempt: input.attempt,
       baseUrl: input.baseUrl,

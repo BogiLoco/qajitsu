@@ -27,6 +27,7 @@ export const BUG_FLAGS = [
   "BUG_OFFER_NEVER_EXPIRES",
   "BUG_OFFLINE_NOTES_LOST",
   "BUG_CHAT_REPLY_DROPS_TEXT",
+  "BUG_SIGNIN_ANY_PASSWORD",
 ];
 
 const PRODUCTS = [
@@ -59,7 +60,9 @@ export function createShop(options) {
   };
   const session = (req) => {
     const header = req.headers["authorization"] ?? "";
-    const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+    // A bearer token, or the HttpOnly cookie of the sign-in form (REQ-EXEC-67 demo).
+    const cookie = /(?:^|;\s*)sid=([0-9a-f]+)/.exec(req.headers["cookie"] ?? "")?.[1] ?? "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : cookie;
     const s = sessions.get(token);
     if (!s) return undefined;
     if (s.expiresAt <= now() && !bugs.BUG_AUTH_EXPIRED_TOKEN_OK) return undefined;
@@ -127,6 +130,21 @@ export function createShop(options) {
       const expiresAt = now() + ttl * 1000;
       sessions.set(token, { user: input.username, expiresAt, cart: { lines: new Map(), discounts: [] } });
       return json(res, 200, { token, expires_at: new Date(expiresAt).toISOString() });
+    }
+    // The sign-in form keeps its session in an HttpOnly cookie (REQ-EXEC-67 demo); BUG-18 accepts any password.
+    if (route === "POST /auth/session") {
+      const input = await body(req);
+      const userOk = input && ["standard", "admin"].includes(input.username);
+      const known = userOk && (input.password === options.password || bugs.BUG_SIGNIN_ANY_PASSWORD);
+      if (!known) return json(res, 401, { error: "INVALID_CREDENTIALS" });
+      const token = randomBytes(16).toString("hex");
+      sessions.set(token, {
+        user: input.username,
+        expiresAt: now() + 3600_000,
+        cart: { lines: new Map(), discounts: [] },
+      });
+      res.setHeader("set-cookie", `sid=${token}; Path=/; HttpOnly; SameSite=Lax`);
+      return json(res, 200, { username: input.username });
     }
     const s = session(req);
     if (!s) return json(res, 401, { error: "UNAUTHORIZED" });

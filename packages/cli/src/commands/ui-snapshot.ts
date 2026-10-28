@@ -1,5 +1,5 @@
 import type { BrowserFactory } from "@qajitsu/adapter-runner-api";
-import { accountsUsedBy, type Plan, type UiScreen } from "@qajitsu/core";
+import { accountsUsedBy, type BrowserState, type Plan, type UiScreen } from "@qajitsu/core";
 
 /** Pages recorded per case and per run, so a snapshot stays quick and its prompt section small (REQ-EXEC-22/AC2). */
 const PAGES_PER_CASE = 5;
@@ -42,6 +42,7 @@ export interface UiSnapshotInput {
       readonly accounts: Readonly<Record<string, Readonly<Record<string, string>>>>;
       readonly secrets: readonly string[];
       readonly sessions?: Readonly<Record<string, string>>;
+      readonly browserStates?: Readonly<Record<string, BrowserState>> | undefined;
       readonly release?: () => void;
     }>;
     /** Account aliases of the environment. */
@@ -123,6 +124,8 @@ export async function recordUiSnapshot(input: UiSnapshotInput): Promise<UiScreen
         accounts: login?.accounts ?? {},
         secrets: login?.secrets ?? [],
         ...(login?.sessions ? { sessions: login.sessions } : {}),
+        ...(login?.browserStates ? { browserStates: login.browserStates } : {}),
+        ...(login?.browserStates ? { browserStates: login.browserStates } : {}),
       });
       try {
         const driver = await session.driver();
@@ -235,6 +238,7 @@ export async function crawlUiSnapshot(input: UiCrawlInput): Promise<UiScreen[]> 
     accounts: login?.accounts ?? {},
     secrets: login?.secrets ?? [],
     ...(login?.sessions ? { sessions: login.sessions } : {}),
+    ...(login?.browserStates ? { browserStates: login.browserStates } : {}),
   });
   try {
     const driver = await session.driver();
