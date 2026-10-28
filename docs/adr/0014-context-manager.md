@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Date: 2026-10-28
-- Related: INV-1, INV-5, INV-8, INV-11, REQ-CTX-05, REQ-CTX-11..19, REQ-LLM-03, REQ-LLM-12, REQ-LLM-15, REQ-VER-16,
+- Related: INV-1, INV-5, INV-8, INV-11, REQ-CTX-05, REQ-CTX-11..20, REQ-LLM-03, REQ-LLM-12, REQ-LLM-15, REQ-VER-16,
   REQ-VER-20
 
 ## Context
