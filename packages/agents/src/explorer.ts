@@ -149,10 +149,10 @@ export async function runExplorer(
     validate: journaled(deps, check),
     retryWithTools: true,
     // REQ-CTX-12: the goal and checklist come from the person who started the session; the change is data.
-    context: assembleFor(deps, {
+    context: await assembleFor(deps, {
       stage: "explore",
       role: "explorer",
-      model: model.id,
+      model,
       fragments: [
         instructions("explorer", EXPLORER_SYSTEM),
         goalFragment(
@@ -237,10 +237,10 @@ export async function runCliExplorer(
     model,
     validate: journaled(deps, check),
     retryWithTools: true,
-    context: assembleFor(deps, {
+    context: await assembleFor(deps, {
       stage: "explore",
       role: "explorer",
-      model: model.id,
+      model,
       fragments: [
         instructions("explorer", CLI_EXPLORER_SYSTEM),
         goalFragment(

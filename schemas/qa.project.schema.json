@@ -1694,6 +1694,18 @@
                       "exclusiveMinimum": 0,
                       "maximum": 9007199254740991
                     },
+                    "working_range": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "context_style": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "compact"
+                      ]
+                    },
                     "think": {
                       "type": "boolean"
                     },

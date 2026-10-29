@@ -9,3 +9,4 @@ export * from "./capabilities.js";
 export * from "./registry.js";
 export * from "./embedder.js";
 export * from "./cost-features.js";
+export * from "./context-profile.js";

@@ -12,6 +12,7 @@ import { runStructuredAgent } from "./loop.js";
 import { AGENT_ROLES } from "./roles.js";
 import {
   assembleFor,
+  contextOf,
   instructions,
   modelForRole,
   question,
@@ -172,10 +173,10 @@ export async function runBlockedHints(
     role: "triage",
     model,
     // REQ-CTX-12: assembled from fragments, its snapshot in the journal (REQ-CTX-17/AC3).
-    context: assembleFor(deps, {
+    context: await assembleFor(deps, {
       stage: "triage",
       role: "blocked",
-      model: model.id,
+      model,
       fragments: blockedFragments(input),
     }),
     schema: BlockedAnswerSchema,
@@ -186,7 +187,7 @@ export async function runBlockedHints(
         ...seen.filter((id, i) => seen.indexOf(id) !== i).map((id) => `hints: ${id} appears more than once`),
       ];
     },
-    tools: createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText }),
+    tools: createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText, wrap: contextOf(deps).wrap }),
     guard: stageGuard(deps, "triage", role),
     usage: deps.usage,
     ...(deps.signal ? { signal: deps.signal } : {}),

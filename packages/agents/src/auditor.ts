@@ -9,7 +9,7 @@ import {
 } from "@qajitsu/core";
 import { runStructuredAgent } from "./loop.js";
 import { AGENT_ROLES } from "./roles.js";
-import { assembleFor, modelForRole, stageGuard, type AgentStageDeps } from "./roles-run.js";
+import { assembleFor, contextOf, modelForRole, stageGuard, type AgentStageDeps } from "./roles-run.js";
 import { createReadOnlyTools } from "./workspace-tools.js";
 
 /** The auditor's answer: one finding per PASSED case (REQ-VER-06). */
@@ -192,10 +192,10 @@ export async function runAuditor(deps: AgentStageDeps, input: AuditInput): Promi
   if (passedIds.length === 0)
     return { model: model.id, sameModelAsAuthor: model.id === author, findings: [] };
   // REQ-CTX-12: the input is assembled from fragments; its snapshot goes into the journal (REQ-CTX-17/AC3).
-  const context = assembleFor(deps, {
+  const context = await assembleFor(deps, {
     stage: "audit",
     role: "auditor",
-    model: model.id,
+    model,
     fragments: auditFragments(input),
   });
   const { value, attempts } = await runStructuredAgent({
@@ -212,7 +212,7 @@ export async function runAuditor(deps: AgentStageDeps, input: AuditInput): Promi
         ...ids.filter((id, i) => ids.indexOf(id) !== i).map((id) => `findings: ${id} appears more than once`),
       ];
     },
-    tools: createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText }),
+    tools: createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText, wrap: contextOf(deps).wrap }),
     guard: stageGuard(deps, "audit", role),
     usage: deps.usage,
     images: input.images,

@@ -222,15 +222,15 @@ How well each agent does its job, per role and model, from what every run alread
 
 ### REQ-LLM-15 · Context profiles and provider renderers
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: later
 - Related: REQ-LLM-03, REQ-LLM-06, REQ-LLM-12, REQ-CTX-12, REQ-SKILL-05, INV-11, ADR-0014
 
 **Acceptance criteria**
 
-- [ ] AC1: Each model profile states its context window and its good working range (below the window, from the benchmark of REQ-LLM-06 where measured), the space reserved for the answer, and the profile's version.
-- [ ] AC2: Tokens are counted with the provider's counting endpoint before sending where there is one; otherwise a local estimate with a margin per model family, because tokenisers differ. The method used is recorded with the call.
-- [ ] AC3: A renderer per provider turns the neutral context into the provider's form: system message, cache breakpoints (explicit for Anthropic, a stable prefix for OpenAI, none for local models), tool results and structured output.
-- [ ] AC4: A profile can ask for a compact style for small models (shorter instructions, more examples, fewer fragments at once); the manager applies it without knowing the model.
-- [ ] AC5: Adding a model or provider means a profile and, for a new provider, a renderer; the context manager does not change. A test with a fake provider shows it.
+- [x] AC1: Each model profile states its context window and its good working range (below the window, from the benchmark of REQ-LLM-06 where measured), the space reserved for the answer, and the profile's version.
+- [x] AC2: Tokens are counted with the provider's counting endpoint before sending where there is one; otherwise a local estimate with a margin per model family, because tokenisers differ. The method used is recorded with the call.
+- [x] AC3: A renderer per provider turns the neutral context into the provider's form: system message, cache breakpoints (explicit for Anthropic, a stable prefix for OpenAI, none for local models), tool results and structured output.
+- [x] AC4: A profile can ask for a compact style for small models (shorter instructions, more examples, fewer fragments at once); the manager applies it without knowing the model.
+- [x] AC5: Adding a model or provider means a profile and, for a new provider, a renderer; the context manager does not change. A test with a fake provider shows it.

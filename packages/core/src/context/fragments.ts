@@ -24,6 +24,7 @@ export const CONTEXT_KINDS = [
   "imported",
   "exploration",
   "map",
+  "catalogue",
 ] as const;
 
 /** One kind of {@link CONTEXT_KINDS}. */
@@ -44,6 +45,11 @@ export const ContextFragmentSchema = z.strictObject({
   /** Higher comes first within a section and is kept longer. */
   priority: z.number().int().min(0).max(100),
   pinned: z.boolean(),
+  /**
+   * Material a role may need but does not always need (whole documents, test indexes, older results): offered as a
+   * handle in the catalogue, read with `read_context` when needed (REQ-CTX-12/AC5).
+   */
+  onDemand: z.boolean().optional(),
   text: z.string(),
   /** Estimated tokens of the text. */
   tokens: z.number().int().min(0),
@@ -78,6 +84,40 @@ export const ContextSnapshotSchema = z.strictObject({
   ),
   /** Input tokens by fragment kind (REQ-CTX-18/AC1). */
   tokensByKind: z.record(z.string(), z.number().int().min(0)),
+  /** The call's budget and how it was counted (REQ-CTX-14/AC1+AC4, REQ-LLM-15/AC2); absent without a model profile. */
+  budget: z
+    .strictObject({
+      tokens: z.number().int().min(0),
+      used: z.number().int().min(0),
+      margin: z.number().positive(),
+      counting: z.enum(["estimate", "provider"]),
+      style: z.enum(["full", "compact"]),
+      profile: z.string(),
+    })
+    .optional(),
+  /** Fragments behind handles, readable with `read_context` (REQ-CTX-12/AC4+AC5). */
+  catalogue: z
+    .array(
+      z.strictObject({
+        handle: z.string().regex(/^h-[0-9a-f]{8}$/),
+        sha256: z.string().regex(/^[0-9a-f]{64}$/),
+        kind: z.string(),
+        source: z.string(),
+        tokens: z.number().int().min(0),
+      }),
+    )
+    .default([]),
+  /** Relevance of the fragments that compete for the budget, with the terms that matched (REQ-CTX-12/AC6). */
+  ranking: z
+    .array(
+      z.strictObject({
+        sha256: z.string().regex(/^[0-9a-f]{64}$/),
+        score: z.number().min(0),
+        terms: z.array(z.string()).max(8),
+        semantic: z.number().min(-1).max(1).optional(),
+      }),
+    )
+    .default([]),
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
 });
 
@@ -119,6 +159,6 @@ const canonical = (value: unknown): string => {
  *
  * @param snapshot - The snapshot without `sha256`.
  */
-export function snapshotHash(snapshot: Omit<ContextSnapshot, "sha256">): string {
+export function snapshotHash(snapshot: Omit<z.input<typeof ContextSnapshotSchema>, "sha256">): string {
   return createHash("sha256").update(canonical(snapshot)).digest("hex");
 }

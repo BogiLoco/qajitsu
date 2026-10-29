@@ -25,7 +25,14 @@ import { modelExchange } from "./exchange.js";
 import { callUsage } from "./usage.js";
 import { prepareCall } from "./prepare-call.js";
 import type { ChangeContext } from "./context.js";
-import { assembleFor, instructions, modelForRole, stageGuard, type AgentStageDeps } from "./roles-run.js";
+import {
+  assembleFor,
+  contextOf,
+  instructions,
+  modelForRole,
+  stageGuard,
+  type AgentStageDeps,
+} from "./roles-run.js";
 import { AGENT_ROLES } from "./roles.js";
 import { createReadOnlyTools } from "./workspace-tools.js";
 
@@ -259,7 +266,10 @@ export async function runAuthor(
   );
   const tools = model.profile.tools
     ? guardTools(
-        [...createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText }), ...(mcp?.tools ?? [])],
+        [
+          ...createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText, wrap: contextOf(deps).wrap }),
+          ...(mcp?.tools ?? []),
+        ],
         guard,
         deps.signal,
       )
@@ -282,10 +292,10 @@ export async function runAuthor(
         over: Omit<Parameters<typeof fragment>[0], "section" | "pinned"> & { pinned?: boolean },
       ): ContextFragment => fragment({ section: "varying", pinned: false, ...over });
       // REQ-CTX-12: the case's input as fragments; the approved case is trusted and pinned, the rest is data.
-      const input = assembleFor(deps, {
+      const input = await assembleFor(deps, {
         stage: "author",
         role: "author",
-        model: model.id,
+        model,
         fragments: [
           instructions("author", AUTHOR_SYSTEM),
           at({
@@ -378,7 +388,13 @@ export async function runAuthor(
         const result = await generateText({
           model: model.model,
           ...prepareCall(model, input, messages),
-          ...(tools ? { tools, stopWhen: stepCountIs(10) } : {}),
+          // REQ-CTX-12/AC4: the case's catalogue tools join the author's own, through the same guard.
+          ...(tools
+            ? {
+                tools: { ...tools, ...guardTools([...(input.tools ?? [])], guard, deps.signal) },
+                stopWhen: stepCountIs(10),
+              }
+            : {}),
           ...(deps.signal ? { abortSignal: deps.signal } : {}),
           maxRetries: 2,
         });

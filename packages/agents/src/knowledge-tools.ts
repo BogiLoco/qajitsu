@@ -28,11 +28,17 @@ export interface KnowledgeAccess {
 }
 
 /** Renders a chunk for a prompt: id, path, section, date and a freshness warning, then the text as untrusted data. */
-export function renderChunk(chunk: KnowledgeChunk, maxAgeDays: number | undefined, now: Date): string {
+export function renderChunk(
+  chunk: KnowledgeChunk,
+  maxAgeDays: number | undefined,
+  now: Date,
+  /** The run's data block (REQ-CTX-15/AC1); the old fixed tag without it. */
+  wrap: (source: string, text: string) => string = untrusted,
+): string {
   const outdated = isOutdated(chunk, maxAgeDays, now) ? ", possibly outdated" : "";
   return [
     `[chunk ${chunk.id}] ${chunk.path}${chunk.section ? ` › ${chunk.section}` : ""} (modified ${chunk.modifiedAt.slice(0, 10)}${outdated})`,
-    untrusted(`knowledge:${chunk.path}`, chunk.text),
+    wrap(`knowledge:${chunk.path}`, chunk.text),
   ].join("\n");
 }
 
@@ -74,6 +80,8 @@ export async function documentationFragments(
         section: "varying",
         priority: 38,
         pinned: false,
+        // REQ-KNOW-07/AC1: full mode is chosen for small documentation, which is given in full; when a call does
+        // not fit, the budget moves what matches nothing of the task behind handles (REQ-CTX-14).
         text: `[chunk ${c.id}] ${c.path}${c.section ? ` › ${c.section}` : ""} (modified ${c.modifiedAt.slice(0, 10)}${isOutdated(c, access.maxAgeDays, now) ? ", possibly outdated" : ""})\n${c.text}`,
       }),
     ),
@@ -93,6 +101,8 @@ export function createKnowledgeTools(options: {
   readonly events: EventLog;
   readonly now: () => Date;
   readonly remember: (chunks: readonly KnowledgeChunk[]) => Promise<void>;
+  /** The run's data block for results (REQ-CTX-15/AC1). */
+  readonly wrap?: ((source: string, text: string) => string) | undefined;
 }): AgentTool[] {
   const { access } = options;
   return [
@@ -117,7 +127,7 @@ export function createKnowledgeTools(options: {
         });
         if (chunks.length === 0) return "No matching documentation.";
         const now = options.now();
-        return chunks.map((c) => renderChunk(c, access.maxAgeDays, now)).join("\n\n");
+        return chunks.map((c) => renderChunk(c, access.maxAgeDays, now, options.wrap)).join("\n\n");
       },
     },
   ];

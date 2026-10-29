@@ -63,10 +63,10 @@ export async function healSpec(
   // REQ-CTX-12: the spec to heal is the author's output (data); the failure is what the runner and page reported.
   const at = (over: Omit<Parameters<typeof fragment>[0], "section" | "pinned">): ContextFragment =>
     fragment({ section: "varying", pinned: false, ...over });
-  const context = assembleFor(deps, {
+  const context = await assembleFor(deps, {
     stage: "heal",
     role: "healer",
-    model: model.id,
+    model,
     fragments: [
       instructions("healer", HEALER_SYSTEM),
       at({

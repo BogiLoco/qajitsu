@@ -1,4 +1,4 @@
-import { estimateInputTokens, type ResolvedModel } from "@qajitsu/models";
+import { estimateInputTokens, renderForProvider, type ResolvedModel } from "@qajitsu/models";
 import type { ModelMessage, SystemModelMessage } from "ai";
 import type { AssembledContext } from "./context-manager.js";
 import { AgentInputTooLargeError } from "./errors.js";
@@ -50,11 +50,7 @@ export function prepareCall(
       `The call to ${model.id} would send about ${String(estimate)} input tokens, over ${String(model.inputLimit.limit)} (${model.inputLimit.why}); nothing was sent. Narrow the context or raise the limit.`,
       { model: model.id, estimate, limit: model.inputLimit.limit, why: model.inputLimit.why },
     );
-  if (!model.cacheOptions) return { system, messages: [...messages] };
-  const providerOptions = model.cacheOptions;
-  const [first, ...rest] = messages;
-  return {
-    system: { role: "system" as const, content: system, providerOptions },
-    messages: [...(first ? [{ ...first, providerOptions } as ModelMessage] : []), ...rest],
-  };
+  // REQ-LLM-15/AC3: the provider's form (cache breakpoints) is the models package's business.
+  const rendered = renderForProvider(model, system, messages);
+  return { system: rendered.system, messages: rendered.messages };
 }

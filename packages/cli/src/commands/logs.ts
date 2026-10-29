@@ -37,8 +37,34 @@ const matches = (e: RunEvent, o: LogsOptions): boolean => {
  * @param e - Event.
  * @param mask - Masker for the details.
  */
+/** A context snapshot in one line (REQ-CTX-14/AC4): fragments, budget, reductions by kind and the catalogue. */
+const contextLine = (d: Record<string, unknown>): string => {
+  const fragments = Array.isArray(d["fragments"]) ? d["fragments"].length : 0;
+  const reductions = Array.isArray(d["reductions"]) ? (d["reductions"] as { action?: string }[]) : [];
+  const byAction = new Map<string, number>();
+  for (const r of reductions) byAction.set(r.action ?? "?", (byAction.get(r.action ?? "?") ?? 0) + 1);
+  const budget = d["budget"] as { tokens?: number; used?: number; counting?: string } | undefined;
+  const catalogue = Array.isArray(d["catalogue"]) ? d["catalogue"].length : 0;
+  return [
+    ` ${String(fragments)} fragment(s)`,
+    budget
+      ? `${String(budget.used ?? 0)}/${String(budget.tokens ?? 0)} tokens (${budget.counting ?? "estimate"})`
+      : "no budget",
+    reductions.length > 0
+      ? `${String(reductions.length)} reduction(s): ${[...byAction].map(([a, n]) => `${a} ${String(n)}`).join(", ")}`
+      : "no reductions",
+    `${String(catalogue)} behind handles`,
+    `snapshot ${typeof d["sha256"] === "string" ? d["sha256"].slice(0, 12) : "?"}`,
+  ].join(" · ");
+};
+
 export function formatEvent(e: RunEvent, mask: (t: string) => string): string {
-  const details = e.details === undefined ? "" : ` ${mask(JSON.stringify(e.details)).slice(0, 300)}`;
+  const details =
+    e.event === "context.snapshot" && e.details !== null && typeof e.details === "object"
+      ? contextLine(e.details as Record<string, unknown>)
+      : e.details === undefined
+        ? ""
+        : ` ${mask(JSON.stringify(e.details)).slice(0, 300)}`;
   return `${e.ts.slice(11, 19)} ${e.stage.padEnd(8)} ${`${e.actor.kind}:${e.actor.name}`.padEnd(20)} ${e.event}${details}`;
 }
 

@@ -8,6 +8,7 @@ import { createOllama } from "ai-sdk-ollama";
 import { patientFetch } from "./patient-fetch.js";
 import { modelProfile, type ModelProfile } from "./capabilities.js";
 import { cacheProviderOptions, inputLimit, type CacheTtl } from "./cost-features.js";
+import { contextProfile, type ContextProfile } from "./context-profile.js";
 import { parseModelRef, resolveRoleModel, type ModelRef, type ModelRole } from "./model-ref.js";
 
 /** A resolved model: AI SDK handle plus its capability profile. */
@@ -21,6 +22,13 @@ export interface ResolvedModel {
   readonly cacheOptions?: Record<string, Record<string, JSONValue>> | undefined;
   /** Most input tokens one call may send and why (REQ-LLM-12/AC4). */
   readonly inputLimit?: { readonly limit: number; readonly why: string } | undefined;
+  /** How the context manager plans this model's calls (REQ-LLM-15). */
+  readonly context: ContextProfile;
+  /**
+   * Counts the input of a call with the provider's own counter (REQ-LLM-15/AC2), where it has one; asked only near
+   * the budget, so most calls cost nothing extra.
+   */
+  readonly countTokens?: ((system: string, prompt: string) => Promise<number>) | undefined;
 }
 
 /** Access to the configured models: the core ModelProvider with AI SDK types (ADR-0005). */
@@ -53,15 +61,52 @@ export function createModelRegistry(options: {
 }): ModelRegistry {
   const { config, resolveSecret } = options;
   /** REQ-LLM-12: the cache breakpoint and the input limit go with the model, so agents need not know the provider. */
-  const withCostFeatures = (providerType: string, m: ResolvedModel): ResolvedModel => {
+  const withCostFeatures = (
+    providerType: string,
+    m: Omit<ResolvedModel, "context">,
+    overrides: {
+      readonly working_range?: number | undefined;
+      readonly context_style?: "full" | "compact" | undefined;
+    } = {},
+  ): ResolvedModel => {
     const cacheOptions = cacheProviderOptions(providerType, options.cacheTtl ?? "off");
     return {
       ...m,
       ...(cacheOptions ? { cacheOptions } : {}),
       inputLimit: inputLimit(m.profile, config.max_input_tokens),
+      // REQ-LLM-15: the provider type's defaults, the model's window and the project's overrides.
+      context: contextProfile(providerType, m.profile, {
+        workingRange: overrides.working_range,
+        style: overrides.context_style,
+      }),
     };
   };
   const fetchOption = options.fetch ? { fetch: options.fetch } : {};
+  /** Anthropic's token counting endpoint (REQ-LLM-15/AC2): the same request shape as a message, nothing generated. */
+  const anthropicCounter = async (provider: ProviderConfig, model: string) => {
+    const apiKey = provider.api_key === undefined ? undefined : await resolveSecret(provider.api_key);
+    const base = (provider.base_url ?? "https://api.anthropic.com/v1").replace(/\/$/, "");
+    const doFetch = options.fetch ?? globalThis.fetch;
+    return async (system: string, prompt: string): Promise<number> => {
+      const res = await doFetch(`${base}/messages/count_tokens`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "anthropic-version": "2023-06-01",
+          ...(apiKey === undefined ? {} : { "x-api-key": apiKey }),
+        },
+        body: JSON.stringify({ model, system, messages: [{ role: "user", content: prompt }] }),
+      });
+      if (!res.ok)
+        throw new ConfigError("MODEL_COUNT_FAILED", `Token counting answered HTTP ${String(res.status)}.`, {
+          model,
+        });
+      const body = (await res.json()) as { input_tokens?: unknown };
+      if (typeof body.input_tokens !== "number")
+        throw new ConfigError("MODEL_COUNT_FAILED", "Token counting returned no count.", { model });
+      return body.input_tokens;
+    };
+  };
 
   const build = async (alias: string, provider: ProviderConfig, model: string): Promise<LanguageModel> => {
     const contextWindow = provider.models[model]?.context_window;
@@ -107,21 +152,25 @@ export function createModelRegistry(options: {
     const id = `${ref.provider}/${ref.model}`;
     const extra = options.extra?.[ref.provider];
     if (extra) {
-      return withCostFeatures("mock", {
-        ref,
-        id,
-        model: extra(ref.model),
-        profile: modelProfile(
-          "mock",
-          ref.model,
-          config.providers[ref.provider]?.models[ref.model] ?? {
-            tools: true,
-            structured_output: true,
-            vision: true,
-            context_window: 200_000,
-          },
-        ),
-      });
+      return withCostFeatures(
+        "mock",
+        {
+          ref,
+          id,
+          model: extra(ref.model),
+          profile: modelProfile(
+            "mock",
+            ref.model,
+            config.providers[ref.provider]?.models[ref.model] ?? {
+              tools: true,
+              structured_output: true,
+              vision: true,
+              context_window: 200_000,
+            },
+          ),
+        },
+        config.providers[ref.provider]?.models[ref.model] ?? {},
+      );
     }
     const provider = config.providers[ref.provider];
     if (!provider) {
@@ -130,12 +179,20 @@ export function createModelRegistry(options: {
         available: Object.keys(config.providers),
       });
     }
-    return withCostFeatures(provider.type, {
-      ref,
-      id,
-      model: await build(ref.provider, provider, ref.model),
-      profile: modelProfile(provider.type, ref.model, provider.models[ref.model]),
-    });
+    const declared = provider.models[ref.model];
+    return withCostFeatures(
+      provider.type,
+      {
+        ref,
+        id,
+        model: await build(ref.provider, provider, ref.model),
+        profile: modelProfile(provider.type, ref.model, declared),
+        ...(provider.type === "anthropic"
+          ? { countTokens: await anthropicCounter(provider, ref.model) }
+          : {}),
+      },
+      declared ?? {},
+    );
   };
 
   return {

@@ -1,6 +1,6 @@
 # Context manager: implementation plan
 
-Requirements: REQ-CTX-11..20, REQ-LLM-15. Decision: ADR-0014. Status (2026-10-29): phases 1 and 2 done. Every role builds its input from fragments through the context manager (the type of `runStructuredAgent` and `prepareCall` accepts nothing else), every role has a declaration of what it may see, and every call journals its snapshot. Still open in these phases: tool results are escaped per call, not yet bounded by the run's marker.
+Requirements: REQ-CTX-11..20, REQ-LLM-15. Decision: ADR-0014. Status (2026-10-29): phases 1 to 5 done: fragments and snapshots, role declarations, model context profiles and renderers, relevance ranking with a catalogue of handles (`read_context`, `search_context`), and budgets with code reductions. Tool results are bounded by the run's marker too.
 
 ## Principles
 

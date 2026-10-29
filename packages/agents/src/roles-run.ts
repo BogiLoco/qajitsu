@@ -1,5 +1,10 @@
 import { fillMissingEvidence, withPlacementHint } from "./plan-hints.js";
-import { createContextManager, type AssembledContext, type ContextManager } from "./context-manager.js";
+import {
+  createContextManager,
+  type AssembledContext,
+  type ContextBudget,
+  type ContextManager,
+} from "./context-manager.js";
 import type { McpClientLike, McpServers } from "./mcp.js";
 import { writeFile } from "node:fs/promises";
 import {
@@ -19,7 +24,7 @@ import {
   type RunWorkspace,
 } from "@qajitsu/core";
 import { DEFAULT_PROTECTED_PATHS, createGuard, createJournal, type Guard } from "@qajitsu/guard";
-import type { ModelRegistry, ResolvedModel } from "@qajitsu/models";
+import { contextBudget, type ModelRegistry, type ResolvedModel } from "@qajitsu/models";
 import {
   checkAnalysisSources,
   checkExistingCoverage,
@@ -31,6 +36,7 @@ import {
   type SpecCheckOptions,
 } from "@qajitsu/verifier";
 import { stringify } from "yaml";
+import { z } from "zod";
 import { changeContextFragments, type ChangeContext } from "./context.js";
 import {
   annotateDocSources,
@@ -78,25 +84,100 @@ export interface AgentStageDeps {
 }
 
 /**
- * Assembles a role's input from fragments and records its snapshot in the journal (REQ-CTX-12, REQ-CTX-17/AC3).
+ * Assembles a role's input from fragments within the model's budget and records its snapshot in the journal
+ * (REQ-CTX-12, REQ-CTX-14, REQ-CTX-17/AC3). Where the provider counts tokens (REQ-LLM-15/AC2), an input near the budget
+ * is counted there and reduced further when the count is over it. `read_context` and `search_context` come with the
+ * input when something was put behind a handle; every read is journaled (REQ-CTX-12/AC4).
  *
  * @param deps - The stage's dependencies.
- * @param call - Stage, role (its declaration in `ROLE_CONTEXT` applies), model and fragments.
+ * @param call - Stage, role (its declaration in `ROLE_CONTEXT` applies), the resolved model and fragments.
  */
-export function assembleFor(
+export async function assembleFor(
   deps: AgentStageDeps,
   call: {
     readonly stage: string;
     readonly role: string;
-    readonly model: string;
+    readonly model: Pick<ResolvedModel, "id"> &
+      Partial<Pick<ResolvedModel, "context" | "inputLimit" | "countTokens">>;
     readonly fragments: readonly ContextFragment[];
   },
-): AssembledContext {
-  const context = contextOf(deps).assemble(call);
+): Promise<AssembledContext> {
+  const manager = contextOf(deps);
+  const profile = call.model.context;
+  const budgetOf = (tokens: number): ContextBudget | undefined =>
+    profile
+      ? {
+          tokens,
+          margin: profile.margin,
+          counting: profile.counting,
+          style: profile.style,
+          profile: profile.version,
+        }
+      : undefined;
+  const planned = profile ? contextBudget(profile, call.model.inputLimit?.limit) : undefined;
+  const run = (tokens: number | undefined) =>
+    manager.assemble({
+      stage: call.stage,
+      role: call.role,
+      model: call.model.id,
+      fragments: call.fragments,
+      budget: tokens === undefined ? undefined : budgetOf(tokens),
+    });
+  let context = run(planned);
+  // REQ-LLM-15/AC2: near the budget, the provider's own count decides; an input over it is reduced once more.
+  const used = context.snapshot.budget?.used ?? 0;
+  if (planned !== undefined && call.model.countTokens && used > planned * 0.8) {
+    const counted = await call.model.countTokens(context.system, context.prompt).catch(() => undefined);
+    if (counted !== undefined && counted > planned)
+      context = run(Math.max(0, Math.floor(planned * (planned / counted)) - 256));
+  }
   deps.events.emit(call.stage, { kind: "agent", name: call.role }, "context.snapshot", {
     ...context.snapshot,
   });
-  return context;
+  return {
+    ...context,
+    tools: context.snapshot.catalogue.length > 0 ? contextTools(deps, manager, call) : [],
+  };
+}
+
+/** The tools over the run's catalogue (REQ-CTX-12/AC4, REQ-CTX-20/AC2): their use is journaled and counted. */
+function contextTools(
+  deps: AgentStageDeps,
+  manager: ContextManager,
+  call: { readonly stage: string; readonly role: string },
+): AgentTool[] {
+  const actor = { kind: "agent", name: call.role } as const;
+  return [
+    {
+      name: "read_context",
+      description:
+        "Read in full a piece of this task's context that is behind a handle (h-xxxxxxxx) in the catalogue.",
+      inputSchema: z.object({ handle: z.string().regex(/^h-[0-9a-f]{8}$/) }),
+      execute: (input) => {
+        const handle = String(input["handle"]);
+        const text = manager.read(handle);
+        deps.events.emit(call.stage, actor, "context.read", { handle, found: text !== undefined });
+        return Promise.resolve(text ?? `No ${handle} in the catalogue.`);
+      },
+    },
+    {
+      name: "search_context",
+      description:
+        "Find pieces of this task's context behind handles by their subject, e.g. 'payment error handling'; returns handles to read.",
+      inputSchema: z.object({ question: z.string().min(2).max(300) }),
+      execute: (input) => {
+        const hits = manager.search(String(input["question"]));
+        deps.events.emit(call.stage, actor, "context.search", { hits: hits.length });
+        return Promise.resolve(
+          hits.length === 0
+            ? "Nothing in the catalogue matches; try other words."
+            : hits
+                .map((h) => `- ${h.handle} · ${h.kind} · ${h.source} · ${String(h.tokens)} tokens`)
+                .join("\n"),
+        );
+      },
+    },
+  ];
 }
 
 /** A role's instructions: trusted, pinned, first. */
@@ -317,7 +398,15 @@ async function documentation(
     await recordRunDocs(deps.ws.path("knowledge", "chunks.json"), chunks);
   };
   return {
-    tools: createKnowledgeTools({ access, stage, role, events: deps.events, now: deps.now, remember }),
+    tools: createKnowledgeTools({
+      access,
+      stage,
+      role,
+      events: deps.events,
+      now: deps.now,
+      remember,
+      wrap: contextOf(deps).wrap,
+    }),
     fragments: await documentationFragments(access, remember, deps.now()),
   };
 }
@@ -341,10 +430,10 @@ export async function runAnalyst(deps: AgentStageDeps, context: ChangeContext): 
     stage: "analyze",
     role: "analyst",
     model,
-    context: assembleFor(deps, {
+    context: await assembleFor(deps, {
       stage: "analyze",
       role: "analyst",
-      model: model.id,
+      model,
       fragments: [
         instructions("analyst", ANALYST_SYSTEM),
         ...changeContextFragments(context, { ui: false }),
@@ -354,7 +443,10 @@ export async function runAnalyst(deps: AgentStageDeps, context: ChangeContext): 
     }),
     schema: AnalysisSchema,
     validate: (analysis) => issuesAsErrors(checkAnalysisSources(analysis, sources)),
-    tools: [...createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText }), ...docs.tools],
+    tools: [
+      ...createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText, wrap: contextOf(deps).wrap }),
+      ...docs.tools,
+    ],
     guard: stageGuard(deps, "analyze", role),
     usage: deps.usage,
     ...(deps.signal ? { signal: deps.signal } : {}),
@@ -432,10 +524,10 @@ export async function runPlanner(
     stage: "plan",
     role: "planner",
     model,
-    context: assembleFor(deps, {
+    context: await assembleFor(deps, {
       stage: "plan",
       role: "planner",
-      model: model.id,
+      model,
       fragments: [
         instructions("planner", PLANNER_SYSTEM),
         ...changeContextFragments(context),
@@ -476,7 +568,10 @@ export async function runPlanner(
         );
       return errors;
     },
-    tools: [...createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText }), ...docs.tools],
+    tools: [
+      ...createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText, wrap: contextOf(deps).wrap }),
+      ...docs.tools,
+    ],
     guard: stageGuard(deps, "plan", role),
     usage: deps.usage,
     ...(deps.signal ? { signal: deps.signal } : {}),

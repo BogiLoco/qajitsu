@@ -2,7 +2,7 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createDemoPipeline, DEMO_PASSWORD } from "../../../../tests/support/cli-pipeline.js";
-import { runLogs } from "./logs.js";
+import { formatEvent, runLogs } from "./logs.js";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -94,5 +94,32 @@ describe("qajitsu logs (REQ-OBS-02/AC1)", () => {
     );
     expect(code).toBe(0);
     expect(polls).toBe(3);
+  });
+});
+
+describe("context snapshots in qj logs (REQ-CTX-14/AC4)", () => {
+  it("REQ-CTX-14/AC4: a snapshot shows its budget, reductions and catalogue in one line", () => {
+    const line = formatEvent(
+      {
+        ts: "2026-10-29T10:00:00.000Z",
+        seq: 3,
+        runId: "r",
+        ticket: "DEMO-1",
+        stage: "plan",
+        actor: { kind: "agent", name: "planner" },
+        event: "context.snapshot",
+        details: {
+          fragments: [{}, {}, {}],
+          reductions: [{ action: "handle" }, { action: "handle" }, { action: "trimmed" }],
+          budget: { tokens: 4000, used: 3500, counting: "provider" },
+          catalogue: [{}, {}],
+          sha256: "abcdef0123456789",
+        },
+      } as never,
+      (t) => t,
+    );
+    expect(line).toContain(
+      "context.snapshot 3 fragment(s) · 3500/4000 tokens (provider) · 3 reduction(s): handle 2, trimmed 1 · 2 behind handles · snapshot abcdef012345",
+    );
   });
 });

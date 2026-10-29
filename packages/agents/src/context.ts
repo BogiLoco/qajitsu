@@ -382,6 +382,10 @@ export function renderChangeContext(context: ChangeContext, options: { readonly 
   }).prompt;
 }
 
+/** Large reference material starts behind a handle (REQ-CTX-12/AC5): the agent reads it when it needs it. */
+const onDemandIfLarge = (f: ContextFragment): ContextFragment =>
+  f.tokens > 1_500 ? { ...f, onDemand: true } : f;
+
 /** A fragment of the change context; the priority keeps the order the roles were written for. */
 const part = (
   kind: ContextKind,
@@ -530,7 +534,9 @@ export function changeContextFragments(
         65,
         `## Tests repository '${r.alias}' (existing automated tests; code under repos/${r.alias}/, not part of the change)`,
       ),
-      part("repository", `tests/${r.alias}/index`, "untrusted", 65, renderTestsRepo(r.alias, r.index)),
+      onDemandIfLarge(
+        part("repository", `tests/${r.alias}/index`, "untrusted", 65, renderTestsRepo(r.alias, r.index)),
+      ),
     );
   if (context.imported.length > 0) {
     // REQ-CTX-08/AC2+AC3: an extra source, wrapped as untrusted data like the ticket.
@@ -638,7 +644,7 @@ export function changeContextFragments(
       ),
     );
     for (const k of context.knowledge)
-      out.push(part("knowledge", `knowledge/${k.name}`, "untrusted", 40, k.text));
+      out.push(onDemandIfLarge(part("knowledge", `knowledge/${k.name}`, "untrusted", 40, k.text)));
   }
   return out;
 }

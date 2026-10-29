@@ -28,6 +28,13 @@ const CapabilityOverrideSchema = z.strictObject({
   vision: z.boolean().optional(),
   context_window: z.number().int().positive().optional(),
   /**
+   * Input that still works well for this model (REQ-LLM-15/AC1), e.g. measured with `qj bench`; the context manager
+   * plans every call within it.
+   */
+  working_range: z.number().int().positive().optional(),
+  /** `compact` sends small models fewer fragments at once (REQ-LLM-15/AC4). */
+  context_style: z.enum(["full", "compact"]).optional(),
+  /**
    * Thinking mode of a reasoning model on Ollama (e.g. Qwen3, DeepSeek-R1), sent as `think`. Some models answer tool
    * requests only when it is set explicitly: without it Qwen3 thinks and returns neither text nor a tool call.
    */

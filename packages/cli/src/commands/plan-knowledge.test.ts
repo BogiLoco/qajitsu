@@ -61,7 +61,10 @@ describe("documentation in planning (REQ-KNOW-06, REQ-KNOW-07, REQ-KNOW-10)", ()
     expect(promptOf(planned.model, 1)).toContain("Use the search_docs tool");
     const toolResult = promptOf(planned.model, 2);
     expect(toolResult).toContain(`[chunk ${CHUNK}] docs/cart.md › Cart > Rounding (modified 20`);
-    expect(toolResult).toContain('<untrusted_data source=\\"knowledge:docs/cart.md\\">');
+    // REQ-CTX-15/AC1: the tool's result is data in a block with the run's marker.
+    expect(toolResult).toMatch(
+      /<data-[a-z0-9]{12} kind=\\"tool-result\\" source=\\"knowledge:docs\/cart.md\\">/,
+    );
     const dir = await p.runDir();
     const md = await readFile(join(dir, "plan", "plan.v1.md"), "utf8");
     expect(md).toMatch(

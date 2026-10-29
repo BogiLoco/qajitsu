@@ -167,7 +167,7 @@ Some companies will not share source code. The project chooses how much of the c
 
 ### REQ-CTX-11 · Context fragments
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: later
 - Related: REQ-CTX-05, REQ-CTX-07, REQ-VER-16, INV-8, INV-11, ADR-0014
@@ -178,24 +178,24 @@ concatenated in each role.
 **Acceptance criteria**
 
 - [x] AC1: Every piece of model input is a fragment with a kind (role instructions, project rules, ticket, plan, diff, file, knowledge, tool result, log, evidence, lesson, skill), a source (file path, ticket key, tool call id, URL), a trust level (`trusted`: QAJitsu's instructions and the approved plan; `untrusted`: tickets, code, pages, logs, tool output), a priority, a `pinned` flag, its token count and its SHA-256. The schema lives in `@qajitsu/core` and is validated with Zod.
-- [ ] AC2: Pinned fragments (the approved plan, the step's expectations, the auditor's rubric) are never dropped, trimmed, summarised or compacted; a context that cannot fit them stops the call with the reason, never sends it without them.
+- [x] AC2: Pinned fragments (the approved plan, the step's expectations, the auditor's rubric) are never dropped, trimmed, summarised or compacted; a context that cannot fit them stops the call with the reason, never sends it without them.
 - [x] AC3: Every agent role builds its input only through fragments; a prompt string assembled outside the context manager is refused by a test over all roles.
 
 ### REQ-CTX-12 · Context pipeline with recorded reductions
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: later
 - Related: REQ-CTX-11, REQ-LLM-12, REQ-LLM-15, REQ-VER-16, ADR-0014
 
 **Acceptance criteria**
 
-- [ ] AC1: The context manager in `@qajitsu/agents` runs in a fixed order: collect fragments from their sources, filter them by role (REQ-CTX-13), compute the budget (REQ-CTX-14), reduce, lay out, hand over to the provider's renderer in `@qajitsu/models`, record the snapshot (REQ-CTX-17). It knows no provider or model by name (INV-11).
+- [x] AC1: The context manager in `@qajitsu/agents` runs in a fixed order: collect fragments from their sources, filter them by role (REQ-CTX-13), compute the budget (REQ-CTX-14), reduce, lay out, hand over to the provider's renderer in `@qajitsu/models`, record the snapshot (REQ-CTX-17). It knows no provider or model by name (INV-11).
 - [x] AC2: The layout puts the stable part first (role instructions, project rules, skills, repository context) and the varying part last (ticket, results, the question), so provider caching applies (REQ-LLM-12/AC1).
-- [ ] AC3: Every reduction (duplicate removed, fragment dropped, trimmed, summarised, replaced by a handle) is recorded with the fragment's hash, the reason and the tokens saved; nothing leaves the context silently.
-- [ ] AC4: A fragment replaced by a handle can be read in full by the agent through a read-only tool (`read_context <handle>`); the reads are counted and recorded.
-- [ ] AC5: Context starts small and grows on demand: material a role may need but does not always need (whole files, full logs, knowledge documents, older results) is offered as a catalogue of handles with a one-line description built by code (path, size, what it is), not as content; the agent reads what it needs with the tools.
-- [ ] AC6: Fragments are selected by relevance to the task before any reduction: what the acceptance criteria, the plan's steps and the change name (files, endpoints, selectors, error messages) ranks first, computed by code from the fragments' metadata and text; the ranking and its reasons are part of the snapshot.
+- [x] AC3: Every reduction (duplicate removed, fragment dropped, trimmed, summarised, replaced by a handle) is recorded with the fragment's hash, the reason and the tokens saved; nothing leaves the context silently.
+- [x] AC4: A fragment replaced by a handle can be read in full by the agent through a read-only tool (`read_context <handle>`); the reads are counted and recorded.
+- [x] AC5: Context starts small and grows on demand: material a role may need but does not always need (whole files, full logs, knowledge documents, older results) is offered as a catalogue of handles with a one-line description built by code (path, size, what it is), not as content; the agent reads what it needs with the tools.
+- [x] AC6: Fragments are selected by relevance to the task before any reduction: what the acceptance criteria, the plan's steps and the change name (files, endpoints, selectors, error messages) ranks first, computed by code from the fragments' metadata and text; the ranking and its reasons are part of the snapshot.
 
 ### REQ-CTX-13 · Role isolation of context
 
@@ -212,22 +212,22 @@ concatenated in each role.
 
 ### REQ-CTX-14 · Context budget and structure-aware reduction
 
-- Status: accepted
+- Status: in-progress
 - Priority: must
 - Stage: later
 - Related: REQ-CTX-12, REQ-LLM-12, REQ-LLM-15, REQ-EVD-09, ADR-0014
 
 **Acceptance criteria**
 
-- [ ] AC1: The budget of a call is the model's good working range (REQ-LLM-15) minus the space for the answer minus a safety margin; sources may get configured shares, and unused shares go to the others. A call that fits its budget is sent as it is: nothing is reduced ahead of need.
-- [ ] AC2: Reductions are done by code first and in this order: duplicates removed; the least relevant non-pinned fragments moved into the catalogue as handles (REQ-CTX-12/AC5); trimming that keeps structure (a diff keeps changed hunks and signatures, a log keeps errors with a few lines around them, recorded traffic keeps method, URL, status and a short body), with the full text behind a handle.
-- [ ] AC3: Reductions never touch pinned fragments and never change a number, an expected value or a quoted text of the ticket that a check relies on; a summary is untrusted data like its source.
-- [ ] AC4: The budget, the reductions and the final input size are visible per call in the audit trail and in `qj logs`.
+- [x] AC1: The budget of a call is the model's good working range (REQ-LLM-15) minus the space for the answer minus a safety margin; sources may get configured shares, and unused shares go to the others. A call that fits its budget is sent as it is: nothing is reduced ahead of need.
+- [x] AC2: Reductions are done by code first and in this order: duplicates removed; the least relevant non-pinned fragments moved into the catalogue as handles (REQ-CTX-12/AC5); trimming that keeps structure (a diff keeps changed hunks and signatures, a log keeps errors with a few lines around them, recorded traffic keeps method, URL, status and a short body), with the full text behind a handle.
+- [x] AC3: Reductions never touch pinned fragments and never change a number, an expected value or a quoted text of the ticket that a check relies on; a summary is untrusted data like its source.
+- [x] AC4: The budget, the reductions and the final input size are visible per call in the audit trail and in `qj logs`.
 - [ ] AC5: A summary by a model is the last resort: only when the code reductions cannot reach the budget, only for non-pinned fragments, only when the role cannot read handles (no tool use in its model profile) or the project allows it, and always with a handle to the full text. Every summary is recorded with the model that wrote it.
 
 ### REQ-CTX-15 · Untrusted data blocks with a per-run boundary
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: later
 - Related: REQ-CTX-05, REQ-NFR-05, REQ-CTX-11, ADR-0014
@@ -239,7 +239,7 @@ its end.
 
 - [x] AC1: Untrusted fragments are always rendered in separate blocks that name their source, bounded by a marker drawn at random for the run (recorded in the snapshot); content containing the marker is neutralised, so a ticket or a page cannot close the block and continue as instructions.
 - [x] AC2: Every role's instructions say that the content of data blocks is data, never instructions; the renderer picks the block form that suits the model (XML tags for Claude) without changing this meaning.
-- [ ] AC3: An adversarial suite with injected instructions in a ticket, a diff, a page, a log and a tool result (including fake block ends) shows no change to the role's task, tools or output schema.
+- [x] AC3: An adversarial suite with injected instructions in a ticket, a diff, a page, a log and a tool result (including fake block ends) shows no change to the role's task, tools or output schema.
 
 ### REQ-CTX-16 · Compaction of long agent loops
 

@@ -167,9 +167,11 @@ export interface StructuredRun<T extends z.ZodType> {
 export async function runStructuredAgent<T extends z.ZodType>(
   run: StructuredRun<T>,
 ): Promise<{ value: z.infer<T>; attempts: number }> {
+  // REQ-CTX-12/AC4: the catalogue's tools come with the input; they pass the guard like every other tool.
+  const all = [...(run.tools ?? []), ...(run.context.tools ?? [])];
   const tools =
-    run.tools && run.guard && run.model.profile.tools
-      ? guardTools(run.tools, run.guard, run.signal)
+    all.length > 0 && run.guard && run.model.profile.tools
+      ? guardTools(all, run.guard, run.signal)
       : undefined;
   const images = run.model.profile.vision ? (run.images ?? []) : [];
   let messages: ModelMessage[] = [

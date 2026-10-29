@@ -112,10 +112,10 @@ export async function runPlanApprover(
       model: "code",
     };
   // REQ-CTX-13/AC2: a judge sees the change and the plan it judges, never the analyst's or planner's reasoning.
-  const context = assembleFor(deps, {
+  const context = await assembleFor(deps, {
     stage: "approve",
     role: "approver",
-    model: model.id,
+    model,
     fragments: [
       instructions("approver", APPROVER_SYSTEM),
       ...changeContextFragments(input.context),
