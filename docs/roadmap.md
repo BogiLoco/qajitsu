@@ -300,13 +300,13 @@ the evidence bundle as pipeline artifacts.
 <!-- prettier-ignore-start -->
 <!-- req-stage:later -->
 - [REQ-CTX-08](requirements/context.md#req-ctx-08--import-existing-manual-test-cases) Import existing manual test cases (could, implemented, AC 4/4)
-- [REQ-CTX-11](requirements/context.md#req-ctx-11--context-fragments) Context fragments (must, accepted, AC 0/3)
-- [REQ-CTX-12](requirements/context.md#req-ctx-12--context-pipeline-with-recorded-reductions) Context pipeline with recorded reductions (must, accepted, AC 0/6)
-- [REQ-CTX-13](requirements/context.md#req-ctx-13--role-isolation-of-context) Role isolation of context (must, accepted, AC 0/3)
+- [REQ-CTX-11](requirements/context.md#req-ctx-11--context-fragments) Context fragments (must, in-progress, AC 1/3)
+- [REQ-CTX-12](requirements/context.md#req-ctx-12--context-pipeline-with-recorded-reductions) Context pipeline with recorded reductions (must, in-progress, AC 1/6)
+- [REQ-CTX-13](requirements/context.md#req-ctx-13--role-isolation-of-context) Role isolation of context (must, in-progress, AC 1/3)
 - [REQ-CTX-14](requirements/context.md#req-ctx-14--context-budget-and-structure-aware-reduction) Context budget and structure-aware reduction (must, accepted, AC 0/5)
-- [REQ-CTX-15](requirements/context.md#req-ctx-15--untrusted-data-blocks-with-a-per-run-boundary) Untrusted data blocks with a per-run boundary (must, accepted, AC 0/3)
+- [REQ-CTX-15](requirements/context.md#req-ctx-15--untrusted-data-blocks-with-a-per-run-boundary) Untrusted data blocks with a per-run boundary (must, in-progress, AC 2/3)
 - [REQ-CTX-16](requirements/context.md#req-ctx-16--compaction-of-long-agent-loops) Compaction of long agent loops (should, accepted, AC 0/3)
-- [REQ-CTX-17](requirements/context.md#req-ctx-17--deterministic-context-and-its-snapshot) Deterministic context and its snapshot (must, accepted, AC 0/4)
+- [REQ-CTX-17](requirements/context.md#req-ctx-17--deterministic-context-and-its-snapshot) Deterministic context and its snapshot (must, in-progress, AC 2/4)
 - [REQ-CTX-18](requirements/context.md#req-ctx-18--context-metrics-and-context-policy-benchmark) Context metrics and context-policy benchmark (should, accepted, AC 0/2)
 - [REQ-CTX-19](requirements/context.md#req-ctx-19--large-changes-analysed-in-parts) Large changes analysed in parts (should, accepted, AC 0/4)
 - [REQ-CTX-20](requirements/context.md#req-ctx-20--semantic-signals-for-choosing-context) Semantic signals for choosing context (should, accepted, AC 0/6)

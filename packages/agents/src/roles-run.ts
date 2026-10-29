@@ -1,4 +1,5 @@
 import { fillMissingEvidence, withPlacementHint } from "./plan-hints.js";
+import { createContextManager, type ContextManager } from "./context-manager.js";
 import type { McpClientLike, McpServers } from "./mcp.js";
 import { writeFile } from "node:fs/promises";
 import {
@@ -70,6 +71,27 @@ export interface AgentStageDeps {
   readonly planQuality?: (plan: Plan) => readonly PlanFlag[];
   /** Project-dependent options of the static spec checks (REQ-EXEC-03), e.g. deep links of the native app. */
   readonly specChecks?: SpecCheckOptions;
+  /** The run's context manager (ADR-0014): one per run, so its block marker is the same for every call. */
+  readonly context?: ContextManager;
+}
+
+const fallbackContexts = new WeakMap<object, ContextManager>();
+
+/**
+ * The context manager of a run: the one the run gave, or one kept for these dependencies, so every call of the run
+ * uses the same block marker (REQ-CTX-15/AC1).
+ *
+ * @param deps - The stage's dependencies.
+ */
+export function contextOf(deps: AgentStageDeps): ContextManager {
+  if (deps.context) return deps.context;
+  const key = deps.events as object;
+  let made = fallbackContexts.get(key);
+  if (!made) {
+    made = createContextManager();
+    fallbackContexts.set(key, made);
+  }
+  return made;
 }
 
 const roleDef = (role: AgentRoleDefinition["role"]): AgentRoleDefinition => {

@@ -45,6 +45,17 @@ describe("failure triage hints (REQ-VER-12)", () => {
       string,
       unknown
     >;
+    // REQ-CTX-17/AC3: the triage input's snapshot is in the journal: fragment hashes, no texts.
+    const journal = await readFile(join(p.dir, "journal", "events.jsonl"), "utf8");
+    const snapshot = journal
+      .split("\n")
+      .filter((l) => l.includes('"event":"context.snapshot"'))
+      .map(
+        (l) => (JSON.parse(l) as { details: { role: string; sha256: string; fragments: unknown[] } }).details,
+      );
+    expect(snapshot.map((s) => s.role)).toEqual(["triage"]);
+    expect(snapshot[0]?.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(snapshot[0]?.fragments.length).toBeGreaterThan(3);
     expect(record).toMatchObject({
       status: "done",
       hints: [

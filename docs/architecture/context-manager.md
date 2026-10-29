@@ -1,6 +1,6 @@
 # Context manager: implementation plan
 
-Requirements: REQ-CTX-11..20, REQ-LLM-15. Decision: ADR-0014. Status: planned (2026-10-28).
+Requirements: REQ-CTX-11..20, REQ-LLM-15. Decision: ADR-0014. Status: phase 1 in progress (2026-10-28): fragments, snapshots, per-run data blocks and role declarations exist; the auditor and triage are migrated.
 
 ## Principles
 

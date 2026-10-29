@@ -8,3 +8,6 @@ export class TokenBudgetExceededError extends QajitsuError {}
 
 /** A model call would send more input than its limit allows (REQ-LLM-12/AC4); nothing was sent. */
 export class AgentInputTooLargeError extends QajitsuError {}
+
+/** A role was handed context it may not see (REQ-CTX-13); nothing was sent. */
+export class ContextRefusedError extends QajitsuError {}
