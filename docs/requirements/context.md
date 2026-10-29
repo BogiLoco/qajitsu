@@ -282,7 +282,7 @@ its end.
 
 ### REQ-CTX-19 · Large changes analysed in parts
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-CTX-05, REQ-CTX-12, REQ-CTX-14, REQ-PLAN-01, REQ-LLM-15, ADR-0014
@@ -292,26 +292,27 @@ than squeezed into one prompt.
 
 **Acceptance criteria**
 
-- [ ] AC1: When the change does not fit the analyst's budget, code splits it into parts (per repository, then per group of related files: a module, an endpoint with its handler and tests) and the analyst studies each part in its own call.
-- [ ] AC2: Each part answers in a structured schema (endpoints, screens, risks, open questions, each with its sources); code merges the parts, removes duplicates and checks every source against the change, as for a single analysis.
-- [ ] AC3: The planner works from the merged analysis and handles into the change, never from the raw diff of every part at once.
-- [ ] AC4: The split, the parts and their snapshots are recorded; the same change splits the same way in every run.
+- [x] AC1: When the change does not fit the analyst's budget, code splits it into parts (per repository, then per group of related files: a module, an endpoint with its handler and tests) and the analyst studies each part in its own call.
+- [x] AC2: Each part answers in a structured schema (endpoints, screens, risks, open questions, each with its sources); code merges the parts, removes duplicates and checks every source against the change, as for a single analysis.
+- [x] AC3: The planner works from the merged analysis and handles into the change, never from the raw diff of every part at once.
+- [x] AC4: The split, the parts and their snapshots are recorded; the same change splits the same way in every run.
 
 ### REQ-CTX-20 · Semantic signals for choosing context
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-CTX-12, REQ-CTX-14, REQ-CTX-17, REQ-CTX-19, REQ-KNOW-01, REQ-KNOW-08, INV-11, ADR-0014
 
 The project's vector store and embedding model (REQ-KNOW-01, REQ-KNOW-08) help choose what a model sees; they never
-decide alone and never summarise.
+decide alone and never summarise. Only an embedding model that runs on the machine ranks context: the consent to send documents to a
+cloud model (REQ-KNOW-09) does not cover the change's code.
 
 **Acceptance criteria**
 
-- [ ] AC1: Relevance (REQ-CTX-12/AC6) may add the similarity of a fragment to the acceptance criteria and the plan's steps as a second signal next to the code's ranking; the code's ranking wins on ties, and a fragment ranked low only moves into the catalogue as a handle, it never leaves the context unreachable.
-- [ ] AC2: The catalogue of a run (diff, logs, recorded traffic, tool results, evidence texts) can be searched by meaning through a read-only tool (`search_context "<question>"`) that returns handles with one-line descriptions, like `search_docs` for the knowledge base; results are untrusted data like their sources.
-- [ ] AC3: Near-identical fragments (the same error in the logs of several attempts) are found by similarity above a threshold, confirmed by code on their text, and kept once; the others become handles.
-- [ ] AC4: When a large change is split into parts (REQ-CTX-19), similarity may group related files that the code's links (imports, routes, tests) did not connect.
-- [ ] AC5: Lessons of earlier runs of the same project (false FAILED reported with `qj feedback`, plan revisions a person asked for) are indexed and offered to the analyst and planner as low-priority, labelled fragments with their source run.
-- [ ] AC6: Without an embedding model the manager works on code signals alone, with the same results otherwise; the embedding model and its version are part of the snapshot (REQ-CTX-17), and vectors are computed once per fragment hash and model and cached.
+- [x] AC1: Relevance (REQ-CTX-12/AC6) may add the similarity of a fragment to the acceptance criteria and the plan's steps as a second signal next to the code's ranking; the code's ranking wins on ties, and a fragment ranked low only moves into the catalogue as a handle, it never leaves the context unreachable.
+- [x] AC2: The catalogue of a run (diff, logs, recorded traffic, tool results, evidence texts) can be searched by meaning through a read-only tool (`search_context "<question>"`) that returns handles with one-line descriptions, like `search_docs` for the knowledge base; results are untrusted data like their sources.
+- [x] AC3: Near-identical fragments (the same error in the logs of several attempts) are found by similarity above a threshold, confirmed by code on their text, and kept once; the others become handles.
+- [x] AC4: When a large change is split into parts (REQ-CTX-19), similarity may group related files that the code's links (imports, routes, tests) did not connect.
+- [x] AC5: Lessons of earlier runs of the same project (false FAILED reported with `qj feedback`, plan revisions a person asked for) are indexed and offered to the analyst and planner as low-priority, labelled fragments with their source run.
+- [x] AC6: Without an embedding model the manager works on code signals alone, with the same results otherwise; the embedding model and its version are part of the snapshot (REQ-CTX-17), and vectors are computed once per fragment hash and model and cached.

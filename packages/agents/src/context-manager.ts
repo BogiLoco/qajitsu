@@ -60,6 +60,7 @@ export const ROLE_CONTEXT: Readonly<Record<string, readonly ContextKind[]>> = {
     "exploration",
     "map",
     "knowledge",
+    "lesson",
     "question",
   ],
   planner: [
@@ -72,6 +73,7 @@ export const ROLE_CONTEXT: Readonly<Record<string, readonly ContextKind[]>> = {
     "exploration",
     "map",
     "knowledge",
+    "lesson",
     "analysis",
     "plan",
     "question",
@@ -124,7 +126,16 @@ export interface ContextManager {
     readonly budget?: ContextBudget | undefined;
     /** Similarity of fragments to the task by hash, from the embedding model (REQ-CTX-20/AC1); optional. */
     readonly semantic?: ReadonlyMap<string, number> | undefined;
+    /**
+     * Near-identical fragments (REQ-CTX-20/AC3): a fragment's hash with the hash of the one kept, found by similarity
+     * and confirmed by code on their text; the later one waits behind a handle.
+     */
+    readonly nearDuplicates?: ReadonlyMap<string, string> | undefined;
+    /** The embedding model that gave the signals, and its version (REQ-CTX-20/AC6). */
+    readonly embedding?: { readonly model: string; readonly version?: string | undefined } | undefined;
   }) => AssembledContext;
+  /** Every fragment behind a handle in this run, for a search by meaning (REQ-CTX-20/AC2). */
+  readonly shelved: () => readonly { readonly handle: string; readonly fragment: ContextFragment }[];
   /** The full text of a fragment behind a handle, as a data block; undefined for an unknown handle (AC4). */
   readonly read: (handle: string) => string | undefined;
   /** Catalogue entries matching a question by its words, best first (REQ-CTX-20/AC2 without an embedding model). */
@@ -197,6 +208,10 @@ export function createContextManager(options: { readonly marker?: string } = {})
       const f = handles.get(handle);
       return f ? (f.trust === "untrusted" ? block(f.kind, f.source, f.text) : f.text) : undefined;
     },
+    shelved: () =>
+      [...handles.entries()]
+        .map(([handle, fragment]) => ({ handle, fragment }))
+        .sort((a, b) => (a.handle < b.handle ? -1 : 1)),
     search: (question, limit = 5) => {
       const terms = anchorTerms([question]);
       return [...handles.entries()]
@@ -206,7 +221,7 @@ export function createContextManager(options: { readonly marker?: string } = {})
         .slice(0, limit)
         .map(({ handle, f }) => ({ handle, kind: f.kind, source: f.source, tokens: f.tokens }));
     },
-    assemble: ({ stage, role, model, fragments, budget, semantic }) => {
+    assemble: ({ stage, role, model, fragments, budget, semantic, nearDuplicates, embedding }) => {
       const allowed = ROLE_CONTEXT[role];
       const refused = allowed ? fragments.filter((f) => !allowed.includes(f.kind)) : [];
       if (refused.length > 0)
@@ -254,6 +269,20 @@ export function createContextManager(options: { readonly marker?: string } = {})
         inPrompt.delete(f.sha256);
         reductions.push({ sha256: f.sha256, action: "handle", reason, tokensSaved: f.tokens });
       };
+      // REQ-CTX-20/AC3: the same error in the logs of several attempts is sent once; the others wait behind handles.
+      for (const f of competing) {
+        const twin = nearDuplicates?.get(f.sha256);
+        const kept = twin === undefined ? undefined : inPrompt.get(twin);
+        if (!kept || !inPrompt.has(f.sha256)) continue;
+        handles.set(handleOf(f), f);
+        inPrompt.delete(f.sha256);
+        reductions.push({
+          sha256: f.sha256,
+          action: "deduplicated",
+          reason: `near-identical to ${kept.source}; the full text is ${handleOf(f)}`,
+          tokensSaved: f.tokens,
+        });
+      }
       // REQ-CTX-12/AC5: material a role may need but does not always need starts behind a handle.
       for (const f of competing) if (f.onDemand === true) shelve(f, "on demand: offered in the catalogue");
       const factor = budget?.margin ?? 1;
@@ -377,6 +406,14 @@ export function createContextManager(options: { readonly marker?: string } = {})
                 counting: budget.counting,
                 style: budget.style,
                 profile: budget.profile,
+              },
+            }
+          : {}),
+        ...(embedding
+          ? {
+              embedding: {
+                model: embedding.model,
+                ...(embedding.version ? { version: embedding.version } : {}),
               },
             }
           : {}),

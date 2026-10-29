@@ -17,6 +17,7 @@ import {
   type ContextFragment,
   type ContextKind,
   type ImportedCase,
+  type Lesson,
   type MapAround,
   type KnowledgeChunk,
   type ReviewItem,
@@ -158,6 +159,8 @@ export interface ChangeContext {
   readonly ui?: UiInventory | undefined;
   /** Pages and screens of the running application, recorded by code before writing specs (REQ-EXEC-22/AC1). */
   readonly snapshot?: readonly UiScreen[] | undefined;
+  /** Lessons of earlier runs of the project (REQ-CTX-20/AC5): untrusted, offered to the analyst and planner only. */
+  readonly lessons?: readonly Lesson[] | undefined;
 }
 
 const UI_EXTENSIONS = /\.(html?|[cm]?jsx?|tsx?|vue|svelte|xml|java|kt|swift|dart)$/;
@@ -406,7 +409,7 @@ const part = (
  */
 export function changeContextFragments(
   context: ChangeContext,
-  options: { readonly ui?: boolean } = {},
+  options: { readonly ui?: boolean; readonly lessons?: boolean } = {},
 ): ContextFragment[] {
   const t = context.ticket;
   const out: ContextFragment[] = [
@@ -645,6 +648,21 @@ export function changeContextFragments(
     );
     for (const k of context.knowledge)
       out.push(onDemandIfLarge(part("knowledge", `knowledge/${k.name}`, "untrusted", 40, k.text)));
+  }
+  // REQ-CTX-20/AC5: what people taught earlier runs; low priority, so it is the first to wait behind a handle.
+  const lessons = options.lessons === true ? (context.lessons ?? []) : [];
+  if (lessons.length > 0) {
+    out.push(
+      part(
+        "lesson",
+        "lessons",
+        "trusted",
+        30,
+        "## Lessons of earlier runs of this project (recorded by people; context, not sources: never cite them)",
+      ),
+    );
+    for (const l of lessons)
+      out.push(part("lesson", `lesson/${l.ticket}/${l.run}/${l.kind}`, "untrusted", 30, l.text));
   }
   return out;
 }

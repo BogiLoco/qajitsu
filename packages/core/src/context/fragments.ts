@@ -107,6 +107,8 @@ export const ContextSnapshotSchema = z.strictObject({
       }),
     )
     .default([]),
+  /** The embedding model whose similarities were a second signal, and its version (REQ-CTX-20/AC6); absent without one. */
+  embedding: z.strictObject({ model: z.string().min(1), version: z.string().optional() }).optional(),
   /** Relevance of the fragments that compete for the budget, with the terms that matched (REQ-CTX-12/AC6). */
   ranking: z
     .array(

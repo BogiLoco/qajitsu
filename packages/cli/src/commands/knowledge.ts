@@ -13,7 +13,7 @@ import {
   type KnowledgeSource,
   type VectorStore,
 } from "@qajitsu/core";
-import type { KnowledgeAccess } from "@qajitsu/agents";
+import { createSemanticIndex, type KnowledgeAccess, type SemanticIndex } from "@qajitsu/agents";
 import { createEmbedder } from "@qajitsu/models";
 import { createMasker, type Masker } from "@qajitsu/steps";
 import { createCliSecretResolver, type RuntimePorts } from "../adapters.js";
@@ -524,7 +524,12 @@ export async function openRunKnowledge(
   resolveSecret: (ref: string) => Promise<string>,
   io: CommandIO,
   ports: Ports,
-): Promise<{ readonly access?: KnowledgeAccess; readonly close: () => Promise<void> }> {
+): Promise<{
+  readonly access?: KnowledgeAccess;
+  /** The embedding model as a signal for choosing context (REQ-CTX-20); only a local one, code never leaves. */
+  readonly semantic?: SemanticIndex;
+  readonly close: () => Promise<void>;
+}> {
   const dir = project.project?.paths.knowledge;
   if (dir === undefined || ports.knowledgeDisabled === true) return { close: () => Promise.resolve() };
   const sources = await readKnowledgeSources(dir);
@@ -547,7 +552,11 @@ export async function openRunKnowledge(
       await k.store.close();
       return { close: () => Promise.resolve() };
     }
+    // REQ-CTX-20: the hybrid index's embedding model also ranks context, when it runs on this machine: the consent
+    // to send documents to a cloud model does not cover the change's code.
+    const embedder = index.mode === "hybrid" ? await k.embedder().catch(() => undefined) : undefined;
     return {
+      ...(embedder?.local === true ? { semantic: createSemanticIndex(embedder) } : {}),
       access: {
         mode: index.mode,
         maxAgeDays: k.config.max_age_days,

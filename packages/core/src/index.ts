@@ -12,6 +12,7 @@ export type * from "./interfaces/index.js";
 export * from "./workspace/run-workspace.js";
 export * from "./workspace/locks.js";
 export * from "./workspace/maintenance.js";
+export * from "./workspace/lessons.js";
 export * from "./events/event-log.js";
 export * from "./events/transcript.js";
 export * from "./certificate.js";
