@@ -13,6 +13,7 @@ import {
   agentScorecard,
   costInsights,
   digestRun,
+  mergeContextUsage,
   planInsights,
   timeInsights,
   weeklyCosts,
@@ -207,6 +208,38 @@ export function qualitySamples(digests: readonly RunDigest[]): Sample[] {
       q.escapedDefects,
     ),
   ];
+}
+
+/**
+ * Context metrics per role and model (REQ-CTX-18/AC1): input tokens by source kind, reductions by action, catalogue
+ * reads and searches, and the provider's prompt cache hit rate.
+ */
+export function contextSamples(digests: readonly RunDigest[]): Sample[] {
+  return mergeContextUsage(digests.map((d) => d.context ?? [])).flatMap((u) => {
+    const labels = { role: u.role, model: u.model };
+    return [
+      ...Object.entries(u.tokensByKind).map(([kind, n]) =>
+        gauge(
+          "qajitsu_context_input_tokens",
+          "Estimated input tokens by fragment kind.",
+          { ...labels, kind },
+          n,
+        ),
+      ),
+      ...Object.entries(u.reductions).map(([action, n]) =>
+        gauge("qajitsu_context_reductions", "Context reductions by action.", { ...labels, action }, n),
+      ),
+      gauge("qajitsu_context_calls", "Assembled model inputs.", labels, u.calls),
+      gauge("qajitsu_context_reads", "read_context calls (handles read in full).", labels, u.reads),
+      gauge("qajitsu_context_searches", "search_context calls.", labels, u.searches),
+      gauge(
+        "qajitsu_context_cache_hit_ratio",
+        "Share of input tokens served from the provider's prompt cache.",
+        labels,
+        u.inputTokens === 0 ? 0 : Number((u.cachedInputTokens / u.inputTokens).toFixed(3)),
+      ),
+    ];
+  });
 }
 
 /** The agent scorecard (REQ-LLM-14/AC3), per role and model. */
@@ -404,6 +437,7 @@ export async function collectMetrics(root: string, now: Date): Promise<Sample[]>
     ...timeSamples(digests),
     ...qualitySamples(digests),
     ...scorecardSamples(digests),
+    ...contextSamples(digests),
   );
   samples.push({
     name: "qajitsu_false_failed_ratio",

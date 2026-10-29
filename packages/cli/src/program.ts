@@ -1040,8 +1040,19 @@ export function createProgram(version: string, io: ProgramIO): Command {
       "--knowledge <mode>",
       "on (default), off, or compare: every case without and with the knowledge base",
     )
-    .action((options: { model: string; role?: string; cases?: string; out?: string; knowledge?: string }) =>
-      withPorts((ports) => runBench(options, commandIO, ports, review))(),
+    .option(
+      "--context <policies>",
+      "every case once per context policy, e.g. default,compact,range=16000,compact+range=8000",
+    )
+    .action(
+      (options: {
+        model: string;
+        role?: string;
+        cases?: string;
+        out?: string;
+        knowledge?: string;
+        context?: string;
+      }) => withPorts((ports) => runBench(options, commandIO, ports, review))(),
     );
 
   const audit = program.command("audit").description("Audit log and audit trail tools");

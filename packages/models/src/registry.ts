@@ -58,6 +58,14 @@ export function createModelRegistry(options: {
   readonly extra?: Readonly<Record<string, (model: string) => ResolvedModel["model"]>>;
   /** The project's prompt cache duration, already chosen when `cache_ttl` is `auto` (REQ-LLM-12/AC2). */
   readonly cacheTtl?: CacheTtl;
+  /**
+   * A context policy for every model of the run (REQ-CTX-18/AC2, `qj bench --context`): its working range and style win
+   * over the models' own.
+   */
+  readonly contextPolicy?: {
+    readonly workingRange?: number | undefined;
+    readonly style?: "full" | "compact" | undefined;
+  };
 }): ModelRegistry {
   const { config, resolveSecret } = options;
   /** REQ-LLM-12: the cache breakpoint and the input limit go with the model, so agents need not know the provider. */
@@ -76,8 +84,8 @@ export function createModelRegistry(options: {
       inputLimit: inputLimit(m.profile, config.max_input_tokens),
       // REQ-LLM-15: the provider type's defaults, the model's window and the project's overrides.
       context: contextProfile(providerType, m.profile, {
-        workingRange: overrides.working_range,
-        style: overrides.context_style,
+        workingRange: options.contextPolicy?.workingRange ?? overrides.working_range,
+        style: options.contextPolicy?.style ?? overrides.context_style,
       }),
     };
   };

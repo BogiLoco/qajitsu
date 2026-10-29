@@ -20,3 +20,4 @@ export * from "./release.js";
 export * from "./regression.js";
 export * from "./versions.js";
 export * from "./insights.js";
+export * from "./context-metrics.js";

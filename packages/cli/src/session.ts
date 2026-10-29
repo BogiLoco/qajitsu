@@ -49,6 +49,15 @@ export interface ModelPorts {
    * another model (REQ-VER-06/AC3).
    */
   readonly modelOverride?: { readonly ref: string; readonly role?: string | undefined };
+  /** A context policy for every model of the run (REQ-CTX-18/AC2): `qajitsu bench --context <policies>`. */
+  readonly contextPolicy?: ContextPolicy;
+}
+
+/** A context policy of a benchmark pass: a name and what it changes in every model's context profile. */
+export interface ContextPolicy {
+  readonly name: string;
+  readonly workingRange?: number | undefined;
+  readonly style?: "full" | "compact" | undefined;
 }
 
 /**
@@ -141,6 +150,7 @@ export async function openSession(
     fetch: ports.fetch,
     cacheTtl,
     ...(ports.extraModels ? { extra: ports.extraModels } : {}),
+    ...(ports.contextPolicy ? { contextPolicy: ports.contextPolicy } : {}),
   });
   return { project, ws, masker, logger, events, models, resolveSecret, now: ports.now };
 }

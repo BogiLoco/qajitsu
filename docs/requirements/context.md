@@ -270,15 +270,15 @@ its end.
 
 ### REQ-CTX-18 · Context metrics and context-policy benchmark
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-LLM-06, REQ-LLM-11, REQ-LLM-14, REQ-CTX-14
 
 **Acceptance criteria**
 
-- [ ] AC1: Per role and model the run records input tokens by source, reductions by kind, `read_context` calls and the cache hit rate; `qj metrics` exports them.
-- [ ] AC2: `qj bench --context <policies>` runs the same tickets under different budgets and shares and reports plan quality, detection, cost and time per policy, so a project picks the cheapest policy that keeps quality.
+- [x] AC1: Per role and model the run records input tokens by source, reductions by kind, `read_context` calls and the cache hit rate; `qj metrics` exports them.
+- [x] AC2: `qj bench --context <policies>` runs the same tickets under different budgets and shares and reports plan quality, detection, cost and time per policy, so a project picks the cheapest policy that keeps quality.
 
 ### REQ-CTX-19 · Large changes analysed in parts
 

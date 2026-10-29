@@ -307,7 +307,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-CTX-15](requirements/context.md#req-ctx-15--untrusted-data-blocks-with-a-per-run-boundary) Untrusted data blocks with a per-run boundary (must, implemented, AC 3/3)
 - [REQ-CTX-16](requirements/context.md#req-ctx-16--compaction-of-long-agent-loops) Compaction of long agent loops (should, implemented, AC 3/3)
 - [REQ-CTX-17](requirements/context.md#req-ctx-17--deterministic-context-and-its-snapshot) Deterministic context and its snapshot (must, implemented, AC 4/4)
-- [REQ-CTX-18](requirements/context.md#req-ctx-18--context-metrics-and-context-policy-benchmark) Context metrics and context-policy benchmark (should, accepted, AC 0/2)
+- [REQ-CTX-18](requirements/context.md#req-ctx-18--context-metrics-and-context-policy-benchmark) Context metrics and context-policy benchmark (should, implemented, AC 2/2)
 - [REQ-CTX-19](requirements/context.md#req-ctx-19--large-changes-analysed-in-parts) Large changes analysed in parts (should, implemented, AC 4/4)
 - [REQ-CTX-20](requirements/context.md#req-ctx-20--semantic-signals-for-choosing-context) Semantic signals for choosing context (should, implemented, AC 6/6)
 - [REQ-PLAN-08](requirements/plan.md#req-plan-08--test-depth-and-budget) Test depth and budget (should, implemented, AC 4/4)

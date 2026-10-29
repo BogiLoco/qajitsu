@@ -16,7 +16,7 @@ import { parse } from "yaml";
 import { z } from "zod";
 import type { RuntimePorts } from "../adapters.js";
 import { loadProject } from "../project.js";
-import type { ModelPorts } from "../session.js";
+import type { ContextPolicy, ModelPorts } from "../session.js";
 import { runFetch, type CommandIO } from "./fetch.js";
 import { runApprove, runPlan, type ReviewPorts } from "./plan.js";
 import { runRun, type RunPorts } from "./run.js";
@@ -70,6 +70,8 @@ export interface BenchCaseResult {
   readonly knowledge?: boolean;
   /** The approved plan has a case whose source is the bug's acceptance criterion (REQ-LLM-14/AC4). */
   readonly criterionCovered?: boolean;
+  /** The context policy of the pass (REQ-CTX-18/AC2). */
+  readonly context?: string;
 }
 
 type Rate = "detectionRate" | "falseFailedRate" | "blockedRate" | "planAcceptanceRate";
@@ -100,6 +102,11 @@ export interface BenchReport {
   readonly scorecard?: AgentScorecard;
   /** Changes since the previous report of the same model and role, when there is one. */
   readonly sincePrevious?: BenchChanges;
+  /** With `--context`: the summary of every context policy, and the cheapest that keeps the best quality. */
+  readonly contextPolicies?: {
+    readonly policies: readonly { readonly policy: string; readonly summary: BenchSummary }[];
+    readonly cheapest?: string;
+  };
   /** With `compare`: each case without and with the knowledge base, and the difference (with − without). */
   readonly comparison?: {
     readonly without: BenchSummary;
@@ -177,6 +184,68 @@ export function compareKnowledge(cases: readonly BenchCaseResult[]): NonNullable
   };
 }
 
+/**
+ * Parses `--context` (REQ-CTX-18/AC2): comma-separated policies, each `default`, `full`, `compact`, `range=<tokens>` or
+ * a combination joined by `+` (`compact+range=16000`). The name of a policy is how it was written.
+ *
+ * @throws {ConfigError} `BENCH_CONTEXT_INVALID` for an unknown part, a range below 1,000 tokens or a repeated policy.
+ */
+export function parseContextPolicies(text: string): ContextPolicy[] {
+  const names = text
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+  const invalid = (why: string) =>
+    new ConfigError(
+      "BENCH_CONTEXT_INVALID",
+      `--context ${text}: ${why}. Use e.g. default,compact,range=16000.`,
+      {},
+    );
+  if (names.length === 0) throw invalid("no policy");
+  if (new Set(names).size !== names.length) throw invalid("a policy is repeated");
+  return names.map((name) => {
+    let policy: ContextPolicy = { name };
+    for (const part of name.split("+")) {
+      const range = /^range=(\d+)$/.exec(part);
+      if (part === "default") continue;
+      if (part === "full" || part === "compact") policy = { ...policy, style: part };
+      else if (range && Number(range[1]) >= 1_000) policy = { ...policy, workingRange: Number(range[1]) };
+      else throw invalid(`'${part}' is not default, full, compact or range=<tokens of at least 1000>`);
+    }
+    return policy;
+  });
+}
+
+/**
+ * The summary of each context policy and the cheapest one that keeps the best quality (REQ-CTX-18/AC2): the best
+ * detection, plan acceptance and criterion coverage and the fewest false FAILED of all policies, then the lowest cost
+ * (or tokens without prices).
+ *
+ * @param cases - Results of every pass, labelled with their policy.
+ */
+export function compareContextPolicies(
+  cases: readonly BenchCaseResult[],
+): NonNullable<BenchReport["contextPolicies"]> {
+  const names = [...new Set(cases.flatMap((c) => (c.context === undefined ? [] : [c.context])))];
+  const policies = names.map((policy) => ({
+    policy,
+    summary: summariseBench(cases.filter((c) => c.context === policy)),
+  }));
+  const best = (k: "detectionRate" | "planAcceptanceRate" | "criterionCoverageRate") =>
+    Math.max(...policies.map((p) => p.summary[k] ?? 0));
+  const fewestFalse = Math.min(...policies.map((p) => p.summary.falseFailedRate));
+  const keeping = policies.filter(
+    (p) =>
+      p.summary.detectionRate >= best("detectionRate") &&
+      p.summary.planAcceptanceRate >= best("planAcceptanceRate") &&
+      (p.summary.criterionCoverageRate ?? 0) >= best("criterionCoverageRate") &&
+      p.summary.falseFailedRate <= fewestFalse,
+  );
+  const cost = (s: BenchSummary): number => s.costUsd ?? s.tokens;
+  const cheapest = [...keeping].sort((a, b) => cost(a.summary) - cost(b.summary))[0]?.policy;
+  return { policies, ...(cheapest === undefined ? {} : { cheapest }) };
+}
+
 const ratio = (n: number, d: number): number => (d === 0 ? 0 : Number((n / d).toFixed(3)));
 
 /**
@@ -240,6 +309,7 @@ export function formatBench(report: BenchReport): string {
     ...(report.scorecard ? ["", ...formatScorecard(report.scorecard)] : []),
     ...(report.sincePrevious ? ["", formatChanges(report.sincePrevious)] : []),
     ...(report.comparison ? ["", formatComparison(report.comparison)] : []),
+    ...(report.contextPolicies ? ["", ...formatPolicies(report.contextPolicies)] : []),
   ].join("\n");
 }
 
@@ -297,6 +367,21 @@ function formatComparison(c: NonNullable<BenchReport["comparison"]>): string {
   ].join("\n");
 }
 
+/** The context policies side by side (REQ-CTX-18/AC2). */
+function formatPolicies(c: NonNullable<BenchReport["contextPolicies"]>): string[] {
+  const pct = (x: number | undefined): string => (x === undefined ? "–" : `${(x * 100).toFixed(0)}%`);
+  return [
+    "Context policies",
+    "",
+    "| Policy | Detection | False FAILED | Plan accepted | Criterion covered | Tokens | Cost | Time |",
+    "|---|---|---|---|---|---|---|---|",
+    ...c.policies.map(
+      ({ policy, summary: s }) =>
+        `| ${policy}${policy === c.cheapest ? " (cheapest at best quality)" : ""} | ${pct(s.detectionRate)} | ${pct(s.falseFailedRate)} | ${pct(s.planAcceptanceRate)} | ${pct(s.criterionCoverageRate)} | ${String(s.tokens)} | ${s.costUsd === undefined ? "–" : `$${s.costUsd.toFixed(4)}`} | ${String(Math.round(s.durationMs / 1000))} s |`,
+    ),
+  ];
+}
+
 /** The latest earlier report of the same model and role in a folder, if any. */
 async function previousReport(dir: string, current: BenchReport): Promise<BenchReport | undefined> {
   let latest: BenchReport | undefined;
@@ -335,6 +420,7 @@ export async function runBench(
     readonly cases?: string | undefined;
     readonly out?: string | undefined;
     readonly knowledge?: string | undefined;
+    readonly context?: string | undefined;
   },
   io: CommandIO,
   ports: RuntimePorts & ModelPorts & RunPorts,
@@ -378,126 +464,138 @@ export async function runBench(
     // REQ-KNOW-11/AC1: in compare mode every case runs without, then with the knowledge base.
     const passes: (boolean | undefined)[] =
       mode === "compare" ? [false, true] : [mode === "off" ? false : undefined];
+    // REQ-CTX-18/AC2: the same cases once per context policy.
+    const policies: (ContextPolicy | undefined)[] =
+      options.context === undefined ? [undefined] : parseContextPolicies(options.context);
     const results: BenchCaseResult[] = [];
     const digests: RunDigest[] = [];
-    for (const withDocs of passes)
-      for (const c of parsed.data.cases) {
-        const benchPorts = {
-          ...ports,
-          modelOverride: { ref: options.model, role: options.role },
-          ...(withDocs === false ? { knowledgeDisabled: true } : {}),
-        };
-        const label =
-          withDocs === undefined ? "" : withDocs ? " (with knowledge base)" : " (without knowledge base)";
-        io.write(`${c.id}: ${c.ticket}${c.flags.length > 0 ? ` with ${c.flags.join(", ")}` : ""}${label}…\n`);
-        const started = ports.now().getTime();
-        const sub = quietIO(io.cwd);
-        const fetched = await runFetch(
-          c.ticket,
-          { ref: c.ref === undefined ? [] : [c.ref] },
-          sub,
-          benchPorts,
-        );
-        const runId = (await readRunIndex(root, c.ticket)).latest;
-        // Marked before anything else: publish refuses benchmark runs.
-        if (fetched === 0 && runId !== undefined) {
-          const ws = await openRunWorkspace(root, c.ticket, runId);
-          await ws.update({
-            data: { ...ws.record.data, bench: { case: c.id, model: options.model, flags: c.flags } },
-          });
-        }
-        const planned =
-          fetched === 0 && runId !== undefined
-            ? await runPlan(c.ticket, { run: runId }, sub, benchPorts, review)
-            : 3;
-        const approved =
-          planned === 0
-            ? // Recorded as an automatic approval by the benchmark, never as a person's.
-              // The benchmark measures what a plan finds: a plan that misses part of the ticket runs and scores lower.
-              await runApprove(
-                c.ticket,
-                { run: runId, confirmOpenQuestions: true, confirmUncovered: true },
-                sub,
-                benchPorts,
-                {
-                  ...review,
-                  user: `bench:${review.user}`,
-                },
-              )
-            : 3;
-        if (approved === 0)
-          await runRun(
+    for (const policy of policies)
+      for (const withDocs of passes)
+        for (const c of parsed.data.cases) {
+          const benchPorts = {
+            ...ports,
+            modelOverride: { ref: options.model, role: options.role },
+            ...(withDocs === false ? { knowledgeDisabled: true } : {}),
+            ...(policy ? { contextPolicy: policy } : {}),
+          };
+          const label =
+            (withDocs === undefined
+              ? ""
+              : withDocs
+                ? " (with knowledge base)"
+                : " (without knowledge base)") + (policy ? ` (context ${policy.name})` : "");
+          io.write(
+            `${c.id}: ${c.ticket}${c.flags.length > 0 ? ` with ${c.flags.join(", ")}` : ""}${label}…\n`,
+          );
+          const started = ports.now().getTime();
+          const sub = quietIO(io.cwd);
+          const fetched = await runFetch(
             c.ticket,
-            { run: runId, build: true, set: c.flags.map((f) => `${base}.${f}=1`) },
+            { ref: c.ref === undefined ? [] : [c.ref] },
             sub,
             benchPorts,
           );
-        const dir = join(root, c.ticket, runId ?? "missing");
-        const record = RunRecordSchema.safeParse(
-          JSON.parse(await readFile(join(dir, "run.json"), "utf8").catch(() => "null")) as unknown,
-        );
-        const statuses = (record.success ? record.data.data["results"] : undefined) as
-          Record<string, string> | undefined;
-        const { events } = parseEventLines(
-          await readFile(join(dir, "journal", "events.jsonl"), "utf8").catch(() => ""),
-        );
-        const usage = events
-          .filter((e) => e.event === "model.usage")
-          .map((e) => (e.details ?? {}) as Record<string, unknown>);
-        const costs = usage.map((u) => u["costUsd"]).filter((x): x is number => typeof x === "number");
-        const values = Object.values(statuses ?? {});
-        if (record.success)
-          digests.push(
-            digestRun({
-              ticket: c.ticket,
-              runId: record.data.runId,
-              createdAt: record.data.createdAt,
-              data: record.data.data,
-              events,
-              attemptsMs: [],
-            }),
+          const runId = (await readRunIndex(root, c.ticket)).latest;
+          // Marked before anything else: publish refuses benchmark runs.
+          if (fetched === 0 && runId !== undefined) {
+            const ws = await openRunWorkspace(root, c.ticket, runId);
+            await ws.update({
+              data: { ...ws.record.data, bench: { case: c.id, model: options.model, flags: c.flags } },
+            });
+          }
+          const planned =
+            fetched === 0 && runId !== undefined
+              ? await runPlan(c.ticket, { run: runId }, sub, benchPorts, review)
+              : 3;
+          const approved =
+            planned === 0
+              ? // Recorded as an automatic approval by the benchmark, never as a person's.
+                // The benchmark measures what a plan finds: a plan that misses part of the ticket runs and scores lower.
+                await runApprove(
+                  c.ticket,
+                  { run: runId, confirmOpenQuestions: true, confirmUncovered: true },
+                  sub,
+                  benchPorts,
+                  {
+                    ...review,
+                    user: `bench:${review.user}`,
+                  },
+                )
+              : 3;
+          if (approved === 0)
+            await runRun(
+              c.ticket,
+              { run: runId, build: true, set: c.flags.map((f) => `${base}.${f}=1`) },
+              sub,
+              benchPorts,
+            );
+          const dir = join(root, c.ticket, runId ?? "missing");
+          const record = RunRecordSchema.safeParse(
+            JSON.parse(await readFile(join(dir, "run.json"), "utf8").catch(() => "null")) as unknown,
           );
-        // REQ-LLM-14/AC4: ground truth of the demo shop: the plan has a case for the criterion the bug breaks.
-        const criterion = "detects" in c.expect ? c.expect.criterion : undefined;
-        const covered =
-          criterion === undefined
-            ? undefined
-            : await readFile(join(dir, "plan", "plan.approved.yaml"), "utf8").then(
-                (text) => {
-                  const plan = parse(text) as { cases?: { source?: { kind?: string; id?: string }[] }[] };
-                  return (plan.cases ?? []).some((pc) =>
-                    (pc.source ?? []).some((src) => src.kind === "ac" && src.id === criterion),
-                  );
-                },
-                () => false,
-              );
-        results.push({
-          id: c.id,
-          ticket: c.ticket,
-          flags: c.flags,
-          expect: "detects" in c.expect ? "detect" : "all_passed",
-          planAccepted: planned === 0 && approved === 0,
-          statuses: statuses ?? {},
-          ...("detects" in c.expect ? { detected: values.includes("FAILED") } : {}),
-          falseFailed: "detects" in c.expect ? 0 : values.filter((v) => v === "FAILED").length,
-          blocked: values.filter((v) => v === "BLOCKED").length,
-          durationMs: ports.now().getTime() - started,
-          tokens: usage.reduce(
-            (n, u) => n + Number(u["inputTokens"] ?? 0) + Number(u["outputTokens"] ?? 0),
-            0,
-          ),
-          ...(costs.length > 0 ? { costUsd: costs.reduce((a, b) => a + b, 0) } : {}),
-          ...(withDocs === undefined ? {} : { knowledge: withDocs }),
-          ...(covered === undefined ? {} : { criterionCovered: covered }),
-          ...(statuses === undefined
-            ? {
-                error: (sub.log.filter((l) => l.startsWith("Error")).at(-1) ?? "did not finish")
-                  .trim()
-                  .slice(0, 300),
-              }
-            : {}),
-        });
-      }
+          const statuses = (record.success ? record.data.data["results"] : undefined) as
+            Record<string, string> | undefined;
+          const { events } = parseEventLines(
+            await readFile(join(dir, "journal", "events.jsonl"), "utf8").catch(() => ""),
+          );
+          const usage = events
+            .filter((e) => e.event === "model.usage")
+            .map((e) => (e.details ?? {}) as Record<string, unknown>);
+          const costs = usage.map((u) => u["costUsd"]).filter((x): x is number => typeof x === "number");
+          const values = Object.values(statuses ?? {});
+          if (record.success)
+            digests.push(
+              digestRun({
+                ticket: c.ticket,
+                runId: record.data.runId,
+                createdAt: record.data.createdAt,
+                data: record.data.data,
+                events,
+                attemptsMs: [],
+              }),
+            );
+          // REQ-LLM-14/AC4: ground truth of the demo shop: the plan has a case for the criterion the bug breaks.
+          const criterion = "detects" in c.expect ? c.expect.criterion : undefined;
+          const covered =
+            criterion === undefined
+              ? undefined
+              : await readFile(join(dir, "plan", "plan.approved.yaml"), "utf8").then(
+                  (text) => {
+                    const plan = parse(text) as { cases?: { source?: { kind?: string; id?: string }[] }[] };
+                    return (plan.cases ?? []).some((pc) =>
+                      (pc.source ?? []).some((src) => src.kind === "ac" && src.id === criterion),
+                    );
+                  },
+                  () => false,
+                );
+          results.push({
+            id: c.id,
+            ticket: c.ticket,
+            flags: c.flags,
+            expect: "detects" in c.expect ? "detect" : "all_passed",
+            planAccepted: planned === 0 && approved === 0,
+            statuses: statuses ?? {},
+            ...("detects" in c.expect ? { detected: values.includes("FAILED") } : {}),
+            falseFailed: "detects" in c.expect ? 0 : values.filter((v) => v === "FAILED").length,
+            blocked: values.filter((v) => v === "BLOCKED").length,
+            durationMs: ports.now().getTime() - started,
+            tokens: usage.reduce(
+              (n, u) => n + Number(u["inputTokens"] ?? 0) + Number(u["outputTokens"] ?? 0),
+              0,
+            ),
+            ...(costs.length > 0 ? { costUsd: costs.reduce((a, b) => a + b, 0) } : {}),
+            ...(withDocs === undefined ? {} : { knowledge: withDocs }),
+            ...(covered === undefined ? {} : { criterionCovered: covered }),
+            ...(policy ? { context: policy.name } : {}),
+            ...(statuses === undefined
+              ? {
+                  error: (sub.log.filter((l) => l.startsWith("Error")).at(-1) ?? "did not finish")
+                    .trim()
+                    .slice(0, 300),
+                }
+              : {}),
+          });
+        }
     const outDir = options.out
       ? isAbsolute(options.out)
         ? options.out
@@ -513,6 +611,7 @@ export async function runBench(
       summary: summariseBench(results),
       scorecard: agentScorecard(digests),
       ...(mode === "compare" ? { comparison: compareKnowledge(results) } : {}),
+      ...(options.context === undefined ? {} : { contextPolicies: compareContextPolicies(results) }),
     };
     // REQ-LLM-14/AC4: the previous report of the same model and role, to see what changed.
     const previous = await previousReport(outDir, current);
