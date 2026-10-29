@@ -9,7 +9,7 @@ import {
 } from "@qajitsu/core";
 import { runStructuredAgent } from "./loop.js";
 import { AGENT_ROLES } from "./roles.js";
-import { contextOf, modelForRole, stageGuard, type AgentStageDeps } from "./roles-run.js";
+import { assembleFor, modelForRole, stageGuard, type AgentStageDeps } from "./roles-run.js";
 import { createReadOnlyTools } from "./workspace-tools.js";
 
 /** The auditor's answer: one finding per PASSED case (REQ-VER-06). */
@@ -192,19 +192,17 @@ export async function runAuditor(deps: AgentStageDeps, input: AuditInput): Promi
   if (passedIds.length === 0)
     return { model: model.id, sameModelAsAuthor: model.id === author, findings: [] };
   // REQ-CTX-12: the input is assembled from fragments; its snapshot goes into the journal (REQ-CTX-17/AC3).
-  const context = contextOf(deps).assemble({
+  const context = assembleFor(deps, {
     stage: "audit",
     role: "auditor",
     model: model.id,
     fragments: auditFragments(input),
   });
-  deps.events.emit("audit", actor, "context.snapshot", { ...context.snapshot });
   const { value, attempts } = await runStructuredAgent({
     stage: "audit",
     role: "auditor",
     model,
-    system: context.system,
-    prompt: context.prompt,
+    context,
     schema: AuditReportSchema,
     validate: (report) => {
       const ids = report.findings.map((f) => f.caseId);

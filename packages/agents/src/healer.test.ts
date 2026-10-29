@@ -64,7 +64,9 @@ describe("healer (REQ-EXEC-09)", () => {
     expect(result.file).toMatch(/specs\/healed\/v1\/TC-01\.spec\.ts$/);
     expect(await readFile(result.file!, "utf8")).toBe(original);
     expect(await readFile(specFile, "utf8")).toBe(broken);
-    expect(promptOf(model, 0)).toContain('<untrusted_data source=\\"dom\\">');
+    expect(promptOf(model, 0)).toMatch(
+      /<data-[a-z0-9]{12} kind=\\"evidence\\" source=\\"dom \(truncated\)\\">/,
+    );
   });
 
   it("REQ-EXEC-22/AC4: the healer sees the elements of the screen at the failure, also for a mobile case", async () => {

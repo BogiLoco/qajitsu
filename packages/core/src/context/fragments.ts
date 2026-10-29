@@ -19,6 +19,11 @@ export const CONTEXT_KINDS = [
   "tool-result",
   "lesson",
   "question",
+  "spec",
+  "ui",
+  "imported",
+  "exploration",
+  "map",
 ] as const;
 
 /** One kind of {@link CONTEXT_KINDS}. */

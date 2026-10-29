@@ -53,9 +53,10 @@ describe("failure triage hints (REQ-VER-12)", () => {
       .map(
         (l) => (JSON.parse(l) as { details: { role: string; sha256: string; fragments: unknown[] } }).details,
       );
-    expect(snapshot.map((s) => s.role)).toEqual(["triage"]);
-    expect(snapshot[0]?.sha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(snapshot[0]?.fragments.length).toBeGreaterThan(3);
+    // Every role of the run journals its input: analyst and planner while planning, then triage.
+    expect(snapshot.map((s) => s.role)).toEqual(["analyst", "planner", "triage"]);
+    for (const s of snapshot) expect(s.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(snapshot.at(-1)?.fragments.length).toBeGreaterThan(3);
     expect(record).toMatchObject({
       status: "done",
       hints: [

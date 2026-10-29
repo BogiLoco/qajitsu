@@ -10,7 +10,7 @@ import {
 } from "@qajitsu/core";
 import { runStructuredAgent } from "./loop.js";
 import { AGENT_ROLES } from "./roles.js";
-import { contextOf, modelForRole, stageGuard, type AgentStageDeps } from "./roles-run.js";
+import { assembleFor, modelForRole, stageGuard, type AgentStageDeps } from "./roles-run.js";
 import { createReadOnlyTools } from "./workspace-tools.js";
 
 /** The model's answer: at most one hint per FAILED case (REQ-VER-12/AC1). */
@@ -159,19 +159,17 @@ export async function runTriage(
   const actor = { kind: "agent", name: "triage" } as const;
   deps.events.emit("triage", actor, "stage.start", { model: model.id, cases: ids.length });
   // REQ-CTX-12: the input is assembled from fragments; its snapshot goes into the journal (REQ-CTX-17/AC3).
-  const context = contextOf(deps).assemble({
+  const context = assembleFor(deps, {
     stage: "triage",
     role: "triage",
     model: model.id,
     fragments: triageFragments(input),
   });
-  deps.events.emit("triage", actor, "context.snapshot", { ...context.snapshot });
   const { value, attempts } = await runStructuredAgent({
     stage: "triage",
     role: "triage",
     model,
-    system: context.system,
-    prompt: context.prompt,
+    context,
     schema: TriageAnswerSchema,
     validate: (answer) => {
       const seen = answer.hints.map((h) => h.caseId);

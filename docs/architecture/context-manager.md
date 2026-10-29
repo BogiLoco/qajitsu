@@ -1,6 +1,6 @@
 # Context manager: implementation plan
 
-Requirements: REQ-CTX-11..20, REQ-LLM-15. Decision: ADR-0014. Status: phase 1 in progress (2026-10-28): fragments, snapshots, per-run data blocks and role declarations exist; the auditor and triage are migrated.
+Requirements: REQ-CTX-11..20, REQ-LLM-15. Decision: ADR-0014. Status (2026-10-29): phases 1 and 2 done. Every role builds its input from fragments through the context manager (the type of `runStructuredAgent` and `prepareCall` accepts nothing else), every role has a declaration of what it may see, and every call journals its snapshot. Still open in these phases: tool results are escaped per call, not yet bounded by the run's marker.
 
 ## Principles
 

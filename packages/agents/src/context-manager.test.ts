@@ -18,8 +18,8 @@ describe("context manager (REQ-CTX-11, REQ-CTX-12, REQ-CTX-15, REQ-CTX-17)", () 
   it("REQ-CTX-12/AC1+AC2: instructions become the system message; stable fragments come first, then by priority and source", () => {
     const cm = createContextManager({ marker: "m0a1b2c3d4e5" });
     const out = cm.assemble({
-      stage: "plan",
-      role: "planner",
+      stage: "probe",
+      role: "not-declared",
       model: "mock/m",
       fragments: [
         f({ kind: "question", source: "question", trust: "trusted", priority: 0, text: "Answer with JSON." }),

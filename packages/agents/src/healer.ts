@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { Plan, UiScreen } from "@qajitsu/core";
+import { fragment, type ContextFragment, type Plan, type UiScreen } from "@qajitsu/core";
 import {
   assertionLockDiff,
   blockingProblems,
@@ -15,15 +15,13 @@ import { extractCode } from "./author.js";
 import { modelExchange } from "./exchange.js";
 import { callUsage } from "./usage.js";
 import { prepareCall } from "./prepare-call.js";
-import { untrusted, UNTRUSTED_DATA_RULES } from "./context.js";
-import { modelForRole, type AgentStageDeps } from "./roles-run.js";
+import { assembleFor, instructions, modelForRole, question, type AgentStageDeps } from "./roles-run.js";
 
 /** Heal attempts per case (REQ-EXEC-09/AC1). */
 export const HEALER_MAX_ATTEMPTS = 2;
 
 /** System prompt of the healer role (REQ-EXEC-09). */
 export const HEALER_SYSTEM = `You are the healer of QAJitsu. A web or mobile test could not run because a selector or a wait did not match the page or the screen of the app.
-${UNTRUSTED_DATA_RULES}
 You may change ONLY selectors (testid:, role:, label:, text:, css: on the web; testid:, label:, text: in a native app) and waits (ui.waitFor).
 Prefer a selector listed for the element under "What the page or screen showed at the failure"; those are the ones that find it. You must keep every step(), every verify() call and every plan.expect(...) exactly as they are, and you must not add try/catch. Code checks this and rejects any other change.
 Answer with the complete spec in one \`\`\`ts code block and nothing else.`;
@@ -62,30 +60,60 @@ export async function healSpec(
     attempt: request.attempt,
     model: model.id,
   });
-  const prompt = [
-    `Heal ${request.caseId}.`,
-    "## Spec",
-    "```ts",
-    original,
-    "```",
-    "## Error",
-    untrusted("error", request.error),
-    ...(request.screen
-      ? [
-          untrusted(
-            "ui/failure",
-            renderUiSnapshot([request.screen], 120, "What the page or screen showed at the failure"),
-          ),
-        ]
-      : []),
-    ...(request.dom
-      ? ["## Page DOM at the failure (truncated)", untrusted("dom", request.dom.slice(0, 20_000))]
-      : []),
-  ].join("\n");
+  // REQ-CTX-12: the spec to heal is the author's output (data); the failure is what the runner and page reported.
+  const at = (over: Omit<Parameters<typeof fragment>[0], "section" | "pinned">): ContextFragment =>
+    fragment({ section: "varying", pinned: false, ...over });
+  const context = assembleFor(deps, {
+    stage: "heal",
+    role: "healer",
+    model: model.id,
+    fragments: [
+      instructions("healer", HEALER_SYSTEM),
+      at({
+        kind: "question",
+        source: "task",
+        trust: "trusted",
+        priority: 95,
+        text: `Heal ${request.caseId}.`,
+      }),
+      at({
+        kind: "spec",
+        source: `specs/${request.caseId}.spec.ts`,
+        trust: "untrusted",
+        priority: 80,
+        text: original,
+      }),
+      at({ kind: "log", source: "error", trust: "untrusted", priority: 70, text: request.error }),
+      ...(request.screen
+        ? [
+            at({
+              kind: "ui",
+              source: "ui/failure",
+              trust: "untrusted",
+              priority: 60,
+              text: renderUiSnapshot([request.screen], 120, "What the page or screen showed at the failure"),
+            }),
+          ]
+        : []),
+      ...(request.dom
+        ? [
+            at({
+              kind: "evidence",
+              source: "dom (truncated)",
+              trust: "untrusted",
+              priority: 50,
+              text: request.dom.slice(0, 20_000),
+            }),
+          ]
+        : []),
+      question("Answer with the healed spec in one ```ts block."),
+    ],
+  });
+  const prompt = context.prompt;
   const startedAt = Date.now();
   const result = await generateText({
     model: model.model,
-    ...prepareCall(model, HEALER_SYSTEM, [{ role: "user", content: prompt }]),
+    ...prepareCall(model, context, [{ role: "user", content: prompt }]),
     ...(deps.signal ? { abortSignal: deps.signal } : {}),
     maxRetries: 2,
   });
@@ -95,7 +123,7 @@ export async function healSpec(
     model.id,
     model.profile,
     callUsage(result.usage, startedAt),
-    modelExchange("heal", "healer", model, { system: HEALER_SYSTEM, prompt }, result),
+    modelExchange("heal", "healer", model, { system: context.system, prompt }, result),
   );
   const code = extractCode(result.text);
   let problems: SpecProblem[] =

@@ -1,5 +1,7 @@
 // Contract of the Anthropic path against the documented Claude Messages API (REQ-LLM-01/AC6), without a key or
 // network: tests/support/anthropic-api.ts answers like the API and refuses requests the documentation does not allow.
+import { createContextManager } from "@qajitsu/agents";
+import { fragment } from "@qajitsu/core";
 import { readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import {
@@ -15,6 +17,37 @@ import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { createAnthropicApi, type AnthropicTurn } from "../support/anthropic-api.js";
 import { createFetchedRun } from "../support/run-fixture.js";
+
+/** A matcher typed as unknown, for fields whose exact text the context manager extends. */
+const containing = (text: string): unknown => expect.stringContaining(text);
+
+/** A call's input as the context manager builds it. */
+const testContext = (system: string, prompt: string) =>
+  createContextManager({ marker: "testmarker00" }).assemble({
+    stage: "test",
+    role: "tester",
+    model: "mock/m",
+    fragments: [
+      fragment({
+        kind: "role-instructions",
+        source: "tester",
+        trust: "trusted",
+        section: "stable",
+        priority: 100,
+        pinned: true,
+        text: system,
+      }),
+      fragment({
+        kind: "question",
+        source: "question",
+        trust: "trusted",
+        section: "varying",
+        priority: 0,
+        pinned: true,
+        text: prompt,
+      }),
+    ],
+  });
 
 const KEY = "sk-ant-api03-contract-test-key-000000";
 const MODEL = "anthropic/claude-sonnet-5-5";
@@ -59,8 +92,7 @@ describe("Anthropic Messages API contract (REQ-LLM-01/AC6)", () => {
       stage: "plan",
       role: "planner",
       model: s.model,
-      system: "You are the planner.",
-      prompt: "Answer with JSON.",
+      context: testContext("You are the planner.", "Answer with JSON."),
       schema: z.object({ answer: z.string() }),
       usage: s.usage,
     });
@@ -68,7 +100,7 @@ describe("Anthropic Messages API contract (REQ-LLM-01/AC6)", () => {
     expect(s.api.violations).toEqual([]);
     expect(s.api.requests[0]).toMatchObject({
       model: "claude-sonnet-5-5",
-      system: [{ type: "text", text: "You are the planner." }],
+      system: [{ type: "text", text: containing("You are the planner.") }],
     });
     expect(s.usageEvents()).toEqual([
       expect.objectContaining({ model: MODEL, inputTokens: 120, outputTokens: 30 }),
@@ -81,8 +113,7 @@ describe("Anthropic Messages API contract (REQ-LLM-01/AC6)", () => {
       stage: "plan",
       role: "planner",
       model: s.model,
-      system: "sys",
-      prompt: "Answer with JSON.",
+      context: testContext("sys", "Answer with JSON."),
       schema: z.object({ answer: z.string() }),
       usage: s.usage,
     });
@@ -148,8 +179,7 @@ describe("Anthropic Messages API contract (REQ-LLM-01/AC6)", () => {
       stage: "plan",
       role: "planner",
       model: retried.model,
-      system: "sys",
-      prompt: "p",
+      context: testContext("sys", "p"),
       schema: z.object({ answer: z.string() }),
       usage: retried.usage,
     });
@@ -161,8 +191,7 @@ describe("Anthropic Messages API contract (REQ-LLM-01/AC6)", () => {
       stage: "plan",
       role: "planner",
       model: denied.model,
-      system: "sys",
-      prompt: "p",
+      context: testContext("sys", "p"),
       schema: z.object({ answer: z.string() }),
       usage: denied.usage,
     }).catch((e: unknown) => e);

@@ -1,4 +1,11 @@
-import { isOutdated, type EventLog, type KnowledgeChunk, type KnowledgeHit } from "@qajitsu/core";
+import {
+  fragment,
+  isOutdated,
+  type ContextFragment,
+  type EventLog,
+  type KnowledgeChunk,
+  type KnowledgeHit,
+} from "@qajitsu/core";
 import { z } from "zod";
 import { untrusted } from "./context.js";
 import type { AgentTool } from "./loop.js";
@@ -27,6 +34,50 @@ export function renderChunk(chunk: KnowledgeChunk, maxAgeDays: number | undefine
     `[chunk ${chunk.id}] ${chunk.path}${chunk.section ? ` › ${chunk.section}` : ""} (modified ${chunk.modifiedAt.slice(0, 10)}${outdated})`,
     untrusted(`knowledge:${chunk.path}`, chunk.text),
   ].join("\n");
+}
+
+/**
+ * The project documentation as fragments (REQ-KNOW-07, REQ-CTX-11): in hybrid mode a note that `search_docs` exists;
+ * in full mode every chunk as untrusted knowledge with its id, path, section and date.
+ */
+export async function documentationFragments(
+  access: KnowledgeAccess,
+  remember: (chunks: readonly KnowledgeChunk[]) => Promise<void>,
+  now: Date,
+): Promise<ContextFragment[]> {
+  const note = (text: string) =>
+    fragment({
+      kind: "knowledge",
+      source: "docs",
+      trust: "trusted",
+      section: "varying",
+      priority: 38,
+      pinned: false,
+      text,
+    });
+  if (access.mode === "hybrid")
+    return [
+      note(
+        "## Project documentation\nThe project has a documentation knowledge base. Use the search_docs tool to look up rules and specifications that concern this change.",
+      ),
+    ];
+  const chunks = await access.all();
+  if (chunks.length === 0) return [];
+  await remember(chunks);
+  return [
+    note("## Project documentation (all of it; search_docs searches the same chunks)"),
+    ...chunks.map((c) =>
+      fragment({
+        kind: "knowledge",
+        source: `docs/${c.path}#${c.id}`,
+        trust: "untrusted",
+        section: "varying",
+        priority: 38,
+        pinned: false,
+        text: `[chunk ${c.id}] ${c.path}${c.section ? ` › ${c.section}` : ""} (modified ${c.modifiedAt.slice(0, 10)}${isOutdated(c, access.maxAgeDays, now) ? ", possibly outdated" : ""})\n${c.text}`,
+      }),
+    ),
+  ];
 }
 
 /**

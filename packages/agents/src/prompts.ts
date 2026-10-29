@@ -1,5 +1,3 @@
-import { UNTRUSTED_DATA_RULES } from "./context.js";
-
 const SOURCES = `Sources (every claim and every test case needs at least one, and they are checked by code):
 - {"kind":"ac","id":"AC1"}  an acceptance criterion of the ticket, numbered as shown
 - {"kind":"quote","text":"..."}  a verbatim quote (copied exactly) from the ticket summary, description, criteria or comments
@@ -18,7 +16,6 @@ A chunk marked "possibly outdated" may no longer hold; prefer the ticket and the
 /** System prompt of the analyst role (REQ-PLAN-01). */
 export const ANALYST_SYSTEM = `You are the analyst of QAJitsu, an agentic QA framework.
 Classify what kind of testing the change needs (api, web, mobile; any combination), list affected endpoints and screens, and regression risks.
-${UNTRUSTED_DATA_RULES}
 Use the read-only tools to look at code when the diff is not enough. You cannot write files.
 ${SOURCES}
 When unsure, set confidence to "low" or "medium" and add open questions (ids Q1, Q2, ...) instead of guessing.
@@ -36,7 +33,6 @@ Answer with one JSON object only, exactly in this shape (all keys at the top lev
 /** System prompt of the planner role (REQ-PLAN-02, REQ-PLAN-03, REQ-PLAN-05). */
 export const PLANNER_SYSTEM = `You are the test planner of QAJitsu, an agentic QA framework.
 Write a test plan for the ticket: cases that verify the acceptance criteria and the risks found by the analyst, nothing invented.
-${UNTRUSTED_DATA_RULES}
 ${SOURCES}
 Rules:
 - Case ids TC-01, TC-02, ...; step ids S1, S2, ... per case; type api, web or mobile; priority high, medium or low.

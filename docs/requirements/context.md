@@ -179,7 +179,7 @@ concatenated in each role.
 
 - [x] AC1: Every piece of model input is a fragment with a kind (role instructions, project rules, ticket, plan, diff, file, knowledge, tool result, log, evidence, lesson, skill), a source (file path, ticket key, tool call id, URL), a trust level (`trusted`: QAJitsu's instructions and the approved plan; `untrusted`: tickets, code, pages, logs, tool output), a priority, a `pinned` flag, its token count and its SHA-256. The schema lives in `@qajitsu/core` and is validated with Zod.
 - [ ] AC2: Pinned fragments (the approved plan, the step's expectations, the auditor's rubric) are never dropped, trimmed, summarised or compacted; a context that cannot fit them stops the call with the reason, never sends it without them.
-- [ ] AC3: Every agent role builds its input only through fragments; a prompt string assembled outside the context manager is refused by a test over all roles.
+- [x] AC3: Every agent role builds its input only through fragments; a prompt string assembled outside the context manager is refused by a test over all roles.
 
 ### REQ-CTX-12 · Context pipeline with recorded reductions
 
@@ -199,7 +199,7 @@ concatenated in each role.
 
 ### REQ-CTX-13 · Role isolation of context
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: later
 - Related: REQ-CTX-11, REQ-VER-06, REQ-VER-09, INV-1, INV-5, ADR-0014
@@ -207,8 +207,8 @@ concatenated in each role.
 **Acceptance criteria**
 
 - [x] AC1: Each role declares which fragment kinds and sources it may see; the declaration is code, reviewed like the guard, and the manager enforces it before the budget is computed.
-- [ ] AC2: The auditor and any judge never receive the reasoning, drafts or tool transcripts of the analyst, planner, author or healer; they see the approved plan, runner results and evidence only.
-- [ ] AC3: An adversarial suite shows that a fragment of a forbidden kind or source, also one smuggled inside another fragment's text or a tool result, never reaches a role that may not see it; the attempt is recorded.
+- [x] AC2: The auditor and any judge never receive the reasoning, drafts or tool transcripts of the analyst, planner, author or healer; they see the approved plan, runner results and evidence only.
+- [x] AC3: An adversarial suite shows that a fragment of a forbidden kind or source, also one smuggled inside another fragment's text or a tool result, never reaches a role that may not see it; the attempt is recorded.
 
 ### REQ-CTX-14 · Context budget and structure-aware reduction
 

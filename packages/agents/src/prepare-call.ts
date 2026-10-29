@@ -1,5 +1,6 @@
 import { estimateInputTokens, type ResolvedModel } from "@qajitsu/models";
 import type { ModelMessage, SystemModelMessage } from "ai";
+import type { AssembledContext } from "./context-manager.js";
 import { AgentInputTooLargeError } from "./errors.js";
 
 /** The parts of a model call that `prepareCall` arranges. */
@@ -31,15 +32,16 @@ const textsOf = (messages: readonly ModelMessage[]): { texts: string[]; images: 
  * breakpoint, so repairs and later calls reuse it (AC1). Provider details stay in `@qajitsu/models` (AC5).
  *
  * @param model - The resolved model.
- * @param system - The role's instructions.
+ * @param context - The input assembled by the context manager (REQ-CTX-11/AC3); its system message is used.
  * @param messages - The conversation so far.
  * @throws {AgentInputTooLargeError} `MODEL_INPUT_TOO_LARGE` with the estimate and the limit.
  */
 export function prepareCall(
   model: ResolvedModel,
-  system: string,
+  context: Pick<AssembledContext, "system" | "snapshot">,
   messages: readonly ModelMessage[],
 ): PreparedCall {
+  const system = context.system;
   const { texts, images } = textsOf(messages);
   const estimate = estimateInputTokens([system, ...texts], images);
   if (model.inputLimit && estimate > model.inputLimit.limit)

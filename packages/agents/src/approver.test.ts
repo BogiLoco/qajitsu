@@ -82,7 +82,10 @@ describe("model approver of a plan (REQ-PLAN-10)", () => {
     // A decision other than approve needs reasons: the first answer was sent back.
     expect(promptOf(approver, 1)).toContain("revise and handover need at least one reason");
     // The plan is data to check, never instructions.
-    expect(promptOf(approver, 0)).toContain('<untrusted_data source=\\"plan\\">');
+    // REQ-CTX-15: the plan it judges is data, in a block with the run's marker.
+    expect(promptOf(approver, 0)).toMatch(
+      /<data-[a-z0-9]{12} kind=\\"plan\\" source=\\"plan \(written by the planner model\)\\">/,
+    );
   });
 
   it("REQ-PLAN-10/AC2: code decides first: a plan with flagged expectations or open questions goes to a person without asking the model", async () => {

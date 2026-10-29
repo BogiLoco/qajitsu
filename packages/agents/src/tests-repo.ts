@@ -1,7 +1,6 @@
 import { mkdir, readFile, readdir, rename, stat, utimes, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { z } from "zod";
-import { untrusted } from "./context.js";
 
 /** What QAJitsu knows about the project's tests repository, computed by code from its worktree (REQ-CTX-06). */
 export interface TestsRepoIndex {
@@ -231,5 +230,6 @@ export function renderTestsRepo(alias: string, index: TestsRepoIndex): string {
     if (lines.join("\n").length + block.length > MAX_RENDER) break;
     lines.push(block);
   }
-  return untrusted(`tests-repo.${alias}`, lines.join("\n"));
+  // Plain text: the caller puts it into an untrusted fragment (REQ-CTX-11).
+  return lines.join("\n");
 }

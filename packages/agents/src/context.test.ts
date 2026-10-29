@@ -15,6 +15,10 @@ import {
 } from "./context.js";
 import { createReadOnlyTools, forbiddenRead } from "./workspace-tools.js";
 
+/** A data block of the rendered context for a source, whatever the run's marker (REQ-CTX-15). */
+const dataBlock = (source: string): RegExp =>
+  new RegExp(`<data-[a-z0-9]{12} kind="[a-z-]+" source="${source.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}">`);
+
 const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((r) => rm(r, { recursive: true, force: true })));
@@ -50,13 +54,12 @@ describe("change context (REQ-CTX-05)", () => {
     const { root, ws } = await createFetchedRun();
     roots.push(root);
     const text = renderChangeContext(await buildChangeContext(ws));
-    expect(text).toContain('<untrusted_data source="ticket">');
+    expect(text).toMatch(dataBlock("ticket/DEMO-1"));
     expect(text).toContain("AC3: Applying a second code replaces the first; codes never stack.");
-    expect(text).toContain(
-      '<untrusted_data source="repos/shop.change">\nTitle: DEMO-1 discount codes\nDescription:\nAdds codes.',
-    );
+    expect(text).toMatch(dataBlock("repos/shop/pull-request"));
+    expect(text).toContain("Title: DEMO-1 discount codes\nDescription:\nAdds codes.");
     expect(text).toContain("[0] reviewer-1 on src/cart/total.ts:3: Round once, good.");
-    expect(text).toContain('<untrusted_data source="repos/shop.diff">');
+    expect(text).toMatch(dataBlock("repos/shop/diff"));
   });
 
   it("REQ-PLAN-09/AC7: the element ids and pages of the worktree are given to the agents, computed by code", async () => {
@@ -76,7 +79,7 @@ describe("change context (REQ-CTX-05)", () => {
     ]);
     expect(context.ui?.pages).toEqual(["/app/checkout"]);
     const text = renderChangeContext(context);
-    expect(text).toContain('<untrusted_data source="ui/inventory">');
+    expect(text).toMatch(dataBlock("ui/inventory"));
     expect(text).toContain("Pages: /app/checkout");
     // The analyst classifies the change without the inventory; with no map, map sources are ruled out in so many words.
     const forAnalyst = renderChangeContext(context, { ui: false });
@@ -122,8 +125,8 @@ describe("project knowledge (REQ-CTX-07)", () => {
     ]);
     const { root, ws } = await createFetchedRun();
     roots.push(root);
-    expect(renderChangeContext(await buildChangeContext(ws, knowledge))).toContain(
-      '<untrusted_data source="knowledge/glossary.md">',
+    expect(renderChangeContext(await buildChangeContext(ws, knowledge))).toMatch(
+      dataBlock("knowledge/glossary.md"),
     );
     expect(await loadKnowledge(join(dir, "missing"), () => false)).toEqual([]);
   });
@@ -250,7 +253,7 @@ describe("read-only workspace tools (REQ-CTX-05/AC1)", () => {
       expect(text).toContain("S01/C1 not-done: apply a code twice");
       // Rejected items never reach the planner, and what exploration saw is data, never a rule.
       expect(text).not.toContain("IGNORE ALL RULES");
-      expect(text).toMatch(/<untrusted_data source="explore\/S01">/);
+      expect(text).toMatch(dataBlock("explore/S01"));
       expect(sourceContext(context).explored).toEqual({
         S01: { items: ["O1", "F1", "C1"], accepted: ["O1", "C1"] },
       });

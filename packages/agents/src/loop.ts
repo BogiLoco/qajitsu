@@ -17,6 +17,7 @@ import { AgentOutputError } from "./errors.js";
 import { modelExchange } from "./exchange.js";
 import { callUsage, type UsageTracker } from "./usage.js";
 import { prepareCall } from "./prepare-call.js";
+import type { AssembledContext } from "./context-manager.js";
 
 /** A tool an agent may call. Execution happens only after the guard allows it (REQ-VER-03/AC3). */
 export interface AgentTool {
@@ -122,8 +123,11 @@ export interface StructuredRun<T extends z.ZodType> {
   readonly stage: string;
   readonly role: string;
   readonly model: ResolvedModel;
-  readonly system: string;
-  readonly prompt: string;
+  /**
+   * The call's input, assembled by the context manager from fragments (REQ-CTX-11/AC3): a prompt string built
+   * anywhere else cannot be passed, because the type asks for the snapshot that comes with it.
+   */
+  readonly context: AssembledContext;
   readonly schema: T;
   /** Extra deterministic checks (e.g. grounded sources); returned strings are sent back as errors. */
   /**
@@ -170,11 +174,11 @@ export async function runStructuredAgent<T extends z.ZodType>(
   const images = run.model.profile.vision ? (run.images ?? []) : [];
   let messages: ModelMessage[] = [
     images.length === 0
-      ? { role: "user", content: run.prompt }
+      ? { role: "user", content: run.context.prompt }
       : {
           role: "user",
           content: [
-            { type: "text", text: run.prompt },
+            { type: "text", text: run.context.prompt },
             ...images.flatMap((img) => [
               { type: "text" as const, text: `Image ${img.name}:` },
               // A file part with an image media type: the "image" part is deprecated in the AI SDK.
@@ -192,7 +196,7 @@ export async function runStructuredAgent<T extends z.ZodType>(
     try {
       result = await generateText({
         model: run.model.model,
-        ...prepareCall(run.model, run.system, messages),
+        ...prepareCall(run.model, run.context, messages),
         ...(constrained
           ? { output: Output.object({ schema: jsonSchema(decodingSchema(run.schema)), name: run.role }) }
           : {}),
@@ -222,7 +226,7 @@ export async function runStructuredAgent<T extends z.ZodType>(
       run.model.id,
       run.model.profile,
       callUsage(result.usage, startedAt),
-      modelExchange(run.stage, run.role, run.model, { system: run.system, messages }, result),
+      modelExchange(run.stage, run.role, run.model, { system: run.context.system, messages }, result),
     );
     let errors: string[];
     try {
