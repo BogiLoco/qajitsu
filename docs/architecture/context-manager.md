@@ -1,6 +1,12 @@
 # Context manager: implementation plan
 
-Requirements: REQ-CTX-11..20, REQ-LLM-15. Decision: ADR-0014. Status (2026-10-29): phases 1 to 5 done: fragments and snapshots, role declarations, model context profiles and renderers, relevance ranking with a catalogue of handles (`read_context`, `search_context`), and budgets with code reductions. Tool results are bounded by the run's marker too.
+Requirements: REQ-CTX-11..20, REQ-LLM-15. Decision: ADR-0014. Status (2026-10-29): all seven phases implemented.
+Fragments and snapshots, role declarations, model context profiles and renderers, relevance ranking with a catalogue of
+handles (`read_context`, `search_context`), budgets with code reductions, large changes analysed in parts, semantic
+signals from a local embedding model, lessons of earlier runs, summaries as the last resort (cached), late compaction
+of agent loops, inputs rebuilt from snapshots (`qj audit verify`, `qj reproduce`), context metrics in `qj metrics` and
+`qj bench --context`. Still open: the dogfood comparison of input tokens and plan quality with a local model per
+phase.
 
 ## Principles
 
