@@ -305,7 +305,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-CTX-13](requirements/context.md#req-ctx-13--role-isolation-of-context) Role isolation of context (must, implemented, AC 3/3)
 - [REQ-CTX-14](requirements/context.md#req-ctx-14--context-budget-and-structure-aware-reduction) Context budget and structure-aware reduction (must, in-progress, AC 4/5)
 - [REQ-CTX-15](requirements/context.md#req-ctx-15--untrusted-data-blocks-with-a-per-run-boundary) Untrusted data blocks with a per-run boundary (must, implemented, AC 3/3)
-- [REQ-CTX-16](requirements/context.md#req-ctx-16--compaction-of-long-agent-loops) Compaction of long agent loops (should, accepted, AC 0/3)
+- [REQ-CTX-16](requirements/context.md#req-ctx-16--compaction-of-long-agent-loops) Compaction of long agent loops (should, implemented, AC 3/3)
 - [REQ-CTX-17](requirements/context.md#req-ctx-17--deterministic-context-and-its-snapshot) Deterministic context and its snapshot (must, in-progress, AC 2/4)
 - [REQ-CTX-18](requirements/context.md#req-ctx-18--context-metrics-and-context-policy-benchmark) Context metrics and context-policy benchmark (should, accepted, AC 0/2)
 - [REQ-CTX-19](requirements/context.md#req-ctx-19--large-changes-analysed-in-parts) Large changes analysed in parts (should, implemented, AC 4/4)

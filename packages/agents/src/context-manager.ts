@@ -8,6 +8,7 @@ import {
   type ContextSnapshot,
 } from "@qajitsu/core";
 import { anchorTerms, handleOf, relevance, trimmed } from "./context-reduce.js";
+import type { ModelMessage } from "ai";
 import type { AgentTool } from "./loop.js";
 import { ContextRefusedError } from "./errors.js";
 
@@ -100,6 +101,11 @@ export interface AssembledContext {
   readonly snapshot: ContextSnapshot;
   /** `read_context` and `search_context` over the run's catalogue, added by the caller that knows the journal. */
   readonly tools?: readonly AgentTool[];
+  /**
+   * Compacts the loop's conversation when the next step would not fit the call's budget (REQ-CTX-16); undefined when
+   * nothing had to change. `canRead`: the loop offers `read_context`, so compacted results stay behind handles.
+   */
+  readonly compact?: (messages: readonly ModelMessage[], canRead: boolean) => ModelMessage[] | undefined;
 }
 
 /** The input of a call could not be reduced to its budget: what must be sent does not fit (REQ-CTX-11/AC2). */
@@ -136,6 +142,8 @@ export interface ContextManager {
   }) => AssembledContext;
   /** Every fragment behind a handle in this run, for a search by meaning (REQ-CTX-20/AC2). */
   readonly shelved: () => readonly { readonly handle: string; readonly fragment: ContextFragment }[];
+  /** Puts a fragment behind a handle outside an assembly (a compacted tool result, REQ-CTX-16/AC2). */
+  readonly keep: (f: ContextFragment) => string;
   /** The full text of a fragment behind a handle, as a data block; undefined for an unknown handle (AC4). */
   readonly read: (handle: string) => string | undefined;
   /** Catalogue entries matching a question by its words, best first (REQ-CTX-20/AC2 without an embedding model). */
@@ -207,6 +215,10 @@ export function createContextManager(options: { readonly marker?: string } = {})
     read: (handle) => {
       const f = handles.get(handle);
       return f ? (f.trust === "untrusted" ? block(f.kind, f.source, f.text) : f.text) : undefined;
+    },
+    keep: (f) => {
+      handles.set(handleOf(f), f);
+      return handleOf(f);
     },
     shelved: () =>
       [...handles.entries()]

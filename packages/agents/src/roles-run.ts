@@ -35,6 +35,7 @@ import {
   type SourceContext,
   type SpecCheckOptions,
 } from "@qajitsu/verifier";
+import type { ModelMessage } from "ai";
 import { stringify } from "yaml";
 import { z } from "zod";
 import {
@@ -44,6 +45,7 @@ import {
   similarities,
   type SemanticIndex,
 } from "./context-semantic.js";
+import { compactMessages } from "./context-compact.js";
 import { changeFits, changeGroups, mergeAnalyses, splitChange, type ChangePart } from "./change-split.js";
 import { changeContextFragments, type ChangeContext } from "./context.js";
 import { AgentOutputError } from "./errors.js";
@@ -150,9 +152,43 @@ export async function assembleFor(
   deps.events.emit(call.stage, { kind: "agent", name: call.role }, "context.snapshot", {
     ...context.snapshot,
   });
+  const budget = context.snapshot.budget;
   return {
     ...context,
-    tools: context.snapshot.catalogue.length > 0 ? contextTools(deps, manager, call) : [],
+    // With a budget the loop may compact (REQ-CTX-16), so the role can always read what was put behind a handle.
+    tools: context.snapshot.catalogue.length > 0 || budget ? contextTools(deps, manager, call) : [],
+    ...(budget
+      ? {
+          compact: (messages: readonly ModelMessage[], canRead: boolean) => {
+            const done = compactMessages(messages, {
+              system: context.system,
+              budget: budget.tokens,
+              margin: budget.margin,
+              keep: canRead
+                ? (toolName, text) =>
+                    manager.keep(
+                      fragment({
+                        kind: "tool-result",
+                        source: `tool:${toolName}`,
+                        trust: "untrusted",
+                        section: "varying",
+                        priority: 0,
+                        pinned: false,
+                        text,
+                      }),
+                    )
+                : undefined,
+            });
+            if (!done) return undefined;
+            deps.events.emit(call.stage, { kind: "agent", name: call.role }, "context.compacted", {
+              snapshot: context.snapshot.sha256,
+              reductions: done.compactions,
+              tokensSaved: done.compactions.reduce((n, c) => n + c.tokensSaved, 0),
+            });
+            return done.messages;
+          },
+        }
+      : {}),
   };
 }
 

@@ -155,6 +155,23 @@ export interface StructuredRun<T extends z.ZodType> {
 }
 
 /**
+ * The AI SDK's per-step hook for a tool loop (REQ-CTX-16/AC1): before every step the conversation is compacted when
+ * it would not fit; the compacted messages carry forward to later steps.
+ *
+ * @param compact - The assembled context's compaction.
+ * @param canRead - Whether the loop offers `read_context`.
+ */
+export function compactStep(
+  compact: NonNullable<AssembledContext["compact"]>,
+  canRead: boolean,
+): (step: { messages: ModelMessage[] }) => { messages?: ModelMessage[] } {
+  return ({ messages }) => {
+    const next = compact(messages, canRead);
+    return next ? { messages: next } : {};
+  };
+}
+
+/**
  * Runs an agent whose final answer must be JSON matching `schema` (REQ-LLM-04). Invalid output is
  * returned to the agent with the validation errors, up to {@link MAX_OUTPUT_ATTEMPTS} attempts; then
  * the stage fails with {@link AgentOutputError}, never with a guessed value. Repair rounds on models
@@ -173,6 +190,7 @@ export async function runStructuredAgent<T extends z.ZodType>(
     all.length > 0 && run.guard && run.model.profile.tools
       ? guardTools(all, run.guard, run.signal)
       : undefined;
+  const canRead = all.some((t) => t.name === "read_context");
   const images = run.model.profile.vision ? (run.images ?? []) : [];
   let messages: ModelMessage[] = [
     images.length === 0
@@ -196,9 +214,13 @@ export async function runStructuredAgent<T extends z.ZodType>(
     let result;
     const startedAt = Date.now();
     try {
+      // REQ-CTX-16/AC1: repairs grow the conversation; it is compacted only when the next call would not fit.
+      const offered = Boolean(tools) && !constrained;
+      messages = run.context.compact?.(messages, offered && canRead) ?? messages;
       result = await generateText({
         model: run.model.model,
         ...prepareCall(run.model, run.context, messages),
+        ...(offered && run.context.compact ? { prepareStep: compactStep(run.context.compact, canRead) } : {}),
         ...(constrained
           ? { output: Output.object({ schema: jsonSchema(decodingSchema(run.schema)), name: run.role }) }
           : {}),

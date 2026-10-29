@@ -18,7 +18,7 @@ import {
   type SpecProblem,
 } from "@qajitsu/verifier";
 import { generateText, stepCountIs, type ModelMessage } from "ai";
-import { guardTools } from "./loop.js";
+import { compactStep, guardTools } from "./loop.js";
 import { openMcpTools } from "./mcp.js";
 import { renderTestsRepo } from "./tests-repo.js";
 import { modelExchange } from "./exchange.js";
@@ -385,6 +385,9 @@ export async function runAuthor(
       for (let attempt = 1; attempt <= AUTHOR_MAX_ATTEMPTS; attempt += 1) {
         attempts += 1;
         const startedAt = Date.now();
+        // REQ-CTX-16: rounds of rejected specs grow the conversation; compacted only when the next call would not fit.
+        const canRead = Boolean(tools) && (input.tools ?? []).some((t) => t.name === "read_context");
+        messages = input.compact?.(messages, canRead) ?? messages;
         const result = await generateText({
           model: model.model,
           ...prepareCall(model, input, messages),
@@ -393,6 +396,7 @@ export async function runAuthor(
             ? {
                 tools: { ...tools, ...guardTools([...(input.tools ?? [])], guard, deps.signal) },
                 stopWhen: stepCountIs(10),
+                ...(input.compact ? { prepareStep: compactStep(input.compact, canRead) } : {}),
               }
             : {}),
           ...(deps.signal ? { abortSignal: deps.signal } : {}),

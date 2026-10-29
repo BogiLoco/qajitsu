@@ -243,16 +243,16 @@ its end.
 
 ### REQ-CTX-16 · Compaction of long agent loops
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-CTX-12, REQ-CTX-14, REQ-EXEC-15, ADR-0014
 
 **Acceptance criteria**
 
-- [ ] AC1: An agent loop is compacted only when its next call would not fit the budget, never on a fixed number of turns; until then every tool result stays whole.
-- [ ] AC2: Compaction replaces the oldest tool results that the loop no longer refers to by handles with a one-line description built by code (REQ-CTX-12/AC4); the last results and every result the latest turns cite stay whole. Summaries by a model follow REQ-CTX-14/AC5.
-- [ ] AC3: Pinned fragments are never compacted; the compaction is recorded like every other reduction.
+- [x] AC1: An agent loop is compacted only when its next call would not fit the budget, never on a fixed number of turns; until then every tool result stays whole.
+- [x] AC2: Compaction replaces the oldest tool results that the loop no longer refers to by handles with a one-line description built by code (REQ-CTX-12/AC4); the last results and every result the latest turns cite stay whole. Summaries by a model follow REQ-CTX-14/AC5.
+- [x] AC3: Pinned fragments are never compacted; the compaction is recorded like every other reduction.
 
 ### REQ-CTX-17 · Deterministic context and its snapshot
 
