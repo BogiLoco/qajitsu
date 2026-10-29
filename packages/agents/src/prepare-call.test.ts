@@ -47,6 +47,7 @@ const anthropic = (cacheTtl: "5m" | "1h" | "off") => {
       providers: { claude: { type: "anthropic", api_key: "secret://env/KEY", models: {} } },
       roles: { default: "claude/claude-sonnet-5-5" },
       cache_ttl: cacheTtl,
+      context_summaries: "no-tools",
     },
     resolveSecret: () => Promise.resolve("sk-ant-test"),
     fetch,

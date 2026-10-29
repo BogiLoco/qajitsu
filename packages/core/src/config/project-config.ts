@@ -486,8 +486,14 @@ export const ProjectConfigSchema = z.strictObject({
       cache_ttl: z.enum(["auto", "5m", "1h", "off"]).default("auto"),
       /** Most input tokens one model call may send (REQ-LLM-12/AC4); larger calls are stopped with the reason. */
       max_input_tokens: z.number().int().positive().optional(),
+      /**
+       * Summaries by the `summary` model of context that does not fit (REQ-CTX-14/AC5), the last resort after every
+       * code reduction: `no-tools` only for a role whose model cannot read handles, `allowed` for every role, `off`
+       * never. Summaries are cached by input hash, model and prompt version (REQ-CTX-17/AC2).
+       */
+      context_summaries: z.enum(["off", "no-tools", "allowed"]).default("no-tools"),
     })
-    .default({ providers: {}, roles: {}, cache_ttl: "auto" }),
+    .default({ providers: {}, roles: {}, cache_ttl: "auto", context_summaries: "no-tools" }),
   /**
    * Scripts from `.qa/hooks/` around every run (REQ-GEN-01/AC2): `setup` after the environment is healthy and
    * before the cases (a failure makes every case BLOCKED), `teardown` after the cases (a failure is a warning).

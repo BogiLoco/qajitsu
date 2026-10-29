@@ -46,6 +46,7 @@ import {
   type SemanticIndex,
 } from "./context-semantic.js";
 import { compactMessages } from "./context-compact.js";
+import { summarise, type SummaryPolicy } from "./context-summary.js";
 import { changeFits, changeGroups, mergeAnalyses, splitChange, type ChangePart } from "./change-split.js";
 import { changeContextFragments, type ChangeContext } from "./context.js";
 import { AgentOutputError } from "./errors.js";
@@ -91,6 +92,11 @@ export interface AgentStageDeps {
   /** Project-dependent options of the static spec checks (REQ-EXEC-03), e.g. deep links of the native app. */
   readonly specChecks?: SpecCheckOptions;
   /**
+   * When a model may summarise context that does not fit (REQ-CTX-14/AC5, `models.context_summaries`): `off` (the
+   * default here), `no-tools` (only for a role whose model cannot read handles) or `allowed`.
+   */
+  readonly contextSummaries?: SummaryPolicy;
+  /**
    * The project's embedding model as a second signal for choosing context (REQ-CTX-20); absent without one, and the
    * manager then works on the code's signals alone (AC6).
    */
@@ -114,7 +120,7 @@ export async function assembleFor(
     readonly stage: string;
     readonly role: string;
     readonly model: Pick<ResolvedModel, "id"> &
-      Partial<Pick<ResolvedModel, "context" | "inputLimit" | "countTokens">>;
+      Partial<Pick<ResolvedModel, "context" | "inputLimit" | "countTokens" | "profile">>;
     readonly fragments: readonly ContextFragment[];
   },
 ): Promise<AssembledContext> {
@@ -131,7 +137,10 @@ export async function assembleFor(
         }
       : undefined;
   const planned = profile ? contextBudget(profile, call.model.inputLimit?.limit) : undefined;
-  const run = (tokens: number | undefined) =>
+  const run = (
+    tokens: number | undefined,
+    summaries?: Parameters<ContextManager["assemble"]>[0]["summaries"],
+  ) =>
     manager.assemble({
       stage: call.stage,
       role: call.role,
@@ -139,16 +148,22 @@ export async function assembleFor(
       fragments: call.fragments,
       budget: tokens === undefined ? undefined : budgetOf(tokens),
       ...(signals ?? {}),
+      ...(summaries ? { summaries } : {}),
     });
   const signals = deps.semantic ? await semanticSignals(deps, call) : undefined;
-  let context = run(planned);
+  let tokens = planned;
+  let context = run(tokens);
   // REQ-LLM-15/AC2: near the budget, the provider's own count decides; an input over it is reduced once more.
   const used = context.snapshot.budget?.used ?? 0;
   if (planned !== undefined && call.model.countTokens && used > planned * 0.8) {
     const counted = await call.model.countTokens(context.system, context.prompt).catch(() => undefined);
-    if (counted !== undefined && counted > planned)
-      context = run(Math.max(0, Math.floor(planned * (planned / counted)) - 256));
+    if (counted !== undefined && counted > planned) {
+      tokens = Math.max(0, Math.floor(planned * (planned / counted)) - 256);
+      context = run(tokens);
+    }
   }
+  const summaries = await summariesFor(deps, call, context);
+  if (summaries.size > 0) context = run(tokens, summaries);
   deps.events.emit(call.stage, { kind: "agent", name: call.role }, "context.snapshot", {
     ...context.snapshot,
   });
@@ -190,6 +205,52 @@ export async function assembleFor(
         }
       : {}),
   };
+}
+
+/** Over-budget fragments summarised per call at most: summaries are the last resort, not a pipeline. */
+const MAX_SUMMARIES = 4;
+
+/**
+ * Summaries for a call whose code reductions left fragments out (REQ-CTX-14/AC5): only when the project's policy
+ * allows it (by default only for a role whose model cannot read handles), only for non-pinned fragments the budget
+ * shelved, the largest first, and never for the summary role itself.
+ */
+async function summariesFor(
+  deps: AgentStageDeps,
+  call: {
+    readonly stage: string;
+    readonly role: string;
+    readonly model: Partial<Pick<ResolvedModel, "profile">>;
+    readonly fragments: readonly ContextFragment[];
+  },
+  context: AssembledContext,
+): Promise<Map<string, { fragment: ContextFragment; model: string }>> {
+  const out = new Map<string, { fragment: ContextFragment; model: string }>();
+  const policy = deps.contextSummaries ?? "off";
+  const canRead = call.model.profile?.tools !== false;
+  if (call.role === "summary" || policy === "off" || (policy === "no-tools" && canRead)) return out;
+  const shelved = new Set(
+    context.snapshot.reductions
+      .filter((r) => r.action === "handle" && r.reason.startsWith("over budget"))
+      .map((r) => r.sha256),
+  );
+  const candidates = call.fragments
+    .filter((f) => shelved.has(f.sha256) && !f.pinned)
+    .sort((a, b) => b.tokens - a.tokens || (a.sha256 < b.sha256 ? -1 : 1))
+    .slice(0, MAX_SUMMARIES);
+  if (candidates.length === 0) return out;
+  const model = await deps.models.forRole("summary").catch(() => undefined);
+  if (!model) return out;
+  for (const f of candidates) {
+    const summary = await summarise(deps, {
+      stage: call.stage,
+      model,
+      fragment: f,
+      assemble: (fragments) => assembleFor(deps, { stage: call.stage, role: "summary", model, fragments }),
+    });
+    if (summary) out.set(f.sha256, { fragment: summary, model: model.id });
+  }
+  return out;
 }
 
 /**

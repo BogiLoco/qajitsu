@@ -212,7 +212,7 @@ concatenated in each role.
 
 ### REQ-CTX-14 · Context budget and structure-aware reduction
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: later
 - Related: REQ-CTX-12, REQ-LLM-12, REQ-LLM-15, REQ-EVD-09, ADR-0014
@@ -223,7 +223,7 @@ concatenated in each role.
 - [x] AC2: Reductions are done by code first and in this order: duplicates removed; the least relevant non-pinned fragments moved into the catalogue as handles (REQ-CTX-12/AC5); trimming that keeps structure (a diff keeps changed hunks and signatures, a log keeps errors with a few lines around them, recorded traffic keeps method, URL, status and a short body), with the full text behind a handle.
 - [x] AC3: Reductions never touch pinned fragments and never change a number, an expected value or a quoted text of the ticket that a check relies on; a summary is untrusted data like its source.
 - [x] AC4: The budget, the reductions and the final input size are visible per call in the audit trail and in `qj logs`.
-- [ ] AC5: A summary by a model is the last resort: only when the code reductions cannot reach the budget, only for non-pinned fragments, only when the role cannot read handles (no tool use in its model profile) or the project allows it, and always with a handle to the full text. Every summary is recorded with the model that wrote it.
+- [x] AC5: A summary by a model is the last resort: only when the code reductions cannot reach the budget, only for non-pinned fragments, only when the role cannot read handles (no tool use in its model profile) or the project allows it, and always with a handle to the full text. Every summary is recorded with the model that wrote it.
 
 ### REQ-CTX-15 · Untrusted data blocks with a per-run boundary
 
@@ -264,7 +264,7 @@ its end.
 **Acceptance criteria**
 
 - [x] AC1: Fragments are ordered by fixed keys (layout section, priority, kind, source, hash); the stable part contains no timestamps or random values.
-- [ ] AC2: Summaries are cached by the hash of their input and the summariser's model and version; repeating a run uses the same summary, never a new one.
+- [x] AC2: Summaries are cached by the hash of their input and the summariser's model and version; repeating a run uses the same summary, never a new one.
 - [x] AC3: Each call records a snapshot: the ordered fragment hashes, the reductions, the run's block marker, the renderer version and the model profile version, and one hash over them that goes into the journal and the audit trail.
 - [ ] AC4: `qj reproduce` and `qj audit verify` rebuild the input of a recorded call from the snapshot and the run's files and report any difference by fragment.
 

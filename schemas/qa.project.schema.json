@@ -1639,7 +1639,8 @@
       "default": {
         "providers": {},
         "roles": {},
-        "cache_ttl": "auto"
+        "cache_ttl": "auto",
+        "context_summaries": "no-tools"
       },
       "type": "object",
       "properties": {
@@ -1820,6 +1821,15 @@
           "type": "integer",
           "exclusiveMinimum": 0,
           "maximum": 9007199254740991
+        },
+        "context_summaries": {
+          "default": "no-tools",
+          "type": "string",
+          "enum": [
+            "off",
+            "no-tools",
+            "allowed"
+          ]
         }
       },
       "additionalProperties": false

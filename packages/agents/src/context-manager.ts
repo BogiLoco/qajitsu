@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import {
+  CONTEXT_KINDS,
   fragment,
   QajitsuError,
   snapshotHash,
@@ -23,6 +24,8 @@ export const CONTEXT_RENDERER = "neutral-1";
 export const ROLE_CONTEXT: Readonly<Record<string, readonly ContextKind[]>> = {
   auditor: ["role-instructions", "plan", "result", "evidence", "question"],
   triage: ["role-instructions", "plan", "result", "evidence", "log", "question"],
+  // REQ-CTX-14/AC5: the summary role sees the one fragment it summarises, of any kind but another role's reasoning.
+  summary: CONTEXT_KINDS.filter((k) => k !== "catalogue" && k !== "analysis"),
   blocked: ["role-instructions", "plan", "result", "spec", "evidence", "log", "question"],
   // A judge of the plan: the change and the plan, never the analysis behind it (AC2).
   approver: [
@@ -137,6 +140,12 @@ export interface ContextManager {
      * and confirmed by code on their text; the later one waits behind a handle.
      */
     readonly nearDuplicates?: ReadonlyMap<string, string> | undefined;
+    /**
+     * Summaries by a model (REQ-CTX-14/AC5), by the hash of the fragment they replace; the full text waits behind a
+     * handle and the reduction names the model that wrote the summary.
+     */
+    readonly summaries?:
+      ReadonlyMap<string, { readonly fragment: ContextFragment; readonly model: string }> | undefined;
     /** The embedding model that gave the signals, and its version (REQ-CTX-20/AC6). */
     readonly embedding?: { readonly model: string; readonly version?: string | undefined } | undefined;
   }) => AssembledContext;
@@ -233,9 +242,19 @@ export function createContextManager(options: { readonly marker?: string } = {})
         .slice(0, limit)
         .map(({ handle, f }) => ({ handle, kind: f.kind, source: f.source, tokens: f.tokens }));
     },
-    assemble: ({ stage, role, model, fragments, budget, semantic, nearDuplicates, embedding }) => {
+    assemble: ({
+      stage,
+      role,
+      model,
+      fragments: given,
+      budget,
+      semantic,
+      nearDuplicates,
+      embedding,
+      summaries,
+    }) => {
       const allowed = ROLE_CONTEXT[role];
-      const refused = allowed ? fragments.filter((f) => !allowed.includes(f.kind)) : [];
+      const refused = allowed ? given.filter((f) => !allowed.includes(f.kind)) : [];
       if (refused.length > 0)
         throw new ContextRefusedError(
           "CONTEXT_REFUSED",
@@ -243,6 +262,19 @@ export function createContextManager(options: { readonly marker?: string } = {})
           { role, kinds: [...new Set(refused.map((f) => f.kind))], sources: refused.map((f) => f.source) },
         );
       const reductions: ContextSnapshot["reductions"] = [];
+      // REQ-CTX-14/AC5: a summary takes the place of a non-pinned fragment; the full text stays behind a handle.
+      const fragments = given.map((f) => {
+        const summary = f.pinned ? undefined : summaries?.get(f.sha256);
+        if (!summary) return f;
+        handles.set(handleOf(f), f);
+        reductions.push({
+          sha256: f.sha256,
+          action: "summarised",
+          reason: `summary by ${summary.model}; the full text is ${handleOf(f)}`,
+          tokensSaved: Math.max(0, f.tokens - summary.fragment.tokens),
+        });
+        return summary.fragment;
+      });
       // Duplicates: the same text twice is sent once (REQ-CTX-14/AC2).
       const seen = new Set<string>();
       const unique: ContextFragment[] = [];
@@ -347,7 +379,7 @@ export function createContextManager(options: { readonly marker?: string } = {})
         );
       const kept = [...inPrompt.values()].sort(order);
       const catalogue = [...handles.entries()]
-        .filter(([, f]) => fragments.some((x) => x.sha256 === f.sha256))
+        .filter(([, f]) => given.some((x) => x.sha256 === f.sha256))
         .map(([handle, f]) => ({
           handle,
           sha256: f.sha256,

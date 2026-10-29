@@ -122,6 +122,7 @@ function stageDeps(session: RunSession, ports: RuntimePorts): AgentStageDeps & {
     now: ports.now,
     maskJson: (v) => session.masker.maskJson(v),
     maskText: (t) => session.masker.maskText(t),
+    contextSummaries: session.project.config.models.context_summaries,
     save: () => saveRunUsage(session.ws, usage),
   };
 }
