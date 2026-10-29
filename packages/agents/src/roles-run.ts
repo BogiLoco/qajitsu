@@ -6,7 +6,8 @@ import {
   type ContextManager,
 } from "./context-manager.js";
 import type { McpClientLike, McpServers } from "./mcp.js";
-import { writeFile } from "node:fs/promises";
+import { mkdir, stat, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import {
   AnalysisSchema,
   ConfigError,
@@ -164,6 +165,7 @@ export async function assembleFor(
   }
   const summaries = await summariesFor(deps, call, context);
   if (summaries.size > 0) context = run(tokens, summaries);
+  await recordFragments(deps, call.fragments, context);
   deps.events.emit(call.stage, { kind: "agent", name: call.role }, "context.snapshot", {
     ...context.snapshot,
   });
@@ -205,6 +207,34 @@ export async function assembleFor(
         }
       : {}),
   };
+}
+
+/**
+ * Keeps the text of every fragment a call showed in the run, by its hash (`context/fragments/<sha256>.txt`), so the
+ * call's input can be rebuilt from its snapshot (REQ-CTX-17/AC4). A trimmed fragment is kept in full: trimming is code
+ * and is applied again. Content-addressed, so a text shared by many calls is written once.
+ */
+async function recordFragments(
+  deps: AgentStageDeps,
+  given: readonly ContextFragment[],
+  context: AssembledContext,
+): Promise<void> {
+  // Stages always have a workspace; a call assembled outside a run (a preview, a unit) has nothing to keep.
+  const ws = (deps as Partial<AgentStageDeps>).ws;
+  if (!ws) return;
+  const full = new Map(given.map((f) => [f.sha256, f.text]));
+  for (const f of context.shown ?? []) {
+    const file = ws.path("context", "fragments", `${f.sha256}.txt`);
+    if (
+      await stat(file).then(
+        () => true,
+        () => false,
+      )
+    )
+      continue;
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, full.get(f.sha256) ?? f.text, "utf8");
+  }
 }
 
 /** Over-budget fragments summarised per call at most: summaries are the last resort, not a pipeline. */

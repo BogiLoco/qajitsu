@@ -52,6 +52,8 @@ describe("reproduce a run from its certificate (REQ-VER-20)", () => {
     const before = JSON.parse(original) as { data: { approval: { sha256: string } } };
     const r = await p.run(["reproduce", p.runDir]);
     expect(r.err).toBe("");
+    // REQ-CTX-17/AC4: every model input of the certified run is rebuilt from its snapshot first.
+    expect(r.out).toMatch(/Model inputs: \d+ model input\(s\) rebuilt from their snapshots/);
     expect(r.out).toContain("TC-01: FAILED → FAILED  same");
     expect(r.out).toContain("TC-02: PASSED → PASSED  same");
     expect(r.out).toMatch(/Certificate qjc-[0-9a-f]{20}/);

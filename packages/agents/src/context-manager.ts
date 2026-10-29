@@ -102,6 +102,8 @@ export interface AssembledContext {
   readonly system: string;
   readonly prompt: string;
   readonly snapshot: ContextSnapshot;
+  /** The fragments the call shows, in their final order and text (trimmed or summarised), for recording. */
+  readonly shown?: readonly ContextFragment[];
   /** `read_context` and `search_context` over the run's catalogue, added by the caller that knows the journal. */
   readonly tools?: readonly AgentTool[];
   /**
@@ -162,6 +164,36 @@ export interface ContextManager {
   ): { handle: string; kind: string; source: string; tokens: number }[];
 }
 
+/**
+ * Renders the fragments a call shows, in their order (REQ-CTX-12/AC2, REQ-CTX-15/AC1): role instructions and the data
+ * rules form the system message; untrusted fragments become data blocks with the run's marker, which their content can
+ * never carry; trusted text keeps its own heading or gets one. Pure, so a recorded call can be rebuilt (REQ-CTX-17/AC4).
+ *
+ * @param marker - The run's block marker.
+ * @param shown - The call's fragments in their final order and text.
+ */
+export function renderFragments(
+  marker: string,
+  shown: readonly ContextFragment[],
+): { readonly system: string; readonly prompt: string } {
+  const markerPattern = new RegExp(marker, "gi");
+  const neutral = (text: string): string => text.replace(markerPattern, "[marker removed]");
+  const render = (f: ContextFragment): string =>
+    f.trust === "untrusted"
+      ? `<data-${marker} kind="${f.kind}" source="${f.source.replace(/"/g, "'")}">\n${neutral(f.text)}\n</data-${marker}>`
+      : f.kind === "question" || f.kind === "catalogue" || f.text.startsWith("#")
+        ? f.text
+        : `## ${f.kind}: ${f.source}\n${f.text}`;
+  const instructions = shown.filter((f) => f.kind === "role-instructions");
+  return {
+    system: [...instructions.map((f) => f.text), dataRules(marker)].join("\n"),
+    prompt: shown
+      .filter((f) => f.kind !== "role-instructions")
+      .map(render)
+      .join("\n\n"),
+  };
+}
+
 /** The rule every role reads about data blocks (REQ-CTX-15/AC2). */
 export const dataRules = (marker: string): string =>
   [
@@ -209,13 +241,6 @@ export function createContextManager(options: { readonly marker?: string } = {})
   const neutral = (text: string): string => text.replace(markerPattern, "[marker removed]");
   const block = (kind: string, source: string, text: string): string =>
     `${open} kind="${kind}" source="${source.replace(/"/g, "'")}">\n${neutral(text)}\n${close}`;
-  // Trusted text that brings its own heading keeps it; other trusted text is headed by its kind and source.
-  const render = (f: ContextFragment): string =>
-    f.trust === "untrusted"
-      ? block(f.kind, f.source, f.text)
-      : f.kind === "question" || f.kind === "catalogue" || f.text.startsWith("#")
-        ? f.text
-        : `## ${f.kind}: ${f.source}\n${f.text}`;
   /** Every fragment put behind a handle in this run, for `read_context` and `search_context`. */
   const handles = new Map<string, ContextFragment>();
   return {
@@ -410,10 +435,7 @@ export function createContextManager(options: { readonly marker?: string } = {})
               }),
             ].sort(order)
           : kept;
-      const instructions = shown.filter((f) => f.kind === "role-instructions");
-      const rest = shown.filter((f) => f.kind !== "role-instructions");
-      const system = [...instructions.map((f) => f.text), dataRules(marker)].join("\n");
-      const prompt = rest.map(render).join("\n\n");
+      const { system, prompt } = renderFragments(marker, shown);
       const tokensByKind: Record<string, number> = {};
       for (const f of shown) tokensByKind[f.kind] = (tokensByKind[f.kind] ?? 0) + f.tokens;
       const unsigned = {
@@ -471,7 +493,7 @@ export function createContextManager(options: { readonly marker?: string } = {})
           }))
           .sort((a, b) => (a.sha256 < b.sha256 ? -1 : 1)),
       };
-      return { system, prompt, snapshot: { ...unsigned, sha256: snapshotHash(unsigned) } };
+      return { system, prompt, snapshot: { ...unsigned, sha256: snapshotHash(unsigned) }, shown };
     },
   };
 }

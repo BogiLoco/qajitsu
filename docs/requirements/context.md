@@ -256,7 +256,7 @@ its end.
 
 ### REQ-CTX-17 · Deterministic context and its snapshot
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: later
 - Related: REQ-VER-16, REQ-VER-20, REQ-CTX-12, ADR-0014
@@ -266,7 +266,7 @@ its end.
 - [x] AC1: Fragments are ordered by fixed keys (layout section, priority, kind, source, hash); the stable part contains no timestamps or random values.
 - [x] AC2: Summaries are cached by the hash of their input and the summariser's model and version; repeating a run uses the same summary, never a new one.
 - [x] AC3: Each call records a snapshot: the ordered fragment hashes, the reductions, the run's block marker, the renderer version and the model profile version, and one hash over them that goes into the journal and the audit trail.
-- [ ] AC4: `qj reproduce` and `qj audit verify` rebuild the input of a recorded call from the snapshot and the run's files and report any difference by fragment.
+- [x] AC4: `qj reproduce` and `qj audit verify` rebuild the input of a recorded call from the snapshot and the run's files and report any difference by fragment.
 
 ### REQ-CTX-18 · Context metrics and context-policy benchmark
 
