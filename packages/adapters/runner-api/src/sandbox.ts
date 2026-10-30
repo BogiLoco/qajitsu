@@ -1,6 +1,6 @@
 import { annotateImage } from "./annotate.js";
 import { pausedStep, startDeadline } from "./deadline.js";
-import type { AttemptExecutor as CoreAttemptExecutor } from "@qajitsu/core";
+import { plannedFields, type AttemptExecutor as CoreAttemptExecutor } from "@qajitsu/core";
 import { fork } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { dirname } from "node:path";
@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   createCaseRuntime,
   createMasker,
+  createPlanAccessor,
   type ApiTransport,
   type AttemptRecord,
   type CaseRuntime,
@@ -182,19 +183,23 @@ const OpSchema = z.discriminatedUnion("op", [
 ]);
 const DoneSchema = z.strictObject({ type: z.literal("done"), error: z.string().max(10_000).optional() });
 
-/** Expectations of one case, keyed `<case>.<step>.<field>`, for `plan.expect` in the child. */
+/**
+ * Expectations of one case, keyed `<case>.<step>.<field>`, for `plan.expect` in the child: the description and every
+ * field the step plans (the same list the static checks require), read like the runtime reads them. The values are
+ * documentation for the spec; the parent evaluates every `verify()` against the plan itself (ADR-0004).
+ */
 const expectationsOf = (input: AttemptInput): Record<string, unknown> => {
   const out: Record<string, unknown> = {};
+  const accessor = createPlanAccessor(input.plan, input.caseId);
   const c = input.plan.cases.find((x) => x.id === input.caseId);
   for (const s of c?.steps ?? []) {
     const p = `${input.caseId}.${s.id}`;
-    out[`${p}.description`] = s.expect.description;
-    if (s.expect.status !== undefined) out[`${p}.status`] = s.expect.status;
-    for (const [k, v] of Object.entries(s.expect.fields ?? {})) out[`${p}.fields.${k}`] = v;
-    (s.expect.texts ?? []).forEach((t, i) => (out[`${p}.texts.${String(i)}`] = t));
-    for (const [selector, state] of Object.entries(s.expect.elements ?? {})) {
-      for (const [prop, value] of Object.entries(state)) out[`${p}.elements.${selector}.${prop}`] = value;
-    }
+    for (const field of ["description", ...plannedFields(s.expect)])
+      try {
+        out[`${p}.${field}`] = accessor.expect(`${p}.${field}`);
+      } catch {
+        // A field the accessor cannot read stays out; the spec's plan.expect() then errors, never passes.
+      }
   }
   return out;
 };
