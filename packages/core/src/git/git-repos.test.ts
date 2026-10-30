@@ -60,6 +60,28 @@ describe("git repos (REQ-CTX-04)", () => {
     expect(second).not.toBe(third);
   });
 
+  it("REQ-CTX-04/AC1: a damaged mirror in the cache is rebuilt from the origin instead of failing the fetch", async () => {
+    const repos = createGitRepos({ cacheDir: join(dir, "cache"), exec });
+    const url = pathToFileURL(origin).href;
+    const mirror = await repos.ensureMirror("local", "demo-org/shop", url);
+    // Partly removed, e.g. by a cleaner of temporary folders: the folder is there, its HEAD is not.
+    await rm(join(mirror, "HEAD"));
+    expect(await repos.ensureMirror("local", "demo-org/shop", url)).toBe(mirror);
+    const wt = await repos.addWorktree(mirror, second, join(dir, "run", "repos", "shop"), url);
+    expect(await readFile(join(wt, "app.txt"), "utf8")).toBe("v2");
+    // HEAD is there but the objects and refs are gone: the update fails, so the mirror is cloned again.
+    await rm(join(mirror, "objects"), { recursive: true, force: true });
+    await rm(join(mirror, "refs"), { recursive: true, force: true });
+    await rm(join(mirror, "packed-refs"), { force: true });
+    await repos.ensureMirror("local", "demo-org/shop", url);
+    expect(await git(mirror, "rev-parse", "main")).toBe(second);
+    // An origin that cannot be reached fails as before, and a healthy mirror is kept for the next try.
+    await expect(
+      repos.ensureMirror("local", "demo-org/shop", pathToFileURL(join(dir, "gone")).href),
+    ).rejects.toMatchObject({ code: "GIT_FAILED" });
+    expect(await git(mirror, "rev-parse", "main")).toBe(second);
+  });
+
   it("REQ-VER-11/AC1: finds the commit a change branched from (the version before the fix)", async () => {
     // main: first, second; fix branch from second with one commit; main moves on afterwards.
     await git(origin, "checkout", "-qb", "fix/SHOP-1");

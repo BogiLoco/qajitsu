@@ -96,7 +96,15 @@ describe("analyst and planner (REQ-PLAN-01..05, REQ-LLM-03)", () => {
     expect(JSON.parse(await readFile(ws.path("analysis.json"), "utf8"))).toEqual(result);
     expect(promptOf(analyst, 1)).toContain("1: export function total()");
     const events = parseEventLines(lines.join("")).events.map((e) => e.event);
-    expect(events).toEqual(["stage.start", "tool_allowed", "tool_result", "model.usage", "stage.end"]);
+    // REQ-CTX-17/AC3: the input's snapshot is journaled before the call.
+    expect(events).toEqual([
+      "stage.start",
+      "context.snapshot",
+      "tool_allowed",
+      "tool_result",
+      "model.usage",
+      "stage.end",
+    ]);
   });
 
   it("REQ-PLAN-01/AC2: ungrounded claims are sent back for repair", async () => {
@@ -239,7 +247,7 @@ describe("analyst and planner (REQ-PLAN-01..05, REQ-LLM-03)", () => {
     );
     const plan = await writePlanVersion(ws, value);
     expect(plan.cases.map((c) => c.id)).toEqual(["TC-01", "TC-02"]);
-    expect(promptOf(planner, 0)).toContain("## Analysis");
+    expect(promptOf(planner, 0)).toMatch(/kind=\\"analysis\\" source=\\"analysis.json\\"/);
   });
 
   it("REQ-PLAN-04/AC1: a revision passes the current plan and the reviewer's instruction", async () => {
@@ -260,7 +268,7 @@ describe("analyst and planner (REQ-PLAN-01..05, REQ-LLM-03)", () => {
     );
     expect(revised.cases).toHaveLength(1);
     expect(promptOf(reviser, 0)).toContain("Drop TC-02, it duplicates TC-01.");
-    expect(promptOf(reviser, 0)).toContain("Current plan v1");
+    expect(promptOf(reviser, 0)).toContain("The data block plan.v1 above is the current plan");
   });
 
   it("REQ-LLM-03/AC3: a role cannot run on a model missing a required capability", async () => {

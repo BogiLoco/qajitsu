@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { AdapterError } from "../errors.js";
 
@@ -155,12 +155,31 @@ export function createGitRepos(options: { readonly cacheDir: string; readonly ex
       }
       const mirror = join(cacheDir, hostAlias, `${repoPath}.git`);
       const { url, env } = splitCredentials(cloneUrl);
-      if (await exists(join(mirror, "HEAD"))) {
-        await run(["-C", mirror, "remote", "set-url", "origin", url], "remote set-url", {}, signal);
-        await run(["-C", mirror, "fetch", "--prune", "origin"], "fetch", env, signal);
-      } else {
+      // The mirror is a cache: a damaged one (partly removed, objects missing) is cloned again from the origin.
+      const clone = async (): Promise<void> => {
+        await rm(mirror, { recursive: true, force: true });
         await mkdir(dirname(mirror), { recursive: true });
         await run(["clone", "--mirror", "--", url, mirror], "clone --mirror", env, signal);
+      };
+      const healthy = async (): Promise<boolean> => {
+        try {
+          await exec(["-C", mirror, "rev-parse", "--verify", "--quiet", "HEAD^{commit}"]);
+          return true;
+        } catch {
+          return false;
+        }
+      };
+      if (!(await exists(join(mirror, "HEAD")))) {
+        await clone();
+        return mirror;
+      }
+      try {
+        await run(["-C", mirror, "remote", "set-url", "origin", url], "remote set-url", {}, signal);
+        await run(["-C", mirror, "fetch", "--prune", "origin"], "fetch", env, signal);
+      } catch (error) {
+        // An origin that cannot be reached is reported; a healthy mirror is kept for the next try (offline use).
+        if (signal?.aborted || (await healthy())) throw error;
+        await clone();
       }
       return mirror;
     },

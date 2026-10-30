@@ -2,7 +2,8 @@ import type { ModelCapabilities } from "@qajitsu/core";
 
 /** Definition of one agent role: what it does, which tools it gets and what its model must support. */
 export interface AgentRoleDefinition {
-  readonly role: "analyst" | "planner" | "author" | "healer" | "auditor" | "explorer" | "triage" | "approver";
+  readonly role:
+    "analyst" | "planner" | "author" | "healer" | "auditor" | "explorer" | "triage" | "approver" | "summary";
   readonly purpose: string;
   /** Tool names allowed for this role; everything else is denied by the guard (REQ-VER-03). */
   readonly tools: readonly string[];
@@ -18,14 +19,22 @@ export const AGENT_ROLES: readonly AgentRoleDefinition[] = [
     role: "analyst",
     purpose:
       "Classify the change (api/web/mobile/mixed), find affected endpoints and screens, list regression risks.",
-    tools: ["read_file", "search_code", "list_files", "search_docs"],
+    tools: ["read_context", "search_context", "read_file", "search_code", "list_files", "search_docs"],
     requires: { tools: true, structuredOutput: true, contextWindow: 64_000 },
     requirements: ["REQ-PLAN-01", "REQ-CTX-05", "REQ-KNOW-06"],
   },
   {
     role: "planner",
     purpose: "Write the structured test plan with grounded sources and open questions.",
-    tools: ["read_file", "search_code", "list_files", "search_docs", "write_plan"],
+    tools: [
+      "read_context",
+      "search_context",
+      "read_file",
+      "search_code",
+      "list_files",
+      "search_docs",
+      "write_plan",
+    ],
     requires: { tools: true, structuredOutput: true, contextWindow: 64_000 },
     requirements: ["REQ-PLAN-02", "REQ-PLAN-03", "REQ-PLAN-05", "REQ-KNOW-06"],
   },
@@ -33,14 +42,23 @@ export const AGENT_ROLES: readonly AgentRoleDefinition[] = [
     role: "author",
     purpose:
       "Turn approved cases into executable specs using @qajitsu/steps; explore the app through MCP for selectors.",
-    tools: ["read_file", "search_code", "list_files", "write_file", "browser_navigate", "browser_snapshot"],
+    tools: [
+      "read_context",
+      "search_context",
+      "read_file",
+      "search_code",
+      "list_files",
+      "write_file",
+      "browser_navigate",
+      "browser_snapshot",
+    ],
     requires: { tools: true, structuredOutput: true, contextWindow: 128_000 },
     requirements: ["REQ-EXEC-01", "REQ-EXEC-02"],
   },
   {
     role: "healer",
     purpose: "Fix selectors and waits in failing specs only; assertions are locked.",
-    tools: ["read_file", "write_file", "browser_snapshot"],
+    tools: ["read_context", "search_context", "read_file", "write_file", "browser_snapshot"],
     requires: { tools: true, contextWindow: 64_000 },
     requirements: ["REQ-EXEC-09"],
   },
@@ -48,14 +66,14 @@ export const AGENT_ROLES: readonly AgentRoleDefinition[] = [
     role: "approver",
     purpose:
       "Check a plan against the ticket, its sources and what code found; approve, ask for a revision or hand over to a person. Never approves a plan code flagged.",
-    tools: [],
+    tools: ["read_context", "search_context"],
     requires: { structuredOutput: true, contextWindow: 64_000 },
     requirements: ["REQ-PLAN-10"],
   },
   {
     role: "auditor",
     purpose: "Independently compare plan, results and evidence; can only downgrade PASSED to NEEDS_REVIEW.",
-    tools: ["read_file", "list_files", "view_image"],
+    tools: ["read_context", "search_context", "read_file", "list_files", "view_image"],
     requires: { tools: true, structuredOutput: true, vision: true, contextWindow: 128_000 },
     requirements: ["REQ-VER-06"],
   },
@@ -64,6 +82,8 @@ export const AGENT_ROLES: readonly AgentRoleDefinition[] = [
     purpose:
       "Explore the application or a command-line tool towards a session goal through actions the trusted parent performs and records; report observations, never statuses.",
     tools: [
+      "read_context",
+      "search_context",
       "explore_look",
       "explore_goto",
       "explore_click",
@@ -90,9 +110,17 @@ export const AGENT_ROLES: readonly AgentRoleDefinition[] = [
     role: "triage",
     purpose:
       "Suggest the likely cause of each FAILED case (product bug, test bug, environment, data) citing evidence; never a status.",
-    tools: ["read_file", "list_files"],
+    tools: ["read_context", "search_context", "read_file", "list_files"],
     requires: { tools: true, structuredOutput: true, contextWindow: 32_000 },
     requirements: ["REQ-VER-12"],
+  },
+  {
+    role: "summary",
+    purpose:
+      "Summarise one piece of context that does not fit a role that cannot read handles; the last resort after every code reduction.",
+    tools: [],
+    requires: { structuredOutput: true, contextWindow: 32_000 },
+    requirements: ["REQ-CTX-14", "REQ-CTX-17"],
   },
 ];
 

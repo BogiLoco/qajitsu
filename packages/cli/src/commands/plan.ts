@@ -18,6 +18,7 @@ import {
   ConfigError,
   DepthSchema,
   applyDepth,
+  collectLessons,
   PlanDraftSchema,
   QajitsuError,
   approvePlan,
@@ -121,6 +122,7 @@ function stageDeps(session: RunSession, ports: RuntimePorts): AgentStageDeps & {
     now: ports.now,
     maskJson: (v) => session.masker.maskJson(v),
     maskText: (t) => session.masker.maskText(t),
+    contextSummaries: session.project.config.models.context_summaries,
     save: () => saveRunUsage(session.ws, usage),
   };
 }
@@ -384,7 +386,11 @@ export async function runPlan(
     }
     const docs = await openRunKnowledge(session.project, masker, session.resolveSecret, io, ports);
     closeKnowledge = docs.close;
-    const deps = { ...stageDeps(session, ports), ...(docs.access ? { knowledge: docs.access } : {}) };
+    const deps = {
+      ...stageDeps(session, ports),
+      ...(docs.access ? { knowledge: docs.access } : {}),
+      ...(docs.semantic ? { semantic: docs.semantic } : {}),
+    };
     saveUsage = deps.save;
     const depthOption = options.depth === undefined ? undefined : DepthSchema.safeParse(options.depth);
     if (depthOption && !depthOption.success)
@@ -400,6 +406,8 @@ export async function runPlan(
       indexCache: codeIndexCache(session.project),
       testIdAttribute: session.project.config.web.test_id_attribute,
     });
+    // REQ-CTX-20/AC5: what people taught earlier runs of the project reaches the analyst and planner as context.
+    context = { ...context, lessons: await collectLessons(ws.root, { exclude: ws.runId }) };
     let analysis: Analysis;
     try {
       analysis = AnalysisSchema.parse(JSON.parse(await readFile(ws.path("analysis.json"), "utf8")));

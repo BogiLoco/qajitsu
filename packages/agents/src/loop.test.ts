@@ -1,3 +1,5 @@
+import { fragment } from "@qajitsu/core";
+import { createContextManager } from "./context-manager.js";
 import { checkTranscript, createEventLog, createTranscript, parseEventLines } from "@qajitsu/core";
 import { DEFAULT_PROTECTED_PATHS, createGuard, createJournal } from "@qajitsu/guard";
 import { describe, expect, it } from "vitest";
@@ -5,6 +7,37 @@ import { z } from "zod";
 import { promptOf, scriptedModel } from "../../../tests/support/mock-model.js";
 import { decodingSchema, extractJson, runStructuredAgent, type AgentTool } from "./loop.js";
 import { createUsageTracker } from "./usage.js";
+
+/** A matcher typed as unknown, for fields whose exact text the context manager extends. */
+const containing = (text: string): unknown => expect.stringContaining(text);
+
+/** A call's input as the context manager builds it, for tests that check the loop itself. */
+const testContext = (system: string, prompt: string) =>
+  createContextManager({ marker: "testmarker00" }).assemble({
+    stage: "test",
+    role: "tester",
+    model: "mock/m",
+    fragments: [
+      fragment({
+        kind: "role-instructions",
+        source: "tester",
+        trust: "trusted",
+        section: "stable",
+        priority: 100,
+        pinned: true,
+        text: system,
+      }),
+      fragment({
+        kind: "question",
+        source: "question",
+        trust: "trusted",
+        section: "varying",
+        priority: 0,
+        pinned: true,
+        text: prompt,
+      }),
+    ],
+  });
 
 const now = (): Date => new Date("2026-10-03T12:00:00Z");
 const setup = (budget?: number) => {
@@ -79,8 +112,7 @@ describe("structured agent loop (REQ-LLM-04, REQ-VER-03/AC3)", () => {
       stage: "analyze",
       role: "analyst",
       model,
-      system: "s",
-      prompt: "p",
+      context: testContext("s", "p"),
       schema: Answer,
       tools,
       guard,
@@ -114,8 +146,7 @@ describe("structured agent loop (REQ-LLM-04, REQ-VER-03/AC3)", () => {
       stage: "analyze",
       role: "analyst",
       model,
-      system: "You analyse.",
-      prompt: "Ticket text with s3cret-token inside",
+      context: testContext("You analyse.", "Ticket text with s3cret-token inside"),
       schema: Answer,
       tools,
       guard,
@@ -129,7 +160,7 @@ describe("structured agent loop (REQ-LLM-04, REQ-VER-03/AC3)", () => {
       role: "analyst",
       model: model.id,
       request: {
-        system: "You analyse.",
+        system: containing("You analyse."),
         messages: [{ role: "user", content: "Ticket text with *** inside" }],
       },
       response: {
@@ -160,8 +191,7 @@ describe("structured agent loop (REQ-LLM-04, REQ-VER-03/AC3)", () => {
       stage: "s",
       role: "analyst",
       model,
-      system: "s",
-      prompt: "p",
+      context: testContext("s", "p"),
       schema: Answer,
       guard,
       usage,
@@ -179,8 +209,7 @@ describe("structured agent loop (REQ-LLM-04, REQ-VER-03/AC3)", () => {
         stage: "s",
         role: "planner",
         model,
-        system: "s",
-        prompt: "p",
+        context: testContext("s", "p"),
         schema: Answer,
         usage,
         validate: (v) => (v.answer === 42 ? [] : ["answer must be grounded"]),
@@ -200,8 +229,7 @@ describe("structured agent loop (REQ-LLM-04, REQ-VER-03/AC3)", () => {
       stage: "s",
       role: "analyst",
       model,
-      system: "s",
-      prompt: "p",
+      context: testContext("s", "p"),
       schema: Answer,
       tools,
       guard,
@@ -217,8 +245,7 @@ describe("structured agent loop (REQ-LLM-04, REQ-VER-03/AC3)", () => {
       stage: "plan",
       role: "planner",
       model,
-      system: "s",
-      prompt: "p",
+      context: testContext("s", "p"),
       schema: Answer,
       usage,
     });
@@ -245,8 +272,7 @@ describe("structured agent loop (REQ-LLM-04, REQ-VER-03/AC3)", () => {
         stage: "plan",
         role: "planner",
         model,
-        system: "s",
-        prompt: "p",
+        context: testContext("s", "p"),
         schema: Answer,
         usage,
       }),
@@ -272,8 +298,7 @@ describe("structured agent loop (REQ-LLM-04, REQ-VER-03/AC3)", () => {
       stage: "s",
       role: "analyst",
       model,
-      system: "s",
-      prompt: "p",
+      context: testContext("s", "p"),
       schema: Answer,
       tools: [failing],
       guard,
@@ -296,8 +321,7 @@ describe("structured agent loop (REQ-LLM-04, REQ-VER-03/AC3)", () => {
       stage: "s",
       role: "analyst",
       model,
-      system: "s",
-      prompt: "p",
+      context: testContext("s", "p"),
       schema: Answer,
       tools,
       guard,
@@ -316,8 +340,7 @@ describe("structured agent loop (REQ-LLM-04, REQ-VER-03/AC3)", () => {
       stage: "s",
       role: "analyst",
       model,
-      system: "s",
-      prompt: "p",
+      context: testContext("s", "p"),
       schema: Answer,
       usage,
     });
@@ -357,8 +380,7 @@ describe("structured agent loop (REQ-LLM-04, REQ-VER-03/AC3)", () => {
       stage: "s",
       role: "analyst",
       model,
-      system: "s",
-      prompt: "p",
+      context: testContext("s", "p"),
       schema: Answer,
       usage,
     });

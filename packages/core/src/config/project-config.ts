@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CONTEXT_KINDS, type ContextKind } from "../context/fragments.js";
 import { ConfigError } from "../errors.js";
 import { TEST_STATUSES } from "../status.js";
 import { MobileSchema } from "./mobile.js";
@@ -27,6 +28,13 @@ const CapabilityOverrideSchema = z.strictObject({
   structured_output: z.boolean().optional(),
   vision: z.boolean().optional(),
   context_window: z.number().int().positive().optional(),
+  /**
+   * Input that still works well for this model (REQ-LLM-15/AC1), e.g. measured with `qj bench`; the context manager
+   * plans every call within it.
+   */
+  working_range: z.number().int().positive().optional(),
+  /** `compact` sends small models fewer fragments at once (REQ-LLM-15/AC4). */
+  context_style: z.enum(["full", "compact"]).optional(),
   /**
    * Thinking mode of a reasoning model on Ollama (e.g. Qwen3, DeepSeek-R1), sent as `think`. Some models answer tool
    * requests only when it is set explicitly: without it Qwen3 thinks and returns neither text nor a tool call.
@@ -479,8 +487,33 @@ export const ProjectConfigSchema = z.strictObject({
       cache_ttl: z.enum(["auto", "5m", "1h", "off"]).default("auto"),
       /** Most input tokens one model call may send (REQ-LLM-12/AC4); larger calls are stopped with the reason. */
       max_input_tokens: z.number().int().positive().optional(),
+      /**
+       * Summaries by the `summary` model of context that does not fit (REQ-CTX-14/AC5), the last resort after every
+       * code reduction: `no-tools` only for a role whose model cannot read handles, `allowed` for every role, `off`
+       * never. Summaries are cached by input hash, model and prompt version (REQ-CTX-17/AC2).
+       */
+      context_summaries: z.enum(["off", "no-tools", "allowed"]).default("no-tools"),
+      /**
+       * Shares of a call's context budget per source kind (REQ-CTX-14/AC1), e.g. `{ diff: 0.5, knowledge: 0.2 }`: over
+       * the budget, a kind over its share is reduced first. Shares a kind does not use go to the others, and a call
+       * that fits is sent whole. They add up to at most 1.
+       */
+      context_shares: z
+        .partialRecord(
+          z.enum(
+            CONTEXT_KINDS.filter((k) => !["role-instructions", "question", "catalogue"].includes(k)) as [
+              ContextKind,
+              ...ContextKind[],
+            ],
+          ),
+          z.number().gt(0).max(1),
+        )
+        .refine((shares) => Object.values(shares).reduce((a, b) => a + b, 0) <= 1.000001, {
+          message: "context_shares add up to at most 1",
+        })
+        .optional(),
     })
-    .default({ providers: {}, roles: {}, cache_ttl: "auto" }),
+    .default({ providers: {}, roles: {}, cache_ttl: "auto", context_summaries: "no-tools" }),
   /**
    * Scripts from `.qa/hooks/` around every run (REQ-GEN-01/AC2): `setup` after the environment is healthy and
    * before the cases (a failure makes every case BLOCKED), `teardown` after the cases (a failure is a warning).

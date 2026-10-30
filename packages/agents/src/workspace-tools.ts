@@ -77,8 +77,20 @@ async function* walk(root: string, dir: string): AsyncGenerator<string> {
 export function createReadOnlyTools(options: {
   readonly root: string;
   readonly mask: (text: string) => string;
+  /**
+   * Wraps what a tool returns in a data block with the run's marker (REQ-CTX-15/AC1): a file or a search hit cannot
+   * pose as the end of a block or as instructions. Without it the text is returned as it is.
+   */
+  readonly wrap?: ((source: string, text: string) => string) | undefined;
 }): AgentTool[] {
-  const { root, mask } = options;
+  const { root } = options;
+  const wrap = options.wrap ?? ((_source: string, text: string) => text);
+  let call = 0;
+  // Masked first, then wrapped: the block marker is never masked away.
+  const mask = (text: string): string => {
+    call += 1;
+    return wrap(`tool:${String(call)}`, options.mask(text));
+  };
   return [
     {
       name: "read_file",

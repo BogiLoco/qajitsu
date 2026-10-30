@@ -75,7 +75,7 @@ describe("tests repository index (REQ-CTX-06)", () => {
     expect(index.conventions.map((c) => c.file)).toEqual(["README.md", "CONTRIBUTING.md"]);
   });
 
-  it("REQ-CTX-06/AC2: the rendered index is bounded and wrapped as untrusted data", async () => {
+  it("REQ-CTX-06/AC2: the rendered index is bounded; the context manager wraps it as untrusted data", async () => {
     const many = Object.fromEntries(
       Array.from({ length: 400 }, (_, i) => [
         `tests/t${String(i)}.spec.ts`,
@@ -84,7 +84,6 @@ describe("tests repository index (REQ-CTX-06)", () => {
     );
     const text = renderTestsRepo("e2e", await indexTestsRepo(await repo({ ...SHOP_TESTS, ...many })));
     expect(text.length).toBeLessThan(25_000);
-    expect(text).toContain('<untrusted_data source="tests-repo.e2e">');
     expect(text).toContain("more test files not listed");
     expect(text).toContain("Preferred selectors: getByTestId");
   });

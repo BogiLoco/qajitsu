@@ -1,5 +1,6 @@
-import { estimateInputTokens, type ResolvedModel } from "@qajitsu/models";
+import { estimateInputTokens, renderForProvider, type ResolvedModel } from "@qajitsu/models";
 import type { ModelMessage, SystemModelMessage } from "ai";
+import type { AssembledContext } from "./context-manager.js";
 import { AgentInputTooLargeError } from "./errors.js";
 
 /** The parts of a model call that `prepareCall` arranges. */
@@ -31,15 +32,16 @@ const textsOf = (messages: readonly ModelMessage[]): { texts: string[]; images: 
  * breakpoint, so repairs and later calls reuse it (AC1). Provider details stay in `@qajitsu/models` (AC5).
  *
  * @param model - The resolved model.
- * @param system - The role's instructions.
+ * @param context - The input assembled by the context manager (REQ-CTX-11/AC3); its system message is used.
  * @param messages - The conversation so far.
  * @throws {AgentInputTooLargeError} `MODEL_INPUT_TOO_LARGE` with the estimate and the limit.
  */
 export function prepareCall(
   model: ResolvedModel,
-  system: string,
+  context: Pick<AssembledContext, "system" | "snapshot">,
   messages: readonly ModelMessage[],
 ): PreparedCall {
+  const system = context.system;
   const { texts, images } = textsOf(messages);
   const estimate = estimateInputTokens([system, ...texts], images);
   if (model.inputLimit && estimate > model.inputLimit.limit)
@@ -48,11 +50,7 @@ export function prepareCall(
       `The call to ${model.id} would send about ${String(estimate)} input tokens, over ${String(model.inputLimit.limit)} (${model.inputLimit.why}); nothing was sent. Narrow the context or raise the limit.`,
       { model: model.id, estimate, limit: model.inputLimit.limit, why: model.inputLimit.why },
     );
-  if (!model.cacheOptions) return { system, messages: [...messages] };
-  const providerOptions = model.cacheOptions;
-  const [first, ...rest] = messages;
-  return {
-    system: { role: "system" as const, content: system, providerOptions },
-    messages: [...(first ? [{ ...first, providerOptions } as ModelMessage] : []), ...rest],
-  };
+  // REQ-LLM-15/AC3: the provider's form (cache breakpoints) is the models package's business.
+  const rendered = renderForProvider(model, system, messages);
+  return { system: rendered.system, messages: rendered.messages };
 }

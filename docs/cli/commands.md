@@ -884,6 +884,10 @@ Makes real model calls; never in PR CI.
 - `--knowledge <mode>`: `on` (default; the knowledge base when the project has one), `off`, or `compare`: every case
   runs without and then with the knowledge base, and the report shows the difference in detection, false FAILED,
   BLOCKED and plans accepted without edits (REQ-KNOW-11)
+- `--context <policies>`: every case runs once per context policy, comma-separated: `default`, `full`, `compact`,
+  `range=<tokens>` (a working range of at least 1000 tokens for every model), or a combination joined by `+`
+  (`compact+range=16000`). The report compares detection, false FAILED, plan acceptance, criterion coverage, tokens,
+  cost and time per policy and names the cheapest policy that keeps the best quality (REQ-CTX-18/AC2)
 
 Exit codes: `0` the benchmark completed (whatever the scores), `3` configuration errors.
 
@@ -965,13 +969,15 @@ Exit codes: `0` shown or decided, `2` no spec to review, `3` errors (also after 
 
 ### `qajitsu audit verify [ticket]`
 
-Checks the hash chain of run journals, also archived ones.
+Checks the hash chain of run journals, also archived ones. For a live run it also checks the approval records and
+rebuilds the input of every model call from its context snapshot and the fragment texts the run kept, naming each
+fragment that changed or is missing (REQ-CTX-17/AC4).
 
 - `--run <id>`: run id (default: latest run of the ticket)
 - `--all`: every run of the ticket
 - `--file <journal>`: verify this journal file instead
 
-Exit codes: `0` every journal intact, `1` a chain is broken, `3` errors.
+Exit codes: `0` every journal intact, `1` a chain is broken or a record or model input differs, `3` errors.
 
 ### `qajitsu audit trail <ticket>`
 
@@ -1083,7 +1089,9 @@ Exit codes: `0` exported, `3` telemetry not configured or the export failed.
 
 ### `qajitsu metrics`
 
-Metrics over every run, as Prometheus text or JSON, for dashboards and alerts.
+Metrics over every run, as Prometheus text or JSON, for dashboards and alerts. Context usage per role and model
+(REQ-CTX-18/AC1): `qajitsu_context_input_tokens` by fragment kind, `qajitsu_context_reductions` by action,
+`qajitsu_context_calls`, `qajitsu_context_reads`, `qajitsu_context_searches` and `qajitsu_context_cache_hit_ratio`.
 
 - `--format <format>`: `prometheus` (default) or `json`
 - `--out <file>`: write to a file atomically, e.g. for the node_exporter textfile collector

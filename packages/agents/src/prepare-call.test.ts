@@ -1,9 +1,21 @@
+import { createContextManager } from "./context-manager.js";
 import { createModelRegistry } from "@qajitsu/models";
 import { generateText } from "ai";
 import { describe, expect, it } from "vitest";
 import { scriptedModel } from "../../../tests/support/mock-model.js";
 import { prepareCall } from "./prepare-call.js";
 import { callUsage } from "./usage.js";
+
+/** prepareCall takes an assembled context: its system message and snapshot. */
+const ctx = (system: string) => ({
+  system,
+  snapshot: createContextManager({ marker: "testmarker00" }).assemble({
+    stage: "t",
+    role: "t",
+    model: "m",
+    fragments: [],
+  }).snapshot,
+});
 
 /** An Anthropic provider whose HTTP calls are captured and answered with a recorded-shape message. */
 const anthropic = (cacheTtl: "5m" | "1h" | "off") => {
@@ -35,6 +47,7 @@ const anthropic = (cacheTtl: "5m" | "1h" | "off") => {
       providers: { claude: { type: "anthropic", api_key: "secret://env/KEY", models: {} } },
       roles: { default: "claude/claude-sonnet-5-5" },
       cache_ttl: cacheTtl,
+      context_summaries: "no-tools",
     },
     resolveSecret: () => Promise.resolve("sk-ant-test"),
     fetch,
@@ -49,7 +62,7 @@ describe("prompt caching and input limits (REQ-LLM-12)", () => {
     const model = await registry.forRole("planner");
     const result = await generateText({
       model: model.model,
-      ...prepareCall(model, "You plan tests.", [
+      ...prepareCall(model, ctx("You plan tests."), [
         { role: "user", content: "Ticket and repository context" },
         { role: "assistant", content: "{" },
         { role: "user", content: "Fix the JSON" },
@@ -71,22 +84,22 @@ describe("prompt caching and input limits (REQ-LLM-12)", () => {
     expect(model.cacheOptions).toBeUndefined();
     await generateText({
       model: model.model,
-      ...prepareCall(model, "You plan tests.", [{ role: "user", content: "x" }]),
+      ...prepareCall(model, ctx("You plan tests."), [{ role: "user", content: "x" }]),
     });
     expect(JSON.stringify(bodies[0])).not.toContain("cache_control");
   });
 
   it("REQ-LLM-12/AC4: a call over the model's limit is stopped before anything is sent, with the estimate and why", () => {
     const model = { ...scriptedModel([]), inputLimit: { limit: 100, why: "models.max_input_tokens" } };
-    expect(() => prepareCall(model, "s", [{ role: "user", content: "x".repeat(1000) }])).toThrow(
+    expect(() => prepareCall(model, ctx("s"), [{ role: "user", content: "x".repeat(1000) }])).toThrow(
       /would send about 251 input tokens, over 100 \(models\.max_input_tokens\); nothing was sent/,
     );
     try {
-      prepareCall(model, "s", [{ role: "user", content: [{ type: "text", text: "x".repeat(1000) }] }]);
+      prepareCall(model, ctx("s"), [{ role: "user", content: [{ type: "text", text: "x".repeat(1000) }] }]);
     } catch (error) {
       expect((error as { code?: string }).code).toBe("MODEL_INPUT_TOO_LARGE");
     }
-    expect(prepareCall(model, "s", [{ role: "user", content: "short" }])).toEqual({
+    expect(prepareCall(model, ctx("s"), [{ role: "user", content: "short" }])).toEqual({
       system: "s",
       messages: [{ role: "user", content: "short" }],
     });

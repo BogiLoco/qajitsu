@@ -8,8 +8,10 @@ import { mkdir } from "node:fs/promises";
 import { apiService } from "../../../../tests/support/cli-build.js";
 import {
   benchChanges,
+  compareContextPolicies,
   compareKnowledge,
   formatBench,
+  parseContextPolicies,
   summariseBench,
   type BenchCaseResult,
   type BenchReport,
@@ -304,5 +306,89 @@ describe("qajitsu bench (REQ-LLM-06)", () => {
       summary: before.summary,
     };
     expect(benchChanges(older, after).authorFirstTryShare).toBeUndefined();
+  });
+
+  it("REQ-CTX-18/AC2: --context runs every case once per policy and names the cheapest one at the best quality", async () => {
+    const p = await createBuildProject();
+    cleanups.push(p.cleanup);
+    await writeFile(
+      join(p.project, ".qa", "bench.yaml"),
+      "version: 1\ncases:\n  - { id: bench-cart-rounding, ticket: DEMO-1, flags: [BUG_CART_TOTAL_ROUNDING], expect: { detects: BUG-01 } }\n",
+    );
+    const analysis = JSON.stringify({
+      summary: "Cart API.",
+      change_type: ["api"],
+      endpoints: [{ method: "GET", path: "/cart", source: [{ kind: "ac", id: "AC1" }] }],
+      confidence: "high",
+    });
+    const draft = await read("fixtures/plans/demo-1-draft.json");
+    const perCase = [{ text: analysis }, { text: draft }, await code("TC-01"), await code("TC-02")];
+    const result = await p.run(
+      ["bench", "--model", "mock/scripted", "--context", "default,compact+range=16000"],
+      [...perCase, ...perCase],
+    );
+    expect(result.err).toBe("");
+    expect(result.out).toContain(
+      "bench-cart-rounding: DEMO-1 with BUG_CART_TOTAL_ROUNDING (context default)…",
+    );
+    expect(result.out).toContain("(context compact+range=16000)…");
+    expect(result.out).toContain(
+      "| Policy | Detection | False FAILED | Plan accepted | Criterion covered | Tokens | Cost | Time |",
+    );
+    // A tie in cost keeps the first policy.
+    expect(result.out).toContain("| default (cheapest at best quality) | 100% | 0% | 100% |");
+    expect(result.out).toContain("| compact+range=16000 | 100% | 0% | 100% |");
+    // The policy reaches every call: the second pass's snapshots carry its budget and style.
+    const runs = join(p.home, "runs", "DEMO-1");
+    const latest = (JSON.parse(await readFile(join(runs, "index.json"), "utf8")) as { latest: string })
+      .latest;
+    const journal = await readFile(join(runs, latest, "journal", "events.jsonl"), "utf8");
+    const budgets = journal
+      .split("\n")
+      .filter((l) => l.includes('"context.snapshot"'))
+      .map(
+        (l) => (JSON.parse(l) as { details: { budget?: { style: string; tokens: number } } }).details.budget,
+      );
+    expect(budgets.length).toBeGreaterThan(0);
+    expect(budgets.every((b) => b?.style === "compact" && b.tokens <= 16_000)).toBe(true);
+    expect((await p.run(["bench", "--model", "mock/scripted", "--context", "tiny"])).err).toContain(
+      "[BENCH_CONTEXT_INVALID]",
+    );
+  });
+
+  it("REQ-CTX-18/AC2: policies parse strictly; the cheapest policy that keeps the best quality is named", () => {
+    expect(parseContextPolicies("default, compact+range=16000,full")).toEqual([
+      { name: "default" },
+      { name: "compact+range=16000", style: "compact", workingRange: 16_000 },
+      { name: "full", style: "full" },
+    ]);
+    expect(() => parseContextPolicies("range=10")).toThrow(/range=<tokens of at least 1000>/);
+    expect(() => parseContextPolicies("compact,compact")).toThrow(/repeated/);
+    const c = (context: string, detected: boolean, tokens: number): BenchCaseResult => ({
+      id: "b",
+      ticket: "DEMO-1",
+      flags: ["F"],
+      expect: "detect",
+      planAccepted: true,
+      statuses: { "TC-01": detected ? "FAILED" : "PASSED" },
+      detected,
+      falseFailed: 0,
+      blocked: 0,
+      durationMs: 1_000,
+      tokens,
+      context,
+    });
+    const compared = compareContextPolicies([
+      c("default", true, 9_000),
+      c("compact", true, 4_000),
+      c("range=8000", false, 2_000),
+    ]);
+    expect(compared.policies.map((x) => `${x.policy} ${String(x.summary.detectionRate)}`)).toEqual([
+      "default 1",
+      "compact 1",
+      "range=8000 0",
+    ]);
+    // The cheapest policy misses the bug, so the cheapest one that keeps quality is compact.
+    expect(compared.cheapest).toBe("compact");
   });
 });

@@ -15,6 +15,7 @@ import {
   resolveWorkspaceRoot,
   verifyEventChain,
 } from "@qajitsu/core";
+import { rebuildCall } from "@qajitsu/agents";
 import { checkApprovalRecords } from "@qajitsu/verifier";
 import type { RuntimePorts } from "../adapters.js";
 import { loadProject } from "../project.js";
@@ -95,6 +96,14 @@ export async function runAuditVerify(
       }
       if (f.runDir !== undefined) {
         const approval = await checkRunApproval(f.runDir, text);
+        const inputs = await checkRunInputs(f.runDir, text);
+        if (inputs !== undefined) {
+          if (inputs.problems.length === 0) io.write(`✔ ${f.name}: ${inputs.summary}\n`);
+          else {
+            broken += 1;
+            io.write(`✘ ${f.name}: model inputs\n${inputs.problems.map((p) => `  ${p}`).join("\n")}\n`);
+          }
+        }
         if (approval === undefined) continue;
         if (approval.problems.length === 0) io.write(`✔ ${f.name}: approval ${approval.summary}\n`);
         else {
@@ -109,6 +118,53 @@ export async function runAuditVerify(
     io.writeError(`Error${code}: ${error instanceof Error ? error.message : String(error)}\n`);
     return 3;
   }
+}
+
+/**
+ * Rebuilds the input of every model call in a journal from its snapshot and the fragment texts the run kept
+ * (REQ-CTX-17/AC4) and reports differences by fragment.
+ *
+ * @param journal - The run's journal.
+ * @param readText - The kept text of a fragment by its hash.
+ * @returns Nothing when the run kept no fragment texts (older runs) or made no model calls.
+ */
+export function rebuildInputs(
+  journal: string,
+  readText: (sha256: string) => string | undefined,
+): { summary: string; problems: string[] } | undefined {
+  const calls = parseEventLines(journal).events.filter((e) => e.event === "context.snapshot");
+  if (calls.length === 0) return undefined;
+  const problems: string[] = [];
+  let found = 0;
+  calls.forEach((e, i) => {
+    const call = `call ${String(i + 1)} (${e.stage}/${e.actor.name})`;
+    try {
+      const rebuilt = rebuildCall(e.details, (h) => {
+        const text = readText(h);
+        if (text !== undefined) found += 1;
+        return text;
+      });
+      if (!rebuilt.snapshotIntact) problems.push(`${call}: the snapshot does not match its own hash`);
+      for (const f of rebuilt.fragments.filter((x) => x.status !== "same"))
+        problems.push(`${call}: ${f.kind} ${f.source} ${f.status} (sha256 ${f.sha256.slice(0, 12)})`);
+    } catch {
+      problems.push(`${call}: the snapshot cannot be read`);
+    }
+  });
+  if (found === 0) return undefined;
+  return { summary: `${String(calls.length)} model input(s) rebuilt from their snapshots`, problems };
+}
+
+/** {@link rebuildInputs} for a live run folder. */
+async function checkRunInputs(
+  runDir: string,
+  journal: string,
+): Promise<{ summary: string; problems: string[] } | undefined> {
+  const dir = join(runDir, "context", "fragments");
+  const texts = new Map<string, string>();
+  for (const name of await readdir(dir).catch(() => [] as string[]))
+    texts.set(name.replace(/\.txt$/, ""), await readFile(join(dir, name), "utf8"));
+  return rebuildInputs(journal, (h) => texts.get(h));
 }
 
 /**

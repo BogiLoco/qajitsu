@@ -102,9 +102,12 @@ describe("auditor (REQ-VER-06)", () => {
       findings: [{ caseId: "TC-01", weak: true, reason: "response body shows an error" }],
     });
     const prompt = promptOf(auditor, 0);
-    expect(prompt).toContain("### TC-01 (status PASSED, computed by code)");
-    expect(prompt).not.toContain("### TC-02");
-    expect(prompt).toContain('<untrusted_data source=\\"evidence/TC-01/attempt-1/S1-01.json\\">');
+    // REQ-CTX-12: the same content as fragments: the plan of the PASSED case, its results and evidence as data blocks.
+    expect(prompt).toContain("## plan: TC-01/plan");
+    expect(prompt).not.toContain("TC-02/plan");
+    expect(prompt).toMatch(
+      /<data-[a-z0-9]{12} kind=\\"evidence\\" source=\\"TC-01\/evidence\/TC-01\/attempt-1\/S1-01.json\\">/,
+    );
     expect(prompt).toContain('"type":"file"');
     expect(auditor.mock.doGenerateCalls).toHaveLength(1);
   });

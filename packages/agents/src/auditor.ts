@@ -1,9 +1,15 @@
 import { z } from "zod";
-import { ConfigError, type CaseResultFile, type Plan, type TestStatus } from "@qajitsu/core";
-import { UNTRUSTED_DATA_RULES, untrusted } from "./context.js";
+import {
+  ConfigError,
+  fragment,
+  type CaseResultFile,
+  type ContextFragment,
+  type Plan,
+  type TestStatus,
+} from "@qajitsu/core";
 import { runStructuredAgent } from "./loop.js";
 import { AGENT_ROLES } from "./roles.js";
-import { modelForRole, stageGuard, type AgentStageDeps } from "./roles-run.js";
+import { assembleFor, contextOf, modelForRole, stageGuard, type AgentStageDeps } from "./roles-run.js";
 import { createReadOnlyTools } from "./workspace-tools.js";
 
 /** The auditor's answer: one finding per PASSED case (REQ-VER-06). */
@@ -59,7 +65,6 @@ export interface AuditResult {
 export const AUDITOR_SYSTEM = `You are the independent auditor of QAJitsu, an agentic QA framework.
 Statuses were computed by code from the test runner. You review only the cases with status PASSED and decide whether each PASSED is convincing.
 You cannot change a status. Flagging a case as weak only sends it to a human (NEEDS_REVIEW); it can never make a result better.
-${UNTRUSTED_DATA_RULES}
 Flag a PASSED case as weak when:
 - an assertion does not check what the plan's expected result says (wrong field, a weaker check, a missing expectation);
 - the evidence contradicts the pass (an error message, an error status, a screenshot that shows a failure or the wrong page);
@@ -69,37 +74,101 @@ Do not flag for style or for things outside the plan. Use the read-only tools to
 Answer with one JSON object only, one finding per PASSED case:
 { "findings": [{ "caseId": "TC-01", "weak": false, "reason": "short reason, cite evidence paths" }] }`;
 
-const render = (input: AuditInput): string => {
+/**
+ * The auditor's context as fragments (REQ-CTX-11): the approved plan of each PASSED case (pinned), its runner output
+ * and evidence (untrusted), the list of evidence files built by code, and the question.
+ */
+export function auditFragments(input: AuditInput): ContextFragment[] {
   const passed = input.cases.filter((c) => c.status === "PASSED");
-  const blocks = passed.map((c) => {
+  const out: ContextFragment[] = [
+    fragment({
+      kind: "role-instructions",
+      source: "auditor",
+      trust: "trusted",
+      section: "stable",
+      priority: 100,
+      pinned: true,
+      text: AUDITOR_SYSTEM,
+    }),
+    fragment({
+      kind: "question",
+      source: "intro",
+      trust: "trusted",
+      section: "varying",
+      priority: 90,
+      pinned: true,
+      text: `Ticket ${input.plan.ticket}, plan v${String(input.plan.version)}. Review these PASSED cases (statuses computed by code):`,
+    }),
+  ];
+  for (const c of passed) {
     const planCase = input.plan.cases.find((p) => p.id === c.caseId);
     const last = c.result.attempts.at(-1);
-    return [
-      `### ${c.caseId} (status PASSED, computed by code)`,
-      "Plan (approved, trusted):",
-      JSON.stringify(planCase ?? {}, null, 2),
-      "Last attempt (runner output):",
-      untrusted(
-        `results/${c.caseId}.json`,
-        JSON.stringify({ steps: last?.steps ?? [], assertions: last?.assertions ?? [] }, null, 2),
-      ),
-      "Evidence files:",
-      c.evidence.map((e) => `- ${e.path} (${e.kind}${e.stepId ? `, step ${e.stepId}` : ""})`).join("\n") ||
-        "- none",
+    out.push(
+      fragment({
+        kind: "plan",
+        source: `${c.caseId}/plan`,
+        trust: "trusted",
+        section: "varying",
+        priority: 50,
+        pinned: true,
+        text: JSON.stringify(planCase ?? {}, null, 2),
+      }),
+      fragment({
+        kind: "result",
+        source: `${c.caseId}/results.json`,
+        trust: "untrusted",
+        section: "varying",
+        priority: 50,
+        pinned: false,
+        text: JSON.stringify({ steps: last?.steps ?? [], assertions: last?.assertions ?? [] }, null, 2),
+      }),
+      fragment({
+        kind: "evidence",
+        source: `${c.caseId}/evidence (list)`,
+        trust: "trusted",
+        section: "varying",
+        priority: 50,
+        pinned: false,
+        text:
+          c.evidence
+            .map((e) => `- ${e.path} (${e.kind}${e.stepId ? `, step ${e.stepId}` : ""})`)
+            .join("\n") || "- none",
+      }),
       ...c.evidence
         .filter((e) => input.texts[e.path] !== undefined)
-        .map((e) => untrusted(`evidence/${e.path}`, (input.texts[e.path] ?? "").slice(0, 2000))),
-    ].join("\n");
-  });
-  return [
-    `Ticket ${input.plan.ticket}, plan v${String(input.plan.version)}. Review these PASSED cases:`,
-    ...blocks,
-    input.images.length > 0
-      ? `${String(input.images.length)} screenshot(s) follow, named by evidence path.`
-      : "",
-    "Answer with the JSON object.",
-  ].join("\n\n");
-};
+        .map((e) =>
+          fragment({
+            kind: "evidence",
+            source: `${c.caseId}/evidence/${e.path}`,
+            trust: "untrusted",
+            section: "varying",
+            priority: 50,
+            pinned: false,
+            text: (input.texts[e.path] ?? "").slice(0, 2000),
+          }),
+        ),
+    );
+  }
+  out.push(
+    fragment({
+      kind: "question",
+      source: "answer",
+      trust: "trusted",
+      section: "varying",
+      priority: 0,
+      pinned: true,
+      text: [
+        input.images.length > 0
+          ? `${String(input.images.length)} screenshot(s) follow, named by evidence path.`
+          : "",
+        "Answer with the JSON object.",
+      ]
+        .filter((x) => x !== "")
+        .join("\n"),
+    }),
+  );
+  return out;
+}
 
 /**
  * Stage `audit`: a separate agent with fresh context reviews every PASSED case against the approved
@@ -122,12 +191,18 @@ export async function runAuditor(deps: AgentStageDeps, input: AuditInput): Promi
   deps.events.emit("audit", actor, "stage.start", { model: model.id, cases: passedIds.length });
   if (passedIds.length === 0)
     return { model: model.id, sameModelAsAuthor: model.id === author, findings: [] };
+  // REQ-CTX-12: the input is assembled from fragments; its snapshot goes into the journal (REQ-CTX-17/AC3).
+  const context = await assembleFor(deps, {
+    stage: "audit",
+    role: "auditor",
+    model,
+    fragments: auditFragments(input),
+  });
   const { value, attempts } = await runStructuredAgent({
     stage: "audit",
     role: "auditor",
     model,
-    system: AUDITOR_SYSTEM,
-    prompt: render(input),
+    context,
     schema: AuditReportSchema,
     validate: (report) => {
       const ids = report.findings.map((f) => f.caseId);
@@ -137,7 +212,7 @@ export async function runAuditor(deps: AgentStageDeps, input: AuditInput): Promi
         ...ids.filter((id, i) => ids.indexOf(id) !== i).map((id) => `findings: ${id} appears more than once`),
       ];
     },
-    tools: createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText }),
+    tools: createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText, wrap: contextOf(deps).wrap }),
     guard: stageGuard(deps, "audit", role),
     usage: deps.usage,
     images: input.images,

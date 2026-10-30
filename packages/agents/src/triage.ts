@@ -1,15 +1,16 @@
 import { z } from "zod";
 import {
   ConfigError,
+  fragment,
   TRIAGE_CATEGORIES,
   TriageCiteSchema,
   type CaseResultFile,
+  type ContextFragment,
   type Plan,
 } from "@qajitsu/core";
-import { UNTRUSTED_DATA_RULES, untrusted } from "./context.js";
 import { runStructuredAgent } from "./loop.js";
 import { AGENT_ROLES } from "./roles.js";
-import { modelForRole, stageGuard, type AgentStageDeps } from "./roles-run.js";
+import { assembleFor, contextOf, modelForRole, stageGuard, type AgentStageDeps } from "./roles-run.js";
 import { createReadOnlyTools } from "./workspace-tools.js";
 
 /** The model's answer: at most one hint per FAILED case (REQ-VER-12/AC1). */
@@ -48,49 +49,98 @@ For each case suggest the most likely cause:
 - data: test data was missing or in the wrong state (unknown product, account locked, previous run left data).
 A failed step may list "network": the requests of the page that went wrong in that step (5xx, 4xx, timeouts,
 connection errors, requests refused by the allowlist, CORS blocks, redirects to a login page), summarised by code.
-${UNTRUSTED_DATA_RULES}
 Cite the evidence your suggestion rests on, using only what is listed: {"kind":"step","ref":"S1"},
 {"kind":"assertion","ref":"S1.status"}, {"kind":"evidence","ref":"<evidence path>"}, {"kind":"log","ref":"<log file>"}.
 Citations are checked by code; a hint whose citations do not exist is thrown away. When unsure, say so in the justification.
 Answer with one JSON object only:
 { "hints": [{ "caseId": "TC-01", "category": "product-bug", "justification": "short, concrete", "cites": [{ "kind": "assertion", "ref": "S1.status" }] }] }`;
 
-const render = (input: TriageInput): string =>
-  [
-    `Ticket ${input.plan.ticket}, plan v${String(input.plan.version)}. FAILED cases:`,
-    ...input.cases.map((c) => {
-      const planCase = input.plan.cases.find((p) => p.id === c.caseId);
-      const last = c.result.attempts.at(-1);
-      return [
-        `### ${c.caseId} (status FAILED, computed by code)`,
-        "Plan (approved, trusted):",
-        JSON.stringify(planCase ?? {}, null, 2),
-        "Last attempt (runner output):",
-        untrusted(
-          `results/${c.caseId}.json`,
-          JSON.stringify(
-            { steps: last?.steps ?? [], assertions: last?.assertions ?? [], error: last?.error },
-            null,
-            2,
-          ),
-        ),
-        "Evidence files:",
-        c.evidence.map((e) => `- ${e}`).join("\n") || "- none",
-        ...c.evidence
-          .filter((e) => input.texts[e] !== undefined)
-          .map((e) => untrusted(`evidence/${e}`, (input.texts[e] ?? "").slice(0, 2000))),
-      ].join("\n");
+/**
+ * The triage context as fragments (REQ-CTX-11): the approved plan of each FAILED case (pinned), its runner output,
+ * evidence and the run's log tails (untrusted), the evidence list built by code, and the question.
+ */
+export function triageFragments(input: TriageInput): ContextFragment[] {
+  const at = (
+    over: Omit<Parameters<typeof fragment>[0], "section" | "priority" | "pinned"> & {
+      pinned?: boolean;
+      priority?: number;
+    },
+  ) => fragment({ section: "varying", priority: 50, pinned: false, ...over });
+  const out: ContextFragment[] = [
+    fragment({
+      kind: "role-instructions",
+      source: "triage",
+      trust: "trusted",
+      section: "stable",
+      priority: 100,
+      pinned: true,
+      text: TRIAGE_SYSTEM,
     }),
-    Object.keys(input.logs).length > 0
-      ? [
-          "Log files (tails):",
-          ...Object.entries(input.logs).map(
-            ([name, text]) => `- ${name}\n${untrusted(`logs/${name}`, text)}`,
-          ),
-        ].join("\n")
-      : "No log files.",
-    "Answer with the JSON object.",
-  ].join("\n\n");
+    at({
+      kind: "question",
+      source: "intro",
+      trust: "trusted",
+      priority: 90,
+      pinned: true,
+      text: `Ticket ${input.plan.ticket}, plan v${String(input.plan.version)}. FAILED cases (statuses computed by code):`,
+    }),
+  ];
+  for (const c of input.cases) {
+    const planCase = input.plan.cases.find((p) => p.id === c.caseId);
+    const last = c.result.attempts.at(-1);
+    out.push(
+      at({
+        kind: "plan",
+        source: `${c.caseId}/plan`,
+        trust: "trusted",
+        pinned: true,
+        text: JSON.stringify(planCase ?? {}, null, 2),
+      }),
+      at({
+        kind: "result",
+        source: `${c.caseId}/results.json`,
+        trust: "untrusted",
+        text: JSON.stringify(
+          { steps: last?.steps ?? [], assertions: last?.assertions ?? [], error: last?.error },
+          null,
+          2,
+        ),
+      }),
+      at({
+        kind: "evidence",
+        source: `${c.caseId}/evidence (list)`,
+        trust: "trusted",
+        text: c.evidence.map((e) => `- ${e}`).join("\n") || "- none",
+      }),
+      ...c.evidence
+        .filter((e) => input.texts[e] !== undefined)
+        .map((e) =>
+          at({
+            kind: "evidence",
+            source: `${c.caseId}/evidence/${e}`,
+            trust: "untrusted",
+            text: (input.texts[e] ?? "").slice(0, 2000),
+          }),
+        ),
+    );
+  }
+  for (const [name, text] of Object.entries(input.logs))
+    out.push(at({ kind: "log", source: `logs/${name}`, trust: "untrusted", priority: 40, text }));
+  out.push(
+    at({
+      kind: "question",
+      source: "answer",
+      trust: "trusted",
+      priority: 0,
+      pinned: true,
+      text:
+        Object.keys(input.logs).length > 0
+          ? "Answer with the JSON object."
+          : "No log files.\nAnswer with the JSON object.",
+    }),
+  );
+  return out;
+}
 
 /**
  * Stage `triage`: suggests a cause for every FAILED case with citations (REQ-VER-12/AC1). The caller keeps only
@@ -108,12 +158,18 @@ export async function runTriage(
   const ids = input.cases.map((c) => c.caseId);
   const actor = { kind: "agent", name: "triage" } as const;
   deps.events.emit("triage", actor, "stage.start", { model: model.id, cases: ids.length });
+  // REQ-CTX-12: the input is assembled from fragments; its snapshot goes into the journal (REQ-CTX-17/AC3).
+  const context = await assembleFor(deps, {
+    stage: "triage",
+    role: "triage",
+    model,
+    fragments: triageFragments(input),
+  });
   const { value, attempts } = await runStructuredAgent({
     stage: "triage",
     role: "triage",
     model,
-    system: TRIAGE_SYSTEM,
-    prompt: render(input),
+    context,
     schema: TriageAnswerSchema,
     validate: (answer) => {
       const seen = answer.hints.map((h) => h.caseId);
@@ -122,7 +178,7 @@ export async function runTriage(
         ...seen.filter((id, i) => seen.indexOf(id) !== i).map((id) => `hints: ${id} appears more than once`),
       ];
     },
-    tools: createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText }),
+    tools: createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText, wrap: contextOf(deps).wrap }),
     guard: stageGuard(deps, "triage", role),
     usage: deps.usage,
     ...(deps.signal ? { signal: deps.signal } : {}),

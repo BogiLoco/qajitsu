@@ -1,3 +1,4 @@
+import { contextUsage, type ContextUsage } from "./context-metrics.js";
 import type { RunEvent } from "@qajitsu/core";
 
 /** What one model role did in a run. */
@@ -73,6 +74,8 @@ export interface RunDigest {
   readonly quality: QualityDigest;
   /** QAJitsu version that ran it, from the recorded versions. */
   readonly qajitsuVersion?: string;
+  /** How each role on each model used its context (REQ-CTX-18/AC1). */
+  readonly context?: readonly ContextUsage[];
 }
 
 /**
@@ -368,6 +371,7 @@ export function digestRun(input: RunDigestInput): RunDigest {
     stages: [...stages],
     stagesWithModel: [...withModel],
     timing: runTiming(input.events),
+    context: contextUsage(input.events),
     outcomes: { author, review, planner, healer },
     quality: {
       ...(typeof approval?.version === "number" ? { approvedVersion: approval.version } : {}),

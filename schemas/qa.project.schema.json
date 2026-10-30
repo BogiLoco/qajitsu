@@ -1639,7 +1639,8 @@
       "default": {
         "providers": {},
         "roles": {},
-        "cache_ttl": "auto"
+        "cache_ttl": "auto",
+        "context_summaries": "no-tools"
       },
       "type": "object",
       "properties": {
@@ -1693,6 +1694,18 @@
                       "type": "integer",
                       "exclusiveMinimum": 0,
                       "maximum": 9007199254740991
+                    },
+                    "working_range": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "context_style": {
+                      "type": "string",
+                      "enum": [
+                        "full",
+                        "compact"
+                      ]
                     },
                     "think": {
                       "type": "boolean"
@@ -1808,6 +1821,47 @@
           "type": "integer",
           "exclusiveMinimum": 0,
           "maximum": 9007199254740991
+        },
+        "context_summaries": {
+          "default": "no-tools",
+          "type": "string",
+          "enum": [
+            "off",
+            "no-tools",
+            "allowed"
+          ]
+        },
+        "context_shares": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "enum": [
+              "project-rules",
+              "skill",
+              "repository",
+              "ticket",
+              "plan",
+              "analysis",
+              "diff",
+              "file",
+              "knowledge",
+              "result",
+              "evidence",
+              "log",
+              "tool-result",
+              "lesson",
+              "spec",
+              "ui",
+              "imported",
+              "exploration",
+              "map"
+            ]
+          },
+          "additionalProperties": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1
+          }
         }
       },
       "additionalProperties": false

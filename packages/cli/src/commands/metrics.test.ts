@@ -11,7 +11,7 @@ afterEach(async () => {
 });
 
 describe("metrics (REQ-OBS-04)", () => {
-  it("REQ-OBS-04/AC1: runs, statuses per environment, BLOCKED reasons, duration, tokens, cost, plan acceptance, denials", async () => {
+  it("REQ-OBS-04/AC1 + REQ-CTX-18/AC1: runs, statuses per environment, BLOCKED reasons, duration, tokens, cost, plan acceptance, denials, context per role and model", async () => {
     const p = await createBuildProject();
     cleanups.push(p.cleanup);
     await p.prepare();
@@ -28,6 +28,13 @@ describe("metrics (REQ-OBS-04)", () => {
     expect(text).toMatch(/qajitsu_tokens\{ticket="DEMO-1"\} \d+/);
     expect(text).toContain("qajitsu_plan_accepted_unchanged_ratio 1");
     expect(text).toContain("qajitsu_false_failed_ratio 0");
+    // REQ-CTX-18/AC1: what each role on each model was given, reduced and read, and the cache hit rate.
+    expect(text).toMatch(
+      /qajitsu_context_input_tokens\{role="planner",model="mock\/scripted",kind="ticket"\} \d+/,
+    );
+    expect(text).toMatch(/qajitsu_context_calls\{role="analyst",model="mock\/scripted"\} \d+/);
+    expect(text).toMatch(/qajitsu_context_reads\{role="planner",model="mock\/scripted"\} 0/);
+    expect(text).toMatch(/qajitsu_context_cache_hit_ratio\{role="analyst",model="mock\/scripted"\} [\d.]+/);
     const blocked = (await broken.run(["metrics", "--format", "json"])).out;
     expect(JSON.parse(blocked)).toEqual(
       expect.arrayContaining([

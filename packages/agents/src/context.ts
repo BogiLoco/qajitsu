@@ -7,13 +7,17 @@ import {
   ExploreSessionSchema,
   ReviewRecordSchema,
   acceptedItems,
+  fragment,
   reviewItems,
   readRunDocs,
   readImportedCases,
   readMapAround,
   readTicketSnapshot,
   type ChangeRef,
+  type ContextFragment,
+  type ContextKind,
   type ImportedCase,
+  type Lesson,
   type MapAround,
   type KnowledgeChunk,
   type ReviewItem,
@@ -22,6 +26,7 @@ import {
   type Ticket,
   type UiScreen,
 } from "@qajitsu/core";
+import { createContextManager } from "./context-manager.js";
 import { cachedTestsIndex, renderTestsRepo, type TestsRepoIndex } from "./tests-repo.js";
 import { buildUiInventory, renderUiInventory, renderUiSnapshot, type UiInventory } from "@qajitsu/verifier";
 
@@ -154,6 +159,8 @@ export interface ChangeContext {
   readonly ui?: UiInventory | undefined;
   /** Pages and screens of the running application, recorded by code before writing specs (REQ-EXEC-22/AC1). */
   readonly snapshot?: readonly UiScreen[] | undefined;
+  /** Lessons of earlier runs of the project (REQ-CTX-20/AC5): untrusted, offered to the analyst and planner only. */
+  readonly lessons?: readonly Lesson[] | undefined;
 }
 
 const UI_EXTENSIONS = /\.(html?|[cm]?jsx?|tsx?|vue|svelte|xml|java|kt|swift|dart)$/;
@@ -363,46 +370,101 @@ export function renderImportedCase(c: ImportedCase): string {
 }
 
 /**
- * Renders the context as a prompt section; every untrusted part is wrapped (REQ-CTX-05/AC6).
+ * The change context as one text, for previews and tests: the fragments of {@link changeContextFragments} laid out and
+ * rendered by a context manager, exactly as a role receives them (REQ-CTX-12).
  *
- * @param context - Change context.
+ * @param context - The change context.
+ * @param options - `ui: false` leaves out the inventory and snapshot.
  */
-export function renderChangeContext(
+export function renderChangeContext(context: ChangeContext, options: { readonly ui?: boolean } = {}): string {
+  return createContextManager().assemble({
+    stage: "preview",
+    role: "preview",
+    model: "none",
+    fragments: changeContextFragments(context, options),
+  }).prompt;
+}
+
+/** Large reference material starts behind a handle (REQ-CTX-12/AC5): the agent reads it when it needs it. */
+const onDemandIfLarge = (f: ContextFragment): ContextFragment =>
+  f.tokens > 1_500 ? { ...f, onDemand: true } : f;
+
+/** A fragment of the change context; the priority keeps the order the roles were written for. */
+const part = (
+  kind: ContextKind,
+  source: string,
+  trust: "trusted" | "untrusted",
+  priority: number,
+  text: string,
+): ContextFragment => fragment({ kind, source, trust, section: "varying", priority, pinned: false, text });
+
+/**
+ * The change context as fragments (REQ-CTX-11): the ticket, code access, repositories with their files, review
+ * comments and diff, test repositories, imported cases, the UI inventory and snapshot, accepted exploration, the
+ * application map and knowledge. The same content as {@link renderChangeContext}; framing text is trusted, everything
+ * that comes from tickets, code, pages or people is untrusted.
+ *
+ * @param context - The change context.
+ * @param options - `ui: false` leaves out the inventory and snapshot (the analyst classifies, it writes no steps).
+ */
+export function changeContextFragments(
   context: ChangeContext,
-  /** The analyst gets no element inventory: it classifies the change; planner and author write steps with it. */
-  options: { readonly ui?: boolean } = {},
-): string {
+  options: { readonly ui?: boolean; readonly lessons?: boolean } = {},
+): ContextFragment[] {
   const t = context.ticket;
-  const ticketText = [
-    `Key: ${t.key}`,
-    `Summary: ${t.summary}`,
-    `Type: ${t.issueType}; Status: ${t.status}`,
-    "",
-    "Description:",
-    t.description,
-    "",
-    "Acceptance criteria (reference them as AC1, AC2, ...):",
-    ...t.acceptanceCriteria.map((ac, i) => `AC${String(i + 1)}: ${ac}`),
-    "",
-    "Comments:",
-    ...t.comments.map((c) => `- ${c.author}: ${c.body}`),
-  ].join("\n");
-  const parts = ["## Ticket", untrusted("ticket", ticketText)];
+  const out: ContextFragment[] = [
+    part("ticket", "ticket/heading", "trusted", 86, "## Ticket"),
+    part(
+      "ticket",
+      `ticket/${t.key}`,
+      "untrusted",
+      85,
+      [
+        `Key: ${t.key}`,
+        `Summary: ${t.summary}`,
+        `Type: ${t.issueType}; Status: ${t.status}`,
+        "",
+        "Description:",
+        t.description,
+        "",
+        "Acceptance criteria (reference them as AC1, AC2, ...):",
+        ...t.acceptanceCriteria.map((ac, i) => `AC${String(i + 1)}: ${ac}`),
+        "",
+        "Comments:",
+        ...t.comments.map((c) => `- ${c.author}: ${c.body}`),
+      ].join("\n"),
+    ),
+  ];
   // REQ-CTX-10: say plainly what is not there, so no agent looks for code or cites a diff.
   if (context.codeAccess?.level === "none")
-    parts.push(
-      "## Code access: none\nThe project shares no code: there is no diff, no pull request and no repository. Plan from the ticket, the documentation and what the environment shows; do not cite diff sources.",
+    out.push(
+      part(
+        "repository",
+        "code-access",
+        "trusted",
+        84,
+        "## Code access: none\nThe project shares no code: there is no diff, no pull request and no repository. Plan from the ticket, the documentation and what the environment shows; do not cite diff sources.",
+      ),
     );
   if (context.codeAccess?.level === "metadata") {
-    parts.push(
-      "## Code access: metadata only\nThe project shares how its changes are described, not their code: no diff and no repository. Do not cite diff sources.",
+    out.push(
+      part(
+        "repository",
+        "code-access",
+        "trusted",
+        84,
+        "## Code access: metadata only\nThe project shares how its changes are described, not their code: no diff and no repository. Do not cite diff sources.",
+      ),
     );
     for (const c of context.codeAccess.changes)
-      parts.push(
-        `### Change of '${c.alias}' (${c.change.kind} ${c.change.id} @ ${c.change.headSha.slice(0, 12)})`,
-        untrusted(
+      out.push(
+        part(
+          "repository",
           `repos/${c.alias}.meta.json`,
+          "untrusted",
+          83,
           [
+            `Change of '${c.alias}' (${c.change.kind} ${c.change.id} @ ${c.change.headSha.slice(0, 12)})`,
             `Title: ${c.change.title ?? "-"}`,
             `Description: ${c.change.description ?? "-"}`,
             `Changed files (${String(c.files.length)}):`,
@@ -412,17 +474,35 @@ export function renderChangeContext(
       );
   }
   for (const repo of context.repos) {
-    parts.push(
-      `## Repository '${repo.alias}' (${repo.change.kind} ${repo.change.id} @ ${repo.change.headSha.slice(0, 12)}; code under repos/${repo.alias}/)`,
-    );
-    const fileList = repo.files
-      .map(
-        (f) => `- ${f.path} (+${String(f.added)} -${String(f.removed)})${f.related ? ` [${f.related}]` : ""}`,
-      )
-      .join("\n");
-    parts.push(
-      "Changed files (lock and generated files excluded):",
-      untrusted(`repos/${repo.alias}.files`, fileList || "(none)"),
+    const base = `repos/${repo.alias}`;
+    out.push(
+      part(
+        "repository",
+        base,
+        "trusted",
+        70,
+        [
+          `## Repository '${repo.alias}' (${repo.change.kind} ${repo.change.id} @ ${repo.change.headSha.slice(0, 12)}; code under repos/${repo.alias}/)`,
+          "Below: the changed files (lock and generated files excluded), the pull/merge request, review comments (reference them as {kind: comment, repo, index}) and the diff.",
+          ...(repo.diffInlined
+            ? []
+            : [
+                `The diff is large (${String(repo.diff.length)} characters); it is not inlined. Read repos/${repo.alias}.diff and files under repos/${repo.alias}/ with your tools.`,
+              ]),
+        ].join("\n"),
+      ),
+      part(
+        "repository",
+        `${base}/files`,
+        "untrusted",
+        70,
+        repo.files
+          .map(
+            (f) =>
+              `- ${f.path} (+${String(f.added)} -${String(f.removed)})${f.related ? ` [${f.related}]` : ""}`,
+          )
+          .join("\n") || "(none)",
+      ),
     );
     const meta = [
       repo.change.title ? `Title: ${repo.change.title}` : "",
@@ -430,12 +510,14 @@ export function renderChangeContext(
     ]
       .filter(Boolean)
       .join("\n");
-    if (meta) parts.push("Pull/merge request:", untrusted(`repos/${repo.alias}.change`, meta));
-    if (repo.comments.length > 0) {
-      parts.push(
-        "Review comments (reference them as {kind: comment, repo, index}):",
-        untrusted(
-          `repos/${repo.alias}.comments`,
+    if (meta) out.push(part("repository", `${base}/pull-request`, "untrusted", 70, meta));
+    if (repo.comments.length > 0)
+      out.push(
+        part(
+          "repository",
+          `${base}/review-comments`,
+          "untrusted",
+          70,
           repo.comments
             .map(
               (c, i) =>
@@ -444,33 +526,45 @@ export function renderChangeContext(
             .join("\n"),
         ),
       );
-    }
-    parts.push(
-      repo.diffInlined
-        ? `Diff:\n${untrusted(`repos/${repo.alias}.diff`, repo.diff)}`
-        : `The diff is large (${String(repo.diff.length)} characters); it is not inlined. Read repos/${repo.alias}.diff and files under repos/${repo.alias}/ with your tools.`,
-    );
+    if (repo.diffInlined) out.push(part("diff", `${base}/diff`, "untrusted", 70, repo.diff));
   }
-  for (const t of context.testsRepos) {
-    parts.push(
-      `## Tests repository '${t.alias}' (existing automated tests; code under repos/${t.alias}/, not part of the change)`,
-      renderTestsRepo(t.alias, t.index),
+  for (const r of context.testsRepos)
+    out.push(
+      part(
+        "repository",
+        `tests/${r.alias}`,
+        "trusted",
+        65,
+        `## Tests repository '${r.alias}' (existing automated tests; code under repos/${r.alias}/, not part of the change)`,
+      ),
+      onDemandIfLarge(
+        part("repository", `tests/${r.alias}/index`, "untrusted", 65, renderTestsRepo(r.alias, r.index)),
+      ),
     );
-  }
   if (context.imported.length > 0) {
     // REQ-CTX-08/AC2+AC3: an extra source, wrapped as untrusted data like the ticket.
-    parts.push(
-      `## Existing manual test cases (${String(context.imported.length)}, imported from test management; cite as {kind: imported, id})`,
+    out.push(
+      part(
+        "imported",
+        "imported",
+        "trusted",
+        60,
+        `## Existing manual test cases (${String(context.imported.length)}, imported from test management; cite as {kind: imported, id})`,
+      ),
     );
-    for (const c of context.imported) parts.push(untrusted(`imported/${c.id}`, renderImportedCase(c)));
+    for (const c of context.imported)
+      out.push(part("imported", `imported/${c.id}`, "untrusted", 60, renderImportedCase(c)));
   }
   if (context.ui && options.ui !== false)
-    parts.push(untrusted("ui/inventory", renderUiInventory(context.ui)));
+    out.push(part("ui", "ui/inventory", "untrusted", 55, renderUiInventory(context.ui)));
   // REQ-EXEC-22/AC7: without the code, what the environment's pages show is how the planner names elements.
   if (context.snapshot && context.snapshot.length > 0 && options.ui !== false)
-    parts.push(
-      untrusted(
+    out.push(
+      part(
+        "ui",
         "ui/snapshot",
+        "untrusted",
+        54,
         renderUiSnapshot(
           context.snapshot,
           60,
@@ -482,12 +576,23 @@ export function renderChangeContext(
   const accepted = context.explorations.flatMap((e) =>
     (e.accepted ?? []).map((i) => ({ session: e.session, ...i })),
   );
-  if (accepted.length > 0)
-    parts.push(
-      "## Exploration accepted by a person (cite as {kind: explore, session, item})",
-      ...[...new Set(accepted.map((a) => a.session))].map((session) =>
-        untrusted(
+  if (accepted.length > 0) {
+    out.push(
+      part(
+        "exploration",
+        "explore",
+        "trusted",
+        50,
+        "## Exploration accepted by a person (cite as {kind: explore, session, item})",
+      ),
+    );
+    for (const session of [...new Set(accepted.map((a) => a.session))])
+      out.push(
+        part(
+          "exploration",
           `explore/${session}`,
+          "untrusted",
+          50,
           accepted
             .filter((a) => a.session === session)
             .map(
@@ -496,25 +601,68 @@ export function renderChangeContext(
             )
             .join("\n"),
         ),
+      );
+  } else
+    out.push(
+      part(
+        "exploration",
+        "explore",
+        "trusted",
+        50,
+        "## Exploration accepted by a person\nNone: do not cite {kind: explore} sources.",
       ),
     );
-  else parts.push("## Exploration accepted by a person\nNone: do not cite {kind: explore} sources.");
   const around = context.mapAround;
-  if (around && (around.changed.length > 0 || around.untested.length > 0)) {
+  if (around && (around.changed.length > 0 || around.untested.length > 0))
     // REQ-OBS-08: computed by code from past runs; labels come from routes, OpenAPI and visited URLs, so wrapped.
-    parts.push(
-      `## Application map around the change (from ${String(around.runs)} past run(s); cite as {kind: map, id})`,
-      untrusted("map/around", renderMapAround(around)),
+    out.push(
+      part(
+        "map",
+        "map",
+        "trusted",
+        45,
+        `## Application map around the change (from ${String(around.runs)} past run(s); cite as {kind: map, id})`,
+      ),
+      part("map", "map/around", "untrusted", 45, renderMapAround(around)),
     );
-  } else
+  else
     // Without a map nothing can be cited from it; models otherwise turn page names into {kind: map} sources.
-    parts.push(
-      "## Application map around the change\nNone for this change: do not cite {kind: map} sources.",
+    out.push(
+      part(
+        "map",
+        "map",
+        "trusted",
+        45,
+        "## Application map around the change\nNone for this change: do not cite {kind: map} sources.",
+      ),
     );
-
   if (context.knowledge.length > 0) {
-    parts.push("## Project knowledge (from .qa/knowledge, maintained by the team)");
-    for (const k of context.knowledge) parts.push(untrusted(`knowledge/${k.name}`, k.text));
+    out.push(
+      part(
+        "knowledge",
+        "knowledge",
+        "trusted",
+        40,
+        "## Project knowledge (from .qa/knowledge, maintained by the team)",
+      ),
+    );
+    for (const k of context.knowledge)
+      out.push(onDemandIfLarge(part("knowledge", `knowledge/${k.name}`, "untrusted", 40, k.text)));
   }
-  return parts.join("\n\n");
+  // REQ-CTX-20/AC5: what people taught earlier runs; low priority, so it is the first to wait behind a handle.
+  const lessons = options.lessons === true ? (context.lessons ?? []) : [];
+  if (lessons.length > 0) {
+    out.push(
+      part(
+        "lesson",
+        "lessons",
+        "trusted",
+        30,
+        "## Lessons of earlier runs of this project (recorded by people; context, not sources: never cite them)",
+      ),
+    );
+    for (const l of lessons)
+      out.push(part("lesson", `lesson/${l.ticket}/${l.run}/${l.kind}`, "untrusted", 30, l.text));
+  }
+  return out;
 }

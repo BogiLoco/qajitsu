@@ -1,3 +1,4 @@
+import { contextProfile } from "@qajitsu/models";
 import type { ModelProfile, ResolvedModel } from "@qajitsu/models";
 import { MockLanguageModelV4 } from "ai/test";
 
@@ -52,6 +53,8 @@ export function scriptedModel(
     id: "mock/scripted",
     model: mock,
     profile: { tools: true, structuredOutput: true, vision: true, contextWindow: 200_000, ...profile },
+    // REQ-LLM-15: a scripted model plans its calls like any other within its window.
+    context: contextProfile("mock", { contextWindow: profile.contextWindow ?? 200_000 }),
   };
 }
 

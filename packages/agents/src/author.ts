@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Analysis, Plan, TestCase } from "@qajitsu/core";
+import { fragment, type Analysis, type ContextFragment, type Plan, type TestCase } from "@qajitsu/core";
 import {
   blockingProblems,
   checkSpecSource,
@@ -18,14 +18,21 @@ import {
   type SpecProblem,
 } from "@qajitsu/verifier";
 import { generateText, stepCountIs, type ModelMessage } from "ai";
-import { guardTools } from "./loop.js";
+import { compactStep, guardTools } from "./loop.js";
 import { openMcpTools } from "./mcp.js";
 import { renderTestsRepo } from "./tests-repo.js";
 import { modelExchange } from "./exchange.js";
 import { callUsage } from "./usage.js";
 import { prepareCall } from "./prepare-call.js";
-import { untrusted, UNTRUSTED_DATA_RULES, type ChangeContext } from "./context.js";
-import { modelForRole, stageGuard, type AgentStageDeps } from "./roles-run.js";
+import type { ChangeContext } from "./context.js";
+import {
+  assembleFor,
+  contextOf,
+  instructions,
+  modelForRole,
+  stageGuard,
+  type AgentStageDeps,
+} from "./roles-run.js";
 import { AGENT_ROLES } from "./roles.js";
 import { createReadOnlyTools } from "./workspace-tools.js";
 
@@ -88,7 +95,6 @@ export async function run({ step, verify, plan, ui }: CaseContext): Promise<void
 
 /** System prompt of the author role (REQ-EXEC-01). */
 export const AUTHOR_SYSTEM = `You are the test author of QAJitsu. You write one executable TypeScript spec for one approved test case.
-${UNTRUSTED_DATA_RULES}
 Rules (checked by code; a violating spec is rejected):
 - Start with: import type { CaseContext } from "@qajitsu/steps"; no other imports, no dynamic import.
 - Export const caseId = "<case id>" and export async function run({ step, verify, plan, api, ui, inbox }: CaseContext) (take only what you use).
@@ -260,7 +266,10 @@ export async function runAuthor(
   );
   const tools = model.profile.tools
     ? guardTools(
-        [...createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText }), ...(mcp?.tools ?? [])],
+        [
+          ...createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText, wrap: contextOf(deps).wrap }),
+          ...(mcp?.tools ?? []),
+        ],
         guard,
         deps.signal,
       )
@@ -279,41 +288,94 @@ export async function runAuthor(
         continue;
       }
       deps.events.emit("author", actor, "case.start", { caseId: planCase.id, model: model.id });
-      let messages: ModelMessage[] = [
-        {
-          role: "user",
-          content: [
-            `Write the spec for ${planCase.id}.`,
-            // The reason comes from the QA person running QAJitsu, not from a ticket or code: an instruction to follow
-            // (REQ-VER-24/AC3). It is masked before it is stored and sent.
-            ...(reviewNotes?.has(planCase.id)
-              ? [
-                  "## A reviewer sent your previous spec of this case back; fix exactly this",
-                  reviewNotes.get(planCase.id) ?? "",
-                ]
-              : []),
-            `Account aliases available: ${accounts.length > 0 ? accounts.join(", ") : "(none: call api without as())"}.`,
-            "## Approved case (from the plan; expectations are read with plan.expect)",
-            untrusted(`plan.${planCase.id}`, describeCase(planCase)),
-            "## Endpoints found by the analyst",
-            untrusted(
-              "analysis.endpoints",
-              JSON.stringify(analysis.endpoints.map((e) => ({ method: e.method, path: e.path }))),
-            ),
-            `Code of the change is under ${context.repos.map((r) => `repos/${r.alias}/`).join(", ") || "repos/"}.`,
-            // REQ-PLAN-09/AC7: the element ids and pages the code defines, so the spec opens real pages.
-            ...(context.ui ? [untrusted("ui/inventory", renderUiInventory(context.ui))] : []),
-            // REQ-EXEC-22/AC1+AC2: what the running application shows on the case's platform, masked by the caller.
-            ...(screensFor(planCase.type).length > 0
-              ? [untrusted("ui/snapshot", renderUiSnapshot(screensFor(planCase.type)))]
-              : []),
-            ...context.testsRepos.flatMap((t) => [
-              `## Conventions of the tests repository '${t.alias}' (REQ-EXEC-01/AC3; code under repos/${t.alias}/)`,
-              renderTestsRepo(t.alias, t.index),
-            ]),
-          ].join("\n\n"),
-        },
-      ];
+      const at = (
+        over: Omit<Parameters<typeof fragment>[0], "section" | "pinned"> & { pinned?: boolean },
+      ): ContextFragment => fragment({ section: "varying", pinned: false, ...over });
+      // REQ-CTX-12: the case's input as fragments; the approved case is trusted and pinned, the rest is data.
+      const input = await assembleFor(deps, {
+        stage: "author",
+        role: "author",
+        model,
+        fragments: [
+          instructions("author", AUTHOR_SYSTEM),
+          at({
+            kind: "question",
+            source: "task",
+            trust: "trusted",
+            priority: 95,
+            pinned: true,
+            text: [
+              `Write the spec for ${planCase.id}.`,
+              // The reason comes from the QA person running QAJitsu, not from a ticket or code: an instruction to
+              // follow (REQ-VER-24/AC3). It is masked before it is stored and sent.
+              ...(reviewNotes?.has(planCase.id)
+                ? [
+                    "## A reviewer sent your previous spec of this case back; fix exactly this",
+                    reviewNotes.get(planCase.id) ?? "",
+                  ]
+                : []),
+              `Account aliases available: ${accounts.length > 0 ? accounts.join(", ") : "(none: call api without as())"}.`,
+              `Code of the change is under ${context.repos.map((r) => `repos/${r.alias}/`).join(", ") || "repos/"}.`,
+            ].join("\n\n"),
+          }),
+          at({
+            kind: "plan",
+            source: `plan/${planCase.id}`,
+            trust: "trusted",
+            priority: 80,
+            pinned: true,
+            text: `## Approved case (from the plan; expectations are read with plan.expect)\n${describeCase(planCase)}`,
+          }),
+          at({
+            kind: "analysis",
+            source: "analysis.endpoints",
+            trust: "untrusted",
+            priority: 60,
+            text: JSON.stringify(analysis.endpoints.map((e) => ({ method: e.method, path: e.path }))),
+          }),
+          // REQ-PLAN-09/AC7: the element ids and pages the code defines, so the spec opens real pages.
+          ...(context.ui
+            ? [
+                at({
+                  kind: "ui",
+                  source: "ui/inventory",
+                  trust: "untrusted",
+                  priority: 50,
+                  text: renderUiInventory(context.ui),
+                }),
+              ]
+            : []),
+          // REQ-EXEC-22/AC1+AC2: what the running application shows on the case's platform, masked by the caller.
+          ...(screensFor(planCase.type).length > 0
+            ? [
+                at({
+                  kind: "ui",
+                  source: "ui/snapshot",
+                  trust: "untrusted",
+                  priority: 49,
+                  text: renderUiSnapshot(screensFor(planCase.type)),
+                }),
+              ]
+            : []),
+          ...context.testsRepos.flatMap((t) => [
+            at({
+              kind: "repository",
+              source: `tests/${t.alias}`,
+              trust: "trusted",
+              priority: 45,
+              text: `## Conventions of the tests repository '${t.alias}' (REQ-EXEC-01/AC3; code under repos/${t.alias}/)`,
+            }),
+            at({
+              kind: "repository",
+              source: `tests/${t.alias}/index`,
+              trust: "untrusted",
+              priority: 45,
+              text: renderTestsRepo(t.alias, t.index),
+            }),
+          ]),
+        ],
+      });
+      let messages: ModelMessage[] = [{ role: "user", content: input.prompt }];
       let problems: SpecProblem[] = [];
       // Every problem of every rejected answer, for the agent scorecard (REQ-LLM-14/AC2).
       const rejected: SpecProblem[] = [];
@@ -323,10 +385,20 @@ export async function runAuthor(
       for (let attempt = 1; attempt <= AUTHOR_MAX_ATTEMPTS; attempt += 1) {
         attempts += 1;
         const startedAt = Date.now();
+        // REQ-CTX-16: rounds of rejected specs grow the conversation; compacted only when the next call would not fit.
+        const canRead = Boolean(tools) && (input.tools ?? []).some((t) => t.name === "read_context");
+        messages = input.compact?.(messages, canRead) ?? messages;
         const result = await generateText({
           model: model.model,
-          ...prepareCall(model, AUTHOR_SYSTEM, messages),
-          ...(tools ? { tools, stopWhen: stepCountIs(10) } : {}),
+          ...prepareCall(model, input, messages),
+          // REQ-CTX-12/AC4: the case's catalogue tools join the author's own, through the same guard.
+          ...(tools
+            ? {
+                tools: { ...tools, ...guardTools([...(input.tools ?? [])], guard, deps.signal) },
+                stopWhen: stepCountIs(10),
+                ...(input.compact ? { prepareStep: compactStep(input.compact, canRead) } : {}),
+              }
+            : {}),
           ...(deps.signal ? { abortSignal: deps.signal } : {}),
           maxRetries: 2,
         });
@@ -336,7 +408,7 @@ export async function runAuthor(
           model.id,
           model.profile,
           callUsage(result.usage, startedAt),
-          modelExchange("author", "author", model, { system: AUTHOR_SYSTEM, messages }, result),
+          modelExchange("author", "author", model, { system: input.system, messages }, result),
         );
         const code = extractCode(result.text);
         problems =

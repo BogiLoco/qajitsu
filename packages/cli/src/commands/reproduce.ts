@@ -17,6 +17,7 @@ import { checkCertificate } from "@qajitsu/verifier";
 import type { RuntimePorts } from "../adapters.js";
 import { loadProject } from "../project.js";
 import { openSession, type ModelPorts } from "../session.js";
+import { rebuildInputs } from "./audit.js";
 import { KEYS_DIR, openRunFiles, publicKeysIn } from "./certificate.js";
 import { runFetch, type CommandIO } from "./fetch.js";
 import { runRun, type RunPorts } from "./run.js";
@@ -104,6 +105,20 @@ export async function runReproduce(
         },
       );
     const p = check.statement.predicate;
+    // REQ-CTX-17/AC4: what each model call of the certified run was given, rebuilt from its snapshot.
+    const text = (name: string): string | undefined => {
+      const data = files.read(name);
+      return data === undefined ? undefined : new TextDecoder().decode(data);
+    };
+    const journal = text("journal/events.jsonl");
+    const inputs =
+      journal === undefined ? undefined : rebuildInputs(journal, (h) => text(`context/fragments/${h}.txt`));
+    if (inputs)
+      io.write(
+        inputs.problems.length === 0
+          ? `Model inputs: ${inputs.summary}\n`
+          : `Model inputs differ from their snapshots:\n${inputs.problems.map((x) => `  ${x}`).join("\n")}\n`,
+      );
     const ticket = TicketKeySchema.parse(p.ticket);
     const certifiedStatuses = p.statuses ?? {};
     const plan = check.statement.subject.find((s) => s.name === "plan/plan.approved.yaml");

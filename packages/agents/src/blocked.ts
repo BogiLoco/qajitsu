@@ -3,13 +3,22 @@ import {
   BLOCKED_CATEGORIES,
   BlockedCiteSchema,
   ConfigError,
+  fragment,
   type CaseResultFile,
+  type ContextFragment,
   type Plan,
 } from "@qajitsu/core";
-import { UNTRUSTED_DATA_RULES, untrusted } from "./context.js";
 import { runStructuredAgent } from "./loop.js";
 import { AGENT_ROLES } from "./roles.js";
-import { modelForRole, stageGuard, type AgentStageDeps } from "./roles-run.js";
+import {
+  assembleFor,
+  contextOf,
+  instructions,
+  modelForRole,
+  question,
+  stageGuard,
+  type AgentStageDeps,
+} from "./roles-run.js";
 import { createReadOnlyTools } from "./workspace-tools.js";
 
 /** The model's answer: at most one hint per BLOCKED case (REQ-VER-13/AC1). */
@@ -50,7 +59,6 @@ For each case give the most likely cause and the next step the tester can take:
 - environment: the application or a dependency was not reachable or not healthy;
 - tooling: the browser, device, emulator or Appium failed;
 - configuration: the project or environment configuration is missing or wrong (accounts, URLs, app binary, keys).
-${UNTRUSTED_DATA_RULES}
 Cite what your explanation rests on, using only what is listed: {"kind":"error","ref":"error"} (the attempt's error),
 {"kind":"spec","ref":"<line number>"}, {"kind":"step","ref":"S1"}, {"kind":"evidence","ref":"<evidence path>"},
 {"kind":"log","ref":"<log file>"}. Citations are checked by code; a hint whose citations do not exist is thrown away.
@@ -66,44 +74,82 @@ const numbered = (source: string): string =>
     .map((line, i) => `${String(i + 1).padStart(3)}| ${line}`)
     .join("\n");
 
-const render = (input: BlockedInput): string =>
-  [
-    `Ticket ${input.plan.ticket}, plan v${String(input.plan.version)}. BLOCKED cases:`,
-    ...input.cases.map((c) => {
-      const planCase = input.plan.cases.find((p) => p.id === c.caseId);
-      const last = c.result.attempts.at(-1);
-      return [
-        `### ${c.caseId} (status BLOCKED, computed by code)`,
-        "Plan (approved, trusted):",
-        JSON.stringify(planCase ?? {}, null, 2),
-        "Last attempt (runner output):",
-        untrusted(
-          `results/${c.caseId}.json`,
-          JSON.stringify({ steps: last?.steps ?? [], error: last?.error }, null, 2),
-        ),
-        c.spec === undefined
-          ? "No spec: the author did not produce one."
-          : [
-              "Spec (generated, with line numbers):",
-              untrusted(`specs/${c.caseId}.spec.ts`, numbered(c.spec)),
-            ].join("\n"),
-        "Evidence files:",
-        c.evidence.map((e) => `- ${e}`).join("\n") || "- none",
-        ...c.evidence
-          .filter((e) => input.texts[e] !== undefined)
-          .map((e) => untrusted(`evidence/${e}`, (input.texts[e] ?? "").slice(0, 2000))),
-      ].join("\n");
+/**
+ * The context of the BLOCKED hints as fragments (REQ-CTX-11): plan (pinned), runner output, the generated spec with
+ * line numbers, evidence and log tails (untrusted), the evidence list built by code, and the question.
+ */
+export function blockedFragments(input: BlockedInput): ContextFragment[] {
+  const at = (
+    over: Omit<Parameters<typeof fragment>[0], "section" | "priority" | "pinned"> & {
+      pinned?: boolean;
+      priority?: number;
+    },
+  ) => fragment({ section: "varying", priority: 50, pinned: false, ...over });
+  const out: ContextFragment[] = [
+    instructions("blocked", BLOCKED_SYSTEM),
+    at({
+      kind: "question",
+      source: "intro",
+      trust: "trusted",
+      priority: 90,
+      pinned: true,
+      text: `Ticket ${input.plan.ticket}, plan v${String(input.plan.version)}. BLOCKED cases (statuses computed by code):`,
     }),
-    Object.keys(input.logs).length > 0
-      ? [
-          "Log files (tails):",
-          ...Object.entries(input.logs).map(
-            ([name, text]) => `- ${name}\n${untrusted(`logs/${name}`, text)}`,
-          ),
-        ].join("\n")
-      : "No log files.",
-    "Answer with the JSON object.",
-  ].join("\n\n");
+  ];
+  for (const c of input.cases) {
+    const planCase = input.plan.cases.find((p) => p.id === c.caseId);
+    const last = c.result.attempts.at(-1);
+    out.push(
+      at({
+        kind: "plan",
+        source: `${c.caseId}/plan`,
+        trust: "trusted",
+        pinned: true,
+        text: JSON.stringify(planCase ?? {}, null, 2),
+      }),
+      at({
+        kind: "result",
+        source: `${c.caseId}/results.json`,
+        trust: "untrusted",
+        text: JSON.stringify({ steps: last?.steps ?? [], error: last?.error }, null, 2),
+      }),
+      c.spec === undefined
+        ? at({
+            kind: "spec",
+            source: `${c.caseId}/spec`,
+            trust: "trusted",
+            text: "No spec: the author did not produce one.",
+          })
+        : at({ kind: "spec", source: `${c.caseId}/spec`, trust: "untrusted", text: numbered(c.spec) }),
+      at({
+        kind: "evidence",
+        source: `${c.caseId}/evidence (list)`,
+        trust: "trusted",
+        text: c.evidence.map((e) => `- ${e}`).join("\n") || "- none",
+      }),
+      ...c.evidence
+        .filter((e) => input.texts[e] !== undefined)
+        .map((e) =>
+          at({
+            kind: "evidence",
+            source: `${c.caseId}/evidence/${e}`,
+            trust: "untrusted",
+            text: (input.texts[e] ?? "").slice(0, 2000),
+          }),
+        ),
+    );
+  }
+  for (const [name, text] of Object.entries(input.logs))
+    out.push(at({ kind: "log", source: `logs/${name}`, trust: "untrusted", priority: 40, text }));
+  out.push(
+    question(
+      Object.keys(input.logs).length > 0
+        ? "Answer with the JSON object."
+        : "No log files.\nAnswer with the JSON object.",
+    ),
+  );
+  return out;
+}
 
 /**
  * Stage `blocked`: explains every BLOCKED case with a next step and citations (REQ-VER-13/AC1). Runs with the model of
@@ -126,8 +172,13 @@ export async function runBlockedHints(
     stage: "triage",
     role: "triage",
     model,
-    system: BLOCKED_SYSTEM,
-    prompt: render(input),
+    // REQ-CTX-12: assembled from fragments, its snapshot in the journal (REQ-CTX-17/AC3).
+    context: await assembleFor(deps, {
+      stage: "triage",
+      role: "blocked",
+      model,
+      fragments: blockedFragments(input),
+    }),
     schema: BlockedAnswerSchema,
     validate: (answer) => {
       const seen = answer.hints.map((h) => h.caseId);
@@ -136,7 +187,7 @@ export async function runBlockedHints(
         ...seen.filter((id, i) => seen.indexOf(id) !== i).map((id) => `hints: ${id} appears more than once`),
       ];
     },
-    tools: createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText }),
+    tools: createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText, wrap: contextOf(deps).wrap }),
     guard: stageGuard(deps, "triage", role),
     usage: deps.usage,
     ...(deps.signal ? { signal: deps.signal } : {}),
