@@ -394,8 +394,26 @@ export const TestCaseSchema = z.strictObject({
             .optional(),
           /** Most scrolls of `ui.scrollUntil` in this step (REQ-EXEC-40/AC2); 20 when not given. */
           scroll_limit: z.number().int().min(1).max(200).optional(),
+          /**
+           * An outcome that comes later (REQ-EXEC-46/AC1): jobs, queues, eventual consistency. The step's actions and
+           * checks are repeated every `interval_s` until every check holds or `timeout_s` has passed; then the last
+           * values decide. Only the plan sets this; a spec cannot wait longer.
+           */
+          wait: z
+            .strictObject({
+              timeout_s: z.number().min(1).max(600),
+              interval_s: z.number().min(0.2).max(60).default(1),
+            })
+            .refine((w) => w.interval_s <= w.timeout_s, "interval_s must not exceed timeout_s")
+            .optional(),
         })
         .superRefine((step, ctx) => {
+          if (step.manual === true && step.wait !== undefined)
+            ctx.addIssue({
+              code: "custom",
+              path: ["wait"],
+              message: "A manual step is answered once; it cannot wait",
+            });
           if (step.manual !== true) return;
           if (step.instructions === undefined)
             ctx.addIssue({

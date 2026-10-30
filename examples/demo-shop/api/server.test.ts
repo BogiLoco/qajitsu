@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 import { afterEach, describe, expect, it } from "vitest";
-import { BUG_FLAGS, startShop } from "./server.mjs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { BUG_FLAGS, createShop, startShop } from "./server.mjs";
 
 interface Shop {
   url: string;
@@ -121,6 +123,55 @@ describe("demo-shop seeded bugs (REQ-NFR-04, BUGS.md)", () => {
     });
     expect(refused.status).toBe(415);
     expect(await refused.json()).toEqual({ error: "PDF_ONLY" });
+  });
+
+  it("BUG-22: a document is ready two seconds after the upload without the flag, never with it", async () => {
+    for (const [flag, later] of [
+      [undefined, "ready"],
+      ["BUG_DOCUMENT_NEVER_READY", "processing"],
+    ] as const) {
+      let t = 1_000_000;
+      const handler = createShop({
+        password: PASSWORD,
+        now: () => t,
+        ...(flag ? { bugs: { [flag]: true } } : {}),
+      });
+      const server = createServer((req, res) => {
+        void handler(req, res);
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const shop: Shop = {
+        url: `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`,
+        close: () =>
+          new Promise((resolve) =>
+            server.close(() => {
+              resolve();
+            }),
+          ),
+      };
+      shops.push(shop);
+      const token = await login(shop);
+      const form = new FormData();
+      form.set("title", "Invoice 8");
+      form.set("file", new Blob(["%PDF-1.4\n"], { type: "application/pdf" }), "invoice-8.pdf");
+      const auth = { authorization: `Bearer ${token}` };
+      const created = (await (
+        await fetch(`${shop.url}/documents`, { method: "POST", headers: auth, body: form })
+      ).json()) as {
+        id: string;
+        status: string;
+      };
+      expect(created.status).toBe("processing");
+      const status = async () =>
+        (
+          (await (await fetch(`${shop.url}/documents/${created.id}`, { headers: auth })).json()) as {
+            status: string;
+          }
+        ).status;
+      expect(await status()).toBe("processing");
+      t += 2_000;
+      expect(await status()).toBe(later);
+    }
   });
 
   it("serves health, version, products; rejects bad logins, unknown codes and routes", async () => {

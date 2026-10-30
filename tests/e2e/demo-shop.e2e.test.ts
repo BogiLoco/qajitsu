@@ -63,7 +63,15 @@ const BUGS = [
     flag: "BUG_DOCUMENT_TRUNCATED",
     ticket: "DEMO-16",
     caseId: "TC-01",
-    specs: ["TC-01", "TC-02"],
+    specs: ["TC-01", "TC-02", "TC-03"],
+  },
+  // An outcome that never comes: the planned wait ends at its timeout with FAILED (REQ-EXEC-46).
+  {
+    bug: "BUG-22",
+    flag: "BUG_DOCUMENT_NEVER_READY",
+    ticket: "DEMO-16",
+    caseId: "TC-03",
+    specs: ["TC-01", "TC-02", "TC-03"],
   },
 ] as const;
 
@@ -168,7 +176,7 @@ describe("demo-shop self-test (REQ-NFR-04/AC1)", () => {
     ["DEMO-4", ["TC-01", "TC-02"]],
     ["DEMO-5", ["TC-01"]],
     ["DEMO-7", ["TC-01", "TC-02", "TC-03"]],
-    ["DEMO-16", ["TC-01", "TC-02"]],
+    ["DEMO-16", ["TC-01", "TC-02", "TC-03"]],
   ] as const)("%s: every case is PASSED with all bugs off", async (ticket, specs) => {
     const { exitCode, statuses, out } = await pipeline(ticket, specs);
     expect(

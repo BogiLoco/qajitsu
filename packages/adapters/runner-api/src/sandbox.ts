@@ -173,6 +173,12 @@ const OpSchema = z.discriminatedUnion("op", [
   z.strictObject({
     type: z.literal("op"),
     id: z.number().int(),
+    op: z.literal("pollRound"),
+    stepId: z.string().max(10),
+  }),
+  z.strictObject({
+    type: z.literal("op"),
+    id: z.number().int(),
     op: z.literal("call"),
     alias: z.string().optional(),
     method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
@@ -366,7 +372,16 @@ export function createSandboxExecutor(
               else if (op.op === "ui") await runtime.uiOp(op.operation);
               else if (op.op === "inboxAddress") value = await runtime.inboxAddress(op.kind);
               else if (op.op === "inboxWait") value = (await runtime.inboxWait(op.stepId)) ?? null;
-              else {
+              else if (op.op === "pollRound") {
+                // REQ-EXEC-46: the plan's wait decides; the interval does not count against the case's time limit.
+                const next = runtime.pollRound(op.stepId);
+                if (next.again) {
+                  deadline.pause();
+                  await new Promise((resolve) => setTimeout(resolve, next.delayMs));
+                  deadline.resume();
+                }
+                value = next.again;
+              } else {
                 const r = await runtime.call(op.alias, op.method, op.path, op.body, {
                   ...(op.options.headers ? { headers: op.options.headers } : {}),
                   ...(op.options.query ? { query: op.options.query } : {}),

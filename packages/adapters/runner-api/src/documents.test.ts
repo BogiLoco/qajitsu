@@ -75,17 +75,28 @@ const runDemo16 = async (flag?: string) => {
     specs: new Map([
       ["TC-01", join(specDir, "TC-01.spec.ts")],
       ["TC-02", join(specDir, "TC-02.spec.ts")],
+      ["TC-03", join(specDir, "TC-03.spec.ts")],
     ]),
     executor: inProcess,
   });
   return { run, results, tokens };
 };
 
-describe("multipart upload and file download against the demo shop (REQ-EXEC-45, BUG-21)", () => {
-  it("REQ-EXEC-45/AC1+AC2+AC3: the PDF is uploaded as multipart and comes back as a file kept by hash; a text file is refused", async () => {
+describe("multipart upload, file download and waiting against the demo shop (REQ-EXEC-45, REQ-EXEC-46, BUG-21)", () => {
+  it("REQ-EXEC-45/AC1+AC2+AC3 + REQ-EXEC-46/AC1+AC2: the PDF is uploaded as multipart and comes back as a file kept by hash; a text file is refused", async () => {
     const { run, results, tokens } = await runDemo16();
     expect(results.get("TC-01")?.attempts.map((a) => a.outcome)).toEqual(["passed"]);
     expect(results.get("TC-02")?.attempts.map((a) => a.outcome)).toEqual(["passed"]);
+    // REQ-EXEC-46/AC1+AC2: the processing document is polled until ready; the rounds are evidence.
+    expect(results.get("TC-03")?.attempts.map((a) => a.outcome)).toEqual(["passed"]);
+    const waited = CaseResultFileSchema.parse(
+      JSON.parse(await readFile(join(run, "results", "TC-03.json"), "utf8")),
+    );
+    const s2 = waited.attempts[0]?.steps.find((x) => x.id === "S2");
+    expect(s2?.wait?.met).toBe(true);
+    expect(s2?.wait?.rounds).toBeGreaterThan(1);
+    expect(s2?.wait?.waitedMs).toBeGreaterThanOrEqual(1000);
+    expect(waited.attempts[0]?.evidence).toContain("TC-03/attempt-1/S2-wait.json");
     const file = CaseResultFileSchema.parse(
       JSON.parse(await readFile(join(run, "results", "TC-01.json"), "utf8")),
     );

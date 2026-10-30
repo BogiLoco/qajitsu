@@ -259,7 +259,9 @@ async function start(m: StartMessage): Promise<void> {
     step: async (stepId: string, fn: () => unknown): Promise<void> => {
       await rpc({ op: "beginStep", stepId });
       try {
-        await fn();
+        // REQ-EXEC-46: the parent says whether a step with a planned wait runs another round (after its checks).
+        do await fn();
+        while ((await rpc({ op: "pollRound", stepId })) === true);
       } catch (e) {
         await rpc({ op: "endStep", stepId, error: message(e) });
         throw e;

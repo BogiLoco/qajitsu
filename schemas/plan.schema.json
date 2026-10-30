@@ -768,6 +768,26 @@
                   "type": "integer",
                   "minimum": 1,
                   "maximum": 200
+                },
+                "wait": {
+                  "type": "object",
+                  "properties": {
+                    "timeout_s": {
+                      "type": "number",
+                      "minimum": 1,
+                      "maximum": 600
+                    },
+                    "interval_s": {
+                      "default": 1,
+                      "type": "number",
+                      "minimum": 0.2,
+                      "maximum": 60
+                    }
+                  },
+                  "required": [
+                    "timeout_s"
+                  ],
+                  "additionalProperties": false
                 }
               },
               "required": [

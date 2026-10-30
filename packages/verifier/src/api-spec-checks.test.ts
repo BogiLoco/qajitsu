@@ -49,4 +49,21 @@ describe("static checks of API bodies (REQ-EXEC-45)", () => {
       "coverage: api.binary(): 'toString' is not a file of TC-01 in the plan (files)",
     );
   });
+
+  it("REQ-EXEC-45/AC1: a binary body without a key, a case without files and a multipart without files", () => {
+    const tc01 = spec("TC-01");
+    const multipart = 'user.multipart({ fields: { title: "Invoice 7" }, files: { file: "invoice" } })';
+    expect(messages(tc01.replace(multipart, "user.binary()"))).toContain(
+      "lint: api.binary() takes literal file keys of the plan",
+    );
+    const noFiles = { ...plan, cases: plan.cases.map((c) => ({ ...c, files: undefined })) };
+    expect(checkSpecSource(tc01, "TC-01", noFiles).map((p) => `${p.check}: ${p.message}`)).toContain(
+      "coverage: api.multipart(): 'invoice' is not a file of TC-01 in the plan (files)",
+    );
+    expect(
+      messages(tc01.replace(multipart, 'user.multipart({ fields: { title: "Invoice 7" } })')).filter((m) =>
+        m.includes("multipart"),
+      ),
+    ).toEqual([]);
+  });
 });

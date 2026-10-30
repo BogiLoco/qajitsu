@@ -43,6 +43,14 @@ export const CaseAttemptSchema = z.strictObject({
           )
           .max(20)
           .optional(),
+        /** A step with a planned wait (REQ-EXEC-46/AC2): time waited, rounds and whether the checks held. */
+        wait: z
+          .strictObject({
+            waitedMs: z.number().nonnegative(),
+            rounds: z.number().int().min(1),
+            met: z.boolean(),
+          })
+          .optional(),
       }),
     )
     .default([]),

@@ -13,6 +13,7 @@ import type {
   VisualCheck,
   TestCase,
 } from "@qajitsu/core";
+import { plannedFields } from "@qajitsu/core";
 import { checkGesture } from "./gestures.js";
 import type { Masker } from "./masking.js";
 import {
@@ -188,6 +189,8 @@ export interface CaseRuntimeOptions {
   /** Headers per account alias, prepared by framework login helpers (REQ-CFG-07/AC2). */
   readonly accounts: Readonly<Record<string, Readonly<Record<string, string>>>>;
   readonly now: () => number;
+  /** Waits between the rounds of a step with a planned wait (REQ-EXEC-46); `setTimeout` when not given. */
+  readonly sleep?: (ms: number) => Promise<void>;
   /** Starts the browser on first use; absent for API-only runs (REQ-EXEC-05). */
   readonly ui?: (() => Promise<UiDriver>) | undefined;
   /**
@@ -223,6 +226,11 @@ export interface CaseRuntime {
   readonly context: CaseContext;
   readonly beginStep: (stepId: string) => void;
   readonly endStep: (stepId: string, error?: string) => Promise<void>;
+  /**
+   * After a round of a step's actions and checks (REQ-EXEC-46): `again` with the delay when the plan's wait allows
+   * another round and a check did not hold; that round's checks then become evidence of the wait.
+   */
+  readonly pollRound: (stepId: string) => { readonly again: boolean; readonly delayMs: number };
   readonly call: (
     alias: string | undefined,
     method: HttpMethod,
@@ -393,6 +401,12 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   /** What the step did last: an API call or a UI action; decides the source of `texts` checks. */
   const lastAction = new Map<string, "api" | "ui">();
   const maskValue = (v: unknown): unknown => masker.maskJson(v);
+  const sleep =
+    options.sleep ??
+    ((ms: number): Promise<void> =>
+      new Promise((resolve) => {
+        setTimeout(resolve, ms);
+      }));
 
   /** Browser sessions by name (REQ-EXEC-62); `main` is the case's first one. `driver` is the active session's. */
   const sessions = new Map<string, UiDriver>();
@@ -460,6 +474,17 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     return { name, text };
   };
 
+  /** Rounds of steps with a planned wait (REQ-EXEC-46): start time, where the round's checks begin, and the rounds. */
+  const waits = new Map<
+    string,
+    {
+      startedAt: number;
+      from: number;
+      rounds: { atMs: number; checks: { field: string; actual: unknown; pass: boolean }[] }[];
+      met: boolean;
+    }
+  >();
+
   const beginStep = (stepId: string): void => {
     if (!stepIds.has(stepId))
       throw new Error(`step('${stepId}') is not a step of ${caseId} in the approved plan`);
@@ -467,6 +492,49 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       throw new Error(`step('${stepId}') ran twice or inside another step`);
     }
     currentStep = stepId;
+    if (planCase.steps.find((s) => s.id === stepId)?.wait)
+      waits.set(stepId, { startedAt: options.now(), from: assertions.length, rounds: [], met: false });
+  };
+
+  /**
+   * REQ-EXEC-46/AC1+AC3: decides whether a step with a planned wait runs another round. The plan alone sets the
+   * timeout and interval; a round with no checks, or after the timeout, ends the waiting, and its checks decide.
+   */
+  const pollRound: CaseRuntime["pollRound"] = (stepId) => {
+    const w = waits.get(stepId);
+    const stepPlan = planCase.steps.find((s) => s.id === stepId);
+    const planned = stepPlan?.wait;
+    if (!w || !stepPlan || !planned || currentStep !== stepId) return { again: false, delayMs: 0 };
+    const round = assertions.slice(w.from);
+    const atMs = options.now() - w.startedAt;
+    w.rounds.push({
+      atMs,
+      checks: round.map((a) => ({ field: a.field, actual: maskValue(a.actual), pass: a.pass })),
+    });
+    // Met only when the round checked every field the plan expects in the step, and each held: a round that leaves
+    // out the failing check cannot stand in for it.
+    const checked = new Set(round.map((a) => a.field));
+    w.met =
+      round.length > 0 &&
+      round.every((a) => a.pass) &&
+      plannedFields(stepPlan.expect).every((f) => checked.has(f));
+    const intervalMs = Math.round(planned.interval_s * 1000);
+    if (w.met) return { again: false, delayMs: 0 };
+    if (atMs + intervalMs > planned.timeout_s * 1000) {
+      // Not met in time while every check of the last round held: a planned check was left out, which is a failure.
+      if (round.every((a) => a.pass))
+        assertions.push({
+          stepId,
+          field: "wait",
+          expected: `every planned check of ${stepId} holds within ${String(planned.timeout_s)} s`,
+          actual: `the last round checked ${[...checked].join(", ") || "nothing"}`,
+          pass: false,
+        });
+      return { again: false, delayMs: 0 };
+    }
+    // The round did not hold: its checks are kept in the wait's evidence, the next round checks again.
+    assertions.splice(w.from);
+    return { again: true, delayMs: intervalMs };
   };
 
   const manualSteps = new Map(planCase.steps.filter((s) => s.manual === true).map((s) => [s.id, s] as const));
@@ -555,9 +623,33 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         name: `${stepId}-network.json`,
         content: `${JSON.stringify({ requests: sent.length, problems }, null, 2)}\n`,
       });
+    const w = waits.get(stepId);
+    const planned = planCase.steps.find((s) => s.id === stepId)?.wait;
+    if (w && planned && w.rounds.length > 0) {
+      const waitedMs = w.rounds.at(-1)?.atMs ?? 0;
+      media.push({
+        stepId,
+        kind: "log",
+        name: `${stepId}-wait.json`,
+        content: `${JSON.stringify(
+          {
+            timeout_s: planned.timeout_s,
+            interval_s: planned.interval_s,
+            waitedMs,
+            met: w.met,
+            rounds: w.rounds,
+          },
+          null,
+          2,
+        )}\n`,
+      });
+    }
     steps.push({
       id: stepId,
       ok: error === undefined,
+      ...(w && w.rounds.length > 0
+        ? { wait: { waitedMs: w.rounds.at(-1)?.atMs ?? 0, rounds: w.rounds.length, met: w.met } }
+        : {}),
       ...(error === undefined ? {} : { error: masker.maskText(error) }),
       ...(driver ? { url: masker.maskText(driver.url()) } : {}),
       ...(problems.length > 0 ? { network: problems } : {}),
@@ -1604,8 +1696,14 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     step: async (stepId, fn) => {
       beginStep(stepId);
       try {
-        await fn();
-        await pending;
+        // REQ-EXEC-46: a step with a planned wait repeats its actions and checks until they hold or time is up.
+        for (;;) {
+          await fn();
+          await pending;
+          const next = pollRound(stepId);
+          if (!next.again) break;
+          await sleep(next.delayMs);
+        }
         await endStep(stepId);
       } catch (error) {
         pending = Promise.resolve();
@@ -1628,6 +1726,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   return {
     context,
     beginStep,
+    pollRound,
     endStep,
     call,
     uiOp,

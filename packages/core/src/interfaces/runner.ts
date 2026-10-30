@@ -82,6 +82,8 @@ export interface AttemptRecord {
     readonly url?: string;
     /** What went wrong in the step's traffic (REQ-EVD-09/AC1), built by code. */
     readonly network?: readonly NetworkProblemRecord[];
+    /** A step with a planned wait (REQ-EXEC-46/AC2): how long it waited, in how many rounds, and whether it held. */
+    readonly wait?: { readonly waitedMs: number; readonly rounds: number; readonly met: boolean };
   }[];
   readonly assertions: readonly AssertionRecord[];
   readonly evidence: readonly EvidenceItem[];

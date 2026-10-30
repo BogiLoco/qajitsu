@@ -31,6 +31,7 @@ export const BUG_FLAGS = [
   "BUG_MESSAGE_TO_SENDER",
   "BUG_SWIPE_SKIPS_SLIDE",
   "BUG_DOCUMENT_TRUNCATED",
+  "BUG_DOCUMENT_NEVER_READY",
 ];
 
 const PRODUCTS = [
@@ -267,8 +268,35 @@ export function createShop(options) {
       if (file.type !== "application/pdf") return json(res, 415, { error: "PDF_ONLY" });
       documentSeq += 1;
       const id = `D-${String(documentSeq)}`;
-      documents.set(id, { title, name: file.filename, type: file.type, data: file.data });
-      return json(res, 201, { id, title, name: file.filename, bytes: file.data.length });
+      // REQ-EXEC-46 demo: a document is processed for two seconds before it is ready.
+      documents.set(id, {
+        title,
+        name: file.filename,
+        type: file.type,
+        data: file.data,
+        readyAt: now() + 2000,
+      });
+      return json(res, 201, {
+        id,
+        title,
+        name: file.filename,
+        bytes: file.data.length,
+        status: "processing",
+      });
+    }
+    const document = /^\/documents\/(D-\d+)$/.exec(url.pathname);
+    if (req.method === "GET" && document) {
+      const d = documents.get(document[1]);
+      if (!d) return json(res, 404, { error: "DOCUMENT_NOT_FOUND" });
+      // BUG-22: the document stays processing for ever.
+      const ready = now() >= d.readyAt && !bugs.BUG_DOCUMENT_NEVER_READY;
+      return json(res, 200, {
+        id: document[1],
+        title: d.title,
+        name: d.name,
+        bytes: d.data.length,
+        status: ready ? "ready" : "processing",
+      });
     }
     const documentFile = /^\/documents\/(D-\d+)\/file$/.exec(url.pathname);
     if (req.method === "GET" && documentFile) {

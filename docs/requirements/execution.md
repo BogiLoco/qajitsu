@@ -710,7 +710,7 @@ Lists, carousels, pull-to-refresh and maps need gestures.
 
 ### REQ-EXEC-46 · Waiting for asynchronous outcomes
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: later
 - Related: REQ-EXEC-04, REQ-EXEC-05, INV-1, INV-4
@@ -719,9 +719,9 @@ Jobs, queues and eventual consistency: "the status changes within 30 seconds".
 
 **Acceptance criteria**
 
-- [ ] AC1: A step can poll an API call or a UI check until the planned expectation holds, with an interval and a timeout from the frozen plan.
-- [ ] AC2: Every attempt is recorded as evidence; the report shows how long it took.
-- [ ] AC3: An expectation not met at the timeout fails the step with the last observed value; polling never retries a failed `verify()` after the step ended.
+- [x] AC1: A step can poll an API call or a UI check until the planned expectation holds, with an interval and a timeout from the frozen plan.
+- [x] AC2: Every attempt is recorded as evidence; the report shows how long it took.
+- [x] AC3: An expectation not met at the timeout fails the step with the last observed value; polling never retries a failed `verify()` after the step ended.
 
 ### REQ-EXEC-47 · WebSocket and server-sent events testing
 

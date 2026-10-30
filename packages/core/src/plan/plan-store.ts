@@ -183,6 +183,10 @@ export function renderPlanMarkdown(plan: Plan): string {
         s.expect.download ? `download ${JSON.stringify(s.expect.download)}` : undefined,
         s.expect.state ? `state ${JSON.stringify(s.expect.state)}` : undefined,
         s.scroll_limit === undefined ? undefined : `at most ${String(s.scroll_limit)} scrolls`,
+        // REQ-EXEC-46: the reviewer sees how long the step may wait for its outcome.
+        s.wait === undefined
+          ? undefined
+          : `checked again every ${String(s.wait.interval_s)} s for up to ${String(s.wait.timeout_s)} s`,
         s.expect.by_locale ? `per locale ${JSON.stringify(s.expect.by_locale)}` : undefined,
       ].filter(Boolean);
       out.push(

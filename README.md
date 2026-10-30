@@ -1177,6 +1177,10 @@ verification: { auditor: optional, canary: true, triage: on }
   named by their key in the plan, never by path. A response that is a file (a PDF, an image, an export) is kept as
   evidence with its SHA-256 and checked like a download (`download.name|type|size|sha256|rows|texts|fields`); form
   fields and text bodies are masked.
+- **Waiting for asynchronous outcomes.** A plan step with `"wait": { "timeout_s": 30, "interval_s": 2 }` repeats its
+  request or page check until every expectation of the step holds or the time is up; only the plan sets the wait.
+  Each round is evidence (`S2-wait.json`), the report shows how long it took, and a check not met in time fails with
+  the last observed value. A round that leaves out a planned check never counts as met.
 - **OpenAPI contract validation** of every response against the document in the analysed commit.
 - **Bug fix verification.** For a Bug ticket the planner marks the cases that reproduce the defect;
   `qj run <TICKET> --build --fix-check` runs them on the commit before the fix (they must FAIL) and with the fix (they

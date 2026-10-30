@@ -187,6 +187,23 @@ describe("API request and response bodies beyond JSON (REQ-EXEC-45)", () => {
     });
   });
 
+  it("REQ-EXEC-45/AC2: an attachment without a type or a file name is kept under the path's name and its type", async () => {
+    const { context, finish } = setup(() => ({
+      status: 200,
+      headers: { "content-disposition": "attachment" },
+      text: "",
+      bytes: PDF,
+    }));
+    await context.step("S1", () => undefined);
+    await context.step("S2", async () => {
+      await context.api.get("/documents/1/report.pdf");
+      context.verify("S2", "download.type", undefined, context.plan.expect("TC-01.S2.download.type"));
+    });
+    const record = await finish();
+    expect(record.evidence.map((e) => e.name)).toContain("S2-download-report.pdf");
+    expect(record.assertions[0]).toMatchObject({ field: "download.type", actual: "pdf", pass: true });
+  });
+
   it("REQ-EXEC-45/AC2: a different file fails the step; a step without a file response fails, never passes", async () => {
     const other = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
     const { context, finish } = setup(() => ({
@@ -234,6 +251,15 @@ describe("API request and response bodies beyond JSON (REQ-EXEC-45)", () => {
       await expect(api.post("/x", { __qjBody: "multipart", files: { a: 7 } })).rejects.toThrow(
         /invalid request body/,
       );
+      // Every malformed descriptor is refused, not sent with a guessed meaning.
+      for (const forged of [
+        { __qjBody: "form", fields: "user=anna" },
+        { __qjBody: "multipart", fields: ["a"] },
+        { __qjBody: "binary", file: 7 },
+        { __qjBody: "text", text: "x", type: "Text/Plain;evil" },
+        { __qjBody: "text", text: 7 },
+      ])
+        await expect(api.post("/x", forged)).rejects.toThrow(/invalid request body/);
     });
     // Refused before anything is sent; the API runner ends such an attempt as an error (sandbox).
     expect(sent).toEqual([]);

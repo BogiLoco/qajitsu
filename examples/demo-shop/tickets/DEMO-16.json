@@ -7,7 +7,8 @@
   "acceptanceCriteria": [
     "Uploading a PDF with a title returns 201 with the document id, the title, the file name and its size in bytes.",
     "Downloading a document returns exactly the uploaded file: the same name, type application/pdf and the same size.",
-    "A file that is not a PDF is refused with 415 and the error PDF_ONLY."
+    "A file that is not a PDF is refused with 415 and the error PDF_ONLY.",
+    "A new document is processing at first and becomes ready within 10 seconds (GET /documents/{id} shows its status)."
   ],
   "labels": ["documents", "api"],
   "components": ["shop-api"],

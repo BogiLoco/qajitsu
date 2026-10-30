@@ -207,12 +207,13 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [id, title, name, bytes]
+                required: [id, title, name, bytes, status]
                 properties:
                   id: { type: string }
                   title: { type: string }
                   name: { type: string }
                   bytes: { type: integer, minimum: 0 }
+                  status: { type: string, enum: [processing, ready] }
         "415":
           {
             description: not multipart or not a PDF,
@@ -221,6 +222,28 @@ paths:
         "422":
           {
             description: title or file missing,
+            content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } },
+          }
+  /documents/{id}:
+    get:
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: the document and its processing status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, title, name, bytes, status]
+                properties:
+                  id: { type: string }
+                  title: { type: string }
+                  name: { type: string }
+                  bytes: { type: integer, minimum: 0 }
+                  status: { type: string, enum: [processing, ready] }
+        "404":
+          {
+            description: unknown document,
             content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } },
           }
   /documents/{id}/file:

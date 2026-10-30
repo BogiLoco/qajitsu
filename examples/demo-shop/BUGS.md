@@ -26,6 +26,7 @@ assert that the targeting case ends FAILED with the flag on and PASSED with it o
 | BUG-19 | `BUG_MESSAGE_TO_SENDER`          | messages  | web    | A message lands in its sender's inbox instead of the recipient's            | DEMO-14        | later |
 | BUG-20 | `BUG_SWIPE_SKIPS_SLIDE`          | gallery   | web    | A swipe in the gallery jumps two slides instead of one                      | DEMO-15        | later |
 | BUG-21 | `BUG_DOCUMENT_TRUNCATED`         | documents | api    | A downloaded invoice document misses the last byte of the uploaded PDF      | DEMO-16        | later |
+| BUG-22 | `BUG_DOCUMENT_NEVER_READY`       | documents | api    | An uploaded document stays processing and never becomes ready               | DEMO-16        | later |
 
 Rules:
 

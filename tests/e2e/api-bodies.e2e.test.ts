@@ -33,14 +33,14 @@ describe("API bodies in the sandboxed runner (REQ-EXEC-45)", () => {
     await rm(run, { recursive: true, force: true });
   });
 
-  it("REQ-EXEC-45/AC1+AC2: a multipart upload from the sandboxed spec reaches the shop and the file response is checked", async () => {
+  it("REQ-EXEC-45/AC1+AC2 + REQ-EXEC-46/AC1: a multipart upload, a file response and a planned wait work from the sandboxed spec", async () => {
     const login = (await (
       await fetch(`${shop.url}/auth/login`, {
         method: "POST",
         body: JSON.stringify({ username: "standard", password: PASSWORD }),
       })
     ).json()) as { token: string };
-    for (const id of ["TC-01", "TC-02"]) {
+    for (const id of ["TC-01", "TC-02", "TC-03"]) {
       const spec = join(run, "specs", `${id}.spec.ts`);
       await copyFile(
         fileURLToPath(new URL(`../../fixtures/specs/demo-16/${id}.spec.ts`, import.meta.url)),
