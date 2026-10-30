@@ -194,6 +194,12 @@ export function renderFragments(
   };
 }
 
+/**
+ * About what one line of the catalogue costs: a fragment this small is not put behind a handle for matching nothing
+ * (a heading such as "## Ticket" would only lose its place and save nothing; dogfood 2026-10-29).
+ */
+const CATALOGUE_LINE_TOKENS = 24;
+
 /** The rule every role reads about data blocks (REQ-CTX-15/AC2). */
 export const dataRules = (marker: string): string =>
   [
@@ -369,11 +375,13 @@ export function createContextManager(options: { readonly marker?: string } = {})
       // REQ-LLM-15/AC4: a compact model gets fewer fragments at once: what matches nothing of the task waits.
       if (budget?.style === "compact")
         for (const f of byRelevance())
-          if ((rank.get(f.sha256)?.value ?? 0) === 0) shelve(f, "compact style: matches nothing of the task");
+          if ((rank.get(f.sha256)?.value ?? 0) === 0 && f.tokens > CATALOGUE_LINE_TOKENS)
+            shelve(f, "compact style: matches nothing of the task");
       if (!fits())
         for (const f of byRelevance()) {
           if (fits()) break;
-          if ((rank.get(f.sha256)?.value ?? 0) === 0) shelve(f, "over budget: matches nothing of the task");
+          if ((rank.get(f.sha256)?.value ?? 0) === 0 && f.tokens > CATALOGUE_LINE_TOKENS)
+            shelve(f, "over budget: matches nothing of the task");
         }
       if (!fits())
         for (const f of competing.filter((x) => inPrompt.has(x.sha256)).sort((a, b) => b.tokens - a.tokens)) {

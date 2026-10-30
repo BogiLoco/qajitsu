@@ -167,6 +167,23 @@ describe("context budget and reductions (REQ-CTX-12, REQ-CTX-14, REQ-LLM-15/AC4)
     expect(compact.snapshot.reductions.map((r) => r.reason)).toEqual([
       "compact style: matches nothing of the task",
     ]);
+    // A fragment smaller than its catalogue line stays: a heading behind a handle saves nothing (dogfood 2026-10-29).
+    const heading = f({
+      kind: "ticket",
+      source: "ticket/heading",
+      trust: "trusted",
+      priority: 86,
+      text: "## Ticket",
+    });
+    const kept = createContextManager({ marker: "testmarker00" }).assemble({
+      stage: "plan",
+      role: "t",
+      model: "m",
+      fragments: [...all, heading],
+      budget: budget(100_000, "compact"),
+    });
+    expect(kept.prompt).toContain("## Ticket");
+    expect(kept.snapshot.catalogue.map((c) => c.source)).not.toContain("ticket/heading");
   });
 
   it("REQ-CTX-14/AC2: duplicates are sent once", () => {

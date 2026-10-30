@@ -73,8 +73,8 @@ const compact = {
 };
 
 describe("semantic signals for choosing context (REQ-CTX-20)", () => {
-  const related = f({ source: "repos/shop/pricing.ts", text: "fee vat tax" });
-  const unrelated = f({ source: "repos/shop/zzz.ts", text: "qux zap" });
+  const related = f({ source: "repos/shop/pricing.ts", text: "fee vat tax ".repeat(12) });
+  const unrelated = f({ source: "repos/shop/zzz.ts", text: "qux zap ".repeat(20) });
 
   it("REQ-CTX-20/AC1+AC6: similarity is a second signal; a fragment ranked low only waits behind a handle", async () => {
     const embedder = createFakeEmbedder({ dimensions: 1024 });
