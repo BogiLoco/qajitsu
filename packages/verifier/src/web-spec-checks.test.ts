@@ -44,6 +44,10 @@ describe("static checks of web actions (REQ-EXEC-38..40, REQ-EXEC-56, ADR-0013)"
     expect(messages(spec.replace('"avatar"', '"secret-file"'), "TC-01", plan)).toContain(
       "coverage: ui.upload(): 'secret-file' is not a file of TC-01 in the plan (files)",
     );
+    // A key every object has is not a file of the plan.
+    expect(messages(spec.replace('"avatar"', '"toString"'), "TC-01", plan)).toContain(
+      "coverage: ui.upload(): 'toString' is not a file of TC-01 in the plan (files)",
+    );
     expect(
       messages(
         spec.replace('ui.upload("testid:avatar-input", "avatar")', 'ui.upload("testid:avatar-input")'),

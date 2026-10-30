@@ -383,7 +383,7 @@ export function checkSpecSource(
         if (keys.length === 0) add("lint", "ui.upload() needs the plan keys of the files to upload", node);
         for (const k of keys) {
           if (!ts.isStringLiteral(k)) add("lint", "ui.upload() takes literal file keys of the plan", k);
-          else if (!(k.text in (planCase.files ?? {})))
+          else if (!Object.hasOwn(planCase.files ?? {}, k.text))
             add("coverage", `ui.upload(): '${k.text}' is not a file of ${caseId} in the plan (files)`, k);
         }
       }
