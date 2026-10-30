@@ -348,7 +348,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-EXEC-42](requirements/execution.md#req-exec-42--mobile-hybrid-apps-and-webviews) Mobile: hybrid apps and WebViews (should, accepted, AC 0/2)
 - [REQ-EXEC-43](requirements/execution.md#req-exec-43--mobile-system-features) Mobile: system features (should, accepted, AC 0/5)
 - [REQ-EXEC-44](requirements/execution.md#req-exec-44--ios-on-a-local-simulator) iOS on a local simulator (should, accepted, AC 0/4)
-- [REQ-EXEC-45](requirements/execution.md#req-exec-45--api-multipart-and-binary-bodies) API: multipart and binary bodies (must, accepted, AC 0/3)
+- [REQ-EXEC-45](requirements/execution.md#req-exec-45--api-multipart-and-binary-bodies) API: multipart and binary bodies (must, implemented, AC 3/3)
 - [REQ-EXEC-46](requirements/execution.md#req-exec-46--waiting-for-asynchronous-outcomes) Waiting for asynchronous outcomes (must, accepted, AC 0/3)
 - [REQ-EXEC-47](requirements/execution.md#req-exec-47--websocket-and-server-sent-events-testing) WebSocket and server-sent events testing (should, in-progress, AC 1/5)
 - [REQ-EXEC-48](requirements/execution.md#req-exec-48--graphql-testing) GraphQL testing (should, accepted, AC 0/4)

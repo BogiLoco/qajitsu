@@ -1,0 +1,61 @@
+{
+  "summary": "Invoice documents for DEMO-16: multipart upload and file download.",
+  "cases": [
+    {
+      "id": "TC-01",
+      "title": "An uploaded invoice PDF downloads unchanged",
+      "type": "api",
+      "priority": "high",
+      "source": [
+        { "kind": "ac", "id": "AC1" },
+        { "kind": "ac", "id": "AC2" }
+      ],
+      "data": { "user": "user:standard" },
+      "files": { "invoice": { "name": "invoice.pdf", "type": "application/pdf", "bytes": 2048 } },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "POST /documents",
+          "expect": {
+            "description": "Created with its name and size",
+            "status": 201,
+            "fields": { "title": "Invoice 7", "name": "invoice.pdf", "bytes": 2048 }
+          }
+        },
+        {
+          "id": "S2",
+          "action": "GET /documents/{id}/file",
+          "expect": {
+            "description": "The same PDF comes back",
+            "status": 200,
+            "download": { "name": "invoice.pdf", "type": "pdf", "min_bytes": 2048, "max_bytes": 2048 }
+          }
+        }
+      ],
+      "evidence": ["request", "response"]
+    },
+    {
+      "id": "TC-02",
+      "title": "A text file is refused",
+      "type": "api",
+      "priority": "medium",
+      "source": [{ "kind": "ac", "id": "AC3" }],
+      "data": { "user": "user:standard" },
+      "files": { "notes": { "name": "notes.txt", "type": "text/plain", "bytes": 64 } },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "POST /documents",
+          "expect": {
+            "description": "Refused as not a PDF",
+            "status": 415,
+            "fields": { "error": "PDF_ONLY" }
+          }
+        }
+      ],
+      "evidence": ["request", "response"]
+    }
+  ],
+  "open_questions": [],
+  "out_of_scope": ["The 5 MB limit (developer comment): not an acceptance criterion of this ticket"]
+}

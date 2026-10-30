@@ -697,16 +697,16 @@ Lists, carousels, pull-to-refresh and maps need gestures.
 
 ### REQ-EXEC-45 · API: multipart and binary bodies
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: later
 - Related: REQ-EXEC-04, REQ-EXEC-38, INV-8
 
 **Acceptance criteria**
 
-- [ ] AC1: Requests can send `multipart/form-data` (fields and files from fixtures), `application/x-www-form-urlencoded`, raw binary and plain text bodies.
-- [ ] AC2: Binary responses (files, images, PDF) are kept as evidence with their hash and checked against the plan (type, size, hash, content for readable types).
-- [ ] AC3: Request and response bodies in evidence are masked; binary bodies are stored as files, never inlined into the report.
+- [x] AC1: Requests can send `multipart/form-data` (fields and files from fixtures), `application/x-www-form-urlencoded`, raw binary and plain text bodies.
+- [x] AC2: Binary responses (files, images, PDF) are kept as evidence with their hash and checked against the plan (type, size, hash, content for readable types).
+- [x] AC3: Request and response bodies in evidence are masked; binary bodies are stored as files, never inlined into the report.
 
 ### REQ-EXEC-46 · Waiting for asynchronous outcomes
 

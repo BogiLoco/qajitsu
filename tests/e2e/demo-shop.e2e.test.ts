@@ -49,6 +49,22 @@ const BUGS = [
     caseId: "TC-02",
     specs: ["TC-01", "TC-02"],
   },
+  // A web download checked in the production sandbox (the child gets every planned expectation, REQ-EXEC-38).
+  {
+    bug: "BUG-10",
+    flag: "BUG_EXPORT_DROPS_LAST_ROW",
+    ticket: "DEMO-7",
+    caseId: "TC-03",
+    specs: ["TC-01", "TC-02", "TC-03"],
+  },
+  // A multipart upload and a file response (REQ-EXEC-45).
+  {
+    bug: "BUG-21",
+    flag: "BUG_DOCUMENT_TRUNCATED",
+    ticket: "DEMO-16",
+    caseId: "TC-01",
+    specs: ["TC-01", "TC-02"],
+  },
 ] as const;
 
 async function pipeline(
@@ -116,7 +132,10 @@ async function pipeline(
     const analysis = JSON.stringify({ summary: "API change.", change_type: ["api"], confidence: "high" });
     const planned = await run(["plan", ticket], [{ text: analysis }, { text: draft }]);
     expect(planned.exitCode, planned.out).toBe(0);
-    expect((await run(["approve", ticket])).exitCode).toBe(0);
+    // The fixture plans were reviewed by people: elements that appear only after an action (the avatar's name after
+    // the upload) are confirmed as a reviewer would.
+    const approved = await run(["approve", ticket, "--confirm-placeholders"]);
+    expect(approved.exitCode, approved.out).toBe(0);
     const runRoot = join(home, "runs", ticket);
     const latest = JSON.parse(await readFile(join(runRoot, "index.json"), "utf8")) as { latest: string };
     for (const id of specs)
@@ -148,6 +167,8 @@ describe("demo-shop self-test (REQ-NFR-04/AC1)", () => {
     ["DEMO-3", ["TC-01", "TC-02"]],
     ["DEMO-4", ["TC-01", "TC-02"]],
     ["DEMO-5", ["TC-01"]],
+    ["DEMO-7", ["TC-01", "TC-02", "TC-03"]],
+    ["DEMO-16", ["TC-01", "TC-02"]],
   ] as const)("%s: every case is PASSED with all bugs off", async (ticket, specs) => {
     const { exitCode, statuses, out } = await pipeline(ticket, specs);
     expect(

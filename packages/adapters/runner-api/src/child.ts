@@ -151,6 +151,20 @@ async function start(m: StartMessage): Promise<void> {
       patch: (path: string, b?: unknown, o?: unknown) => send("PATCH", path, b, o),
       delete: (path: string, o?: unknown) => send("DELETE", path, undefined, o),
       as: (a: string) => client(a),
+      // REQ-EXEC-45/AC1: body descriptors are plain data; the parent resolves files from the plan and checks them.
+      multipart: (parts: { fields?: unknown; files?: unknown } = {}) => ({
+        __qjBody: "multipart",
+        fields: parts.fields,
+        files: parts.files,
+      }),
+      form: (fields: unknown) => ({ __qjBody: "form", fields }),
+      // Values are passed as they are: the parent refuses anything that is not a string.
+      binary: (file: unknown) => ({ __qjBody: "binary", file }),
+      text: (text: unknown, type?: unknown) => ({
+        __qjBody: "text",
+        text,
+        ...(type === undefined ? {} : { type }),
+      }),
     };
   };
   const context = {

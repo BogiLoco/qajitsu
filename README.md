@@ -1172,6 +1172,11 @@ verification: { auditor: optional, canary: true, triage: on }
   dynamic ports), managed processes, WireMock/Mockoon stubs (listed in the report as not real), health checks, seed
   hook, variables from templates and secrets, cleanup policy. The compose file of the change is checked before it
   starts (no privileged containers, host mounts or public ports). [docs/cli/build-and-runs.md](docs/cli/build-and-runs.md)
+- **API bodies beyond JSON.** Specs send `multipart/form-data`, urlencoded forms, raw binary and plain text
+  (`client.multipart({ fields, files })`, `client.form()`, `client.binary("<file key>")`, `client.text()`), with files
+  named by their key in the plan, never by path. A response that is a file (a PDF, an image, an export) is kept as
+  evidence with its SHA-256 and checked like a download (`download.name|type|size|sha256|rows|texts|fields`); form
+  fields and text bodies are masked.
 - **OpenAPI contract validation** of every response against the document in the analysed commit.
 - **Bug fix verification.** For a Bug ticket the planner marks the cases that reproduce the defect;
   `qj run <TICKET> --build --fix-check` runs them on the commit before the fix (they must FAIL) and with the fix (they

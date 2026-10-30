@@ -387,6 +387,26 @@ export function checkSpecSource(
             add("coverage", `ui.upload(): '${k.text}' is not a file of ${caseId} in the plan (files)`, k);
         }
       }
+      // REQ-EXEC-45/AC1: API bodies name files of the case's plan by literal key, like uploads; `ui` has no such method.
+      const onClient = ts.isPropertyAccessExpression(node.expression) && !onUi;
+      const fileKey = (k: ts.Expression | undefined, by: string): void => {
+        if (!k || !ts.isStringLiteral(k)) add("lint", `${by} takes literal file keys of the plan`, k ?? node);
+        else if (!Object.hasOwn(planCase.files ?? {}, k.text))
+          add("coverage", `${by}: '${k.text}' is not a file of ${caseId} in the plan (files)`, k);
+      };
+      if (onClient && name === "binary") fileKey(first, "api.binary()");
+      if (onClient && name === "multipart" && first && ts.isObjectLiteralExpression(first)) {
+        const files = first.properties.find(
+          (p): p is ts.PropertyAssignment =>
+            ts.isPropertyAssignment(p) && ts.isIdentifier(p.name) && p.name.text === "files",
+        );
+        if (files && !ts.isObjectLiteralExpression(files.initializer))
+          add("lint", "api.multipart() takes its files as an object literal of plan file keys", files);
+        else if (files && ts.isObjectLiteralExpression(files.initializer))
+          for (const f of files.initializer.properties)
+            if (ts.isPropertyAssignment(f)) fileKey(f.initializer, "api.multipart()");
+            else add("lint", "api.multipart() takes literal file keys of the plan", f);
+      }
       // REQ-EXEC-67/AC5: a secret is named by an account of the case and a field, never passed as a value.
       if (onUi && name === "fillSecret") {
         const [, alias, field] = node.arguments;
@@ -420,7 +440,14 @@ export function checkSpecSource(
             node,
           );
       }
-      if (onUi && name === "download") {
+      // A file comes from ui.download() or, in an API step, from the response of a request (REQ-EXEC-45/AC2).
+      if (
+        (onUi && name === "download") ||
+        (!onUi &&
+          ts.isPropertyAccessExpression(node.expression) &&
+          name !== undefined &&
+          HTTP_VERBS.has(name))
+      ) {
         const owner = enclosingStep(node);
         if (owner !== undefined) downloadSteps.add(owner);
       }
@@ -508,7 +535,7 @@ export function checkSpecSource(
     if (step.expect.download !== undefined && !downloadSteps.has(step.id))
       add(
         "coverage",
-        `step ${step.id} expects a download: call ui.download(<selector>) inside step("${step.id}", ...)`,
+        `step ${step.id} expects a download: call ui.download(<selector>) or the API request that returns the file inside step("${step.id}", ...)`,
       );
     // Every planned expectation is verified; leaving one out would let the spec pass whatever it is.
     for (const field of plannedFields(step.expect))

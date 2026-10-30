@@ -89,6 +89,40 @@ describe("demo-shop seeded bugs (REQ-NFR-04, BUGS.md)", () => {
     }
   });
 
+  it("BUG-21: a downloaded document is the uploaded PDF without the flag, one byte short with it", async () => {
+    const pdf = Buffer.from("%PDF-1.4\nfictional invoice\n%%EOF\n");
+    for (const [flag, size] of [
+      [undefined, pdf.length],
+      ["BUG_DOCUMENT_TRUNCATED", pdf.length - 1],
+    ] as const) {
+      const shop = await start(flag);
+      const token = await login(shop);
+      const form = new FormData();
+      form.set("title", "Invoice 7");
+      form.set("file", new Blob([pdf], { type: "application/pdf" }), "invoice-7.pdf");
+      const auth = { authorization: `Bearer ${token}` };
+      const created = await fetch(`${shop.url}/documents`, { method: "POST", headers: auth, body: form });
+      expect(created.status).toBe(201);
+      const doc = (await created.json()) as { id: string; name: string; bytes: number };
+      expect(doc).toMatchObject({ name: "invoice-7.pdf", bytes: pdf.length });
+      const file = await fetch(`${shop.url}/documents/${doc.id}/file`, { headers: auth });
+      expect(file.headers.get("content-disposition")).toBe('attachment; filename="invoice-7.pdf"');
+      expect((await file.arrayBuffer()).byteLength).toBe(size);
+    }
+    const shop = await start();
+    const token = await login(shop);
+    const text = new FormData();
+    text.set("title", "Notes");
+    text.set("file", new Blob(["plain"], { type: "text/plain" }), "notes.txt");
+    const refused = await fetch(`${shop.url}/documents`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+      body: text,
+    });
+    expect(refused.status).toBe(415);
+    expect(await refused.json()).toEqual({ error: "PDF_ONLY" });
+  });
+
   it("serves health, version, products; rejects bad logins, unknown codes and routes", async () => {
     const shop = await start();
     expect((await call(shop, "GET", "/health")).body).toEqual({ status: "ok" });
