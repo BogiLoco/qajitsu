@@ -123,7 +123,8 @@ describe("context budget and reductions (REQ-CTX-12, REQ-CTX-14, REQ-LLM-15/AC4)
       role: "t",
       model: "m",
       fragments: [instructions, plan, unrelated, question],
-      budget: budget(1_100),
+      // The pinned fragments and the catalogue line of what was put behind a handle.
+      budget: budget(1_200),
     });
     expect(out.prompt).toContain("expected total 10.05");
     expect(out.snapshot.reductions.every((r) => r.sha256 !== plan.sha256)).toBe(true);
@@ -269,5 +270,48 @@ describe("context budget and reductions (REQ-CTX-12, REQ-CTX-14, REQ-LLM-15/AC4)
       const tight = assemble(shared(1_000, { diff: 0.3, knowledge: 0.6 }));
       expect(tight.snapshot.catalogue.map((c) => c.source)).toEqual(["repos/shop/diff"]);
     });
+  });
+
+  it("REQ-CTX-14/AC2: the least relevant per token goes first; small fragments stay; the catalogue counts in the budget", () => {
+    // The planner's input of DEMO-11 in the dogfood of 2026-10-30: a large page recording that names many terms of
+    // the task, a smaller analysis that names fewer, an empty diff and a heading.
+    const words = "notes offline queue saved count install manifest service worker sync";
+    const pages = f({
+      kind: "ui",
+      source: "ui/snapshot",
+      priority: 54,
+      text: `${words} `.repeat(4) + "page row ".repeat(1_200),
+    });
+    const analysis = f({
+      kind: "analysis",
+      source: "analysis.json",
+      priority: 30,
+      text: `${words.split(" ").slice(0, 6).join(" ")} ${"x".repeat(1_500)}`,
+    });
+    const heading = f({
+      kind: "ticket",
+      source: "ticket/heading",
+      trust: "trusted",
+      priority: 86,
+      text: "## Ticket",
+    });
+    const emptyDiff = f({ kind: "diff", source: "repos/shop/diff", priority: 70, text: "" });
+    const task = f({
+      kind: "ticket",
+      source: "ticket/DEMO-11",
+      priority: 85,
+      text: `Offline notes: ${words}`,
+    });
+    const out = createContextManager({ marker: "testmarker00" }).assemble({
+      stage: "plan",
+      role: "t",
+      model: "m",
+      fragments: [instructions, heading, task, emptyDiff, analysis, pages, question],
+      budget: budget(2_000),
+    });
+    expect(out.snapshot.catalogue.map((c) => c.source)).toEqual(["ui/snapshot"]);
+    expect(out.prompt).toContain("analysis.json");
+    expect(out.prompt).toContain("## Ticket");
+    expect(out.snapshot.budget?.used).toBeLessThanOrEqual(2_000);
   });
 });

@@ -205,6 +205,19 @@ export function renderFragments(
  */
 const CATALOGUE_LINE_TOKENS = 24;
 
+/** The head of the catalogue fragment. */
+const CATALOGUE_HEAD = [
+  "## Catalogue: more context of this task, behind handles",
+  "Read one with read_context(handle); find one by its subject with search_context(question).",
+];
+
+/** One line of the catalogue: handle, kind, source and size, and whether a trimmed version is shown above. */
+const catalogueLine = (
+  c: { readonly handle: string; readonly kind: string; readonly source: string; readonly tokens: number },
+  trimmedAbove: boolean,
+): string =>
+  `- ${c.handle} · ${c.kind} · ${c.source} · ${String(c.tokens)} tokens${trimmedAbove ? " · trimmed above" : ""}`;
+
 /** The rule every role reads about data blocks (REQ-CTX-15/AC2). */
 export const dataRules = (marker: string): string =>
   [
@@ -367,7 +380,21 @@ export function createContextManager(options: { readonly marker?: string } = {})
       for (const f of competing) if (f.onDemand === true) shelve(f, "on demand: offered in the catalogue");
       const factor = budget?.margin ?? 1;
       const cost = (): number => Math.ceil([...inPrompt.values()].reduce((n, f) => n + f.tokens, 0) * factor);
-      const fits = (): boolean => budget === undefined || cost() <= budget.tokens;
+      // Every handle adds a line to the catalogue: what the call sends includes it (dogfood 2026-10-30).
+      const catalogueCost = (): number => {
+        const lines = [...handles.entries()]
+          .filter(([, f]) => given.some((x) => x.sha256 === f.sha256))
+          .map(([handle, f]) =>
+            catalogueLine(
+              { handle, kind: f.kind, source: f.source, tokens: f.tokens },
+              inPrompt.has(f.sha256),
+            ),
+          );
+        return lines.length === 0
+          ? 0
+          : Math.ceil(Math.ceil([...CATALOGUE_HEAD, ...lines].join("\n").length / 4) * factor);
+      };
+      const fits = (): boolean => budget === undefined || cost() + catalogueCost() <= budget.tokens;
       const byRelevance = (): ContextFragment[] =>
         competing
           .filter((f) => inPrompt.has(f.sha256))
@@ -377,6 +404,12 @@ export function createContextManager(options: { readonly marker?: string } = {})
               b.tokens - a.tokens ||
               order(a, b),
           );
+      const density = (f: ContextFragment): number =>
+        (rank.get(f.sha256)?.value ?? 0) / Math.max(1, f.tokens);
+      const byDensity = (): ContextFragment[] =>
+        competing
+          .filter((f) => inPrompt.has(f.sha256))
+          .sort((a, b) => density(a) - density(b) || b.tokens - a.tokens || order(a, b));
       // REQ-LLM-15/AC4: a compact model gets fewer fragments at once: what matches nothing of the task waits.
       if (budget?.style === "compact")
         for (const f of byRelevance())
@@ -410,7 +443,10 @@ export function createContextManager(options: { readonly marker?: string } = {})
             tokensSaved: f.tokens - cut.tokens,
           });
         }
-        for (const f of byRelevance().filter(scope)) {
+        // Least relevant per token first: a large fragment with few matching terms goes before a small, dense one, so
+        // the call keeps as much of what matters as its budget allows (dogfood 2026-10-30). Fragments no larger than
+        // their catalogue line stay: putting them behind a handle saves nothing.
+        for (const f of byDensity().filter((x) => scope(x) && x.tokens > CATALOGUE_LINE_TOKENS)) {
           if (done()) return;
           shelve(f, `${why}: least relevant`);
         }
@@ -441,8 +477,8 @@ export function createContextManager(options: { readonly marker?: string } = {})
       if (!fits())
         throw new ContextTooLargeError(
           "CONTEXT_TOO_LARGE",
-          `The input of the ${role} needs about ${String(cost())} tokens even after every reduction, over its budget of ${String(budget?.tokens ?? 0)}: what must be sent (instructions, plan, expectations) does not fit; nothing was sent.`,
-          { role, model, tokens: cost(), budget: budget?.tokens ?? 0 },
+          `The input of the ${role} needs about ${String(cost() + catalogueCost())} tokens even after every reduction, over its budget of ${String(budget?.tokens ?? 0)}: what must be sent (instructions, plan, expectations) does not fit; nothing was sent.`,
+          { role, model, tokens: cost() + catalogueCost(), budget: budget?.tokens ?? 0 },
         );
       const kept = [...inPrompt.values()].sort(order);
       const catalogue = [...handles.entries()]
@@ -467,11 +503,12 @@ export function createContextManager(options: { readonly marker?: string } = {})
                 priority: 1,
                 pinned: true,
                 text: [
-                  "## Catalogue: more context of this task, behind handles",
-                  "Read one with read_context(handle); find one by its subject with search_context(question).",
-                  ...catalogue.map(
-                    (c) =>
-                      `- ${c.handle} · ${c.kind} · ${c.source} · ${String(c.tokens)} tokens${kept.some((k) => k.sha256 === c.sha256) ? " · trimmed above" : ""}`,
+                  ...CATALOGUE_HEAD,
+                  ...catalogue.map((c) =>
+                    catalogueLine(
+                      c,
+                      kept.some((k) => k.sha256 === c.sha256),
+                    ),
                   ),
                 ].join("\n"),
               }),
