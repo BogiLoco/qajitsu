@@ -1,3 +1,4 @@
+import { parseProjectConfig } from "@qajitsu/core";
 import { describe, expect, it } from "vitest";
 import {
   contextBudget,
@@ -105,5 +106,27 @@ describe("context profiles and renderers (REQ-LLM-15)", () => {
       cache: "none",
       counting: "estimate",
     });
+  });
+
+  it("REQ-CTX-14/AC1: the project's shares of the budget reach every model's profile; invalid shares are refused", async () => {
+    const config = (shares: unknown) =>
+      parseProjectConfig({
+        project: "demo",
+        jira: { type: "file", tickets_dir: "t", project_key: "DEMO" },
+        models: { roles: { default: "local/m" }, context_shares: shares },
+      });
+    const models = config({ diff: 0.5, knowledge: 0.2 }).models;
+    const registry = createModelRegistry({
+      config: {
+        ...models,
+        providers: { local: { type: "ollama", models: { m: { context_window: 131_072 } } } },
+      } as never,
+      resolveSecret: () => Promise.resolve(""),
+    });
+    expect((await registry.resolve("local/m")).context.shares).toEqual({ diff: 0.5, knowledge: 0.2 });
+    expect(() => config({ diff: 0.7, knowledge: 0.4 })).toThrow(/at most 1/);
+    expect(() => config({ "role-instructions": 0.2 })).toThrow();
+    expect(() => config({ diff: 0 })).toThrow();
+    expect(contextProfile("ollama", { contextWindow: 131_072 }).shares).toBeUndefined();
   });
 });

@@ -95,6 +95,11 @@ export interface ContextBudget {
   readonly style: "full" | "compact";
   /** Version of the model's context profile. */
   readonly profile: string;
+  /**
+   * Shares of the budget per fragment kind (REQ-CTX-14/AC1, `models.context_shares`): over the budget, a kind over its
+   * share is reduced first. Shares a kind does not use go to the others: a call that fits is never reduced.
+   */
+  readonly shares?: Readonly<Record<string, number>> | undefined;
 }
 
 /** Input of one call, assembled from fragments. */
@@ -377,15 +382,21 @@ export function createContextManager(options: { readonly marker?: string } = {})
         for (const f of byRelevance())
           if ((rank.get(f.sha256)?.value ?? 0) === 0 && f.tokens > CATALOGUE_LINE_TOKENS)
             shelve(f, "compact style: matches nothing of the task");
-      if (!fits())
-        for (const f of byRelevance()) {
-          if (fits()) break;
+      /**
+       * The code reductions in their order (REQ-CTX-14/AC2) over the fragments in `scope`, until `done`: what matches
+       * nothing of the task, then trimming with the structure kept, largest first, then the least relevant.
+       */
+      const reduce = (scope: (f: ContextFragment) => boolean, done: () => boolean, why: string): void => {
+        for (const f of byRelevance().filter(scope)) {
+          if (done()) return;
           if ((rank.get(f.sha256)?.value ?? 0) === 0 && f.tokens > CATALOGUE_LINE_TOKENS)
-            shelve(f, "over budget: matches nothing of the task");
+            shelve(f, `${why}: matches nothing of the task`);
         }
-      if (!fits())
-        for (const f of competing.filter((x) => inPrompt.has(x.sha256)).sort((a, b) => b.tokens - a.tokens)) {
-          if (fits()) break;
+        // A fragment already trimmed (for its share) is not trimmed again: it stays as it is or waits behind its handle.
+        for (const f of competing
+          .filter((x) => inPrompt.get(x.sha256) === x && scope(x))
+          .sort((a, b) => b.tokens - a.tokens)) {
+          if (done()) return;
           const handle = handleOf(f);
           const short = trimmed(f, handle);
           if (short === undefined) continue;
@@ -395,15 +406,38 @@ export function createContextManager(options: { readonly marker?: string } = {})
           reductions.push({
             sha256: f.sha256,
             action: "trimmed",
-            reason: `over budget: kept the structure of the ${f.kind}`,
+            reason: `${why}: kept the structure of the ${f.kind}`,
             tokensSaved: f.tokens - cut.tokens,
           });
         }
-      if (!fits())
-        for (const f of byRelevance()) {
-          if (fits()) break;
-          shelve(f, "over budget: least relevant");
+        for (const f of byRelevance().filter(scope)) {
+          if (done()) return;
+          shelve(f, `${why}: least relevant`);
         }
+      };
+      // REQ-CTX-14/AC1: kinds over their share are reduced first, the furthest over first, each only as far as needed.
+      const kindCost = (kind: string): number =>
+        Math.ceil(
+          competing
+            .filter((f) => f.kind === kind && inPrompt.has(f.sha256))
+            .reduce((n, f) => n + (inPrompt.get(f.sha256)?.tokens ?? 0), 0) * factor,
+        );
+      if (!fits() && budget?.shares) {
+        const allowances = Object.entries(budget.shares)
+          .map(([kind, share]) => ({ kind, allowance: Math.floor(share * budget.tokens) }))
+          .sort(
+            (a, b) =>
+              kindCost(b.kind) - b.allowance - (kindCost(a.kind) - a.allowance) || (a.kind < b.kind ? -1 : 1),
+          );
+        for (const { kind, allowance } of allowances)
+          if (!fits() && kindCost(kind) > allowance)
+            reduce(
+              (f) => f.kind === kind,
+              () => fits() || kindCost(kind) <= allowance,
+              `over budget: ${kind} over its share of ${String(allowance)} tokens`,
+            );
+      }
+      if (!fits()) reduce(() => true, fits, "over budget");
       if (!fits())
         throw new ContextTooLargeError(
           "CONTEXT_TOO_LARGE",
@@ -480,6 +514,7 @@ export function createContextManager(options: { readonly marker?: string } = {})
                 counting: budget.counting,
                 style: budget.style,
                 profile: budget.profile,
+                ...(budget.shares ? { shares: { ...budget.shares } } : {}),
               },
             }
           : {}),

@@ -1830,6 +1830,38 @@
             "no-tools",
             "allowed"
           ]
+        },
+        "context_shares": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "enum": [
+              "project-rules",
+              "skill",
+              "repository",
+              "ticket",
+              "plan",
+              "analysis",
+              "diff",
+              "file",
+              "knowledge",
+              "result",
+              "evidence",
+              "log",
+              "tool-result",
+              "lesson",
+              "spec",
+              "ui",
+              "imported",
+              "exploration",
+              "map"
+            ]
+          },
+          "additionalProperties": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1
+          }
         }
       },
       "additionalProperties": false

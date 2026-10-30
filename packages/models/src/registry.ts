@@ -86,6 +86,7 @@ export function createModelRegistry(options: {
       context: contextProfile(providerType, m.profile, {
         workingRange: options.contextPolicy?.workingRange ?? overrides.working_range,
         style: options.contextPolicy?.style ?? overrides.context_style,
+        shares: config.context_shares as Readonly<Record<string, number>> | undefined,
       }),
     };
   };

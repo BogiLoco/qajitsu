@@ -22,6 +22,8 @@ export interface ContextProfile {
   readonly cache: "explicit" | "prefix" | "none";
   /** `compact` for small models: fewer fragments at once, the rest behind handles (AC4). */
   readonly style: "full" | "compact";
+  /** The project's shares of the budget per fragment kind (REQ-CTX-14/AC1, `models.context_shares`), if any. */
+  readonly shares?: Readonly<Record<string, number>>;
 }
 
 /** Version of {@link FAMILY}; raise it when a value changes, so snapshots name the profile they used. */
@@ -67,7 +69,7 @@ const OTHER = FAMILY["openai-compatible"];
 
 /**
  * The context profile of a model: the defaults of its provider type, the window from its capability profile, and the
- * project's overrides (`working_range`, `style`). Small windows (below 64k tokens) get the compact style.
+ * project's overrides (`working_range`, `style`, `context_shares`). Small windows (below 64k tokens) get the compact style.
  *
  * @param providerType - The provider's type, e.g. `anthropic` or `ollama`.
  * @param profile - The model's capability profile.
@@ -79,6 +81,7 @@ export function contextProfile(
   overrides: {
     readonly workingRange?: number | undefined;
     readonly style?: "full" | "compact" | undefined;
+    readonly shares?: Readonly<Record<string, number>> | undefined;
   } = {},
 ): ContextProfile {
   const f = FAMILY[providerType] ??
@@ -101,6 +104,9 @@ export function contextProfile(
     counting: f.counting,
     cache: f.cache,
     style: overrides.style ?? (window < 64_000 ? "compact" : f.style),
+    ...(overrides.shares && Object.keys(overrides.shares).length > 0
+      ? { shares: { ...overrides.shares } }
+      : {}),
   };
 }
 

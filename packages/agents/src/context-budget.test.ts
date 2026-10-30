@@ -198,4 +198,76 @@ describe("context budget and reductions (REQ-CTX-12, REQ-CTX-14, REQ-LLM-15/AC4)
     expect(out.prompt.split("ERROR same line")).toHaveLength(2);
     expect(out.snapshot.reductions.map((r) => r.action)).toEqual(["deduplicated"]);
   });
+
+  describe("shares of the budget per source (REQ-CTX-14/AC1)", () => {
+    const task = f({
+      kind: "ticket",
+      source: "ticket/DEMO-1",
+      priority: 85,
+      text: "Discount codes apply to the cart total",
+    });
+    const docs = f({
+      kind: "knowledge",
+      source: "docs/discounts.md",
+      priority: 40,
+      text: "discount rules for the cart ".repeat(70),
+    });
+    const change = f({
+      kind: "diff",
+      source: "repos/shop/diff",
+      priority: 70,
+      text: "discount codes cart total ".repeat(110),
+    });
+    const shared = (tokens: number, shares?: Record<string, number>): ContextBudget => ({
+      ...budget(tokens),
+      ...(shares ? { shares } : {}),
+    });
+    const assemble = (b: ContextBudget) =>
+      createContextManager({ marker: "testmarker00" }).assemble({
+        stage: "plan",
+        role: "t",
+        model: "m",
+        fragments: [instructions, task, docs, change],
+        budget: b,
+      });
+
+    it("REQ-CTX-14/AC1: a source over its share is reduced first, before a less relevant source within its share", () => {
+      // Without shares the least relevant source (the documentation) waits behind a handle.
+      expect(assemble(shared(1_000)).snapshot.catalogue.map((c) => c.source)).toEqual(["docs/discounts.md"]);
+      // With the diff limited to 30% of the budget, the diff goes behind a handle and the documentation stays.
+      const out = assemble(shared(1_000, { diff: 0.3 }));
+      expect(out.snapshot.catalogue.map((c) => c.source)).toEqual(["repos/shop/diff"]);
+      expect(out.prompt).toContain("discount rules for the cart");
+      expect(out.snapshot.reductions.map((r) => r.reason)).toEqual([
+        "over budget: diff over its share of 300 tokens: least relevant",
+      ]);
+      expect(out.snapshot.budget?.shares).toEqual({ diff: 0.3 });
+    });
+
+    it("REQ-CTX-14/AC1+AC4: a fragment trimmed for its share is not trimmed again when the whole call is still over", () => {
+      const out = createContextManager({ marker: "testmarker00" }).assemble({
+        stage: "plan",
+        role: "t",
+        model: "m",
+        fragments: [instructions, task, docs, bigDiff],
+        // The diff is trimmed for its share; the call is still over, so the general reductions follow.
+        budget: shared(400, { diff: 0.5 }),
+      });
+      const shas = out.snapshot.reductions.map((r) => r.sha256);
+      expect(new Set(shas).size).toBe(shas.length);
+      expect(out.snapshot.reductions.find((r) => r.sha256 === bigDiff.sha256)?.reason).toBe(
+        "over budget: diff over its share of 200 tokens: kept the structure of the diff",
+      );
+    });
+
+    it("REQ-CTX-14/AC1: shares that are not used go to the others; a call that fits is sent whole", () => {
+      // Both sources are far over their shares, but the whole call fits: nothing is reduced ahead of need.
+      const out = assemble(shared(10_000, { diff: 0.05, knowledge: 0.05 }));
+      expect(out.snapshot.reductions).toEqual([]);
+      expect(out.snapshot.catalogue).toEqual([]);
+      // Over the budget, only as much is reduced as the call needs: a source within its share is untouched.
+      const tight = assemble(shared(1_000, { diff: 0.3, knowledge: 0.6 }));
+      expect(tight.snapshot.catalogue.map((c) => c.source)).toEqual(["repos/shop/diff"]);
+    });
+  });
 });

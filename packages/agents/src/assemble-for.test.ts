@@ -85,4 +85,35 @@ describe("assembling a call for a model (REQ-CTX-14, REQ-LLM-15, REQ-CTX-12/AC4)
     });
     expect(small.tools).toEqual([]);
   });
+
+  it("REQ-CTX-14/AC1: the shares of the model's profile apply to the call and are recorded with its budget", async () => {
+    const deps = {
+      events: createEventLog({
+        ticket: "DEMO-1",
+        run: "r",
+        write: () => undefined,
+        now: () => new Date(0),
+        mask: (v) => v,
+      }),
+    } as unknown as AgentStageDeps;
+    const out = await assembleFor(deps, {
+      stage: "plan",
+      role: "probe-test",
+      model: {
+        id: "m",
+        context: { ...contextProfile("mock", { contextWindow: 200_000 }), shares: { diff: 0.4 } },
+      },
+      fragments: [
+        f({
+          kind: "question",
+          source: "question",
+          trust: "trusted",
+          pinned: true,
+          priority: 0,
+          text: "Plan.",
+        }),
+      ],
+    });
+    expect(out.snapshot.budget?.shares).toEqual({ diff: 0.4 });
+  });
 });

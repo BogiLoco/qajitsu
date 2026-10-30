@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CONTEXT_KINDS, type ContextKind } from "../context/fragments.js";
 import { ConfigError } from "../errors.js";
 import { TEST_STATUSES } from "../status.js";
 import { MobileSchema } from "./mobile.js";
@@ -492,6 +493,25 @@ export const ProjectConfigSchema = z.strictObject({
        * never. Summaries are cached by input hash, model and prompt version (REQ-CTX-17/AC2).
        */
       context_summaries: z.enum(["off", "no-tools", "allowed"]).default("no-tools"),
+      /**
+       * Shares of a call's context budget per source kind (REQ-CTX-14/AC1), e.g. `{ diff: 0.5, knowledge: 0.2 }`: over
+       * the budget, a kind over its share is reduced first. Shares a kind does not use go to the others, and a call
+       * that fits is sent whole. They add up to at most 1.
+       */
+      context_shares: z
+        .partialRecord(
+          z.enum(
+            CONTEXT_KINDS.filter((k) => !["role-instructions", "question", "catalogue"].includes(k)) as [
+              ContextKind,
+              ...ContextKind[],
+            ],
+          ),
+          z.number().gt(0).max(1),
+        )
+        .refine((shares) => Object.values(shares).reduce((a, b) => a + b, 0) <= 1.000001, {
+          message: "context_shares add up to at most 1",
+        })
+        .optional(),
     })
     .default({ providers: {}, roles: {}, cache_ttl: "auto", context_summaries: "no-tools" }),
   /**

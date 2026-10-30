@@ -93,6 +93,8 @@ export const ContextSnapshotSchema = z.strictObject({
       counting: z.enum(["estimate", "provider"]),
       style: z.enum(["full", "compact"]),
       profile: z.string(),
+      /** Shares of the budget per fragment kind that applied (REQ-CTX-14/AC1). */
+      shares: z.record(z.string(), z.number().min(0).max(1)).optional(),
     })
     .optional(),
   /** Fragments behind handles, readable with `read_context` (REQ-CTX-12/AC4+AC5). */

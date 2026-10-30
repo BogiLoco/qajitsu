@@ -195,6 +195,8 @@ test_types: [api, web]
 #   max_input_tokens: 150000   # stop calls that would send more
 #   context_summaries: no-tools   # off | no-tools | allowed: the summary model shortens context that does not fit,
 #                                 # by default only for roles whose model cannot read handles (REQ-CTX-14)
+#   context_shares: { diff: 0.5, knowledge: 0.2 }   # over the budget, a source over its share is reduced first;
+#                                                  # unused shares go to the others (REQ-CTX-14)
 #
 # Time budget per stage in seconds (REQ-NFR-11): over it is a warning with the measured time, never a status.
 # Defaults: fetch 300, analyze 900, plan 1200, run 3600, audit 900, triage 600, explore 3600

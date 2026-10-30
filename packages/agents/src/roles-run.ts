@@ -135,6 +135,7 @@ export async function assembleFor(
           counting: profile.counting,
           style: profile.style,
           profile: profile.version,
+          ...(profile.shares ? { shares: profile.shares } : {}),
         }
       : undefined;
   const planned = profile ? contextBudget(profile, call.model.inputLimit?.limit) : undefined;
