@@ -25,4 +25,14 @@ describe("static checks of test data (REQ-EXEC-53)", () => {
       "lint: data.get() takes the literal name of a test_data record",
     );
   });
+
+  it("REQ-EXEC-53/AC1: a spec that never reads a record of its test data is sent back (dogfood: a made-up id)", () => {
+    const madeUp = spec("TC-02").replace(
+      'const product = data.get("shelf");',
+      'const product = { id: "some_product_id" };',
+    );
+    expect(messages(madeUp, "TC-02")).toContain(
+      'coverage: the plan creates test data shelf for TC-02 but the spec never reads it: use const shelf = data.get("shelf") and its id, never a made-up one',
+    );
+  });
 });
