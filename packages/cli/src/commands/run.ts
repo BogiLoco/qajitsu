@@ -86,6 +86,84 @@ import { headlessFor, prepareLiveRun, type LiveOptions, type LiveRun } from "./l
 import { RegressionRunSchema } from "./pack.js";
 import { runVersions } from "../versions.js";
 import { createProgressPrinter, liveScreenshots, teeEvents } from "./progress.js";
+import { checkRunReadiness, commentEnvReadiness, formatEnvReadiness } from "../env-readiness.js";
+import { publisherFor } from "./publish.js";
+
+/**
+ * The environment readiness gate of a run (REQ-ENV-13): checks, waits as configured, records the report in
+ * `run.json` and the journal, prints it and comments it on the ticket as configured. Returns why the environment is not
+ * ready, or undefined when it is, when nothing is configured, or when a person runs anyway with a reason (AC5).
+ */
+async function environmentReadiness(
+  session: RunSession,
+  env: ResolvedEnvironment,
+  options: {
+    readonly built: boolean;
+    readonly override: string | undefined;
+    readonly user: string | undefined;
+    readonly io: CommandIO;
+    readonly ports: RuntimePorts & ModelPorts & RunPorts;
+    readonly masker: ReturnType<typeof createMasker>;
+  },
+): Promise<string | undefined> {
+  const config = session.project.config.environments.readiness;
+  if (!config) return undefined;
+  const { io, ports, masker } = options;
+  io.write(`Checking that ${env.name} is ready for ${session.ws.ticket}…\n`);
+  const checked = await checkRunReadiness(session, env, {
+    config,
+    built: options.built,
+    fetch: ports.fetch,
+    gitExec: ports.gitExec,
+    masker,
+    ...(ports.sleep ? { sleep: ports.sleep } : {}),
+    onRound: (r) => {
+      if (!r.ready && config.wait)
+        io.write(
+          `  not ready yet (${r.checks
+            .filter((c) => !c.ok)
+            .map((c) => c.name)
+            .join(", ")}); checking again in ${String(config.wait.interval_s)} s\n`,
+        );
+    },
+  });
+  const override =
+    checked.ready || options.override === undefined || options.override.trim() === ""
+      ? undefined
+      : {
+          by: masker.maskText(options.user ?? "unknown"),
+          reason: masker.maskText(options.override).slice(0, 500),
+          at: ports.now().toISOString(),
+        };
+  const report = override ? { ...checked, override } : checked;
+  await session.ws.update({ data: { ...session.ws.record.data, readiness_env: report } });
+  const failed = report.checks.filter((c) => !c.ok);
+  session.events.emit("run", SYSTEM, "env.readiness", {
+    ready: report.ready,
+    rounds: report.rounds,
+    failed: failed.map((c) => c.name),
+    ...(override ? { override: { by: override.by, reason: override.reason } } : {}),
+  });
+  io.write(
+    `${formatEnvReadiness(report)
+      .map((l) => masker.maskText(l))
+      .join("\n")}\n`,
+  );
+  const commentError = await commentEnvReadiness(
+    session,
+    report,
+    config,
+    publisherFor(session, ports),
+    masker,
+  );
+  if (commentError !== undefined)
+    io.writeError(`Warning: the readiness comment was not posted to ${session.ws.ticket}: ${commentError}\n`);
+  if (report.ready || override) return undefined;
+  return failed
+    .map((c) => `${c.name}: ${c.observed}`)
+    .join("; ")
+    .slice(0, 1000);
+}
 
 /** Options of `qajitsu run`. */
 export interface RunOptions extends LiveOptions {
@@ -103,11 +181,18 @@ export interface RunOptions extends LiveOptions {
   readonly sequential?: boolean | undefined;
   /** A person reviews every generated spec before it runs (REQ-VER-24/AC1). */
   readonly reviewSpecs?: boolean | undefined;
+  /**
+   * Runs although the environment is not ready, with this reason (REQ-ENV-13/AC5): every result is "environment not
+   * confirmed" and the run never counts as verified for a release.
+   */
+  readonly envNotConfirmed?: string | undefined;
 }
 
 /** Ports `run` needs beyond the common ones; the executor is replaceable in tests. */
 export interface RunPorts extends KnowledgePorts, MessagePorts {
   readonly executor?: AttemptExecutor;
+  /** Waits between readiness checks while a deployment is awaited (REQ-ENV-13/AC4); replaced in tests. */
+  readonly sleep?: (ms: number) => Promise<void>;
   /** Executor of mobile cases for a device factory (replaced in tests with a fake device). */
   readonly mobileExecutor?: (device: BrowserFactory) => AttemptExecutor;
   /** Device for mobile cases (replaced in tests); default: emulator/farm from the mobile config. */
@@ -653,48 +738,65 @@ export async function runRun(
           io.writeError(`Warning: ${message}\n`);
         }
       }
-      // REQ-GEN-01/AC2: the project's setup hook prepares data; if it fails nothing can be tested.
-      const setup = await runRunHook(session, "setup", env, ports.hookExec);
-      if (!setup.ok) {
+      // REQ-ENV-13: the environment runs the ticket's change with everything it needs, before the first case.
+      const notReady = await environmentReadiness(session, env, {
+        built: built !== undefined,
+        override: options.envNotConfirmed,
+        user: options.user,
+        io,
+        ports,
+        masker,
+      });
+      if (notReady !== undefined) {
         io.writeError(
-          `Setup hook ${setup.script ?? ""} failed; every case is BLOCKED. Log: ${setup.log ?? ""}\n`,
+          `The environment is not ready for ${ws.ticket} (${notReady}); every case is BLOCKED.\n`,
         );
-        await blockAfterStartFailure(
-          session,
-          chosenIds,
-          { message: `setup hook ${setup.script ?? ""} failed`, logs: setup.log ? [setup.log] : [] },
-          results,
-        );
+        await writeBlocked(session, chosenIds, `environment not ready: ${notReady}`, results);
         await notChosen();
       } else {
-        // REQ-OBS-10/AC1: the versions of every tool and model this run uses, recorded before anything runs.
-        await ws.update({
-          data: {
-            ...ws.record.data,
-            versions: await runVersions(project, { exec: ports.versionExec, playwright: ports.playwright }),
-          },
-        });
-        const pending = await executeCases(session, plan, env, io, ports, results, {
-          startedAt,
-          user: options.user,
-          messages,
-          build: options.build === true,
-          onDevice: (stop) => deviceStops.push(stop),
-          live,
-          sequential: options.sequential === true,
-          reviewSpecs: options.reviewSpecs === true,
-          keep: options.keep === true,
-        });
-        if (pending.length > 0)
-          io.write(`Rejected spec files (not in the approved plan or misplaced): ${pending.join(", ")}\n`);
-        // REQ-VER-06: the independent auditor reviews what PASSED; it can only downgrade. Regression runs call no
-        // model (REQ-EXEC-17/AC1): their specs were audited when they passed and were promoted.
-        const audit =
-          ws.record.data["regression"] === undefined ? await auditRun(session, ports.now) : undefined;
-        if (audit?.status === "failed")
-          io.writeError(`Auditor did not complete (${audit.mode}): ${audit.error}\n`);
+        // REQ-GEN-01/AC2: the project's setup hook prepares data; if it fails nothing can be tested.
+        const setup = await runRunHook(session, "setup", env, ports.hookExec);
+        if (!setup.ok) {
+          io.writeError(
+            `Setup hook ${setup.script ?? ""} failed; every case is BLOCKED. Log: ${setup.log ?? ""}\n`,
+          );
+          await blockAfterStartFailure(
+            session,
+            chosenIds,
+            { message: `setup hook ${setup.script ?? ""} failed`, logs: setup.log ? [setup.log] : [] },
+            results,
+          );
+          await notChosen();
+        } else {
+          // REQ-OBS-10/AC1: the versions of every tool and model this run uses, recorded before anything runs.
+          await ws.update({
+            data: {
+              ...ws.record.data,
+              versions: await runVersions(project, { exec: ports.versionExec, playwright: ports.playwright }),
+            },
+          });
+          const pending = await executeCases(session, plan, env, io, ports, results, {
+            startedAt,
+            user: options.user,
+            messages,
+            build: options.build === true,
+            onDevice: (stop) => deviceStops.push(stop),
+            live,
+            sequential: options.sequential === true,
+            reviewSpecs: options.reviewSpecs === true,
+            keep: options.keep === true,
+          });
+          if (pending.length > 0)
+            io.write(`Rejected spec files (not in the approved plan or misplaced): ${pending.join(", ")}\n`);
+          // REQ-VER-06: the independent auditor reviews what PASSED; it can only downgrade. Regression runs call no
+          // model (REQ-EXEC-17/AC1): their specs were audited when they passed and were promoted.
+          const audit =
+            ws.record.data["regression"] === undefined ? await auditRun(session, ports.now) : undefined;
+          if (audit?.status === "failed")
+            io.writeError(`Auditor did not complete (${audit.mode}): ${audit.error}\n`);
+        }
+        teardownDue = true;
       }
-      teardownDue = true;
     }
 
     // Statuses, gates and reports: computed by code only, from the files on disk (invariants 1, 6, 7).

@@ -9,6 +9,7 @@ import {
   TicketKeySchema,
   openRunWorkspace,
   readRunIndex,
+  resolveEnvironment,
   resolveWorkspaceRoot,
   type RunWorkspace,
   type TicketKey,
@@ -18,7 +19,8 @@ import { createMasker } from "@qajitsu/steps";
 import { createCliSecretResolver } from "../adapters.js";
 import { createCliLogger } from "../logger.js";
 import { loadProject, type LoadedProject } from "../project.js";
-import { openSession } from "../session.js";
+import { openSession, type RunSession } from "../session.js";
+import { checkRunReadiness, commentEnvReadiness } from "../env-readiness.js";
 import type { CommandIO } from "./fetch.js";
 import { runFetch } from "./fetch.js";
 import { runPlan, type ReviewPorts } from "./plan.js";
@@ -101,23 +103,41 @@ export async function pickUp(
   const status = await ctx.workflow.status(ticket).catch(() => undefined);
   if (status === undefined) return skip("its status could not be read");
   if (status.toLowerCase() !== start.toLowerCase()) return skip(`it is in "${status}", not "${start}"`);
-  // A ticket whose move out of the start status failed would be picked up on every poll: one open run at a time.
-  if (before !== undefined) {
-    const open = await openRunWorkspace(ctx.root, ticket, before).then(runIsOpen, () => false);
-    if (open)
-      return skip(`run ${before} is still open; finish it or close it with qajitsu work reset ${ticket}`);
-  }
   // No terminal questions while picking up: nobody is there to answer.
   const quiet: CommandIO = { ...io, ask: undefined };
-  const fetched = await runFetch(ticket, {}, quiet, ports);
-  const runId = await latest();
-  if (fetched !== 0 || runId === undefined || runId === before) {
-    await logPickup(ctx.root, ports.now, { event: "pickup.not_started", ticket, via, exit: fetched });
-    if (fetched !== 0)
-      io.writeError(`${ticket} was not picked up: qajitsu fetch ended with exit code ${String(fetched)}.\n`);
-    return undefined;
+  let runId: RunWorkspace["runId"] | undefined;
+  // A ticket whose move out of the start status failed would be picked up on every poll: one open run at a time.
+  // A run parked until its environment is ready (REQ-ENV-13/AC6) is checked again instead.
+  if (before !== undefined) {
+    const previous = await openRunWorkspace(ctx.root, ticket, before).catch(() => undefined);
+    if (previous && runIsOpen(previous)) {
+      if (previous.record.data["parked_env"] !== true)
+        return skip(`run ${before} is still open; finish it or close it with qajitsu work reset ${ticket}`);
+      const parked = await openSession(ticket, before, io.cwd, ports);
+      if (!(await environmentReady(parked, ctx, io, ports, via)))
+        return skip(`the environment is not ready yet for run ${before}`);
+      runId = before;
+    }
+  }
+  if (runId === undefined) {
+    const fetched = await runFetch(ticket, {}, quiet, ports);
+    runId = await latest();
+    if (fetched !== 0 || runId === undefined || runId === before) {
+      await logPickup(ctx.root, ports.now, { event: "pickup.not_started", ticket, via, exit: fetched });
+      if (fetched !== 0)
+        io.writeError(
+          `${ticket} was not picked up: qajitsu fetch ended with exit code ${String(fetched)}.\n`,
+        );
+      return undefined;
+    }
+    // REQ-ENV-13/AC6: a ticket whose environment is not ready is parked: it stays in the start status.
+    if (!(await environmentReady(await openSession(ticket, runId, io.cwd, ports), ctx, io, ports, via))) {
+      io.write(`${ticket} is parked until its environment is ready (run ${runId}).\n`);
+      return undefined;
+    }
   }
   const session = await openSession(ticket, runId, io.cwd, ports);
+  runId = session.ws.runId;
   session.events.emit("fetch", { kind: "system", name: "orchestrator" }, "ticket.picked_up", { via });
   const publisher = publisherFor(session, ports);
   await moveToRole(session, quiet, ctx.workflow, publisher, "in_testing", `run ${runId} started`);
@@ -143,6 +163,59 @@ export async function pickUp(
   if (planned === 0 && ctx.project.config.workflow?.approvers_group !== undefined)
     await runWorkflowSync(ticket, { run: runId }, quiet, ports, review);
   return runId;
+}
+
+/**
+ * Whether the default environment is ready for a picked-up run (REQ-ENV-13/AC6), checked once (the poll interval is
+ * the wait). Not ready: the run is marked parked with the report, commented as configured, and checked again on the
+ * next poll; ready: the mark goes. Without readiness or a default environment nothing is checked.
+ */
+async function environmentReady(
+  session: RunSession,
+  ctx: PickupContext,
+  io: CommandIO,
+  ports: SyncPorts,
+  via: PickupVia,
+): Promise<boolean> {
+  const { config } = ctx.project;
+  const readiness = config.environments.readiness;
+  const name = config.environments.default;
+  if (!readiness || name === undefined) return true;
+  const env = await resolveEnvironment({ config, qaDir: ctx.project.qaDir, env: name });
+  const report = await checkRunReadiness(session, env, {
+    config: { ...readiness, wait: undefined },
+    built: false,
+    fetch: ports.fetch,
+    gitExec: ports.gitExec,
+    masker: session.masker,
+  });
+  const data = Object.fromEntries(Object.entries(session.ws.record.data).filter(([k]) => k !== "parked_env"));
+  await session.ws.update({
+    data: { ...data, readiness_env: report, ...(report.ready ? {} : { parked_env: true }) },
+  });
+  session.events.emit("fetch", { kind: "system", name: "orchestrator" }, "env.readiness", {
+    ready: report.ready,
+    rounds: report.rounds,
+    failed: report.checks.filter((c) => !c.ok).map((c) => c.name),
+    parked: !report.ready,
+  });
+  if (!report.ready) {
+    await logPickup(ctx.root, ports.now, {
+      event: "pickup.parked",
+      ticket: session.ws.ticket,
+      via,
+      run: session.ws.runId,
+    });
+    const failed = await commentEnvReadiness(
+      session,
+      report,
+      readiness,
+      publisherFor(session, ports),
+      session.masker,
+    );
+    if (failed !== undefined) io.writeError(`Warning: the readiness comment was not posted: ${failed}\n`);
+  }
+  return report.ready;
 }
 
 /**

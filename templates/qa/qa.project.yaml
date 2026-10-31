@@ -198,6 +198,18 @@ test_types: [api, web]
 #   context_shares: { diff: 0.5, knowledge: 0.2 }   # over the budget, a source over its share is reduced first;
 #                                                  # unused shares go to the others (REQ-CTX-14)
 #
+# Environment readiness for the ticket (REQ-ENV-13), inside environments: { ... }: nothing runs until it holds.
+#   readiness:
+#     versions:   # per repository: the deployed commit must be the change or contain it
+#       shop: { url: /version, sha: sha }   # or a deployments API / Argo CD URL on the allowlist, or { command: hooks/x.mjs }
+#     checks:
+#       - { name: api health, url: /health }
+#       - { name: migrations, url: /admin/migrations, json: latest, equals: "2026_10_31_stock", as: "user:admin" }
+#       - { name: low stock flag, url: /flags, json: low_stock_badge, equals: true, labels: [low-stock] }
+#       - { name: test accounts, accounts: ["user:standard"] }
+#     wait: { timeout_s: 1800, interval_s: 60 }   # wait for the deployment before giving up as BLOCKED
+#     comment: not_ready                           # never | not_ready | always
+#
 # Records a case needs (REQ-EXEC-53): created before each attempt with the run's marker, removed afterwards.
 # test_data:
 #   kinds:
