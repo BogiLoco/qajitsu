@@ -32,6 +32,7 @@ export const BUG_FLAGS = [
   "BUG_SWIPE_SKIPS_SLIDE",
   "BUG_DOCUMENT_TRUNCATED",
   "BUG_DOCUMENT_NEVER_READY",
+  "BUG_LOW_STOCK_OFF_BY_ONE",
 ];
 
 const PRODUCTS = [
@@ -94,6 +95,9 @@ export function createShop(options) {
     res.writeHead(status, { "content-type": "application/json" });
     res.end(JSON.stringify(body));
   };
+  /** Products created for tests by the admin (REQ-EXEC-53 demo): id -> { name, price, stock, marker }. */
+  const testProducts = new Map();
+  let productSeq = 100;
   /** Uploaded documents (REQ-EXEC-45 demo): id -> { title, name, type, data }. */
   const documents = new Map();
   let documentSeq = 0;
@@ -232,6 +236,51 @@ export function createShop(options) {
         200,
         inbox.filter((m) => m.to === s.user),
       );
+    // Test data of the shop (REQ-EXEC-53 demo): the admin creates products with a marker and removes them by id or
+    // by marker prefix.
+    if (route === "POST /admin/products") {
+      if (s.user !== "admin") return json(res, 403, { error: "FORBIDDEN" });
+      const input = await body(req);
+      if (typeof input?.name !== "string" || !Number.isInteger(input.stock) || input.stock < 0)
+        return json(res, 422, { error: "NAME_AND_STOCK_REQUIRED" });
+      productSeq += 1;
+      const product = {
+        id: `P-${String(productSeq)}`,
+        name: input.name,
+        price: typeof input.price === "number" ? input.price : 10,
+        stock: input.stock,
+      };
+      testProducts.set(product.id, { ...product, marker: String(input.qa_marker ?? "") });
+      return json(res, 201, product);
+    }
+    if (route === "DELETE /admin/products") {
+      if (s.user !== "admin") return json(res, 403, { error: "FORBIDDEN" });
+      const prefix = url.searchParams.get("marker") ?? "";
+      if (prefix === "") return json(res, 422, { error: "MARKER_REQUIRED" });
+      let removed = 0;
+      for (const [id, p] of testProducts)
+        if (p.marker.startsWith(prefix)) {
+          testProducts.delete(id);
+          removed += 1;
+        }
+      return json(res, 200, { removed });
+    }
+    const adminProduct = /^\/admin\/products\/(P-\d+)$/.exec(url.pathname);
+    if (req.method === "DELETE" && adminProduct) {
+      if (s.user !== "admin") return json(res, 403, { error: "FORBIDDEN" });
+      if (!testProducts.delete(adminProduct[1])) return json(res, 404, { error: "PRODUCT_NOT_FOUND" });
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    // A product with its stock (REQ-EXEC-53 demo): three or fewer left is low stock; BUG-23 only below three.
+    const productPath = /^\/products\/(P-\d+)$/.exec(url.pathname);
+    if (req.method === "GET" && productPath) {
+      const p = testProducts.get(productPath[1]);
+      if (!p) return json(res, 404, { error: "PRODUCT_NOT_FOUND" });
+      const low = bugs.BUG_LOW_STOCK_OFF_BY_ONE ? p.stock < 3 : p.stock <= 3;
+      return json(res, 200, { id: p.id, name: p.name, price: p.price, stock: p.stock, low_stock: low });
+    }
     if (route === "POST /admin/seed" || route === "GET /admin/seed") {
       if (s.user !== "admin") return json(res, 403, { error: "FORBIDDEN" });
       if (req.method === "GET") return json(res, 200, { markers: seeds });

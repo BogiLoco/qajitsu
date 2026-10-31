@@ -260,6 +260,8 @@ export interface AttemptRequest {
   readonly extractText?: (name: string, data: Uint8Array) => Promise<string | undefined>;
   /** The application's test hook for `state.*` checks (REQ-EXEC-56/AC2), e.g. `__QA_STATE__`. */
   readonly testStateHook?: string;
+  /** Records created for this attempt by name (REQ-EXEC-53/AC1), for the spec's `data.get(name)`. */
+  readonly testData?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 }
 
 /** What the trusted parent reports while an attempt runs (REQ-OBS-09). */

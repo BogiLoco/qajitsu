@@ -283,6 +283,36 @@
               "pattern": "^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$"
             }
           },
+          "test_data": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,40}$"
+                },
+                "kind": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_-]{0,40}$"
+                },
+                "with": {
+                  "default": {},
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "name",
+                "kind"
+              ],
+              "additionalProperties": false
+            }
+          },
           "locales": {
             "type": "array",
             "items": {

@@ -159,6 +159,11 @@ export interface ChangeContext {
   readonly ui?: UiInventory | undefined;
   /** Pages and screens of the running application, recorded by code before writing specs (REQ-EXEC-22/AC1). */
   readonly snapshot?: readonly UiScreen[] | undefined;
+  /**
+   * Kinds of test data the project can create for a case (REQ-EXEC-53/AC1): the kinds of `test_data.kinds`, and whether
+   * a data hook handles any other kind.
+   */
+  readonly testData?: { readonly kinds: readonly string[]; readonly hook: boolean } | undefined;
   /** Lessons of earlier runs of the project (REQ-CTX-20/AC5): untrusted, offered to the analyst and planner only. */
   readonly lessons?: readonly Lesson[] | undefined;
 }
@@ -649,6 +654,20 @@ export function changeContextFragments(
     for (const k of context.knowledge)
       out.push(onDemandIfLarge(part("knowledge", `knowledge/${k.name}`, "untrusted", 40, k.text)));
   }
+  // REQ-EXEC-53: which records the planner may ask code to create (project configuration, trusted).
+  if (context.testData && (context.testData.kinds.length > 0 || context.testData.hook))
+    out.push(
+      part(
+        "repository",
+        "test-data",
+        "trusted",
+        66,
+        `## Test data kinds\n${[
+          ...context.testData.kinds,
+          ...(context.testData.hook ? ["(any other kind: the project's data hook)"] : []),
+        ].join(", ")}`,
+      ),
+    );
   // REQ-CTX-20/AC5: what people taught earlier runs; low priority, so it is the first to wait behind a handle.
   const lessons = options.lessons === true ? (context.lessons ?? []) : [];
   if (lessons.length > 0) {

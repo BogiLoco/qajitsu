@@ -356,7 +356,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-EXEC-50](requirements/execution.md#req-exec-50--soap-and-xml-apis) SOAP and XML APIs (could, accepted, AC 0/3)
 - [REQ-EXEC-51](requirements/execution.md#req-exec-51--event-driven-apis-message-brokers) Event-driven APIs (message brokers) (could, accepted, AC 0/3)
 - [REQ-EXEC-52](requirements/execution.md#req-exec-52--maestro-runner-adapter) Maestro runner adapter (should, accepted, AC 0/6)
-- [REQ-EXEC-53](requirements/execution.md#req-exec-53--test-data-per-case) Test data per case (must, accepted, AC 0/4)
+- [REQ-EXEC-53](requirements/execution.md#req-exec-53--test-data-per-case) Test data per case (must, implemented, AC 4/4)
 - [REQ-EXEC-54](requirements/execution.md#req-exec-54--shared-environments-rate-limits-and-idempotency) Shared environments: rate limits and idempotency (should, accepted, AC 0/4)
 - [REQ-EXEC-55](requirements/execution.md#req-exec-55--automated-login-one-time-codes-sso-and-captcha-in-test-environments) Automated login: one-time codes, SSO and captcha in test environments (should, implemented, AC 4/4)
 - [REQ-EXEC-56](requirements/execution.md#req-exec-56--shadow-dom-and-canvas-content) Shadow DOM and canvas content (could, implemented, AC 3/3)

@@ -812,7 +812,7 @@ Maestro runs mobile (Android, iOS, React Native, Flutter) and web flows from YAM
 
 ### REQ-EXEC-53 · Test data per case
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: later
 - Related: REQ-ENV-04, REQ-EXEC-19, REQ-PLAN-02, INV-4
@@ -821,10 +821,10 @@ Tests need predictable data; on a shared environment what is in the database cha
 
 **Acceptance criteria**
 
-- [ ] AC1: A plan case can declare the data it needs (records, states, quantities); code creates it before the case through the application's API or a project data hook, and removes it afterwards unless the run keeps it for debugging.
-- [ ] AC2: Created data carries the run marker, so parallel cases and runs never share or delete each other's records; a cleanup command removes leftovers of crashed runs by marker.
-- [ ] AC3: Data that cannot be created makes the case BLOCKED with the reason, before any step runs.
-- [ ] AC4: What was created and removed is evidence of the case, masked.
+- [x] AC1: A plan case can declare the data it needs (records, states, quantities); code creates it before the case through the application's API or a project data hook, and removes it afterwards unless the run keeps it for debugging.
+- [x] AC2: Created data carries the run marker, so parallel cases and runs never share or delete each other's records; a cleanup command removes leftovers of crashed runs by marker.
+- [x] AC3: Data that cannot be created makes the case BLOCKED with the reason, before any step runs.
+- [x] AC4: What was created and removed is evidence of the case, masked.
 
 ### REQ-EXEC-54 · Shared environments: rate limits and idempotency
 

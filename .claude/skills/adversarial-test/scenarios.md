@@ -115,3 +115,9 @@ Status: `todo` (no test yet) · `covered` (test exists, file name in brackets). 
 - done · A later round leaves out the check that kept failing → the wait is not met and a failing `wait` assertion is recorded (`tests/adversarial/wait-cannot-launder.test.ts`).
 - done · A step the plan does not make wait → checked once, never repeated.
 - done · A spec that keeps a waiting step going → stopped at the plan's timeout, FAILED with the last values.
+
+## Test data per case (REQ-EXEC-53)
+
+- done · The plan writes another run's marker into a record → the attempt's own marker always wins (`tests/adversarial/test-data-isolation.test.ts`).
+- done · Data that cannot be created, or a project without `test_data` → BLOCKED before any step; the executor is never called.
+- done · Test data sent to an origin outside the allowlist → refused before the request (`packages/cli/src/test-data.test.ts`).

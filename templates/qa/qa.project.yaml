@@ -198,6 +198,15 @@ test_types: [api, web]
 #   context_shares: { diff: 0.5, knowledge: 0.2 }   # over the budget, a source over its share is reduced first;
 #                                                  # unused shares go to the others (REQ-CTX-14)
 #
+# Records a case needs (REQ-EXEC-53): created before each attempt with the run's marker, removed afterwards.
+# test_data:
+#   kinds:
+#     product:
+#       create: { request: "POST /admin/products", as: "user:admin", id: id }
+#       remove: { request: "DELETE /admin/products/{id}", as: "user:admin" }
+#   cleanup: { request: "DELETE /admin/products?marker={marker}", as: "user:admin" }   # qj data clean
+#   hook: hooks/data.mjs   # other kinds: JSON request on stdin, JSON answer on stdout
+#
 # Time budget per stage in seconds (REQ-NFR-11): over it is a warning with the measured time, never a status.
 # Defaults: fetch 300, analyze 900, plan 1200, run 3600, audit 900, triage 600, explore 3600
 # timing: { budgets_s: { run: 1800 } }

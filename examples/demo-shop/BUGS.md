@@ -27,6 +27,7 @@ assert that the targeting case ends FAILED with the flag on and PASSED with it o
 | BUG-20 | `BUG_SWIPE_SKIPS_SLIDE`          | gallery   | web    | A swipe in the gallery jumps two slides instead of one                      | DEMO-15        | later |
 | BUG-21 | `BUG_DOCUMENT_TRUNCATED`         | documents | api    | A downloaded invoice document misses the last byte of the uploaded PDF      | DEMO-16        | later |
 | BUG-22 | `BUG_DOCUMENT_NEVER_READY`       | documents | api    | An uploaded document stays processing and never becomes ready               | DEMO-16        | later |
+| BUG-23 | `BUG_LOW_STOCK_OFF_BY_ONE`       | products  | api    | A product with exactly three left is not shown as low stock                 | DEMO-17        | later |
 
 Rules:
 

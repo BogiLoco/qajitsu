@@ -158,6 +158,13 @@ export function renderPlanMarkdown(plan: Plan): string {
     if (c.locales && c.locales.length > 0) out.push(`Also runs in locales: ${c.locales.join(", ")}`, "");
     const data = Object.entries(c.data);
     if (data.length > 0) out.push(`Data: ${data.map(([k, v]) => `${k}=${v}`).join(", ")}`, "");
+    // REQ-EXEC-53: the reviewer sees the records created for each attempt.
+    const records = c.test_data ?? [];
+    if (records.length > 0)
+      out.push(
+        `Test data: ${records.map((d) => `${d.name}=${d.kind} ${JSON.stringify(d.with)}`).join(", ")}`,
+        "",
+      );
     // REQ-EXEC-38/AC1: the reviewer sees every file the case uploads.
     const files = Object.entries(c.files ?? {});
     if (files.length > 0)

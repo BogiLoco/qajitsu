@@ -96,6 +96,8 @@ interface StartMessage {
   readonly caseId: string;
   /** Expectations of this case only, keyed `<case>.<step>.<field>`; returned by plan.expect for readability. */
   readonly expectations: Readonly<Record<string, unknown>>;
+  /** Records created for this attempt by name (REQ-EXEC-53/AC1). */
+  readonly testData: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 }
 
 interface ReplyMessage {
@@ -171,7 +173,7 @@ async function start(m: StartMessage): Promise<void> {
     caseId: m.caseId,
     plan: {
       expect: (path: string): unknown => {
-        if (!(path in m.expectations))
+        if (!Object.hasOwn(m.expectations, path))
           throw new Error(`plan.expect('${path}'): not an expectation of ${m.caseId}`);
         return m.expectations[path];
       },
@@ -270,6 +272,13 @@ async function start(m: StartMessage): Promise<void> {
     },
     verify: (stepId: string, field: string): void => {
       void rpc({ op: "verify", stepId, field }).catch(() => undefined);
+    },
+    data: {
+      get: (name: string) => {
+        if (!Object.hasOwn(m.testData, name))
+          throw new Error(`data.get('${name.slice(0, 40)}'): no test data of ${m.caseId} has this name`);
+        return m.testData[name];
+      },
     },
     inbox: {
       address: (kind = "email") => rpc({ op: "inboxAddress", kind }),

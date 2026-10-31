@@ -211,6 +211,18 @@ describe("plan store (REQ-PLAN-02, REQ-PLAN-04, REQ-PLAN-06)", () => {
       }),
     );
     expect(sixteen).toContain("checked again every 1 s for up to 10 s");
+    // REQ-EXEC-53: the records each attempt creates are shown to the reviewer.
+    const seventeen = renderPlanMarkdown(
+      parsePlan({
+        schema: 1,
+        ticket: "DEMO-17",
+        version: 1,
+        ...JSON.parse(
+          readFileSync(new URL("../../../../fixtures/plans/demo-17-draft.json", import.meta.url), "utf8"),
+        ),
+      }),
+    );
+    expect(seventeen).toContain('Test data: lamp=product {"name":"Lamp","price":12.5,"stock":3}');
     const fixture = renderPlanMarkdown(
       parsePlan({
         schema: 1,

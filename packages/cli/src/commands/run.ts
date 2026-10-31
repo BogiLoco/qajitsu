@@ -67,7 +67,8 @@ import { runMessages, type MessagePorts, type RunMessages } from "./messages.js"
 import { approvalContext, changedParts, type ApprovalContext } from "./context-fingerprint.js";
 import { runRunHook, type HookExec } from "./hooks.js";
 import { prepareMobile, type PreparedMobile } from "./mobile.js";
-import { accountLogin, runLimited, runMobileLane } from "./lanes.js";
+import { accountHeaders, accountLogin, runLimited, runMobileLane } from "./lanes.js";
+import { createTestDataProvider, testDataMarker } from "../test-data.js";
 import { authorSnapshot } from "./app-snapshot.js";
 import { exportRunTelemetry } from "./telemetry.js";
 import {
@@ -444,8 +445,9 @@ export async function runRun(
         {},
       );
     }
-    if (!options.build && (options.keep || (options.set ?? []).length > 0))
-      throw new ConfigError("BUILD_OPTION_WITHOUT_BUILD", "--keep and --set apply to --build runs only.", {});
+    // `--keep` also keeps the cases' test data (REQ-EXEC-53/AC1), so it applies to any environment.
+    if (!options.build && (options.set ?? []).length > 0)
+      throw new ConfigError("BUILD_OPTION_WITHOUT_BUILD", "--set applies to --build runs only.", {});
     if (options.build && options.env !== undefined && /^https?:\/\//.test(options.env))
       throw new ConfigError(
         "BUILD_WITH_URL",
@@ -681,6 +683,7 @@ export async function runRun(
           live,
           sequential: options.sequential === true,
           reviewSpecs: options.reviewSpecs === true,
+          keep: options.keep === true,
         });
         if (pending.length > 0)
           io.write(`Rejected spec files (not in the approved plan or misplaced): ${pending.join(", ")}\n`);
@@ -857,6 +860,8 @@ async function executeCases(
     readonly sequential?: boolean | undefined;
     /** `--review-specs` (REQ-VER-24/AC1). */
     readonly reviewSpecs?: boolean | undefined;
+    /** `--keep`: containers and worktrees of a build, and the cases' test data (REQ-EXEC-53/AC1). */
+    readonly keep?: boolean | undefined;
   } = {
     build: false,
     onDevice: () => undefined,
@@ -1074,6 +1079,15 @@ async function executeCases(
     events.emit("run", SYSTEM, "contract.loaded", { repo: alias, file: repo.openapi });
     break;
   }
+  const leases = createAccountLeases(env.profile, { waitMs: project.config.execution.account_wait_s * 1000 });
+  const loginDeps = {
+    fetch: ports.fetch,
+    qaDir: project.qaDir,
+    resolveSecret: (r: string) => session.resolveSecret(r),
+    registerSecret: (v: string) => {
+      masker.register(v);
+    },
+  };
   const base = {
     // REQ-EXEC-11: manual steps ask a person here (terminal) or through manual/ files (CI); never an agent.
     manual: createManualPrompter(session, io, {
@@ -1094,15 +1108,8 @@ async function executeCases(
     // REQ-ENV-09: each attempt holds its own pool accounts while it runs.
     login: accountLogin(
       env,
-      createAccountLeases(env.profile, { waitMs: project.config.execution.account_wait_s * 1000 }),
-      {
-        fetch: ports.fetch,
-        qaDir: project.qaDir,
-        resolveSecret: (r) => session.resolveSecret(r),
-        registerSecret: (v) => {
-          masker.register(v);
-        },
-      },
+      leases,
+      loginDeps,
       // REQ-EXEC-62/AC3: every session of a case holds its own pool account.
       (caseId) =>
         Object.values(plan.cases.find((c) => c.id === caseId)?.data ?? {}).filter((v) =>
@@ -1110,6 +1117,21 @@ async function executeCases(
         ),
     ),
     contract,
+    // REQ-EXEC-53: the records cases need, marked with this run; `--keep` leaves them for debugging.
+    ...(project.config.test_data
+      ? {
+          testData: createTestDataProvider({
+            config: project.config.test_data,
+            baseUrl: env.baseUrl,
+            allowedOrigins: [env.origin],
+            fetch: ports.fetch,
+            headersFor: accountHeaders(env, leases, loginDeps),
+            qaDir: project.qaDir,
+          }),
+        }
+      : {}),
+    marker: testDataMarker(ws.ticket, ws.runId),
+    keepTestData: run.keep === true,
     events,
     now: ports.now,
   };

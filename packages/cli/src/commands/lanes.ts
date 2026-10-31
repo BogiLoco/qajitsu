@@ -5,6 +5,7 @@ import { createBrowserLogin } from "@qajitsu/adapter-runner-web";
 import type { BrowserFactory, LoginContext, RunCasesOptions } from "@qajitsu/adapter-runner-api";
 import {
   accountsUsedBy,
+  ConfigError,
   CaseResultFileSchema,
   type AccountLeases,
   type CaseResultFile,
@@ -90,6 +91,34 @@ export function accountLogin(
     } catch (error) {
       lease.release();
       throw error;
+    }
+  };
+}
+
+/**
+ * Request headers of one account alias for one call of the test data (REQ-EXEC-53): the alias's pool account is held
+ * only for the call and given back, so data setup never keeps an account a case needs.
+ */
+export function accountHeaders(
+  env: ResolvedEnvironment,
+  leases: AccountLeases,
+  deps: Parameters<typeof loginAccounts>[1],
+): (alias: string | undefined) => Promise<Readonly<Record<string, string>>> {
+  return async (alias) => {
+    if (alias === undefined) return {};
+    if (!Object.hasOwn(env.profile.accounts, alias))
+      throw new ConfigError(
+        "TEST_DATA_ACCOUNT_UNKNOWN",
+        `test data runs as ${alias}, which this environment has no account for`,
+        {
+          alias,
+        },
+      );
+    const lease = await leases.acquire({ caseId: "test-data", lane: "api", aliases: [alias] });
+    try {
+      return (await loginAccounts(env, deps, lease.members)).accounts[alias] ?? {};
+    } finally {
+      lease.release();
     }
   };
 }

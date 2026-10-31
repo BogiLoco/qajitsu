@@ -53,6 +53,7 @@ import { runExplore, runExplorePromote } from "./commands/explore.js";
 import { runExploreReview } from "./commands/explore-review.js";
 import { runBench } from "./commands/bench.js";
 import { runAuditVerify } from "./commands/audit.js";
+import { runDataClean } from "./commands/data.js";
 import { runAuditExport, runAuditTrail } from "./commands/audit-trail.js";
 import { runCertify, runKeygen, runVerifyReport } from "./commands/certificate.js";
 import { runReviewSpec } from "./commands/spec-review.js";
@@ -688,7 +689,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
       "--build",
       "build the application from the fetched worktrees (services and build in qa.project.yaml)",
     )
-    .option("--keep", "with --build: keep containers and worktrees after the run")
+    .option("--keep", "keep the cases' test data and, with --build, containers and worktrees after the run")
     .option(
       "--set <service.VAR=value>",
       "with --build: override an overridable service variable (repeatable)",
@@ -811,7 +812,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
       "environment profile from .qa/envs or a URL (default: environments.default)",
     )
     .option("--build", "build the application from the fetched worktrees")
-    .option("--keep", "with --build: keep containers and worktrees after the run")
+    .option("--keep", "keep the cases' test data and, with --build, containers and worktrees after the run")
     .option(
       "--set <service.VAR=value>",
       "with --build: override an overridable service variable",
@@ -1053,6 +1054,18 @@ export function createProgram(version: string, io: ProgramIO): Command {
         knowledge?: string;
         context?: string;
       }) => withPorts((ports) => runBench(options, commandIO, ports, review))(),
+    );
+
+  const data = program.command("data").description("Test data of the cases (REQ-EXEC-53)");
+  data
+    .command("clean")
+    .description("Remove the test data crashed or kept runs left in an environment, by marker")
+    .argument("[ticket]", "Jira key, e.g. SHOP-482: every run of the ticket")
+    .option("--run <id>", "only this run of the ticket")
+    .option("--all", "everything QAJitsu created (marker qj-)")
+    .option("--env <profile>", "environment profile from .qa/envs (default: environments.default)")
+    .action((ticket: string | undefined, options: { run?: string; all?: boolean; env?: string }) =>
+      withPorts((ports) => runDataClean(ticket, options, commandIO, ports))(),
     );
 
   const audit = program.command("audit").description("Audit log and audit trail tools");

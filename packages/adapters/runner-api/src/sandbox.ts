@@ -269,6 +269,7 @@ export function createSandboxExecutor(
       ...(input.fixture ? { fixture: input.fixture } : {}),
       ...(input.extractText ? { extractText: input.extractText } : {}),
       ...(input.testStateHook ? { testStateHook: input.testStateHook } : {}),
+      ...(input.testData ? { testData: input.testData } : {}),
       ...(input.credential ? { credential: input.credential } : {}),
       caseId: input.caseId,
       attempt: input.attempt,
@@ -404,7 +405,13 @@ export function createSandboxExecutor(
             );
           });
         });
-        child.send({ type: "start", specFile, caseId: input.caseId, expectations: expectationsOf(input) });
+        child.send({
+          type: "start",
+          specFile,
+          caseId: input.caseId,
+          expectations: expectationsOf(input),
+          testData: input.testData ?? {},
+        });
       });
     } finally {
       await dispose?.();

@@ -314,6 +314,22 @@ export const TestCaseSchema = z.strictObject({
   data: z
     .record(z.string(), z.string().regex(/^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$/, "Use aliases like user:standard"))
     .default({}),
+  /**
+   * Records the case needs (REQ-EXEC-53/AC1): created by code before each attempt through the application's API or the
+   * project's data hook (`test_data` in the project config), marked with the run, and removed afterwards. A spec reads
+   * a created record with `data.get("<name>")`.
+   */
+  test_data: z
+    .array(
+      z.strictObject({
+        name: z.string().regex(/^[a-z][a-z0-9_-]{0,40}$/, "A name like lamp or low-stock-product"),
+        kind: z.string().regex(/^[a-z][a-z0-9_-]{0,40}$/, "A kind of the project config's test_data.kinds"),
+        with: z.record(z.string(), z.unknown()).default({}),
+      }),
+    )
+    .max(20)
+    .refine((d) => new Set(d.map((x) => x.name)).size === d.length, "Every record needs its own name")
+    .optional(),
   /** Locales of the project this case also runs in (REQ-EXEC-14/AC1); expectations per locale in `by_locale`. */
   locales: z.array(LocaleNameSchema).optional(),
   /**

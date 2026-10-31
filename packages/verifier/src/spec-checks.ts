@@ -407,6 +407,23 @@ export function checkSpecSource(
             if (ts.isPropertyAssignment(f)) fileKey(f.initializer, "api.multipart()");
             else add("lint", "api.multipart() takes literal file keys of the plan", f);
       }
+      // REQ-EXEC-53/AC1: test data is read by the literal name of a record the case's plan creates.
+      if (
+        name === "get" &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        ts.isIdentifier(node.expression.expression) &&
+        node.expression.expression.text === "data"
+      ) {
+        const names = (planCase.test_data ?? []).map((d) => d.name);
+        if (!first || !ts.isStringLiteral(first))
+          add("lint", "data.get() takes the literal name of a test_data record", node);
+        else if (!names.includes(first.text))
+          add(
+            "coverage",
+            `data.get(): '${first.text}' is not a test_data record of ${caseId} in the plan`,
+            first,
+          );
+      }
       // REQ-EXEC-67/AC5: a secret is named by an account of the case and a field, never passed as a value.
       if (onUi && name === "fillSecret") {
         const [, alias, field] = node.arguments;

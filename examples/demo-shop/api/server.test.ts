@@ -174,6 +174,37 @@ describe("demo-shop seeded bugs (REQ-NFR-04, BUGS.md)", () => {
     }
   });
 
+  it("BUG-23: three left is low stock without the flag, not with it; test products go by id or marker", async () => {
+    for (const [flag, low] of [
+      [undefined, true],
+      ["BUG_LOW_STOCK_OFF_BY_ONE", false],
+    ] as const) {
+      const shop = await start(flag);
+      const admin = String(
+        (await call(shop, "POST", "/auth/login", { username: "admin", password: PASSWORD })).body["token"],
+      );
+      const created = await call(
+        shop,
+        "POST",
+        "/admin/products",
+        { name: "Lamp", stock: 3, qa_marker: "qj-x-a1" },
+        admin,
+      );
+      expect(created.status).toBe(201);
+      const user = await login(shop);
+      const product = await call(shop, "GET", `/products/${String(created.body["id"])}`, undefined, user);
+      expect(product.body).toMatchObject({ stock: 3, low_stock: low });
+      expect((await call(shop, "POST", "/admin/products", { name: "x", stock: 1 }, user)).status).toBe(403);
+      await call(shop, "POST", "/admin/products", { name: "Shelf", stock: 9, qa_marker: "qj-x-a2" }, admin);
+      expect((await call(shop, "DELETE", "/admin/products?marker=qj-x-", undefined, admin)).body).toEqual({
+        removed: 2,
+      });
+      expect(
+        (await call(shop, "GET", `/products/${String(created.body["id"])}`, undefined, user)).status,
+      ).toBe(404);
+    }
+  });
+
   it("serves health, version, products; rejects bad logins, unknown codes and routes", async () => {
     const shop = await start();
     expect((await call(shop, "GET", "/health")).body).toEqual({ status: "ok" });

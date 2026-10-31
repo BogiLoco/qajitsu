@@ -65,6 +65,14 @@ const BUGS = [
     caseId: "TC-01",
     specs: ["TC-01", "TC-02", "TC-03"],
   },
+  // Records created for each attempt (REQ-EXEC-53): exactly three in stock is the boundary.
+  {
+    bug: "BUG-23",
+    flag: "BUG_LOW_STOCK_OFF_BY_ONE",
+    ticket: "DEMO-17",
+    caseId: "TC-01",
+    specs: ["TC-01", "TC-02"],
+  },
   // An outcome that never comes: the planned wait ends at its timeout with FAILED (REQ-EXEC-46).
   {
     bug: "BUG-22",
@@ -95,7 +103,18 @@ async function pipeline(
       (await readFile(yaml, "utf8")).replace(
         "environments: { allowlist: ['http://localhost:3000'] }",
         `environments: { default: local, allowlist: ['${shop.url}'] }`,
-      ),
+      ) +
+        // REQ-EXEC-53: the demo's products for tests, as in examples/demo-shop/.qa/qa.project.yaml.
+        [
+          "",
+          "test_data:",
+          "  kinds:",
+          "    product:",
+          '      create: { request: "POST /admin/products", as: "user:admin" }',
+          '      remove: { request: "DELETE /admin/products/{id}", as: "user:admin" }',
+          '  cleanup: { request: "DELETE /admin/products?marker={marker}", as: "user:admin" }',
+          "",
+        ].join("\n"),
     );
     await mkdir(join(project, ".qa", "envs"));
     const profile = readFileSync(
@@ -135,7 +154,8 @@ async function pipeline(
       return { out, exitCode };
     };
     const ref = ticket === "DEMO-1" ? [] : ["--ref", "shop=main"];
-    expect((await run(["fetch", ticket, ...ref])).exitCode).toBe(0);
+    const fetched = await run(["fetch", ticket, ...ref]);
+    expect(fetched.exitCode, fetched.out).toBe(0);
     const draft = readFileSync(fixture(`plans/${ticket.toLowerCase()}-draft.json`), "utf8");
     const analysis = JSON.stringify({ summary: "API change.", change_type: ["api"], confidence: "high" });
     const planned = await run(["plan", ticket], [{ text: analysis }, { text: draft }]);
@@ -177,6 +197,7 @@ describe("demo-shop self-test (REQ-NFR-04/AC1)", () => {
     ["DEMO-5", ["TC-01"]],
     ["DEMO-7", ["TC-01", "TC-02", "TC-03"]],
     ["DEMO-16", ["TC-01", "TC-02", "TC-03"]],
+    ["DEMO-17", ["TC-01", "TC-02"]],
   ] as const)("%s: every case is PASSED with all bugs off", async (ticket, specs) => {
     const { exitCode, statuses, out } = await pipeline(ticket, specs);
     expect(

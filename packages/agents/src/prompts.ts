@@ -53,6 +53,10 @@ Rules:
   (exact strings). An element inside an iframe: "frame:title:Payment >> testid:iban-field". An element that
   repeats (a button per row) is narrowed with a chain: "role:row >> has-text:Anna Smith >> role:button:Delete" or
   "testid:card >> nth:2" (web only).
+- A case that needs records in a certain state (a product with 3 in stock, an expired coupon, an order to cancel)
+  lists them in "test_data": [{"name": "lamp", "kind": "product", "with": {"stock": 3}}]; code creates them before
+  each attempt and removes them afterwards, so the case never relies on what happens to be in a shared environment.
+  Use only kinds the project lists under "Test data kinds"; without them, ask an open question instead.
 - An outcome that comes later (a job, a queue, "the status changes within 30 seconds", an e-mail or a report being
   generated) is one step that checks it with "wait": {"timeout_s": 30, "interval_s": 2} next to its "expect": the
   step's request or page check is repeated until every expectation of the step holds or the time is up. Take the

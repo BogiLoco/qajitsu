@@ -149,6 +149,18 @@ export interface CaseContext {
   readonly verify: (stepId: string, field: string, actual?: unknown, expected?: unknown) => void;
   /** The case's inbox (REQ-ENV-08): an address for the test data, and the message the plan expects. */
   readonly inbox: InboxClient;
+  /** Records created for this attempt (REQ-EXEC-53): `data.get("lamp").id`. */
+  readonly data: TestDataClient;
+}
+
+/** The records the plan's `test_data` created for the attempt (REQ-EXEC-53/AC1). */
+export interface TestDataClient {
+  /**
+   * What the application answered when the record was created.
+   *
+   * @throws {Error} When the case's plan has no record with this name; the attempt then errors.
+   */
+  readonly get: (name: string) => Readonly<Record<string, unknown>>;
 }
 
 /** A received message as a spec sees it: masked, with the links it contains. */
@@ -189,6 +201,8 @@ export interface CaseRuntimeOptions {
   /** Headers per account alias, prepared by framework login helpers (REQ-CFG-07/AC2). */
   readonly accounts: Readonly<Record<string, Readonly<Record<string, string>>>>;
   readonly now: () => number;
+  /** Records created for this attempt by name (REQ-EXEC-53/AC1), provided by the runner. */
+  readonly testData?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
   /** Waits between the rounds of a step with a planned wait (REQ-EXEC-46); `setTimeout` when not given. */
   readonly sleep?: (ms: number) => Promise<void>;
   /** Starts the browser on first use; absent for API-only runs (REQ-EXEC-05). */
@@ -1720,6 +1734,14 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     inbox: {
       address: (kind = "email") => inboxAddress(kind),
       wait: (stepId) => inboxWait(stepId),
+    },
+    data: {
+      get: (name) => {
+        const record = Object.hasOwn(options.testData ?? {}, name) ? options.testData?.[name] : undefined;
+        if (record === undefined)
+          throw new Error(`data.get('${name.slice(0, 40)}'): no test data of ${caseId} has this name`);
+        return record;
+      },
     },
   };
 
