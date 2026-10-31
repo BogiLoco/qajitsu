@@ -1,4 +1,4 @@
-import { copyFile, lstat, mkdir, readdir, rename, rm } from "node:fs/promises";
+import { copyFile, lstat, mkdir, readFile, readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { ConfigError } from "../errors.js";
 import { RunIdSchema, TicketKeySchema, type TicketKey } from "../identifiers.js";
@@ -133,6 +133,22 @@ export async function archiveJournal(
  *
  * @returns Removed archive paths.
  */
+/**
+ * When an archived run ended: the time of its journal's last entry, so retention follows the run and the run's clock;
+ * the file's time only when no entry can be read.
+ */
+async function endedAt(path: string, fileTimeMs: number): Promise<number> {
+  const text = await readFile(path, "utf8").catch(() => "");
+  const last = text.trimEnd().split("\n").at(-1) ?? "";
+  try {
+    const ts = (JSON.parse(last) as { ts?: unknown }).ts;
+    const ms = typeof ts === "string" ? Date.parse(ts) : Number.NaN;
+    return Number.isNaN(ms) ? fileTimeMs : ms;
+  } catch {
+    return fileTimeMs;
+  }
+}
+
 export async function pruneAuditArchive(root: string, retentionDays: number, now: Date): Promise<string[]> {
   const removed: string[] = [];
   const cutoff = now.getTime() - retentionDays * 86_400_000;
@@ -141,7 +157,7 @@ export async function pruneAuditArchive(root: string, retentionDays: number, now
     for (const file of await readdir(join(root, AUDIT_DIR, ticket)).catch(() => [])) {
       const path = join(root, AUDIT_DIR, ticket, file);
       const info = await lstat(path);
-      if (info.isFile() && file.endsWith(".events.jsonl") && info.mtimeMs < cutoff) {
+      if (info.isFile() && file.endsWith(".events.jsonl") && (await endedAt(path, info.mtimeMs)) < cutoff) {
         await rm(path, { force: true });
         removed.push(path);
       }
