@@ -515,6 +515,57 @@ export const ProjectConfigSchema = z.strictObject({
     })
     .default({ providers: {}, roles: {}, cache_ttl: "auto", context_summaries: "no-tools" }),
   /**
+   * How the records a case needs are created and removed (REQ-EXEC-53): per kind through the application's API
+   * (`create: { request: "POST /admin/products", as: user:admin }`, `remove: { request: "DELETE /admin/products/{id}" }`)
+   * or by the data hook in `.qa/hooks/` for every kind not listed. Every record carries the marker in `marker_field`;
+   * `cleanup` removes what crashed runs left, by marker prefix (`{marker}` in its request).
+   */
+  test_data: z
+    .strictObject({
+      marker_field: z
+        .string()
+        .regex(/^[A-Za-z_][\w-]{0,40}$/)
+        .default("qa_marker"),
+      kinds: z
+        .record(
+          z.string().regex(/^[a-z][a-z0-9_-]{0,40}$/),
+          z.strictObject({
+            create: z.strictObject({
+              request: z.string().regex(/^POST \/\S*$/, "POST /path"),
+              as: z
+                .string()
+                .regex(/^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$/)
+                .optional(),
+              /** Path of the new record's id in the response (dotted). */
+              id: z.string().min(1).max(100).default("id"),
+            }),
+            remove: z
+              .strictObject({
+                request: z.string().regex(/^DELETE \/\S*\{id\}\S*$/, "DELETE /path/{id}"),
+                as: z
+                  .string()
+                  .regex(/^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$/)
+                  .optional(),
+              })
+              .optional(),
+          }),
+        )
+        .default({}),
+      cleanup: z
+        .strictObject({
+          request: z.string().regex(/^DELETE \/\S*\{marker\}\S*$/, "DELETE /path?marker={marker}"),
+          as: z
+            .string()
+            .regex(/^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$/)
+            .optional(),
+        })
+        .optional(),
+      /** A script of `.qa/hooks/` for kinds without an API: JSON request on stdin, JSON answer on stdout. */
+      hook: HookPath.optional(),
+      timeout_s: z.number().int().min(1).max(300).default(30),
+    })
+    .optional(),
+  /**
    * Scripts from `.qa/hooks/` around every run (REQ-GEN-01/AC2): `setup` after the environment is healthy and
    * before the cases (a failure makes every case BLOCKED), `teardown` after the cases (a failure is a warning).
    */

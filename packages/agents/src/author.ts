@@ -99,6 +99,11 @@ Rules (checked by code; a violating spec is rejected):
 - Start with: import type { CaseContext } from "@qajitsu/steps"; no other imports, no dynamic import.
 - Export const caseId = "<case id>" and export async function run({ step, verify, plan, api, ui, inbox }: CaseContext) (take only what you use).
 - One step("<step id>", async () => { ... }) per plan step, in order; API calls only inside steps through api or api.as("<account alias>").
+- API bodies are JSON objects by default. Other bodies are made by the client: client.multipart({ fields: { name:
+  "text" }, files: { "<form field>": "<file key>" } }), client.form({ name: "text" }), client.binary("<file key>") and
+  client.text("text", "text/csv"); files are the keys of the case's "files" in the plan (never a path or content).
+  A request whose response is a file (a PDF, an image, an export) keeps it: check it in the same step with
+  verify("<step id>", "download.<name|type|size|sha256|rows|texts.<n>|fields.<key>>", undefined, plan.expect(...)).
 - Every verify("<step id>", ...) is written inside the function of that same step, never after it or in another step.
 - Every step has at least one verify("<step id>", "<field>", <actual value>, plan.expect("<case>.<step>.<field>")).
   Fields are "status", "fields.<key>" (read with res.json("<key>")) or "texts.<n>". The expected value is ALWAYS plan.expect(...) with exactly the same step and field; never a literal.
@@ -141,6 +146,9 @@ Rules (checked by code; a violating spec is rejected):
 - QAJitsu reads web and mobile values from the live page: element states are verified as
   verify("<step id>", "elements.<selector>.<property>", undefined, plan.expect("<case>.<step>.elements.<selector>.<property>"))
   and visible texts as verify("<step id>", "texts.<n>", undefined, plan.expect("<case>.<step>.texts.<n>")).
+- A case with "test_data" in the plan gets those records created before it runs: const lamp = data.get("lamp") (take
+  data from the run's arguments) gives what the application answered, e.g. lamp["id"]; never create or delete them
+  yourself and never hard-code an id.
 - A step whose expect has "message": use const email = await inbox.address() (or inbox.address("url") for a webhook)
   as the address in the test data, then const msg = await inbox.wait("<step id>") and
   verify("<step id>", "message", msg, plan.expect("<case>.<step>.message")); msg.links holds the links of the message.

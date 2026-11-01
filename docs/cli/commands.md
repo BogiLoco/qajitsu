@@ -317,7 +317,7 @@ page or screen showed, masked), which the healer gets; mobile cases are healed t
 - `--env <profile|url>`: environment profile from `.qa/envs` or a URL (default: the environment `qajitsu env up`
   started for this run while it answers, else `environments.default`)
 - `--build`: build the application from the fetched worktrees
-- `--keep`: with `--build`, keep containers and worktrees after the run
+- `--keep`: keep the cases' test data after the run (REQ-EXEC-53) and, with `--build`, containers and worktrees
 - `--set <service.VAR=value>`: with `--build`, override an overridable service variable (repeatable)
 - `--cases <ids>`: run only these cases of the approved plan, e.g. `TC-02,TC-03`; an id not in the plan is refused, the
   other cases are NOT_RUN ("not selected") and get no spec written (REQ-EXEC-16)
@@ -1097,6 +1097,18 @@ Metrics over every run, as Prometheus text or JSON, for dashboards and alerts. C
 - `--out <file>`: write to a file atomically, e.g. for the node_exporter textfile collector
 
 Exit codes: `0` written, `3` errors.
+
+### `qajitsu data clean [ticket]`
+
+Removes the test data that crashed or kept runs left in an environment (REQ-EXEC-53/AC2). Every record a case
+creates carries the marker `qj-<ticket>-<run>-<case>-a<attempt>` in `test_data.marker_field`; the project's
+`test_data.cleanup` request (`DELETE /path?marker={marker}`) or its data hook removes what matches.
+
+- `--run <id>`: only this run of the ticket (default: every run of the ticket)
+- `--all`: everything QAJitsu created (marker `qj-`), instead of a ticket
+- `--env <profile>`: environment profile from `.qa/envs` (default: `environments.default`)
+
+Exit codes: `0` cleaned, `3` errors.
 
 ## CI
 

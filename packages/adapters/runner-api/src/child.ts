@@ -96,6 +96,8 @@ interface StartMessage {
   readonly caseId: string;
   /** Expectations of this case only, keyed `<case>.<step>.<field>`; returned by plan.expect for readability. */
   readonly expectations: Readonly<Record<string, unknown>>;
+  /** Records created for this attempt by name (REQ-EXEC-53/AC1). */
+  readonly testData: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 }
 
 interface ReplyMessage {
@@ -151,13 +153,27 @@ async function start(m: StartMessage): Promise<void> {
       patch: (path: string, b?: unknown, o?: unknown) => send("PATCH", path, b, o),
       delete: (path: string, o?: unknown) => send("DELETE", path, undefined, o),
       as: (a: string) => client(a),
+      // REQ-EXEC-45/AC1: body descriptors are plain data; the parent resolves files from the plan and checks them.
+      multipart: (parts: { fields?: unknown; files?: unknown } = {}) => ({
+        __qjBody: "multipart",
+        fields: parts.fields,
+        files: parts.files,
+      }),
+      form: (fields: unknown) => ({ __qjBody: "form", fields }),
+      // Values are passed as they are: the parent refuses anything that is not a string.
+      binary: (file: unknown) => ({ __qjBody: "binary", file }),
+      text: (text: unknown, type?: unknown) => ({
+        __qjBody: "text",
+        text,
+        ...(type === undefined ? {} : { type }),
+      }),
     };
   };
   const context = {
     caseId: m.caseId,
     plan: {
       expect: (path: string): unknown => {
-        if (!(path in m.expectations))
+        if (!Object.hasOwn(m.expectations, path))
           throw new Error(`plan.expect('${path}'): not an expectation of ${m.caseId}`);
         return m.expectations[path];
       },
@@ -245,7 +261,9 @@ async function start(m: StartMessage): Promise<void> {
     step: async (stepId: string, fn: () => unknown): Promise<void> => {
       await rpc({ op: "beginStep", stepId });
       try {
-        await fn();
+        // REQ-EXEC-46: the parent says whether a step with a planned wait runs another round (after its checks).
+        do await fn();
+        while ((await rpc({ op: "pollRound", stepId })) === true);
       } catch (e) {
         await rpc({ op: "endStep", stepId, error: message(e) });
         throw e;
@@ -254,6 +272,13 @@ async function start(m: StartMessage): Promise<void> {
     },
     verify: (stepId: string, field: string): void => {
       void rpc({ op: "verify", stepId, field }).catch(() => undefined);
+    },
+    data: {
+      get: (name: string) => {
+        if (!Object.hasOwn(m.testData, name))
+          throw new Error(`data.get('${name.slice(0, 40)}'): no test data of ${m.caseId} has this name`);
+        return m.testData[name];
+      },
     },
     inbox: {
       address: (kind = "email") => rpc({ op: "inboxAddress", kind }),

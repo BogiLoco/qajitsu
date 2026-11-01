@@ -84,4 +84,10 @@ describe("author prompt (REQ-EXEC-01, REQ-EXEC-05)", () => {
     expect(AUTHOR_SYSTEM).toContain(EXAMPLE_WEB_SPEC);
     expect(AUTHOR_SYSTEM).toContain('"elements.<selector>.<property>"');
   });
+
+  it("REQ-EXEC-45/AC1+AC2: the author is told how to send multipart, form, binary and text bodies and check a file response", () => {
+    for (const helper of ["client.multipart(", "client.form(", "client.binary(", "client.text("])
+      expect(AUTHOR_SYSTEM).toContain(helper);
+    expect(AUTHOR_SYSTEM).toContain("A request whose response is a file");
+  });
 });

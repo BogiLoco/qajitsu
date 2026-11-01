@@ -1866,6 +1866,101 @@
       },
       "additionalProperties": false
     },
+    "test_data": {
+      "type": "object",
+      "properties": {
+        "marker_field": {
+          "default": "qa_marker",
+          "type": "string",
+          "pattern": "^[A-Za-z_][\\w-]{0,40}$"
+        },
+        "kinds": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,40}$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "create": {
+                "type": "object",
+                "properties": {
+                  "request": {
+                    "type": "string",
+                    "pattern": "^POST \\/\\S*$"
+                  },
+                  "as": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$"
+                  },
+                  "id": {
+                    "default": "id",
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  }
+                },
+                "required": [
+                  "request"
+                ],
+                "additionalProperties": false
+              },
+              "remove": {
+                "type": "object",
+                "properties": {
+                  "request": {
+                    "type": "string",
+                    "pattern": "^DELETE \\/\\S*\\{id\\}\\S*$"
+                  },
+                  "as": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$"
+                  }
+                },
+                "required": [
+                  "request"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "create"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "cleanup": {
+          "type": "object",
+          "properties": {
+            "request": {
+              "type": "string",
+              "pattern": "^DELETE \\/\\S*\\{marker\\}\\S*$"
+            },
+            "as": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$"
+            }
+          },
+          "required": [
+            "request"
+          ],
+          "additionalProperties": false
+        },
+        "hook": {
+          "type": "string",
+          "pattern": "^hooks\\/[\\w.-]+(\\/[\\w.-]+)*$"
+        },
+        "timeout_s": {
+          "default": 30,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300
+        }
+      },
+      "additionalProperties": false
+    },
     "hooks": {
       "default": {
         "timeout_s": 120

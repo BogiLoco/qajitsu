@@ -13,6 +13,7 @@ import type {
   VisualCheck,
   TestCase,
 } from "@qajitsu/core";
+import { plannedFields } from "@qajitsu/core";
 import { checkGesture } from "./gestures.js";
 import type { Masker } from "./masking.js";
 import {
@@ -36,12 +37,40 @@ import { csvRows, generateFile, isTextType, mimeOf, sha256Hex, type DownloadedFi
 /** HTTP methods the API client supports. */
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
+/**
+ * A request body other than JSON (REQ-EXEC-45/AC1), made by `api.multipart()`, `api.form()`, `api.binary()` and
+ * `api.text()`. Files are named by their key in the case's plan (`files`), never by a path or with bytes.
+ */
+export type ApiBody =
+  | {
+      readonly __qjBody: "multipart";
+      readonly fields?: Readonly<Record<string, string>>;
+      /** Form field name to the plan's file key. */
+      readonly files?: Readonly<Record<string, string>>;
+    }
+  | { readonly __qjBody: "form"; readonly fields: Readonly<Record<string, string>> }
+  | { readonly __qjBody: "binary"; readonly file: string }
+  | { readonly __qjBody: "text"; readonly text: string; readonly type?: string };
+
+/** A non-JSON body as the transport sends it: files resolved from the plan by the runtime. */
+export type ApiPayload =
+  | {
+      readonly kind: "multipart";
+      readonly fields: Readonly<Record<string, string>>;
+      readonly files: Readonly<Record<string, UiFile>>;
+    }
+  | { readonly kind: "form"; readonly fields: Readonly<Record<string, string>> }
+  | { readonly kind: "bytes"; readonly data: Uint8Array; readonly type: string };
+
 /** A request as sent by the transport. */
 export interface ApiRequest {
   readonly method: HttpMethod;
   readonly url: string;
   readonly headers: Readonly<Record<string, string>>;
+  /** A JSON body. */
   readonly body?: unknown;
+  /** A multipart, form, binary or text body (REQ-EXEC-45/AC1); set instead of `body`. */
+  readonly payload?: ApiPayload;
 }
 
 /** A response as returned by the transport. */
@@ -49,6 +78,8 @@ export interface ApiTransportResponse {
   readonly status: number;
   readonly headers: Readonly<Record<string, string>>;
   readonly text: string;
+  /** The body's bytes, so a binary response (a file, an image, a PDF) is kept as it is (REQ-EXEC-45/AC2). */
+  readonly bytes?: Uint8Array;
 }
 
 /** Sends HTTP requests; implemented by the API runner on Playwright `APIRequestContext` (REQ-EXEC-04/AC1). */
@@ -78,6 +109,17 @@ export interface ApiClient {
   readonly delete: (path: string, options?: ApiCallOptions) => Promise<ApiResponse>;
   /** The same client, authenticated as an account alias such as `user:standard`. */
   readonly as: (alias: string) => ApiClient;
+  /** A `multipart/form-data` body: text fields and files of the plan by key, `{ field: "<file key>" }`. */
+  readonly multipart: (parts: {
+    readonly fields?: Readonly<Record<string, string>>;
+    readonly files?: Readonly<Record<string, string>>;
+  }) => ApiBody;
+  /** An `application/x-www-form-urlencoded` body. */
+  readonly form: (fields: Readonly<Record<string, string>>) => ApiBody;
+  /** The bytes of a file of the plan, by key, as the raw body with its type. */
+  readonly binary: (fileKey: string) => ApiBody;
+  /** A plain text body, `text/plain` unless another text type is given. */
+  readonly text: (text: string, type?: string) => ApiBody;
 }
 
 /** Read access to the approved plan's expectations (invariant 4). */
@@ -107,6 +149,18 @@ export interface CaseContext {
   readonly verify: (stepId: string, field: string, actual?: unknown, expected?: unknown) => void;
   /** The case's inbox (REQ-ENV-08): an address for the test data, and the message the plan expects. */
   readonly inbox: InboxClient;
+  /** Records created for this attempt (REQ-EXEC-53): `data.get("lamp").id`. */
+  readonly data: TestDataClient;
+}
+
+/** The records the plan's `test_data` created for the attempt (REQ-EXEC-53/AC1). */
+export interface TestDataClient {
+  /**
+   * What the application answered when the record was created.
+   *
+   * @throws {Error} When the case's plan has no record with this name; the attempt then errors.
+   */
+  readonly get: (name: string) => Readonly<Record<string, unknown>>;
 }
 
 /** A received message as a spec sees it: masked, with the links it contains. */
@@ -147,6 +201,10 @@ export interface CaseRuntimeOptions {
   /** Headers per account alias, prepared by framework login helpers (REQ-CFG-07/AC2). */
   readonly accounts: Readonly<Record<string, Readonly<Record<string, string>>>>;
   readonly now: () => number;
+  /** Records created for this attempt by name (REQ-EXEC-53/AC1), provided by the runner. */
+  readonly testData?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+  /** Waits between the rounds of a step with a planned wait (REQ-EXEC-46); `setTimeout` when not given. */
+  readonly sleep?: (ms: number) => Promise<void>;
   /** Starts the browser on first use; absent for API-only runs (REQ-EXEC-05). */
   readonly ui?: (() => Promise<UiDriver>) | undefined;
   /**
@@ -182,6 +240,11 @@ export interface CaseRuntime {
   readonly context: CaseContext;
   readonly beginStep: (stepId: string) => void;
   readonly endStep: (stepId: string, error?: string) => Promise<void>;
+  /**
+   * After a round of a step's actions and checks (REQ-EXEC-46): `again` with the delay when the plan's wait allows
+   * another round and a check did not hold; that round's checks then become evidence of the wait.
+   */
+  readonly pollRound: (stepId: string) => { readonly again: boolean; readonly delayMs: number };
   readonly call: (
     alias: string | undefined,
     method: HttpMethod,
@@ -352,6 +415,12 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   /** What the step did last: an API call or a UI action; decides the source of `texts` checks. */
   const lastAction = new Map<string, "api" | "ui">();
   const maskValue = (v: unknown): unknown => masker.maskJson(v);
+  const sleep =
+    options.sleep ??
+    ((ms: number): Promise<void> =>
+      new Promise((resolve) => {
+        setTimeout(resolve, ms);
+      }));
 
   /** Browser sessions by name (REQ-EXEC-62); `main` is the case's first one. `driver` is the active session's. */
   const sessions = new Map<string, UiDriver>();
@@ -387,9 +456,9 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   /** Every UI action with the page it went to (REQ-EXEC-39/AC2), masked; case evidence `ui-actions.json`. */
   const actions: Record<string, unknown>[] = [];
   /** A case file by its plan key (REQ-EXEC-38/AC1): never a path or bytes from the spec. */
-  const caseFile = async (key: string): Promise<UiFile> => {
-    const spec = planCase.files?.[key];
-    if (!spec) throw new Error(`ui.upload: '${key.slice(0, 40)}' is not a file of ${caseId} in the plan`);
+  const caseFile = async (key: string, by = "ui.upload"): Promise<UiFile> => {
+    const spec = Object.hasOwn(planCase.files ?? {}, key) ? planCase.files?.[key] : undefined;
+    if (!spec) throw new Error(`${by}: '${key.slice(0, 40)}' is not a file of ${caseId} in the plan`);
     if ("fixture" in spec) {
       if (!options.fixture) throw new Error("This run has no fixtures (.qa/fixtures/) for uploads");
       const name = spec.fixture.split("/").at(-1) ?? spec.fixture;
@@ -402,20 +471,33 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     stepId: string,
     kind: "upload" | "download",
     file: { name: string; type: string; data: Uint8Array },
-  ): Promise<string | undefined> => {
+  ): Promise<{ readonly name: string; readonly text: string | undefined }> => {
     const safe = file.name.replace(/[^\w.-]+/g, "_").slice(-80) || "file";
     const name = `${stepId}-${kind}-${safe}`;
     if (isTextType(file.type)) {
       const text = new TextDecoder().decode(file.data);
       media.push({ stepId, kind, name, content: masker.maskText(text) });
-      return text;
+      return { name, text };
     }
     const text = await options.extractText?.(file.name, file.data).catch(() => undefined);
-    if (text !== undefined && masker.containsSecret(text))
+    if (text !== undefined && masker.containsSecret(text)) {
       media.push({ stepId, kind, name: `${name}.masked.txt`, content: masker.maskText(text) });
-    else media.push({ stepId, kind, name, content: file.data });
-    return text;
+      return { name: `${name}.masked.txt`, text };
+    }
+    media.push({ stepId, kind, name, content: file.data });
+    return { name, text };
   };
+
+  /** Rounds of steps with a planned wait (REQ-EXEC-46): start time, where the round's checks begin, and the rounds. */
+  const waits = new Map<
+    string,
+    {
+      startedAt: number;
+      from: number;
+      rounds: { atMs: number; checks: { field: string; actual: unknown; pass: boolean }[] }[];
+      met: boolean;
+    }
+  >();
 
   const beginStep = (stepId: string): void => {
     if (!stepIds.has(stepId))
@@ -424,6 +506,49 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       throw new Error(`step('${stepId}') ran twice or inside another step`);
     }
     currentStep = stepId;
+    if (planCase.steps.find((s) => s.id === stepId)?.wait)
+      waits.set(stepId, { startedAt: options.now(), from: assertions.length, rounds: [], met: false });
+  };
+
+  /**
+   * REQ-EXEC-46/AC1+AC3: decides whether a step with a planned wait runs another round. The plan alone sets the
+   * timeout and interval; a round with no checks, or after the timeout, ends the waiting, and its checks decide.
+   */
+  const pollRound: CaseRuntime["pollRound"] = (stepId) => {
+    const w = waits.get(stepId);
+    const stepPlan = planCase.steps.find((s) => s.id === stepId);
+    const planned = stepPlan?.wait;
+    if (!w || !stepPlan || !planned || currentStep !== stepId) return { again: false, delayMs: 0 };
+    const round = assertions.slice(w.from);
+    const atMs = options.now() - w.startedAt;
+    w.rounds.push({
+      atMs,
+      checks: round.map((a) => ({ field: a.field, actual: maskValue(a.actual), pass: a.pass })),
+    });
+    // Met only when the round checked every field the plan expects in the step, and each held: a round that leaves
+    // out the failing check cannot stand in for it.
+    const checked = new Set(round.map((a) => a.field));
+    w.met =
+      round.length > 0 &&
+      round.every((a) => a.pass) &&
+      plannedFields(stepPlan.expect).every((f) => checked.has(f));
+    const intervalMs = Math.round(planned.interval_s * 1000);
+    if (w.met) return { again: false, delayMs: 0 };
+    if (atMs + intervalMs > planned.timeout_s * 1000) {
+      // Not met in time while every check of the last round held: a planned check was left out, which is a failure.
+      if (round.every((a) => a.pass))
+        assertions.push({
+          stepId,
+          field: "wait",
+          expected: `every planned check of ${stepId} holds within ${String(planned.timeout_s)} s`,
+          actual: `the last round checked ${[...checked].join(", ") || "nothing"}`,
+          pass: false,
+        });
+      return { again: false, delayMs: 0 };
+    }
+    // The round did not hold: its checks are kept in the wait's evidence, the next round checks again.
+    assertions.splice(w.from);
+    return { again: true, delayMs: intervalMs };
   };
 
   const manualSteps = new Map(planCase.steps.filter((s) => s.manual === true).map((s) => [s.id, s] as const));
@@ -512,9 +637,33 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         name: `${stepId}-network.json`,
         content: `${JSON.stringify({ requests: sent.length, problems }, null, 2)}\n`,
       });
+    const w = waits.get(stepId);
+    const planned = planCase.steps.find((s) => s.id === stepId)?.wait;
+    if (w && planned && w.rounds.length > 0) {
+      const waitedMs = w.rounds.at(-1)?.atMs ?? 0;
+      media.push({
+        stepId,
+        kind: "log",
+        name: `${stepId}-wait.json`,
+        content: `${JSON.stringify(
+          {
+            timeout_s: planned.timeout_s,
+            interval_s: planned.interval_s,
+            waitedMs,
+            met: w.met,
+            rounds: w.rounds,
+          },
+          null,
+          2,
+        )}\n`,
+      });
+    }
     steps.push({
       id: stepId,
       ok: error === undefined,
+      ...(w && w.rounds.length > 0
+        ? { wait: { waitedMs: w.rounds.at(-1)?.atMs ?? 0, rounds: w.rounds.length, met: w.met } }
+        : {}),
       ...(error === undefined ? {} : { error: masker.maskText(error) }),
       ...(driver ? { url: masker.maskText(driver.url()) } : {}),
       ...(problems.length > 0 ? { network: problems } : {}),
@@ -562,6 +711,110 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     }
   };
 
+  /**
+   * A body descriptor of `api.multipart()`, `api.form()`, `api.binary()` or `api.text()` (REQ-EXEC-45/AC1) turned into
+   * what the transport sends, what the evidence keeps (masked; files as files) and the cURL arguments. Files come from
+   * the plan by key only; a forged descriptor is checked the same way.
+   */
+  const requestBody = async (
+    stepId: string,
+    body: Record<string, unknown>,
+  ): Promise<{ payload: ApiPayload; evidence: unknown; curl: string[]; contentType?: string }> => {
+    const invalid = (): Error =>
+      new Error("api: invalid request body; use api.multipart, form, binary or text");
+    const strings = (v: unknown): Record<string, string> => {
+      if (v === undefined) return {};
+      if (typeof v !== "object" || v === null || Array.isArray(v)) throw invalid();
+      const out: Record<string, string> = {};
+      for (const [k, x] of Object.entries(v)) {
+        if (typeof x !== "string") throw invalid();
+        out[k] = x;
+      }
+      return out;
+    };
+    const describe = (f: UiFile) => ({
+      name: f.name,
+      type: f.type,
+      bytes: f.data.byteLength,
+      sha256: sha256Hex(f.data),
+    });
+    const kind = body["__qjBody"];
+    if (kind === "multipart") {
+      const fields = strings(body["fields"]);
+      const keys = strings(body["files"]);
+      const files: Record<string, UiFile> = {};
+      for (const [field, key] of Object.entries(keys)) {
+        const f = await caseFile(key, "api.multipart");
+        files[field] = f;
+        await fileEvidence(stepId, "upload", f);
+      }
+      return {
+        payload: { kind: "multipart", fields, files },
+        evidence: {
+          multipart: {
+            fields: maskValue(fields),
+            files: Object.entries(files).map(([field, f]) => ({ field, ...describe(f) })),
+          },
+        },
+        curl: [
+          ...Object.entries(fields).map(([k, v]) => `-F ${shellQuote(`${k}=${masker.maskText(v)}`)}`),
+          ...Object.entries(files).map(([k, f]) => `-F ${shellQuote(`${k}=@${f.name};type=${f.type}`)}`),
+        ],
+      };
+    }
+    if (kind === "form") {
+      const fields = strings(body["fields"]);
+      return {
+        payload: { kind: "form", fields },
+        evidence: { form: maskValue(fields) },
+        curl: Object.entries(fields).map(
+          ([k, v]) => `--data-urlencode ${shellQuote(`${k}=${masker.maskText(v)}`)}`,
+        ),
+      };
+    }
+    if (kind === "binary") {
+      if (typeof body["file"] !== "string") throw invalid();
+      const f = await caseFile(body["file"], "api.binary");
+      await fileEvidence(stepId, "upload", f);
+      return {
+        payload: { kind: "bytes", data: f.data, type: f.type },
+        evidence: { file: describe(f) },
+        curl: [`--data-binary ${shellQuote(`@${f.name}`)}`],
+        contentType: f.type,
+      };
+    }
+    if (kind === "text") {
+      const text = body["text"];
+      const type = body["type"] ?? "text/plain";
+      if (typeof text !== "string" || typeof type !== "string" || !/^[a-z]+\/[a-z0-9.+-]+$/.test(type))
+        throw invalid();
+      return {
+        payload: { kind: "bytes", data: new TextEncoder().encode(text), type },
+        evidence: { text: masker.maskText(text), type },
+        curl: [`--data-binary ${shellQuote(masker.maskText(text))}`],
+        contentType: type,
+      };
+    }
+    throw invalid();
+  };
+
+  /** A response that is a file (an attachment, or a type that is not text or JSON), kept as one (REQ-EXEC-45/AC2). */
+  const responseFile = (
+    pathname: string,
+    response: ApiTransportResponse,
+  ): { name: string; type: string; data: Uint8Array } | undefined => {
+    if (response.bytes === undefined) return undefined;
+    const header = (name: string): string =>
+      Object.entries(response.headers).find(([k]) => k.toLowerCase() === name)?.[1] ?? "";
+    const type = (header("content-type").split(";")[0] ?? "").trim().toLowerCase();
+    const disposition = header("content-disposition");
+    const attachment = /^\s*attachment/i.test(disposition);
+    if (!attachment && (type === "" || isTextType(type) || type.endsWith("+json"))) return undefined;
+    const suggested = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition)?.[1];
+    const name = decodeURIComponent(suggested ?? pathname.split("/").filter(Boolean).at(-1) ?? "response");
+    return { name, type: type || mimeOf(name), data: response.bytes };
+  };
+
   const call: CaseRuntime["call"] = async (alias, method, path, body, opts) => {
     if (currentStep === undefined) throw new Error("API calls must run inside step()");
     const stepId = currentStep;
@@ -572,9 +825,18 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       throw new Error(`URL ${url.origin} is not in the environment allowlist`);
     const accountHeaders = alias === undefined ? {} : options.accounts[alias];
     if (accountHeaders === undefined) throw new Error(`Unknown account alias '${alias ?? ""}'`);
-    // Account headers win: a spec cannot replace the session of an alias.
+    const special =
+      typeof body === "object" && body !== null && !Array.isArray(body) && "__qjBody" in body
+        ? await requestBody(stepId, body)
+        : undefined;
+    // Account headers win: a spec cannot replace the session of an alias. Multipart and form bodies get their
+    // content type (with the boundary) from the transport.
     const headers = {
-      "content-type": "application/json",
+      ...(special === undefined
+        ? { "content-type": "application/json" }
+        : special.contentType === undefined
+          ? {}
+          : { "content-type": special.contentType }),
       // REQ-EXEC-14: a locale run asks the API for that locale; a spec may still set its own header.
       ...(options.locale ? { "accept-language": options.locale } : {}),
       ...opts.headers,
@@ -585,15 +847,33 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       method,
       url: url.toString(),
       headers,
-      ...(body === undefined ? {} : { body }),
+      ...(special ? { payload: special.payload } : body === undefined ? {} : { body }),
     });
     const durationMs = options.now() - started;
-    const parsed = parseJson(response.text);
+    const file = responseFile(url.pathname, response);
+    const parsed = file === undefined ? parseJson(response.text) : undefined;
+    let responseBody: unknown;
+    if (file) {
+      // REQ-EXEC-45/AC2+AC3: the file is evidence on its own, with its hash; the call record points to it.
+      const kept = await fileEvidence(stepId, "download", file);
+      downloads.set(stepId, { ...file, text: kept.text });
+      downloadCount.set(stepId, (downloadCount.get(stepId) ?? 0) + 1);
+      responseBody = {
+        file: kept.name,
+        type: file.type,
+        bytes: file.data.byteLength,
+        sha256: sha256Hex(file.data),
+      };
+    } else responseBody = parsed === undefined ? masker.maskText(response.text) : maskValue(parsed);
     const maskedHeaders = masker.maskHeaders(headers);
     const curl = [
       `curl -X ${method} ${shellQuote(masker.maskText(url.toString()))}`,
       ...Object.entries(maskedHeaders).map(([k, v]) => `-H ${shellQuote(`${k}: ${v}`)}`),
-      ...(body === undefined ? [] : [`--data ${shellQuote(JSON.stringify(maskValue(body)))}`]),
+      ...(special
+        ? special.curl
+        : body === undefined
+          ? []
+          : [`--data ${shellQuote(JSON.stringify(maskValue(body)))}`]),
     ].join(" \\\n  ");
     calls.push({
       stepId,
@@ -605,11 +885,11 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       record: {
         method,
         url: masker.maskText(url.toString()),
-        request: { headers: maskedHeaders, body: maskValue(body) },
+        request: { headers: maskedHeaders, body: special ? special.evidence : maskValue(body) },
         response: {
           status: response.status,
           headers: masker.maskHeaders(response.headers),
-          body: parsed === undefined ? masker.maskText(response.text) : maskValue(parsed),
+          body: responseBody,
         },
         durationMs,
         curl,
@@ -840,7 +1120,11 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       case "download": {
         const got = await need(d, "download", "ui.download()")(assertSelector(operation.selector), waitMs);
         const type = mimeOf(got.name);
-        const text = await fileEvidence(currentStep, "download", { name: got.name, type, data: got.data });
+        const { text } = await fileEvidence(currentStep, "download", {
+          name: got.name,
+          type,
+          data: got.data,
+        });
         downloads.set(currentStep, { name: got.name, type, data: got.data, text });
         downloadCount.set(currentStep, (downloadCount.get(currentStep) ?? 0) + 1);
         return;
@@ -1332,6 +1616,17 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     record(expected, actual);
   };
 
+  /** Body descriptors (REQ-EXEC-45/AC1): plain data, resolved and checked when the call is made. */
+  const bodies: Pick<ApiClient, "multipart" | "form" | "binary" | "text"> = {
+    multipart: (parts) => ({
+      __qjBody: "multipart",
+      ...(parts.fields ? { fields: parts.fields } : {}),
+      ...(parts.files ? { files: parts.files } : {}),
+    }),
+    form: (fields) => ({ __qjBody: "form", fields }),
+    binary: (file) => ({ __qjBody: "binary", file }),
+    text: (text, type) => ({ __qjBody: "text", text, ...(type === undefined ? {} : { type }) }),
+  };
   const client = (alias: string | undefined): ApiClient => {
     const send = async (
       method: HttpMethod,
@@ -1350,6 +1645,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       patch: (path, body, o) => send("PATCH", path, body, o),
       delete: (path, o) => send("DELETE", path, undefined, o),
       as: (a) => client(a),
+      ...bodies,
     };
   };
 
@@ -1414,8 +1710,14 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     step: async (stepId, fn) => {
       beginStep(stepId);
       try {
-        await fn();
-        await pending;
+        // REQ-EXEC-46: a step with a planned wait repeats its actions and checks until they hold or time is up.
+        for (;;) {
+          await fn();
+          await pending;
+          const next = pollRound(stepId);
+          if (!next.again) break;
+          await sleep(next.delayMs);
+        }
         await endStep(stepId);
       } catch (error) {
         pending = Promise.resolve();
@@ -1433,11 +1735,20 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       address: (kind = "email") => inboxAddress(kind),
       wait: (stepId) => inboxWait(stepId),
     },
+    data: {
+      get: (name) => {
+        const record = Object.hasOwn(options.testData ?? {}, name) ? options.testData?.[name] : undefined;
+        if (record === undefined)
+          throw new Error(`data.get('${name.slice(0, 40)}'): no test data of ${caseId} has this name`);
+        return record;
+      },
+    },
   };
 
   return {
     context,
     beginStep,
+    pollRound,
     endStep,
     call,
     uiOp,

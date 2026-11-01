@@ -1,0 +1,23 @@
+{
+  "key": "DEMO-16",
+  "type": "Story",
+  "status": "Ready for QA",
+  "summary": "Invoice documents: upload and download",
+  "description": "A signed-in shopper keeps invoice PDFs in the shop. POST /documents takes multipart/form-data with the fields title and file; GET /documents/{id}/file gives the stored file back as an attachment.",
+  "acceptanceCriteria": [
+    "Uploading a PDF with a title returns 201 with the document id, the title, the file name and its size in bytes.",
+    "Downloading a document returns exactly the uploaded file: the same name, type application/pdf and the same size.",
+    "A file that is not a PDF is refused with 415 and the error PDF_ONLY.",
+    "A new document is processing at first and becomes ready within 10 seconds (GET /documents/{id} shows its status)."
+  ],
+  "labels": ["documents", "api"],
+  "components": ["shop-api"],
+  "attachments": [],
+  "comments": [
+    {
+      "author": "developer",
+      "created": "2026-10-30T09:00:00Z",
+      "body": "Limit is 5 MB per file for now."
+    }
+  ]
+}

@@ -82,6 +82,8 @@ export interface AttemptRecord {
     readonly url?: string;
     /** What went wrong in the step's traffic (REQ-EVD-09/AC1), built by code. */
     readonly network?: readonly NetworkProblemRecord[];
+    /** A step with a planned wait (REQ-EXEC-46/AC2): how long it waited, in how many rounds, and whether it held. */
+    readonly wait?: { readonly waitedMs: number; readonly rounds: number; readonly met: boolean };
   }[];
   readonly assertions: readonly AssertionRecord[];
   readonly evidence: readonly EvidenceItem[];
@@ -258,6 +260,8 @@ export interface AttemptRequest {
   readonly extractText?: (name: string, data: Uint8Array) => Promise<string | undefined>;
   /** The application's test hook for `state.*` checks (REQ-EXEC-56/AC2), e.g. `__QA_STATE__`. */
   readonly testStateHook?: string;
+  /** Records created for this attempt by name (REQ-EXEC-53/AC1), for the spec's `data.get(name)`. */
+  readonly testData?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 }
 
 /** What the trusted parent reports while an attempt runs (REQ-OBS-09). */

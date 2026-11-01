@@ -49,6 +49,38 @@ const BUGS = [
     caseId: "TC-02",
     specs: ["TC-01", "TC-02"],
   },
+  // A web download checked in the production sandbox (the child gets every planned expectation, REQ-EXEC-38).
+  {
+    bug: "BUG-10",
+    flag: "BUG_EXPORT_DROPS_LAST_ROW",
+    ticket: "DEMO-7",
+    caseId: "TC-03",
+    specs: ["TC-01", "TC-02", "TC-03"],
+  },
+  // A multipart upload and a file response (REQ-EXEC-45).
+  {
+    bug: "BUG-21",
+    flag: "BUG_DOCUMENT_TRUNCATED",
+    ticket: "DEMO-16",
+    caseId: "TC-01",
+    specs: ["TC-01", "TC-02", "TC-03"],
+  },
+  // Records created for each attempt (REQ-EXEC-53): exactly three in stock is the boundary.
+  {
+    bug: "BUG-23",
+    flag: "BUG_LOW_STOCK_OFF_BY_ONE",
+    ticket: "DEMO-17",
+    caseId: "TC-01",
+    specs: ["TC-01", "TC-02"],
+  },
+  // An outcome that never comes: the planned wait ends at its timeout with FAILED (REQ-EXEC-46).
+  {
+    bug: "BUG-22",
+    flag: "BUG_DOCUMENT_NEVER_READY",
+    ticket: "DEMO-16",
+    caseId: "TC-03",
+    specs: ["TC-01", "TC-02", "TC-03"],
+  },
 ] as const;
 
 async function pipeline(
@@ -71,7 +103,18 @@ async function pipeline(
       (await readFile(yaml, "utf8")).replace(
         "environments: { allowlist: ['http://localhost:3000'] }",
         `environments: { default: local, allowlist: ['${shop.url}'] }`,
-      ),
+      ) +
+        // REQ-EXEC-53: the demo's products for tests, as in examples/demo-shop/.qa/qa.project.yaml.
+        [
+          "",
+          "test_data:",
+          "  kinds:",
+          "    product:",
+          '      create: { request: "POST /admin/products", as: "user:admin" }',
+          '      remove: { request: "DELETE /admin/products/{id}", as: "user:admin" }',
+          '  cleanup: { request: "DELETE /admin/products?marker={marker}", as: "user:admin" }',
+          "",
+        ].join("\n"),
     );
     await mkdir(join(project, ".qa", "envs"));
     const profile = readFileSync(
@@ -111,12 +154,16 @@ async function pipeline(
       return { out, exitCode };
     };
     const ref = ticket === "DEMO-1" ? [] : ["--ref", "shop=main"];
-    expect((await run(["fetch", ticket, ...ref])).exitCode).toBe(0);
+    const fetched = await run(["fetch", ticket, ...ref]);
+    expect(fetched.exitCode, fetched.out).toBe(0);
     const draft = readFileSync(fixture(`plans/${ticket.toLowerCase()}-draft.json`), "utf8");
     const analysis = JSON.stringify({ summary: "API change.", change_type: ["api"], confidence: "high" });
     const planned = await run(["plan", ticket], [{ text: analysis }, { text: draft }]);
     expect(planned.exitCode, planned.out).toBe(0);
-    expect((await run(["approve", ticket])).exitCode).toBe(0);
+    // The fixture plans were reviewed by people: elements that appear only after an action (the avatar's name after
+    // the upload) are confirmed as a reviewer would.
+    const approved = await run(["approve", ticket, "--confirm-placeholders"]);
+    expect(approved.exitCode, approved.out).toBe(0);
     const runRoot = join(home, "runs", ticket);
     const latest = JSON.parse(await readFile(join(runRoot, "index.json"), "utf8")) as { latest: string };
     for (const id of specs)
@@ -148,6 +195,9 @@ describe("demo-shop self-test (REQ-NFR-04/AC1)", () => {
     ["DEMO-3", ["TC-01", "TC-02"]],
     ["DEMO-4", ["TC-01", "TC-02"]],
     ["DEMO-5", ["TC-01"]],
+    ["DEMO-7", ["TC-01", "TC-02", "TC-03"]],
+    ["DEMO-16", ["TC-01", "TC-02", "TC-03"]],
+    ["DEMO-17", ["TC-01", "TC-02"]],
   ] as const)("%s: every case is PASSED with all bugs off", async (ticket, specs) => {
     const { exitCode, statuses, out } = await pipeline(ticket, specs);
     expect(

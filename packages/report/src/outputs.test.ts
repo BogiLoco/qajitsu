@@ -69,7 +69,7 @@ describe("report formats (REQ-EVD-05)", () => {
     expect(crc32(new TextEncoder().encode("123456789"))).toBe(0xcbf43926);
   });
 
-  it("REQ-EVD-05/AC3: report.html is self-contained, escapes text and embeds evidence by hash", () => {
+  it("REQ-EVD-05/AC3 + REQ-EXEC-46/AC2: report.html is self-contained, escapes text, embeds evidence by hash and shows waits", () => {
     const plan = PlanSchema.parse({
       schema: 1,
       ticket: "DEMO-1",
@@ -104,6 +104,7 @@ describe("report formats (REQ-EVD-05)", () => {
             attempt: 1,
             outcome: "failed",
             error: "boom",
+            waits: [{ stepId: "S1", waitedMs: 10_000, rounds: 6, met: false }],
             assertions: [{ stepId: "S1", field: "fields.total", expected: 1.01, actual: 1.02, pass: false }],
             evidence: [
               {
@@ -134,6 +135,8 @@ describe("report formats (REQ-EVD-05)", () => {
       repos: { shop: "1".repeat(40) },
       gates: [{ gate: "manifest-intact", ok: false, problems: ["x missing"] }],
     });
+    // REQ-EXEC-46/AC2: the report shows how long a waiting step took.
+    expect(html).toContain("S1 waited 10.0 s in 6 round(s): not met in time");
     expect(html).toContain("Content-Security-Policy");
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;");

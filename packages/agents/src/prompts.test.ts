@@ -25,4 +25,10 @@ describe("planner prompt (REQ-PLAN-02, REQ-EXEC-05)", () => {
     expect(PLANNER_SYSTEM).toContain("testid:<test id>");
     expect(PLANNER_SYSTEM).toContain('lower-case letters, digits and "-" only');
   });
+
+  it("REQ-EXEC-46/AC1: the planner is shown a valid wait for an outcome that comes later", () => {
+    const wait = example("wait") as { timeout_s: number; interval_s: number };
+    expect(wait).toEqual({ timeout_s: 30, interval_s: 2 });
+    expect(PLANNER_SYSTEM).toContain("never add a wait to a step whose result is immediate");
+  });
 });

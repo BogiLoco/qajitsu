@@ -34,6 +34,13 @@ export interface ReportAttempt {
     readonly stepId: string;
     readonly problems: readonly NetworkProblemRecord[];
   }[];
+  /** Steps with a planned wait (REQ-EXEC-46/AC2): how long they waited, in how many rounds, and whether it held. */
+  readonly waits?: readonly {
+    readonly stepId: string;
+    readonly waitedMs: number;
+    readonly rounds: number;
+    readonly met: boolean;
+  }[];
 }
 
 /** Input of {@link renderReportHtml}. */
@@ -205,7 +212,13 @@ export function renderReportHtml(input: ReportInput): string {
               ),
             )
             .join("");
-          return `<h4>Attempt ${String(a.attempt)}: ${esc(a.outcome)}</h4>${a.error ? `<p class="bad">${esc(a.error)}</p>` : ""}${network ? `<p class="muted">Requests that went wrong in the failed steps (from the recorded traffic):</p><ul class="bad">${network}</ul>` : ""}${assertions ? `<table><tr><th>Step</th><th>Field</th><th>Expected</th><th>Actual</th><th></th></tr>${assertions}</table>` : '<p class="muted">No assertions recorded.</p>'}${evidence}`;
+          const waits = (a.waits ?? [])
+            .map(
+              (w) =>
+                `<li class="${w.met ? "ok" : "bad"}">${esc(w.stepId)} waited ${(w.waitedMs / 1000).toFixed(1)} s in ${String(w.rounds)} round(s): ${w.met ? "the checks held" : "not met in time"}</li>`,
+            )
+            .join("");
+          return `<h4>Attempt ${String(a.attempt)}: ${esc(a.outcome)}</h4>${a.error ? `<p class="bad">${esc(a.error)}</p>` : ""}${waits ? `<ul>${waits}</ul>` : ""}${network ? `<p class="muted">Requests that went wrong in the failed steps (from the recorded traffic):</p><ul class="bad">${network}</ul>` : ""}${assertions ? `<table><tr><th>Step</th><th>Field</th><th>Expected</th><th>Actual</th><th></th></tr>${assertions}</table>` : '<p class="muted">No assertions recorded.</p>'}${evidence}`;
         })
         .join("");
       return `<section id="${esc(c.id)}"><h3>${esc(c.id)}: ${esc(c.title)} ${row ? badge(row.status) : ""}</h3><ol>${steps}</ol>${attemptHtml || '<p class="muted">Not run.</p>'}</section>`;

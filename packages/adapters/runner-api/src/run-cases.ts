@@ -12,8 +12,10 @@ import {
   type CaseMessages,
   type Lane,
   type Plan,
+  type TestDataProvider,
+  type TestDataRecord,
 } from "@qajitsu/core";
-import type { AttemptRecord } from "@qajitsu/steps";
+import { createMasker, type AttemptRecord } from "@qajitsu/steps";
 import type { AttemptInput } from "./attempt.js";
 import type { ContractValidator } from "./openapi.js";
 import type { AttemptExecutor } from "./sandbox.js";
@@ -95,6 +97,12 @@ export interface RunCasesOptions {
   readonly testStateHook?: string | undefined;
   /** OpenAPI contract of the application; responses that violate it fail the step (REQ-EXEC-04/AC2). */
   readonly contract?: ContractValidator | undefined;
+  /** Creates and removes the records cases need (REQ-EXEC-53); without it a case with `test_data` is BLOCKED. */
+  readonly testData?: TestDataProvider | undefined;
+  /** Marker of the run, e.g. `qj-DEMO-17-<run id>`; each attempt's records get `<marker>-<case>-a<attempt>`. */
+  readonly marker?: string | undefined;
+  /** Keeps the created records after the case for debugging (`qj run --keep`). */
+  readonly keepTestData?: boolean | undefined;
 }
 
 /**
@@ -155,6 +163,99 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
     );
   };
 
+  /**
+   * Creates the case's records for one attempt (REQ-EXEC-53/AC1..AC4). On a record that cannot be made, what was made is
+   * removed and the reason returned, so the attempt ends before any step (BLOCKED). `finish` removes the records in
+   * reverse order (once), unless the run keeps them, and returns the masked evidence of what was created and removed;
+   * a failed removal is a warning in the journal, never a status.
+   */
+  const prepareTestData = async (
+    caseId: string,
+    attempt: number,
+    secrets: readonly string[],
+  ): Promise<
+    | { readonly error: string }
+    | {
+        readonly created: readonly TestDataRecord[];
+        readonly finish: () => Promise<AttemptRecord["evidence"][number] | undefined>;
+      }
+  > => {
+    const wanted = options.plan.cases.find((c) => c.id === caseId)?.test_data ?? [];
+    const none = { created: [], finish: () => Promise.resolve(undefined) };
+    if (wanted.length === 0) return none;
+    const masker = createMasker({ secrets });
+    const provider = options.testData;
+    if (!provider)
+      return {
+        error: `the plan needs test data (${wanted.map((d) => d.name).join(", ")}) but the project configures no test_data`,
+      };
+    const marker = `${options.marker ?? "qj"}-${caseId}-a${String(attempt)}`;
+    const created: TestDataRecord[] = [];
+    const removed: string[] = [];
+    const removeAll = async (): Promise<void> => {
+      for (const r of [...created].reverse())
+        try {
+          await provider.remove(r, marker);
+          removed.push(r.name);
+        } catch (error) {
+          options.events.emit("run", actor, "test_data.remove_failed", {
+            caseId,
+            attempt,
+            name: r.name,
+            kind: r.kind,
+            id: r.id,
+            marker,
+            reason: masker.maskText(error instanceof Error ? error.message : String(error)).slice(0, 300),
+          });
+        }
+    };
+    for (const d of wanted)
+      try {
+        created.push(await provider.create({ name: d.name, kind: d.kind, with: d.with, marker }));
+      } catch (error) {
+        await removeAll();
+        return {
+          error: masker.maskText(
+            `test data ${d.name} (${d.kind}) could not be created: ${error instanceof Error ? error.message : String(error)}`,
+          ),
+        };
+      }
+    options.events.emit("run", actor, "test_data.created", {
+      caseId,
+      attempt,
+      marker,
+      records: created.map((r) => ({ name: r.name, kind: r.kind, id: r.id })),
+    });
+    let finished: Promise<AttemptRecord["evidence"][number]> | undefined;
+    return {
+      created,
+      finish: () =>
+        (finished ??= (async () => {
+          if (options.keepTestData !== true) await removeAll();
+          return {
+            stepId: "case",
+            kind: "log" as const,
+            name: "test-data.json",
+            content: `${JSON.stringify(
+              {
+                marker,
+                created: created.map((r) => ({
+                  name: r.name,
+                  kind: r.kind,
+                  id: r.id,
+                  record: masker.maskJson(r.record),
+                })),
+                removed,
+                kept: options.keepTestData === true ? created.map((r) => r.name) : [],
+              },
+              null,
+              2,
+            )}\n`,
+          };
+        })()),
+    };
+  };
+
   const runAttempt = async (
     caseId: string,
     spec: string,
@@ -193,6 +294,14 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
     if (session.leased && Object.keys(session.leased).length > 0)
       options.events.emit("run", actor, "case.accounts", { caseId, attempt, lane, accounts: session.leased });
     const release = session.release;
+    // REQ-EXEC-53: the records the case needs, made for this attempt under its own marker before any step.
+    const data = await prepareTestData(caseId, attempt, session.secrets);
+    if ("error" in data) {
+      release?.();
+      return {
+        entry: { attempt, outcome: "error", assertions: [], error: data.error, steps: [], evidence: [] },
+      };
+    }
     const executed = await options
       .executor({
         specFile: spec,
@@ -210,7 +319,12 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
         timeoutMs:
           (options.timeoutMs ?? 60_000) +
           manualCount(caseId) * (options.manualTimeoutMs ?? 900_000) +
-          messageWaitMs(caseId),
+          messageWaitMs(caseId) +
+          // REQ-EXEC-46: the plan's waits fit in the limit wherever the attempt runs.
+          (options.plan.cases.find((c) => c.id === caseId)?.steps ?? []).reduce(
+            (ms, st) => ms + (st.wait ? st.wait.timeout_s * 1000 : 0),
+            0,
+          ),
         ...(options.manual ? { manual: options.manual } : {}),
         ...(options.locale ? { locale: options.locale } : {}),
         ...(options.visual ? { visual: options.visual } : {}),
@@ -228,10 +342,19 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
         ...(options.fixture ? { fixture: options.fixture } : {}),
         ...(options.extractText ? { extractText: options.extractText } : {}),
         ...(options.testStateHook ? { testStateHook: options.testStateHook } : {}),
+        ...(data.created.length > 0
+          ? { testData: Object.fromEntries(data.created.map((r) => [r.name, r.record])) }
+          : {}),
       })
       // The accounts go back to the pool as soon as the attempt ends, also when it throws (REQ-ENV-09/AC2).
-      .finally(() => release?.());
-    const record = applyContract(executed, options.contract);
+      .finally(() => release?.())
+      // REQ-EXEC-53/AC1: the records go too, unless the run keeps them for debugging.
+      .finally(() => data.finish());
+    const dataEvidence = await data.finish();
+    const record = applyContract(
+      dataEvidence ? { ...executed, evidence: [...executed.evidence, dataEvidence] } : executed,
+      options.contract,
+    );
     const evidencePaths: string[] = [];
     for (const item of record.evidence) {
       const stored = await options.evidence.put(

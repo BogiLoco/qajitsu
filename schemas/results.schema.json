@@ -140,6 +140,29 @@
                     ],
                     "additionalProperties": false
                   }
+                },
+                "wait": {
+                  "type": "object",
+                  "properties": {
+                    "waitedMs": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "rounds": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "met": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "waitedMs",
+                    "rounds",
+                    "met"
+                  ],
+                  "additionalProperties": false
                 }
               },
               "required": [

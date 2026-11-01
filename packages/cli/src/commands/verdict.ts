@@ -562,6 +562,8 @@ export async function computeVerdict(
       assertions: a.assertions,
       // REQ-EVD-09/AC1: what went wrong in the traffic of the failed steps, next to the failure.
       network: a.steps.flatMap((s) => (s.network ? [{ stepId: s.id, problems: s.network }] : [])),
+      // REQ-EXEC-46/AC2: how long each waiting step took.
+      waits: a.steps.flatMap((s) => (s.wait ? [{ stepId: s.id, ...s.wait }] : [])),
       // REQ-EVD-08/AC5: the screenshots that mark where the step failed come first.
       evidence: annotatedFirst(
         manifest.filter((m) => a.evidence.includes(m.path)),

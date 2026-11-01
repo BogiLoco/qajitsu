@@ -44,6 +44,15 @@ models:
 test_types: [api, web, mobile]
 
 # `qj run DEMO-1 --build` (stage 6): the API is built from the fetched worktree of `shop` with Docker Compose.
+# Records a case needs (REQ-EXEC-53): the admin creates products with the run's marker and removes them afterwards;
+# `qj data clean` removes what crashed runs left.
+test_data:
+  kinds:
+    product:
+      create: { request: "POST /admin/products", as: "user:admin" }
+      remove: { request: "DELETE /admin/products/{id}", as: "user:admin" }
+  cleanup: { request: "DELETE /admin/products?marker={marker}", as: "user:admin" }
+
 services:
   api:
     kind: compose
@@ -73,6 +82,9 @@ services:
       BUG_SIGNIN_ANY_PASSWORD: { value: "0", overridable: true }
       BUG_MESSAGE_TO_SENDER: { value: "0", overridable: true }
       BUG_SWIPE_SKIPS_SLIDE: { value: "0", overridable: true }
+      BUG_DOCUMENT_TRUNCATED: { value: "0", overridable: true }
+      BUG_DOCUMENT_NEVER_READY: { value: "0", overridable: true }
+      BUG_LOW_STOCK_OFF_BY_ONE: { value: "0", overridable: true }
     health: { http: /health, timeout_s: 180 }
 
 build:

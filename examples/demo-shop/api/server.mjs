@@ -30,6 +30,9 @@ export const BUG_FLAGS = [
   "BUG_SIGNIN_ANY_PASSWORD",
   "BUG_MESSAGE_TO_SENDER",
   "BUG_SWIPE_SKIPS_SLIDE",
+  "BUG_DOCUMENT_TRUNCATED",
+  "BUG_DOCUMENT_NEVER_READY",
+  "BUG_LOW_STOCK_OFF_BY_ONE",
 ];
 
 const PRODUCTS = [
@@ -38,6 +41,38 @@ const PRODUCTS = [
   { id: "P-3", name: "T-shirt", price: 59.5 },
 ];
 const DISCOUNTS = { SAVE10: 10, SAVE20: 20 };
+
+/**
+ * Parts of a `multipart/form-data` body: name, file name and type of each part with its bytes (REQ-EXEC-45 demo).
+ *
+ * @param {Buffer} raw
+ * @param {string} boundary
+ * @returns {{ name: string, filename?: string, type?: string, data: Buffer }[]}
+ */
+function parseMultipart(raw, boundary) {
+  const parts = [];
+  const delimiter = Buffer.from(`--${boundary}`);
+  let at = raw.indexOf(delimiter);
+  while (at >= 0) {
+    const start = at + delimiter.length;
+    if (raw.subarray(start, start + 2).toString() === "--") break;
+    const next = raw.indexOf(delimiter, start);
+    if (next < 0) break;
+    const part = raw.subarray(start + 2, next - 2);
+    const split = part.indexOf("\r\n\r\n");
+    const head = part.subarray(0, split).toString("utf8");
+    const name = /name="([^"]*)"/.exec(head)?.[1];
+    if (name !== undefined)
+      parts.push({
+        name,
+        filename: /filename="([^"]*)"/.exec(head)?.[1],
+        type: /content-type:\s*([^\r\n;]+)/i.exec(head)?.[1]?.trim(),
+        data: part.subarray(split + 4),
+      });
+    at = next;
+  }
+  return parts;
+}
 
 const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -60,6 +95,12 @@ export function createShop(options) {
     res.writeHead(status, { "content-type": "application/json" });
     res.end(JSON.stringify(body));
   };
+  /** Products created for tests by the admin (REQ-EXEC-53 demo): id -> { name, price, stock, marker }. */
+  const testProducts = new Map();
+  let productSeq = 100;
+  /** Uploaded documents (REQ-EXEC-45 demo): id -> { title, name, type, data }. */
+  const documents = new Map();
+  let documentSeq = 0;
   /** Messages between shoppers (REQ-EXEC-62 demo). */
   const inbox = [];
   const session = (req) => {
@@ -195,6 +236,51 @@ export function createShop(options) {
         200,
         inbox.filter((m) => m.to === s.user),
       );
+    // Test data of the shop (REQ-EXEC-53 demo): the admin creates products with a marker and removes them by id or
+    // by marker prefix.
+    if (route === "POST /admin/products") {
+      if (s.user !== "admin") return json(res, 403, { error: "FORBIDDEN" });
+      const input = await body(req);
+      if (typeof input?.name !== "string" || !Number.isInteger(input.stock) || input.stock < 0)
+        return json(res, 422, { error: "NAME_AND_STOCK_REQUIRED" });
+      productSeq += 1;
+      const product = {
+        id: `P-${String(productSeq)}`,
+        name: input.name,
+        price: typeof input.price === "number" ? input.price : 10,
+        stock: input.stock,
+      };
+      testProducts.set(product.id, { ...product, marker: String(input.qa_marker ?? "") });
+      return json(res, 201, product);
+    }
+    if (route === "DELETE /admin/products") {
+      if (s.user !== "admin") return json(res, 403, { error: "FORBIDDEN" });
+      const prefix = url.searchParams.get("marker") ?? "";
+      if (prefix === "") return json(res, 422, { error: "MARKER_REQUIRED" });
+      let removed = 0;
+      for (const [id, p] of testProducts)
+        if (p.marker.startsWith(prefix)) {
+          testProducts.delete(id);
+          removed += 1;
+        }
+      return json(res, 200, { removed });
+    }
+    const adminProduct = /^\/admin\/products\/(P-\d+)$/.exec(url.pathname);
+    if (req.method === "DELETE" && adminProduct) {
+      if (s.user !== "admin") return json(res, 403, { error: "FORBIDDEN" });
+      if (!testProducts.delete(adminProduct[1])) return json(res, 404, { error: "PRODUCT_NOT_FOUND" });
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    // A product with its stock (REQ-EXEC-53 demo): three or fewer left is low stock; BUG-23 only below three.
+    const productPath = /^\/products\/(P-\d+)$/.exec(url.pathname);
+    if (req.method === "GET" && productPath) {
+      const p = testProducts.get(productPath[1]);
+      if (!p) return json(res, 404, { error: "PRODUCT_NOT_FOUND" });
+      const low = bugs.BUG_LOW_STOCK_OFF_BY_ONE ? p.stock < 3 : p.stock <= 3;
+      return json(res, 200, { id: p.id, name: p.name, price: p.price, stock: p.stock, low_stock: low });
+    }
     if (route === "POST /admin/seed" || route === "GET /admin/seed") {
       if (s.user !== "admin") return json(res, 403, { error: "FORBIDDEN" });
       if (req.method === "GET") return json(res, 200, { markers: seeds });
@@ -215,6 +301,64 @@ export function createShop(options) {
       if (bytes > limit) return json(res, 413, { error: "FILE_TOO_LARGE" });
       const name = String(req.headers["x-file-name"] ?? "avatar.png").slice(0, 100);
       return json(res, 201, { name, bytes });
+    }
+    // Invoice documents (REQ-EXEC-45 demo): a PDF with a title as multipart/form-data, downloaded as an attachment.
+    if (route === "POST /documents") {
+      const type = req.headers["content-type"] ?? "";
+      const boundary = /boundary=(?:"([^"]+)"|([^;]+))/.exec(type);
+      if (!type.startsWith("multipart/form-data") || !boundary)
+        return json(res, 415, { error: "MULTIPART_ONLY" });
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const parts = parseMultipart(Buffer.concat(chunks), boundary[1] ?? boundary[2] ?? "");
+      const title = parts.find((p) => p.name === "title" && p.filename === undefined)?.data.toString("utf8");
+      const file = parts.find((p) => p.name === "file" && p.filename !== undefined);
+      if (!title || !file) return json(res, 422, { error: "TITLE_AND_FILE_REQUIRED" });
+      if (file.type !== "application/pdf") return json(res, 415, { error: "PDF_ONLY" });
+      documentSeq += 1;
+      const id = `D-${String(documentSeq)}`;
+      // REQ-EXEC-46 demo: a document is processed for two seconds before it is ready.
+      documents.set(id, {
+        title,
+        name: file.filename,
+        type: file.type,
+        data: file.data,
+        readyAt: now() + 2000,
+      });
+      return json(res, 201, {
+        id,
+        title,
+        name: file.filename,
+        bytes: file.data.length,
+        status: "processing",
+      });
+    }
+    const document = /^\/documents\/(D-\d+)$/.exec(url.pathname);
+    if (req.method === "GET" && document) {
+      const d = documents.get(document[1]);
+      if (!d) return json(res, 404, { error: "DOCUMENT_NOT_FOUND" });
+      // BUG-22: the document stays processing for ever.
+      const ready = now() >= d.readyAt && !bugs.BUG_DOCUMENT_NEVER_READY;
+      return json(res, 200, {
+        id: document[1],
+        title: d.title,
+        name: d.name,
+        bytes: d.data.length,
+        status: ready ? "ready" : "processing",
+      });
+    }
+    const documentFile = /^\/documents\/(D-\d+)\/file$/.exec(url.pathname);
+    if (req.method === "GET" && documentFile) {
+      const d = documents.get(documentFile[1]);
+      if (!d) return json(res, 404, { error: "DOCUMENT_NOT_FOUND" });
+      // BUG-21: the download leaves out the file's last byte.
+      const data = bugs.BUG_DOCUMENT_TRUNCATED ? d.data.subarray(0, d.data.length - 1) : d.data;
+      res.writeHead(200, {
+        "content-type": d.type,
+        "content-disposition": `attachment; filename="${d.name}"`,
+      });
+      res.end(data);
+      return;
     }
     if (route === "GET /cart") return json(res, 200, cartView(s.cart));
     if (route === "POST /cart/lines") {

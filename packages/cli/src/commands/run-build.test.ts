@@ -116,8 +116,9 @@ describe("qajitsu run --build (stage 6)", () => {
     expect(notOverridable.exitCode).toBe(3);
     expect(notOverridable.err).toContain("api.DEMO_USER_PASSWORD: variable is not overridable");
     expect(await readdir(join(dir, "logs"))).not.toContain("api.log");
-    expect((await run(["run", "DEMO-1", "--keep"])).err).toContain(
-      "--keep and --set apply to --build runs only",
+    // `--keep` also keeps test data (REQ-EXEC-53), so only `--set` needs a build.
+    expect((await run(["run", "DEMO-1", "--set", "api.DEMO_SHA=x"])).err).toContain(
+      "--set applies to --build runs only",
     );
     expect((await run(["run", "DEMO-1", "--build", "--env", "http://127.0.0.1:1"])).exitCode).toBe(3);
     expect((await run(["run", "DEMO-1", "--build", "--set", "nonsense"])).err).toContain("OVERRIDE_INVALID");

@@ -408,6 +408,13 @@ export async function runPlan(
     });
     // REQ-CTX-20/AC5: what people taught earlier runs of the project reaches the analyst and planner as context.
     context = { ...context, lessons: await collectLessons(ws.root, { exclude: ws.runId }) };
+    // REQ-EXEC-53: the kinds of test data this project can create for a case.
+    const testData = session.project.config.test_data;
+    if (testData)
+      context = {
+        ...context,
+        testData: { kinds: Object.keys(testData.kinds), hook: testData.hook !== undefined },
+      };
     let analysis: Analysis;
     try {
       analysis = AnalysisSchema.parse(JSON.parse(await readFile(ws.path("analysis.json"), "utf8")));

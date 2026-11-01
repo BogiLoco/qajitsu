@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 import { afterEach, describe, expect, it } from "vitest";
-import { BUG_FLAGS, startShop } from "./server.mjs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { BUG_FLAGS, createShop, startShop } from "./server.mjs";
 
 interface Shop {
   url: string;
@@ -86,6 +88,120 @@ describe("demo-shop seeded bugs (REQ-NFR-04, BUGS.md)", () => {
       expect(
         (await call(shop, "POST", "/cart/discount", { code: "SAVE20" }, token)).body["discounts"],
       ).toEqual(expected);
+    }
+  });
+
+  it("BUG-21: a downloaded document is the uploaded PDF without the flag, one byte short with it", async () => {
+    const pdf = Buffer.from("%PDF-1.4\nfictional invoice\n%%EOF\n");
+    for (const [flag, size] of [
+      [undefined, pdf.length],
+      ["BUG_DOCUMENT_TRUNCATED", pdf.length - 1],
+    ] as const) {
+      const shop = await start(flag);
+      const token = await login(shop);
+      const form = new FormData();
+      form.set("title", "Invoice 7");
+      form.set("file", new Blob([pdf], { type: "application/pdf" }), "invoice-7.pdf");
+      const auth = { authorization: `Bearer ${token}` };
+      const created = await fetch(`${shop.url}/documents`, { method: "POST", headers: auth, body: form });
+      expect(created.status).toBe(201);
+      const doc = (await created.json()) as { id: string; name: string; bytes: number };
+      expect(doc).toMatchObject({ name: "invoice-7.pdf", bytes: pdf.length });
+      const file = await fetch(`${shop.url}/documents/${doc.id}/file`, { headers: auth });
+      expect(file.headers.get("content-disposition")).toBe('attachment; filename="invoice-7.pdf"');
+      expect((await file.arrayBuffer()).byteLength).toBe(size);
+    }
+    const shop = await start();
+    const token = await login(shop);
+    const text = new FormData();
+    text.set("title", "Notes");
+    text.set("file", new Blob(["plain"], { type: "text/plain" }), "notes.txt");
+    const refused = await fetch(`${shop.url}/documents`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+      body: text,
+    });
+    expect(refused.status).toBe(415);
+    expect(await refused.json()).toEqual({ error: "PDF_ONLY" });
+  });
+
+  it("BUG-22: a document is ready two seconds after the upload without the flag, never with it", async () => {
+    for (const [flag, later] of [
+      [undefined, "ready"],
+      ["BUG_DOCUMENT_NEVER_READY", "processing"],
+    ] as const) {
+      let t = 1_000_000;
+      const handler = createShop({
+        password: PASSWORD,
+        now: () => t,
+        ...(flag ? { bugs: { [flag]: true } } : {}),
+      });
+      const server = createServer((req, res) => {
+        void handler(req, res);
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const shop: Shop = {
+        url: `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`,
+        close: () =>
+          new Promise((resolve) =>
+            server.close(() => {
+              resolve();
+            }),
+          ),
+      };
+      shops.push(shop);
+      const token = await login(shop);
+      const form = new FormData();
+      form.set("title", "Invoice 8");
+      form.set("file", new Blob(["%PDF-1.4\n"], { type: "application/pdf" }), "invoice-8.pdf");
+      const auth = { authorization: `Bearer ${token}` };
+      const created = (await (
+        await fetch(`${shop.url}/documents`, { method: "POST", headers: auth, body: form })
+      ).json()) as {
+        id: string;
+        status: string;
+      };
+      expect(created.status).toBe("processing");
+      const status = async () =>
+        (
+          (await (await fetch(`${shop.url}/documents/${created.id}`, { headers: auth })).json()) as {
+            status: string;
+          }
+        ).status;
+      expect(await status()).toBe("processing");
+      t += 2_000;
+      expect(await status()).toBe(later);
+    }
+  });
+
+  it("BUG-23: three left is low stock without the flag, not with it; test products go by id or marker", async () => {
+    for (const [flag, low] of [
+      [undefined, true],
+      ["BUG_LOW_STOCK_OFF_BY_ONE", false],
+    ] as const) {
+      const shop = await start(flag);
+      const admin = String(
+        (await call(shop, "POST", "/auth/login", { username: "admin", password: PASSWORD })).body["token"],
+      );
+      const created = await call(
+        shop,
+        "POST",
+        "/admin/products",
+        { name: "Lamp", stock: 3, qa_marker: "qj-x-a1" },
+        admin,
+      );
+      expect(created.status).toBe(201);
+      const user = await login(shop);
+      const product = await call(shop, "GET", `/products/${String(created.body["id"])}`, undefined, user);
+      expect(product.body).toMatchObject({ stock: 3, low_stock: low });
+      expect((await call(shop, "POST", "/admin/products", { name: "x", stock: 1 }, user)).status).toBe(403);
+      await call(shop, "POST", "/admin/products", { name: "Shelf", stock: 9, qa_marker: "qj-x-a2" }, admin);
+      expect((await call(shop, "DELETE", "/admin/products?marker=qj-x-", undefined, admin)).body).toEqual({
+        removed: 2,
+      });
+      expect(
+        (await call(shop, "GET", `/products/${String(created.body["id"])}`, undefined, user)).status,
+      ).toBe(404);
     }
   });
 

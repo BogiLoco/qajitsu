@@ -24,6 +24,7 @@ export * from "./context/ticket-snapshot.js";
 export * from "./context/fetch-context.js";
 export * from "./context/imported-cases.js";
 export * from "./plan/schemas.js";
+export * from "./plan/expectation-paths.js";
 export * from "./plan/plan-store.js";
 export * from "./results.js";
 export * from "./checks.js";

@@ -44,6 +44,10 @@ describe("static checks of web actions (REQ-EXEC-38..40, REQ-EXEC-56, ADR-0013)"
     expect(messages(spec.replace('"avatar"', '"secret-file"'), "TC-01", plan)).toContain(
       "coverage: ui.upload(): 'secret-file' is not a file of TC-01 in the plan (files)",
     );
+    // A key every object has is not a file of the plan.
+    expect(messages(spec.replace('"avatar"', '"toString"'), "TC-01", plan)).toContain(
+      "coverage: ui.upload(): 'toString' is not a file of TC-01 in the plan (files)",
+    );
     expect(
       messages(
         spec.replace('ui.upload("testid:avatar-input", "avatar")', 'ui.upload("testid:avatar-input")'),
@@ -67,7 +71,7 @@ describe("static checks of web actions (REQ-EXEC-38..40, REQ-EXEC-56, ADR-0013)"
     const plan = fixturePlan("DEMO-7");
     const spec = fixtureSpec("DEMO-7", "TC-03");
     expect(messages(spec.replace('await ui.download("testid:export-csv");', ""), "TC-03", plan)).toContain(
-      'coverage: step S1 expects a download: call ui.download(<selector>) inside step("S1", ...)',
+      'coverage: step S1 expects a download: call ui.download(<selector>) or the API request that returns the file inside step("S1", ...)',
     );
     expect(messages(spec.replace(/verify\("S1", "download\.rows".*\n/, ""), "TC-03", plan)).toContain(
       'coverage: expectation S1 download.rows has no verify("S1", "download.rows", ...) call',

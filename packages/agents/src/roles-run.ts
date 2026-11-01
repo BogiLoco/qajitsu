@@ -746,6 +746,20 @@ export async function runAnalyst(deps: AgentStageDeps, context: ChangeContext): 
   return value;
 }
 
+/** Test data of a draft that code cannot create: a kind the project does not configure (REQ-EXEC-53/AC1). */
+function testDataProblems(plan: Plan, context: ChangeContext): string[] {
+  const kinds = context.testData?.kinds ?? [];
+  if (context.testData?.hook === true) return [];
+  return plan.cases.flatMap((c) =>
+    (c.test_data ?? [])
+      .filter((d) => !kinds.includes(d.kind))
+      .map(
+        (d) =>
+          `${c.id}.test_data ${d.name}: kind ${d.kind} cannot be created (the project's kinds: ${kinds.join(", ") || "none"}); use one of them or ask an open question`,
+      ),
+  );
+}
+
 /** A revision request for an existing plan version (REQ-PLAN-04). */
 export interface PlanRevision {
   readonly previous: Plan;
@@ -849,6 +863,7 @@ export async function runPlanner(
         return plan.error.issues.map((i) => `${i.path.join(".")}: ${withPlacementHint(i.path, i.message)}`);
       // REQ-CTX-06/AC2: claimed existing coverage must name real tests of the tests repository.
       const errors = [
+        ...testDataProblems(plan.data, context),
         ...issuesAsErrors(checkPlanSources(plan.data, sources)),
         ...checkExistingCoverage(plan.data, sources),
       ];

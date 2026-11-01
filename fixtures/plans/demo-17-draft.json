@@ -1,0 +1,89 @@
+{
+  "summary": "Low stock badge for DEMO-17, on products created for each case.",
+  "cases": [
+    {
+      "id": "TC-01",
+      "title": "Three left is low stock",
+      "type": "api",
+      "priority": "high",
+      "source": [
+        {
+          "kind": "ac",
+          "id": "AC1"
+        }
+      ],
+      "data": {
+        "user": "user:standard"
+      },
+      "test_data": [
+        {
+          "name": "lamp",
+          "kind": "product",
+          "with": {
+            "name": "Lamp",
+            "price": 12.5,
+            "stock": 3
+          }
+        }
+      ],
+      "steps": [
+        {
+          "id": "S1",
+          "action": "GET /products/{id}",
+          "expect": {
+            "description": "low_stock is true",
+            "status": 200,
+            "fields": {
+              "stock": 3,
+              "low_stock": true
+            }
+          }
+        }
+      ],
+      "evidence": ["request", "response"]
+    },
+    {
+      "id": "TC-02",
+      "title": "Four left is not low stock",
+      "type": "api",
+      "priority": "high",
+      "source": [
+        {
+          "kind": "ac",
+          "id": "AC2"
+        }
+      ],
+      "data": {
+        "user": "user:standard"
+      },
+      "test_data": [
+        {
+          "name": "shelf",
+          "kind": "product",
+          "with": {
+            "name": "Shelf",
+            "price": 12.5,
+            "stock": 4
+          }
+        }
+      ],
+      "steps": [
+        {
+          "id": "S1",
+          "action": "GET /products/{id}",
+          "expect": {
+            "description": "low_stock is false",
+            "status": 200,
+            "fields": {
+              "stock": 4,
+              "low_stock": false
+            }
+          }
+        }
+      ],
+      "evidence": ["request", "response"]
+    }
+  ],
+  "open_questions": [],
+  "out_of_scope": []
+}

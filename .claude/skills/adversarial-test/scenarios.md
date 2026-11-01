@@ -103,3 +103,21 @@ Status: `todo` (no test yet) · `covered` (test exists, file name in brackets). 
 - done · A plan code flagged or with open questions → handed over to a person; the model is not asked.
 - done · A person step added to `run.json`, or the model-only marker removed → `approval-intact` fails, `qj audit verify` fails, PASSED becomes NEEDS_REVIEW (`packages/cli/src/commands/approval-flow.test.ts`).
 - done · Jira refusing an approval comment → warned and journaled; the decision stands as recorded.
+
+## API bodies and file responses (REQ-EXEC-45)
+
+- done · A spec names a path, a key outside the plan (`__proto__`, `constructor`) or forges a body descriptor → refused before anything is sent (`tests/adversarial/api-body-smuggling.test.ts`).
+- done · A file from another step, or a JSON response, offered for a `download.*` check → "(no download in this step)", FAILED.
+- done · A secret in a text body, a form field or a text attachment → masked in every evidence file and the cURL line.
+
+## Waiting for asynchronous outcomes (REQ-EXEC-46)
+
+- done · A later round leaves out the check that kept failing → the wait is not met and a failing `wait` assertion is recorded (`tests/adversarial/wait-cannot-launder.test.ts`).
+- done · A step the plan does not make wait → checked once, never repeated.
+- done · A spec that keeps a waiting step going → stopped at the plan's timeout, FAILED with the last values.
+
+## Test data per case (REQ-EXEC-53)
+
+- done · The plan writes another run's marker into a record → the attempt's own marker always wins (`tests/adversarial/test-data-isolation.test.ts`).
+- done · Data that cannot be created, or a project without `test_data` → BLOCKED before any step; the executor is never called.
+- done · Test data sent to an origin outside the allowlist → refused before the request (`packages/cli/src/test-data.test.ts`).

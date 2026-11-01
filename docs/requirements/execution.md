@@ -697,20 +697,20 @@ Lists, carousels, pull-to-refresh and maps need gestures.
 
 ### REQ-EXEC-45 · API: multipart and binary bodies
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: later
 - Related: REQ-EXEC-04, REQ-EXEC-38, INV-8
 
 **Acceptance criteria**
 
-- [ ] AC1: Requests can send `multipart/form-data` (fields and files from fixtures), `application/x-www-form-urlencoded`, raw binary and plain text bodies.
-- [ ] AC2: Binary responses (files, images, PDF) are kept as evidence with their hash and checked against the plan (type, size, hash, content for readable types).
-- [ ] AC3: Request and response bodies in evidence are masked; binary bodies are stored as files, never inlined into the report.
+- [x] AC1: Requests can send `multipart/form-data` (fields and files from fixtures), `application/x-www-form-urlencoded`, raw binary and plain text bodies.
+- [x] AC2: Binary responses (files, images, PDF) are kept as evidence with their hash and checked against the plan (type, size, hash, content for readable types).
+- [x] AC3: Request and response bodies in evidence are masked; binary bodies are stored as files, never inlined into the report.
 
 ### REQ-EXEC-46 · Waiting for asynchronous outcomes
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: later
 - Related: REQ-EXEC-04, REQ-EXEC-05, INV-1, INV-4
@@ -719,9 +719,9 @@ Jobs, queues and eventual consistency: "the status changes within 30 seconds".
 
 **Acceptance criteria**
 
-- [ ] AC1: A step can poll an API call or a UI check until the planned expectation holds, with an interval and a timeout from the frozen plan.
-- [ ] AC2: Every attempt is recorded as evidence; the report shows how long it took.
-- [ ] AC3: An expectation not met at the timeout fails the step with the last observed value; polling never retries a failed `verify()` after the step ended.
+- [x] AC1: A step can poll an API call or a UI check until the planned expectation holds, with an interval and a timeout from the frozen plan.
+- [x] AC2: Every attempt is recorded as evidence; the report shows how long it took.
+- [x] AC3: An expectation not met at the timeout fails the step with the last observed value; polling never retries a failed `verify()` after the step ended.
 
 ### REQ-EXEC-47 · WebSocket and server-sent events testing
 
@@ -812,7 +812,7 @@ Maestro runs mobile (Android, iOS, React Native, Flutter) and web flows from YAM
 
 ### REQ-EXEC-53 · Test data per case
 
-- Status: accepted
+- Status: implemented
 - Priority: must
 - Stage: later
 - Related: REQ-ENV-04, REQ-EXEC-19, REQ-PLAN-02, INV-4
@@ -821,10 +821,10 @@ Tests need predictable data; on a shared environment what is in the database cha
 
 **Acceptance criteria**
 
-- [ ] AC1: A plan case can declare the data it needs (records, states, quantities); code creates it before the case through the application's API or a project data hook, and removes it afterwards unless the run keeps it for debugging.
-- [ ] AC2: Created data carries the run marker, so parallel cases and runs never share or delete each other's records; a cleanup command removes leftovers of crashed runs by marker.
-- [ ] AC3: Data that cannot be created makes the case BLOCKED with the reason, before any step runs.
-- [ ] AC4: What was created and removed is evidence of the case, masked.
+- [x] AC1: A plan case can declare the data it needs (records, states, quantities); code creates it before the case through the application's API or a project data hook, and removes it afterwards unless the run keeps it for debugging.
+- [x] AC2: Created data carries the run marker, so parallel cases and runs never share or delete each other's records; a cleanup command removes leftovers of crashed runs by marker.
+- [x] AC3: Data that cannot be created makes the case BLOCKED with the reason, before any step runs.
+- [x] AC4: What was created and removed is evidence of the case, masked.
 
 ### REQ-EXEC-54 · Shared environments: rate limits and idempotency
 

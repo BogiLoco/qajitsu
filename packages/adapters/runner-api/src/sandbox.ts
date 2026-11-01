@@ -1,6 +1,6 @@
 import { annotateImage } from "./annotate.js";
 import { pausedStep, startDeadline } from "./deadline.js";
-import type { AttemptExecutor as CoreAttemptExecutor } from "@qajitsu/core";
+import { plannedFields, type AttemptExecutor as CoreAttemptExecutor } from "@qajitsu/core";
 import { fork } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { dirname } from "node:path";
@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   createCaseRuntime,
   createMasker,
+  createPlanAccessor,
   type ApiTransport,
   type AttemptRecord,
   type CaseRuntime,
@@ -172,6 +173,12 @@ const OpSchema = z.discriminatedUnion("op", [
   z.strictObject({
     type: z.literal("op"),
     id: z.number().int(),
+    op: z.literal("pollRound"),
+    stepId: z.string().max(10),
+  }),
+  z.strictObject({
+    type: z.literal("op"),
+    id: z.number().int(),
     op: z.literal("call"),
     alias: z.string().optional(),
     method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
@@ -182,19 +189,23 @@ const OpSchema = z.discriminatedUnion("op", [
 ]);
 const DoneSchema = z.strictObject({ type: z.literal("done"), error: z.string().max(10_000).optional() });
 
-/** Expectations of one case, keyed `<case>.<step>.<field>`, for `plan.expect` in the child. */
+/**
+ * Expectations of one case, keyed `<case>.<step>.<field>`, for `plan.expect` in the child: the description and every
+ * field the step plans (the same list the static checks require), read like the runtime reads them. The values are
+ * documentation for the spec; the parent evaluates every `verify()` against the plan itself (ADR-0004).
+ */
 const expectationsOf = (input: AttemptInput): Record<string, unknown> => {
   const out: Record<string, unknown> = {};
+  const accessor = createPlanAccessor(input.plan, input.caseId);
   const c = input.plan.cases.find((x) => x.id === input.caseId);
   for (const s of c?.steps ?? []) {
     const p = `${input.caseId}.${s.id}`;
-    out[`${p}.description`] = s.expect.description;
-    if (s.expect.status !== undefined) out[`${p}.status`] = s.expect.status;
-    for (const [k, v] of Object.entries(s.expect.fields ?? {})) out[`${p}.fields.${k}`] = v;
-    (s.expect.texts ?? []).forEach((t, i) => (out[`${p}.texts.${String(i)}`] = t));
-    for (const [selector, state] of Object.entries(s.expect.elements ?? {})) {
-      for (const [prop, value] of Object.entries(state)) out[`${p}.elements.${selector}.${prop}`] = value;
-    }
+    for (const field of ["description", ...plannedFields(s.expect)])
+      try {
+        out[`${p}.${field}`] = accessor.expect(`${p}.${field}`);
+      } catch {
+        // A field the accessor cannot read stays out; the spec's plan.expect() then errors, never passes.
+      }
   }
   return out;
 };
@@ -258,6 +269,7 @@ export function createSandboxExecutor(
       ...(input.fixture ? { fixture: input.fixture } : {}),
       ...(input.extractText ? { extractText: input.extractText } : {}),
       ...(input.testStateHook ? { testStateHook: input.testStateHook } : {}),
+      ...(input.testData ? { testData: input.testData } : {}),
       ...(input.credential ? { credential: input.credential } : {}),
       caseId: input.caseId,
       attempt: input.attempt,
@@ -361,7 +373,16 @@ export function createSandboxExecutor(
               else if (op.op === "ui") await runtime.uiOp(op.operation);
               else if (op.op === "inboxAddress") value = await runtime.inboxAddress(op.kind);
               else if (op.op === "inboxWait") value = (await runtime.inboxWait(op.stepId)) ?? null;
-              else {
+              else if (op.op === "pollRound") {
+                // REQ-EXEC-46: the plan's wait decides; the interval does not count against the case's time limit.
+                const next = runtime.pollRound(op.stepId);
+                if (next.again) {
+                  deadline.pause();
+                  await new Promise((resolve) => setTimeout(resolve, next.delayMs));
+                  deadline.resume();
+                }
+                value = next.again;
+              } else {
                 const r = await runtime.call(op.alias, op.method, op.path, op.body, {
                   ...(op.options.headers ? { headers: op.options.headers } : {}),
                   ...(op.options.query ? { query: op.options.query } : {}),
@@ -384,7 +405,13 @@ export function createSandboxExecutor(
             );
           });
         });
-        child.send({ type: "start", specFile, caseId: input.caseId, expectations: expectationsOf(input) });
+        child.send({
+          type: "start",
+          specFile,
+          caseId: input.caseId,
+          expectations: expectationsOf(input),
+          testData: input.testData ?? {},
+        });
       });
     } finally {
       await dispose?.();

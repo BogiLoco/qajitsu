@@ -1,0 +1,21 @@
+{
+  "key": "DEMO-17",
+  "type": "Story",
+  "status": "Ready for QA",
+  "summary": "Low stock badge on products",
+  "description": "GET /products/{id} tells shoppers when a product is almost sold out, so the product page can show a Low stock badge.",
+  "acceptanceCriteria": [
+    "A product with three or fewer items in stock has low_stock true.",
+    "A product with four or more items in stock has low_stock false."
+  ],
+  "labels": ["products", "api"],
+  "components": ["shop-api"],
+  "attachments": [],
+  "comments": [
+    {
+      "author": "developer",
+      "created": "2026-10-31T09:00:00Z",
+      "body": "Products for tests are created by the admin through /admin/products."
+    }
+  ]
+}
