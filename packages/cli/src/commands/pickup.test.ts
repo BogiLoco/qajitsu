@@ -2,7 +2,8 @@ import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
 import { createHmac } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
-import { createServer } from "node:net";
+import { createServer as createHttpServer } from "node:http";
+import { createServer, type AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createDemoPipeline, flowScript } from "../../../../tests/support/cli-pipeline.js";
@@ -204,6 +205,55 @@ describe("picking tickets up (REQ-FLOW-01)", () => {
     const r = await serving;
     expect(r.out).toContain('DEMO-1 not picked up: it is in "Done", not "Ready for QA".');
     expect(await p.runs()).toHaveLength(0);
+  });
+
+  it("REQ-ENV-13/AC6: a ticket whose environment is not ready is parked in the start status and picked up once it is", async () => {
+    const p = await setup();
+    let deployed = "c".repeat(40);
+    const versions = createHttpServer((_, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ sha: deployed }));
+    });
+    await new Promise<void>((done) => versions.listen(0, "127.0.0.1", done));
+    cleanups.push(
+      () =>
+        new Promise((done) =>
+          versions.close(() => {
+            done();
+          }),
+        ),
+    );
+    const origin = `http://127.0.0.1:${String((versions.address() as AddressInfo).port)}`;
+    const yaml = join(p.project, ".qa", "qa.project.yaml");
+    const text = await readFile(yaml, "utf8");
+    const shopUrl = /environments: \{ default: local, allowlist: \['([^']+)'\] \}/.exec(text)?.[1] ?? "";
+    await writeFile(
+      yaml,
+      text.replace(
+        /environments: \{ default: local, allowlist: \['[^']+'\] \}/,
+        `environments:\n  default: local\n  allowlist: ['${shopUrl}', '${origin}']\n  readiness:\n    versions: { shop: { url: '${origin}/version' } }\n    comment: never`,
+      ),
+    );
+    const parked = await p.run(["workflow", "poll", "--once"], { script: p.plan });
+    expect(parked.out).toContain("DEMO-1 is parked until its environment is ready (run 20261003-1046-aaaa).");
+    expect(parked.out).not.toContain("Moved DEMO-1");
+    expect((await p.ticket()).status).toBe("Ready for QA");
+    const record = async () =>
+      JSON.parse(await readFile(join(p.runDir, "run.json"), "utf8")) as {
+        data: Record<string, unknown> & { repos?: never };
+        repos: Record<string, { sha: string }>;
+      };
+    expect((await record()).data["parked_env"]).toBe(true);
+    // The next poll checks the same run again; still not deployed, still parked, no second run.
+    expect((await p.run(["workflow", "poll", "--once"])).out).toContain(
+      "not picked up: the environment is not ready yet for run 20261003-1046-aaaa",
+    );
+    deployed = (await record()).repos["shop"]?.sha ?? "";
+    const started = await p.run(["workflow", "poll", "--once"], { script: p.plan });
+    expect(started.out).toContain('Moved DEMO-1 to "In QA" (run 20261003-1046-aaaa started).');
+    expect((await record()).data["parked_env"]).toBeUndefined();
+    expect(await p.runs()).toHaveLength(1);
+    expect(await readFile(join(p.runDir, "journal", "events.jsonl"), "utf8")).toContain('"parked":true');
   });
 
   it("REQ-FLOW-01/AC3: the webhook never runs without a secret", async () => {

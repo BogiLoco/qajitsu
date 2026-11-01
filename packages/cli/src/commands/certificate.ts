@@ -225,6 +225,8 @@ async function issueOrReuse(
     versions: data["versions"],
     images: build["images"] ?? [],
     environment: data["environment"],
+    // REQ-ENV-13/AC3: the environment's readiness for the ticket, with every check and a person's override.
+    ...(data["readiness_env"] ? { readiness: data["readiness_env"] } : {}),
     ...(data["codeAccess"] ? { codeAccess: data["codeAccess"] } : {}),
     ...storageOf(session, issuedAt),
   });

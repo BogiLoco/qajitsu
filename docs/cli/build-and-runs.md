@@ -56,7 +56,8 @@ literal value. The effective configuration, masked, is written to `run.json` (`d
 | Command                                                     | What it does                                                                                 |
 | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | `qajitsu run <T> --build [--env <profile>] [--set s.VAR=v]` | validate, start, seed, test, clean up per policy                                             |
-| `qajitsu run <T> --build --keep`                            | keep containers and worktrees after this run                                                 |
+| `qajitsu run <T> --build --keep`                            | keep containers, worktrees and the cases' test data after this run                           |
+| `qajitsu data clean [<T>] [--run <id>\|--all]`              | remove the test data crashed or kept runs left, by marker (REQ-EXEC-53)                      |
 | `qajitsu env check [--env <profile>]`                       | list every missing or invalid variable without starting anything (exit 3 on problems)        |
 | `qajitsu env render <T> [--run <id>]`                       | recreate the per-service `.env` files (0600) with the ports recorded by `--build`            |
 | `qajitsu runs <T>`                                          | runs of a ticket: status, stage, results, retention                                          |

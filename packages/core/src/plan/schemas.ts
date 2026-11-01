@@ -312,7 +312,15 @@ export const TestCaseSchema = z.strictObject({
   preconditions: z.array(z.string()).default([]),
   /** Test data by alias only, e.g. `{ user: "user:standard" }`; never secret values (invariant 8). */
   data: z
-    .record(z.string(), z.string().regex(/^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$/, "Use aliases like user:standard"))
+    .record(
+      z.string(),
+      z
+        .string()
+        .regex(
+          /^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$/,
+          'Use aliases like user:standard; records the case needs (products, orders) go in the case\'s "test_data", not in data',
+        ),
+    )
     .default({}),
   /**
    * Records the case needs (REQ-EXEC-53/AC1): created by code before each attempt through the application's API or the

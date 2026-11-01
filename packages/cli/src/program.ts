@@ -709,6 +709,10 @@ export function createProgram(version: string, io: ProgramIO): Command {
     )
     .option("--review-specs", "a person reviews every generated spec before it runs (REQ-VER-24)")
     .option(
+      "--env-not-confirmed <reason>",
+      "run although the environment is not ready for the ticket; results are marked environment not confirmed",
+    )
+    .option(
       "--fix-check",
       "with --build: verify a bug fix: cases marked reproduces must FAIL before the fix and PASS with it",
     )
@@ -728,6 +732,7 @@ export function createProgram(version: string, io: ProgramIO): Command {
           step?: boolean;
           sequential?: boolean;
           reviewSpecs?: boolean;
+          envNotConfirmed?: string;
         },
       ) => {
         const { fixCheck, ...runOptions } = options;

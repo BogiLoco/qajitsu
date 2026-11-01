@@ -10,7 +10,14 @@ const CASE_PLATFORMS: Record<string, { readonly platforms: readonly UiPlatform[]
 
 /** Why an expectation of a plan cannot be checked as it is (REQ-PLAN-09). */
 export type PlanFlagKind =
-  "placeholder" | "schema" | "description-only" | "selector" | "account" | "recorded-text" | "dialog";
+  | "placeholder"
+  | "schema"
+  | "description-only"
+  | "selector"
+  | "account"
+  | "recorded-text"
+  | "dialog"
+  | "record";
 
 /** One expectation a test could not compare with anything meaningful. */
 export interface PlanFlag {
@@ -199,6 +206,8 @@ export function checkPlanExpectations(
     readonly inventory?: UiInventory | undefined;
     /** Pages and screens recorded on the environment before planning (REQ-EXEC-22/AC8). */
     readonly snapshot?: readonly UiScreen[] | undefined;
+    /** Kinds of test data the project can create (REQ-EXEC-53); without them reads of unknown records are not flagged. */
+    readonly testDataKinds?: readonly string[] | undefined;
   } = {},
 ): PlanFlag[] {
   const flags: PlanFlag[] = [];
@@ -216,6 +225,19 @@ export function checkPlanExpectations(
           stepId: step.id,
           kind: "account",
           reason: `${needsLogin(doc, step.action) ?? ""} needs a login (401 without one), but the case names no test account: add one to data, e.g. user: user:standard`,
+        });
+    }
+    // REQ-EXEC-53/AC1: a step that reads a record by an id it never gets cannot run on a shared environment.
+    if (options.testDataKinds && options.testDataKinds.length > 0 && (c.test_data ?? []).length === 0) {
+      const created = (i: number): boolean => c.steps.slice(0, i).some((s) => /^POST\s/i.test(s.action));
+      const index = c.steps.findIndex((s) => /^(GET|PUT|PATCH|DELETE)\s+\S*\{[^}]+\}/i.test(s.action));
+      const step = index >= 0 ? c.steps[index] : undefined;
+      if (step && !created(index))
+        flags.push({
+          caseId: c.id,
+          stepId: step.id,
+          kind: "record",
+          reason: `${step.action} reads a record the case never creates: list it in the case's test_data (kinds: ${options.testDataKinds.join(", ")}) or add a step that creates it first`,
         });
     }
     for (const s of c.steps) {

@@ -196,12 +196,17 @@ async function planFlagsOf(session: RunSession, context: ChangeContext): Promise
   const openapi = await runOpenApi(session);
   // REQ-EXEC-22/AC8: elements are also checked against the pages recorded before planning.
   const snapshot = context.snapshot ?? (await readPlanSnapshot(session.ws));
+  const testData = session.project.config.test_data;
   // REQ-PLAN-12: what code converts itself is not a flag, so the planner is not sent back for it.
   return (plan) =>
     checkPlanExpectations(convertNumericStrings(plan, openapi).plan, {
       openapi,
       inventory: context.ui,
       snapshot,
+      // REQ-EXEC-53: with test data the project can create, a case must not read records it never gets.
+      testDataKinds: testData
+        ? [...Object.keys(testData.kinds), ...(testData.hook ? ["any kind of the data hook"] : [])]
+        : undefined,
     });
 }
 

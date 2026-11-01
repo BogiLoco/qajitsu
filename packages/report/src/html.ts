@@ -65,6 +65,13 @@ export interface ReportInput {
     readonly deployedSha?: string | undefined;
     /** Stubbed services: what was not real in this run (REQ-ENV-05/AC2). */
     readonly stubs?: readonly string[] | undefined;
+    /** The environment readiness of the run and its checks (REQ-ENV-13/AC3). */
+    readonly readiness?: string | undefined;
+    readonly readinessChecks?: readonly {
+      readonly name: string;
+      readonly ok: boolean;
+      readonly observed: string;
+    }[];
   };
   readonly repos: Readonly<Record<string, string>>;
   /** How much code the project shares, when not all of it (REQ-CTX-10/AC4), e.g. `metadata only: shop pr 12 @ 9f0fe9ca`. */
@@ -256,7 +263,7 @@ section{border-top:1px solid #d0d7de;margin-top:16px}img,video{max-width:100%}
 :target{outline:3px solid #0969da}figure{margin:8px 0}.timeline td{font-size:12px}
 </style></head><body>
 <h1>${esc(input.ticket)} test report</h1>
-<p class="muted">Run ${esc(input.runId)} · ${esc(input.generatedAt)} · environment ${esc(input.environment.name)} (${esc(input.environment.baseUrl)})${input.environment.deployedSha ? ` · deployed <code>${esc(input.environment.deployedSha)}</code>` : ""}${input.environment.stubs?.length ? ` · <strong>stubbed (not real):</strong> ${esc(input.environment.stubs.join(", "))}` : ""}<br>Code: ${repos || "–"}${input.codeAccess ? ` (${esc(input.codeAccess)})` : ""}${app} · plan sha256 <code>${esc(input.planSha256.slice(0, 16))}…</code>${input.approvalNote ? `<br><strong>${esc(input.approvalNote)}</strong>` : ""}${input.versions ? `<br>Tools: ${esc(formatVersions(input.versions))}` : ""}</p>
+<p class="muted">Run ${esc(input.runId)} · ${esc(input.generatedAt)} · environment ${esc(input.environment.name)} (${esc(input.environment.baseUrl)})${input.environment.deployedSha ? ` · deployed <code>${esc(input.environment.deployedSha)}</code>` : ""}${input.environment.stubs?.length ? ` · <strong>stubbed (not real):</strong> ${esc(input.environment.stubs.join(", "))}` : ""}<br>Code: ${repos || "–"}${input.codeAccess ? ` (${esc(input.codeAccess)})` : ""}${app} · plan sha256 <code>${esc(input.planSha256.slice(0, 16))}…</code>${input.approvalNote ? `<br><strong>${esc(input.approvalNote)}</strong>` : ""}${input.environment.readiness ? `<br>Environment readiness: <strong>${esc(input.environment.readiness)}</strong>` : ""}${input.versions ? `<br>Tools: ${esc(formatVersions(input.versions))}` : ""}</p>
 ${renderCertificateBlock(input.certificate)}
 <div class="tiles">${tiles}</div>
 ${input.decision ? `<h2 class="${input.decision.startsWith("Decision: GO") ? "ok" : "bad"}">${esc(input.decision)}</h2>` : ""}
@@ -287,6 +294,7 @@ ${
 <table><tr><th>Endpoint</th><th>Reached by</th></tr>${input.endpoints.map((e) => `<tr class="${e.cases.length > 0 ? "ok" : "bad"}"><td><code>${esc(e.id)}</code></td><td>${e.cases.length > 0 ? esc(e.cases.join(", ")) : "no case reached it"}</td></tr>`).join("")}</table>`
     : ""
 }
+${input.environment.readinessChecks && input.environment.readinessChecks.length > 0 ? `<h2>Environment readiness</h2><ul>${input.environment.readinessChecks.map((c) => `<li class="${c.ok ? "ok" : "bad"}">${c.ok ? "✔" : "✘"} ${esc(c.name)}: ${esc(c.observed)}</li>`).join("")}</ul>` : ""}
 <h2>Matrix</h2><table><tr><th>TC</th><th>Title</th><th>Requirement</th><th>Type</th><th>Status</th><th>Steps OK</th><th>Evidence</th></tr>${matrix}</table>
 <h2>Publish gates</h2><ul>${gates}</ul>
 ${input.checks && input.checks.length > 0 ? `<h2>Verification checks</h2><ul>${input.checks.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}

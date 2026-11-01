@@ -318,6 +318,9 @@ page or screen showed, masked), which the healer gets; mobile cases are healed t
   started for this run while it answers, else `environments.default`)
 - `--build`: build the application from the fetched worktrees
 - `--keep`: keep the cases' test data after the run (REQ-EXEC-53) and, with `--build`, containers and worktrees
+- `--env-not-confirmed <reason>`: run although `environments.readiness` finds the environment not ready for the
+  ticket (REQ-ENV-13/AC5); the reason and who ran it are recorded, every result is marked "environment not confirmed"
+  in the report and the comment, and the run never counts as verified for `qj release`
 - `--set <service.VAR=value>`: with `--build`, override an overridable service variable (repeatable)
 - `--cases <ids>`: run only these cases of the approved plan, e.g. `TC-02,TC-03`; an id not in the plan is refused, the
   other cases are NOT_RUN ("not selected") and get no spec written (REQ-EXEC-16)

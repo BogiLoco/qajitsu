@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CONTEXT_KINDS, type ContextKind } from "../context/fragments.js";
+import { ReadinessConfigSchema } from "../env/readiness.js";
 import { ConfigError } from "../errors.js";
 import { TEST_STATUSES } from "../status.js";
 import { MobileSchema } from "./mobile.js";
@@ -471,6 +472,8 @@ export const ProjectConfigSchema = z.strictObject({
       retries: z.number().int().min(0).max(3).default(1),
       /** Cases running in parallel (REQ-EXEC-10/AC1). */
       workers: z.number().int().min(1).max(16).default(1),
+      /** Whether the environment is ready for the ticket before any case runs (REQ-ENV-13). */
+      readiness: ReadinessConfigSchema.optional(),
     })
     .default({ allowlist: [], allow_production: false, on_version_mismatch: "warn", retries: 1, workers: 1 }),
   models: z
