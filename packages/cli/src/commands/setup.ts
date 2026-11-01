@@ -35,6 +35,7 @@ import {
 import { createCliSecretResolver, type RuntimePorts } from "../adapters.js";
 import type { LoadedProject } from "../project.js";
 import { execVersion, playwrightInfo } from "../versions.js";
+import { installMissingPlugins, projectPlugins } from "./plugin.js";
 import type { CommandIO } from "./fetch.js";
 
 /** Flags of `qj setup` (REQ-GEN-06). */
@@ -407,7 +408,22 @@ export async function runSetupCommand(
         ? `${JSON.stringify(report, null, 2)}\n`
         : `${formatSetupReport(report, root)}\n${bundle !== undefined && report.stopped === undefined ? `Bundle: ${bundle} (copy it to the offline machine, then: qj setup --from <dir>)\n` : ""}`,
     );
-    return options.check === true ? (report.prechecks.every((p) => p.ok) ? 0 : 2) : setupExitCode(report);
+    // REQ-GEN-11/AC3: the plugins the project's settings need are installed with the tools.
+    let pluginsFailed = false;
+    if (project && bundle === undefined && options.from === undefined && (options.only ?? []).length === 0) {
+      if (options.check === true) {
+        const missing = (await projectPlugins(project, ports)).filter((p) => p.found === undefined);
+        for (const m of missing) log(`plugin ${m.id}: would install (${m.setting})`);
+      } else {
+        const result = await installMissingPlugins(project, ports, log);
+        for (const id of result.installed) log(`✔ plugin ${id} installed`);
+        for (const f of result.failed) log(`✘ plugin ${f}`);
+        pluginsFailed = result.failed.length > 0;
+      }
+    }
+    if (options.check === true) return report.prechecks.every((p) => p.ok) ? 0 : 2;
+    const code = setupExitCode(report);
+    return code === 0 && pluginsFailed ? 1 : code;
   } catch (error) {
     io.writeError(`Error: ${error instanceof Error ? error.message : String(error)}\n`);
     return 2;

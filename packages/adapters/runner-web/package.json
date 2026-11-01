@@ -30,5 +30,25 @@
     "@qajitsu/core": "workspace:*",
     "@qajitsu/verifier": "workspace:*",
     "@types/pngjs": "^6.0.5"
+  },
+  "qajitsu": {
+    "plugin": {
+      "types": [
+        "runner"
+      ],
+      "core_api": "^1.0.0",
+      "secrets": [
+        "account credentials",
+        "TOTP seeds"
+      ],
+      "hosts": [
+        "config"
+      ],
+      "permissions": [
+        "network",
+        "exec",
+        "filesystem"
+      ]
+    }
   }
 }

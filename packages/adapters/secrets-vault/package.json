@@ -19,5 +19,22 @@
   },
   "dependencies": {
     "@qajitsu/core": "workspace:*"
+  },
+  "qajitsu": {
+    "plugin": {
+      "types": [
+        "secret provider"
+      ],
+      "core_api": "^1.0.0",
+      "secrets": [
+        "Vault token"
+      ],
+      "hosts": [
+        "config"
+      ],
+      "permissions": [
+        "network"
+      ]
+    }
   }
 }

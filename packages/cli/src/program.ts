@@ -72,6 +72,13 @@ import { loadProject, type LoadedProject } from "./project.js";
 import type { ModelPorts } from "./session.js";
 import { formatDoctor, missingToolChecks, reportedBy, runDoctor } from "./doctor.js";
 import { projectChecks } from "./doctor-project.js";
+import {
+  installMissingPlugins,
+  pluginCheck,
+  runPluginAdd,
+  runPluginList,
+  runPluginRemove,
+} from "./commands/plugin.js";
 import { appVersions, formatAppVersions } from "./app-versions.js";
 import { formatToolVersions, toolVersions } from "./versions.js";
 import { readToolchainChoice, toolchainEnv, type ToolchainEnv } from "@qajitsu/toolchain";
@@ -151,6 +158,8 @@ export function createProgram(version: string, io: ProgramIO): Command {
     "projects remove",
     "projects archive",
     "projects unarchive",
+    // Checks every registered project for settings that still use the plugin (REQ-GEN-11/AC10).
+    "plugin remove",
   ]);
   // These commands write machine-readable output to stdout; the project line goes to stderr.
   const MACHINE_OUTPUT = new Set(["ci detect", "metrics", "setup"]);
@@ -430,6 +439,47 @@ export function createProgram(version: string, io: ProgramIO): Command {
       );
     });
 
+  const plugin = program
+    .command("plugin")
+    .description("Show, add and remove plugins: integrations installed on demand (REQ-GEN-11)");
+  plugin
+    .command("list")
+    .description("Every official plugin: its version, where it is, and which settings of the project need it")
+    .action(async () => {
+      if (!io.ports) return;
+      const project =
+        resolved && projectError === undefined
+          ? await loadProject(io.cwd, resolved).catch(() => undefined)
+          : undefined;
+      io.setExitCode(
+        await runPluginList(commandIO, { ...io.ports, ...(resolved ? { project: resolved } : {}) }, project),
+      );
+    });
+  plugin
+    .command("add")
+    .description("Install plugins at the version of this release, checked against their published checksums")
+    .argument("<plugins...>", "plugin ids, e.g. knowledge-lancedb")
+    .option(
+      "--file <tarball>",
+      "install one plugin from a tarball (a build of this repository, an offline copy)",
+    )
+    .action(async (ids: string[], options: { file?: string }) => {
+      if (!io.ports) return;
+      const project =
+        resolved && projectError === undefined
+          ? await loadProject(io.cwd, resolved).catch(() => undefined)
+          : undefined;
+      io.setExitCode(await runPluginAdd(ids, options, commandIO, io.ports, project));
+    });
+  plugin
+    .command("remove")
+    .description("Remove an installed plugin; refused while a project's settings use it")
+    .argument("<plugin>", "plugin id")
+    .action(async (id: string) => {
+      if (!io.ports) return;
+      io.setExitCode(await runPluginRemove(id, commandIO, io.ports));
+    });
+
   program
     .command("doctor")
     .description("Check that this machine and project are ready for QAJitsu")
@@ -524,6 +574,13 @@ export function createProgram(version: string, io: ProgramIO): Command {
               },
             )),
           );
+          // REQ-GEN-11/AC2: the plugins the project's settings need, with the command for each missing one.
+          checks.push(
+            await pluginCheck(await loadProject(io.cwd, resolved), {
+              ...io.ports,
+              ...(resolved ? { project: resolved } : {}),
+            }),
+          );
         } catch (error) {
           // REQ-GEN-08/AC1: the file exists but does not load: one failed check, not "found" and "invalid".
           const failed = {
@@ -578,6 +635,25 @@ export function createProgram(version: string, io: ProgramIO): Command {
         io.write(`\nToolchain (qj setup):\n${toolchain.lines.join("\n")}\n`);
       if (loaded) io.write(`\n${formatAppVersions(app)}\n`);
       let ok = checks.every((c) => c.ok);
+      // REQ-GEN-11/AC3: --fix installs the missing plugins; the plugin check counts as fixed only if all installed.
+      if (options.fix === true && io.ports && loaded && checks.some((c) => c.name === "plugins" && !c.ok)) {
+        const result = await installMissingPlugins(
+          loaded,
+          { ...io.ports, ...(resolved ? { project: resolved } : {}) },
+          (line) => {
+            io.write(`${line}\n`);
+          },
+        );
+        for (const f of result.failed) io.write(`✘ plugin ${f}\n`);
+        const at = checks.findIndex((c) => c.name === "plugins");
+        if (result.failed.length === 0 && at >= 0)
+          checks.splice(at, 1, {
+            name: "plugins",
+            ok: true,
+            detail: `installed ${result.installed.join(", ")}`,
+          });
+        ok = checks.every((c) => c.ok);
+      }
       // REQ-GEN-06/AC9: --fix installs what doctor found missing, then the tool checks count as fixed only if setup succeeded.
       if (options.fix === true && io.ports && toolchain) {
         if (toolchain.missing.length === 0) io.write("\nNothing for qj setup to install.\n");

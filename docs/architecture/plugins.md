@@ -964,6 +964,31 @@ Model providers, embedders, telemetry and pipelines are not plugin types: the fi
 are not loaded by QAJitsu. A new plugin type is added to REQ-GEN-11/AC7, `PLUGIN_TYPES` in the check and this table
 in the same change, with its ADR.
 
+## How plugins are installed and loaded
+
+REQ-GEN-11, implemented in `packages/cli/src/plugins/`. **Manifest.** Each plugin's `package.json` has
+`qajitsu.plugin`: its types (those of this page), the range of the core's adapter API it works with (`core_api`,
+checked against `PLUGIN_API_VERSION` of `@qajitsu/core`), the secrets, hosts (`config` for the URL the project
+configures) and permissions (`network`, `exec`, `filesystem`) it needs. A contract test checks every adapter
+package's manifest against this inventory.
+
+**Catalogue.** `packages/cli/plugins.json` pins the version of every official plugin for a release. It is written by
+`pnpm plugins:catalogue` after `changeset version`, and a test fails while it is stale.
+
+**Install.** The registry version's tarball is checked against its published sha512, and it must come from the
+registry's own host. npm then installs it into `~/.qajitsu/plugins/<id>/<version>/` with `--ignore-scripts`. The
+manifest and API range are checked before an installed version is replaced, and `installed.json` and `history.jsonl`
+record what happened.
+
+**Load.** A plugin still carried by the installation is imported as it is. An installed one is imported from its
+folder, and QAJitsu's own packages are linked into `~/.qajitsu/plugins/node_modules/` while the plugin's own copies
+are deleted, so every plugin runs against the installation's core, steps, guard and verifier. A missing plugin stops
+the command with `qj plugin add <id>`.
+
+**What a plugin package needs.** It depends on QAJitsu's own packages as `peerDependencies`, never as
+`dependencies`, so npm does not fetch a second copy. Each plugin pull request (REQ-GEN-11/AC11) moves its package to
+peer dependencies, removes it from `@qajitsu/cli`'s dependencies and loads it through the plugin loader.
+
 ## Core and plugins
 
 REQ-GEN-14/AC4. **Accepted on 2026-11-01** (ADR-0011).

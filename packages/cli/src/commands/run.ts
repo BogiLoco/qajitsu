@@ -85,6 +85,7 @@ import type { CommandExec } from "@qajitsu/adapter-env-compose";
 import { headlessFor, prepareLiveRun, type LiveOptions, type LiveRun } from "./live.js";
 import { RegressionRunSchema } from "./pack.js";
 import { runVersions } from "../versions.js";
+import { pluginVersions } from "./plugin.js";
 import { createProgressPrinter, liveScreenshots, teeEvents } from "./progress.js";
 import { checkRunReadiness, commentEnvReadiness, formatEnvReadiness } from "../env-readiness.js";
 import { publisherFor } from "./publish.js";
@@ -772,7 +773,11 @@ export async function runRun(
           await ws.update({
             data: {
               ...ws.record.data,
-              versions: await runVersions(project, { exec: ports.versionExec, playwright: ports.playwright }),
+              versions: {
+                ...(await runVersions(project, { exec: ports.versionExec, playwright: ports.playwright })),
+                // REQ-GEN-11/AC5: the plugins the run uses, with their versions and where they came from.
+                ...(await pluginVersions(project, ports)),
+              },
             },
           });
           const pending = await executeCases(session, plan, env, io, ports, results, {

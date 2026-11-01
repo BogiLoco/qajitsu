@@ -23,5 +23,26 @@
   },
   "devDependencies": {
     "@qajitsu/report": "workspace:*"
+  },
+  "qajitsu": {
+    "plugin": {
+      "types": [
+        "test-case source"
+      ],
+      "core_api": "^1.0.0",
+      "secrets": [
+        "client secret",
+        "API token"
+      ],
+      "hosts": [
+        "xray.cloud.getxray.app",
+        "api.zephyrscale.smartbear.com",
+        "config"
+      ],
+      "permissions": [
+        "network",
+        "filesystem"
+      ]
+    }
   }
 }

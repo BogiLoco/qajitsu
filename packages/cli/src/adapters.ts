@@ -32,6 +32,8 @@ import {
 import type { Masker } from "@qajitsu/steps";
 import type { LoadedProject } from "./project.js";
 import type { SetupPorts } from "@qajitsu/toolchain";
+import type { PluginCatalogue } from "./plugins/catalogue.js";
+import type { PluginLoader } from "./plugins/load.js";
 import type { PlaywrightInfo, VersionExec } from "./versions.js";
 import { resolveConfigPath } from "./project.js";
 
@@ -55,6 +57,10 @@ export interface RuntimePorts {
   readonly playwright?: () => PlaywrightInfo;
   /** Parts of `qj setup` replaced in tests: commands, host, prechecks, smoke tests (REQ-GEN-06). */
   readonly toolchain?: Partial<SetupPorts>;
+  /** The plugin loader (replaced in tests; REQ-GEN-11). */
+  readonly plugins?: PluginLoader;
+  /** The plugin catalogue (replaced in tests; REQ-GEN-11/AC3). */
+  readonly pluginCatalogue?: PluginCatalogue;
 }
 
 /** Adapters for one project. */

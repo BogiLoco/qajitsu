@@ -29,5 +29,25 @@
   "devDependencies": {
     "@qajitsu/adapter-evidence-local": "workspace:*",
     "@types/pngjs": "^6.0.5"
+  },
+  "qajitsu": {
+    "plugin": {
+      "types": [
+        "runner",
+        "test data"
+      ],
+      "core_api": "^1.0.0",
+      "secrets": [
+        "account credentials"
+      ],
+      "hosts": [
+        "config"
+      ],
+      "permissions": [
+        "network",
+        "exec",
+        "filesystem"
+      ]
+    }
   }
 }

@@ -29,7 +29,8 @@
     "qajitsu": "node packages/cli/dist/bin.js",
     "changeset": "changeset",
     "req:list": "node scripts/requirements.mjs list",
-    "demo": "pnpm build && node scripts/demo.mjs"
+    "demo": "pnpm build && node scripts/demo.mjs",
+    "plugins:catalogue": "node scripts/plugin-catalogue.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.3",

@@ -20,5 +20,25 @@
   "dependencies": {
     "@qajitsu/core": "workspace:*",
     "zod": "catalog:"
+  },
+  "qajitsu": {
+    "plugin": {
+      "types": [
+        "publisher",
+        "ticket workflow",
+        "bug tracker"
+      ],
+      "core_api": "^1.0.0",
+      "secrets": [
+        "API token"
+      ],
+      "hosts": [
+        "*.atlassian.net",
+        "config"
+      ],
+      "permissions": [
+        "network"
+      ]
+    }
   }
 }

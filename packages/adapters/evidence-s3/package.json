@@ -19,5 +19,23 @@
   },
   "dependencies": {
     "@qajitsu/core": "workspace:*"
+  },
+  "qajitsu": {
+    "plugin": {
+      "types": [
+        "evidence archive"
+      ],
+      "core_api": "^1.0.0",
+      "secrets": [
+        "access key id",
+        "secret access key"
+      ],
+      "hosts": [
+        "config"
+      ],
+      "permissions": [
+        "network"
+      ]
+    }
   }
 }

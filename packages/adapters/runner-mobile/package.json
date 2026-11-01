@@ -22,5 +22,27 @@
     "@qajitsu/core": "workspace:*",
     "@qajitsu/steps": "workspace:*",
     "webdriverio": "^9.32.0"
+  },
+  "qajitsu": {
+    "plugin": {
+      "types": [
+        "runner",
+        "device provider"
+      ],
+      "core_api": "^1.0.0",
+      "secrets": [
+        "account credentials",
+        "device farm access key"
+      ],
+      "hosts": [
+        "localhost",
+        "config"
+      ],
+      "permissions": [
+        "network",
+        "exec",
+        "filesystem"
+      ]
+    }
   }
 }

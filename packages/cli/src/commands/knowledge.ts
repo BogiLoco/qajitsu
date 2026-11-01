@@ -22,6 +22,11 @@ import { createCliLogger } from "../logger.js";
 import { loadProject, type LoadedProject } from "../project.js";
 import { registerConfiguredSecrets } from "../session.js";
 import type { CommandIO } from "./fetch.js";
+import type * as ChromaPlugin from "@qajitsu/adapter-knowledge-chroma";
+import type * as ConfluencePlugin from "@qajitsu/adapter-knowledge-confluence";
+import type * as JiraPlugin from "@qajitsu/adapter-ticket-jira";
+import type { PluginLoader } from "../plugins/load.js";
+import { pluginLoader } from "./plugin.js";
 
 /** Replaceable parts of the knowledge commands (tests use a fake embedder). */
 export interface KnowledgePorts {
@@ -82,14 +87,20 @@ async function openKnowledgeContext(
         "knowledge.store is chroma: set knowledge.chroma.url (and token) as secret:// references.",
         {},
       );
-    const { createChromaStore } = await import("@qajitsu/adapter-knowledge-chroma");
+    const { createChromaStore } = await pluginLoader(ports).load<typeof ChromaPlugin>("knowledge-chroma");
     store = await createChromaStore({
       url: await resolveSecret(config.chroma.url),
       token: config.chroma.token === undefined ? undefined : await resolveSecret(config.chroma.token),
       collection: `qajitsu-${resolved.slug}`,
       fetch: ports.fetch,
     });
-  } else store = await (await import("@qajitsu/adapter-knowledge-lancedb")).createLanceDbStore(dir);
+  } else
+    // REQ-GEN-11/AC2: a missing store plugin stops with the command that installs it.
+    store = await (
+      await pluginLoader(ports).load<{ createLanceDbStore(dir: string): Promise<VectorStore> }>(
+        "knowledge-lancedb",
+      )
+    ).createLanceDbStore(dir);
   const consentFile = join(dir, "cloud-consent.json");
   const logger = createCliLogger({
     file: join(resolved.paths.logs, "knowledge.log"),
@@ -113,7 +124,7 @@ async function openKnowledgeContext(
     config,
     now: ports.now,
     maskSecrets: (text) => masker.maskText(text),
-    documentSource: (source) => onlineSource(source, project, deps),
+    documentSource: (source) => onlineSource(source, project, deps, pluginLoader(ports)),
     embedder: () =>
       ports.embedder
         ? ports.embedder(config.embedding, project)
@@ -581,6 +592,7 @@ async function onlineSource(
   source: KnowledgeSource,
   project: LoadedProject,
   deps: AdapterDeps,
+  plugins: PluginLoader,
 ): Promise<DocumentSource> {
   const locator = parseOnlineLocator(source.path);
   const jira = project.config.jira;
@@ -602,7 +614,7 @@ async function onlineSource(
         "Set knowledge.confluence.base_url and token (secret://), or use Jira Cloud whose site hosts Confluence.",
         {},
       );
-    const { createConfluenceSource } = await import("@qajitsu/adapter-knowledge-confluence");
+    const { createConfluenceSource } = await plugins.load<typeof ConfluencePlugin>("knowledge-confluence");
     return filtered(
       createConfluenceSource(
         { baseUrl, flavor, email: c.email ?? jira.email, token, space: locator.space, page: locator.page },
@@ -611,7 +623,7 @@ async function onlineSource(
     );
   }
   if (locator?.kind === "jira") {
-    const { createFileBugSource, createJiraBugSource } = await import("@qajitsu/adapter-ticket-jira");
+    const { createFileBugSource, createJiraBugSource } = await plugins.load<typeof JiraPlugin>("ticket-jira");
     if (jira.type === "file") {
       if (jira.tickets_dir === undefined)
         throw new ConfigError("KNOWLEDGE_JIRA_NOT_CONFIGURED", "jira.tickets_dir is not set.", {});

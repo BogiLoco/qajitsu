@@ -172,7 +172,7 @@ on the machine stays the other way.
 
 ### REQ-GEN-11 · Integrations as plugins, installed on demand
 
-- Status: accepted
+- Status: in-progress
 - Priority: should
 - Stage: 9
 - Related: REQ-GEN-02, REQ-GEN-03, REQ-GEN-06, REQ-GEN-14, REQ-NFR-05, ADR-0011, INV-12
@@ -183,16 +183,16 @@ depends on all twenty-one adapter packages, so everyone installs every integrati
 **Acceptance criteria**
 
 - [ ] AC1: The core installation carries the core only: ticket files, local repositories, secrets from the environment, local evidence and the steps library. Every integration is a plugin package published from this repository and can be added or removed per installation: ticket systems and publishers (Jira Cloud and Data Center, Xray, Zephyr Scale and Squad, TestRail), code hosts (GitHub, GitLab), runners (API, web, mobile), knowledge stores and sources, secret managers, environment providers and tools. `qj init` installs the official plugins the chosen setup needs, so the usual Jira and GitHub flow needs no extra step.
-- [ ] AC2: `qj doctor` reads the project configuration and names every plugin it needs and lacks (for example `test_cases: { type: xray }` without the Xray plugin) with the command that installs it; a command that needs a missing plugin stops with the same message instead of a module error.
-- [ ] AC3: `qj setup` and `qj doctor --fix` install the plugins the project needs into the QAJitsu home at versions pinned for the QAJitsu release, checked against their published checksums, without install scripts; `qj plugin list|add|remove` shows and changes them by hand.
+- [x] AC2: `qj doctor` reads the project configuration and names every plugin it needs and lacks (for example `test_cases: { type: xray }` without the Xray plugin) with the command that installs it; a command that needs a missing plugin stops with the same message instead of a module error.
+- [x] AC3: `qj setup` and `qj doctor --fix` install the plugins the project needs into the QAJitsu home at versions pinned for the QAJitsu release, checked against their published checksums, without install scripts; `qj plugin list|add|remove` shows and changes them by hand.
 - [ ] AC4: A plugin works only through the adapter interfaces of `@qajitsu/core` (INV-12): it cannot replace the guard, the verifier, status computation, masking or publish gates, and it gets secrets only through the secret provider.
-- [ ] AC5: The plugins and versions a run used are recorded with the run (REQ-OBS-10).
+- [x] AC5: The plugins and versions a run used are recorded with the run (REQ-OBS-10).
 - [ ] AC6: Offline installations take plugins from the offline bundle of `qj setup --download` (REQ-GEN-06).
-- [ ] AC7: Each plugin has a manifest: name, version, plugin types (those of the inventory, `docs/architecture/plugins.md`: ticket source, ticket workflow, bug tracker, test-case source, publisher, code host, runner, environment provider, device provider, secret provider, evidence store, evidence archive, knowledge store, document source, message capture, test data, mock server, tool, chain, wallet), the range of the core's adapter API it works with, required secrets, network hosts and permissions.
-- [ ] AC8: A plugin whose core API range does not match is refused with a clear message.
+- [x] AC7: Each plugin has a manifest: name, version, plugin types (those of the inventory, `docs/architecture/plugins.md`: ticket source, ticket workflow, bug tracker, test-case source, publisher, code host, runner, environment provider, device provider, secret provider, evidence store, evidence archive, knowledge store, document source, message capture, test data, mock server, tool, chain, wallet), the range of the core's adapter API it works with, required secrets, network hosts and permissions.
+- [x] AC8: A plugin whose core API range does not match is refused with a clear message.
 - [ ] AC9: A plugin reaches the network only to the hosts in its manifest that are also on the environment allowlist, and never writes results, evidence or the frozen plan; the guard enforces it like for agents.
 
-- [ ] AC10: Removing a plugin a project still uses is refused with the projects and settings that use it; removing one no project uses deletes its files and records it.
+- [x] AC10: Removing a plugin a project still uses is refused with the projects and settings that use it; removing one no project uses deletes its files and records it.
 - [ ] AC11: Every plugin is moved out of the core, or added, in its own pull request with its contract tests run against the installed plugin, its adversarial suite where it touches statuses, evidence or secrets, and its inventory entry (REQ-GEN-14) updated.
 
 ### REQ-GEN-12 · Plugin tiers, dev kit and registry
