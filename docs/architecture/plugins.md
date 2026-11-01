@@ -1,7 +1,7 @@
 # Plugin inventory
 
-Requirement: REQ-GEN-14. Decision record: ADR-0011 (proposed). Status (2026-11-01): **proposed, awaiting review**.
-The split between core and plugins and the migration order below (AC4) must be accepted before REQ-GEN-11 is built.
+Requirement: REQ-GEN-14. Decision record: ADR-0011. Status (2026-11-01): **accepted** by the project owner: the
+split between core and plugins and the migration order below (AC4) are the basis for REQ-GEN-11.
 
 This page lists every integration QAJitsu has or plans: every package under `packages/adapters/`, and every
 integration a requirement names. It exists so the plugin types, the interfaces and the packaging of REQ-GEN-11 fit all
@@ -959,14 +959,14 @@ plugin. A gap is changed in an ADR before the plugin that needs it is implemente
 | chain, wallet        | none (`new ChainAdapter`, `new WalletDriver`) | chain families, browser wallets                     | Defined by REQ-CHAIN-01 and REQ-CHAIN-06. **ADR before any chain work.**                                                                                                                                                                                                                                     |
 | telemetry, pipeline  | none needed                                   | OTLP backends, CI systems                           | Not plugins: OTLP covers the backends; CI integrations run QAJitsu from outside.                                                                                                                                                                                                                             |
 
-Every plugin type also needs a manifest entry (REQ-GEN-11/AC7). REQ-GEN-11/AC7 lists seven types; this inventory
-adds ticket workflow, bug tracker, code host, device provider, evidence store and archive, knowledge store, document
-source, embedder, message capture, test data, mock server, chain and wallet. That list in REQ-GEN-11 is to be updated
-when this inventory is accepted.
+Every plugin declares its types in its manifest (REQ-GEN-11/AC7), which lists the plugin types of this table.
+Model providers, embedders, telemetry and pipelines are not plugin types: the first two stay in the core, the last two
+are not loaded by QAJitsu. A new plugin type is added to REQ-GEN-11/AC7, `PLUGIN_TYPES` in the check and this table
+in the same change, with its ADR.
 
 ## Core and plugins
 
-REQ-GEN-14/AC4. **Proposed; to be reviewed and accepted before REQ-GEN-11 is implemented.**
+REQ-GEN-14/AC4. **Accepted on 2026-11-01** (ADR-0011).
 
 **The core keeps** what every installation needs to go from a ticket to a published result without any plugin, plus
 what decides results:
@@ -983,8 +983,8 @@ what decides results:
 **Everything else becomes a plugin**, still developed and released from this repository. `qj init` installs the
 official plugins the chosen setup needs, so the usual Jira and GitHub flow needs no extra step.
 
-ADR-0011 (proposed) still keeps Jira, GitHub, GitLab and the API and web runners in the core. REQ-GEN-11/AC1 moves
-them out, and the catalogue wins. ADR-0011 is to be amended to the list above when this inventory is accepted.
+Jira, GitHub, GitLab and the API and web runners are plugins too, like REQ-GEN-11/AC1 says; ADR-0011 records it.
+Every plugin is easy to add and to install on demand: it implements the core interfaces and nothing else.
 
 **Migration order.** Each wave starts only after the previous one runs from installed plugins in CI.
 
@@ -998,6 +998,10 @@ them out, and the catalogue wins. ADR-0011 is to be amended to the list above wh
    plugin (ADR-0011).
 4. **The default flow** (`ticket-jira`, `publish-jira`, `codehost-github`, `codehost-gitlab`). These go last, once
    `qj init` installs plugins reliably, so the most common setup never regresses.
+
+**One plugin per pull request** (REQ-GEN-11/AC11). Each move out of the core, and each new plugin, is its own pull
+request with its contract tests against the installed plugin, its adversarial suite where it touches statuses,
+evidence or secrets, and its entry here updated. A wave is a sequence of such pull requests, not one large change.
 
 New integrations (Bitbucket, Azure DevOps, Maestro and the rest) start as plugins once their wave's mechanism exists.
 Until then they are built as packages under `packages/adapters/`, and the check above keeps them listed here.

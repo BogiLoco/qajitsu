@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  PLUGIN_TYPES,
   checkInventory,
   loadInventory,
   parseInventory,
@@ -205,5 +206,13 @@ describe("plugin inventory check (REQ-GEN-14/AC5)", () => {
   it("REQ-GEN-14/AC5: the repository inventory is complete", () => {
     const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
     expect(checkInventory(loadInventory(root))).toEqual([]);
+  });
+
+  it("REQ-GEN-14/AC3: REQ-GEN-11/AC7 lists every plugin type of the inventory", () => {
+    const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+    const gen11 = loadInventory(root).requirements.find((r) => r.id === "REQ-GEN-11");
+    const ac7 = gen11?.text.split("\n").find((l) => l.includes("AC7:")) ?? "";
+    const notPlugins = ["model provider", "embedder", "telemetry", "pipeline"];
+    expect(PLUGIN_TYPES.filter((t) => !notPlugins.includes(t) && !ac7.includes(t))).toEqual([]);
   });
 });

@@ -172,13 +172,13 @@ on the machine stays the other way.
 
 ### REQ-GEN-11 · Integrations as plugins, installed on demand
 
-- Status: proposed
+- Status: accepted
 - Priority: should
 - Stage: 9
-- Related: REQ-GEN-02, REQ-GEN-03, REQ-GEN-06, REQ-NFR-05, ADR-0011, INV-12
+- Related: REQ-GEN-02, REQ-GEN-03, REQ-GEN-06, REQ-GEN-14, REQ-NFR-05, ADR-0011, INV-12
 
 Integrations stay in this repository, but an installation carries only what a project uses. Today `@qajitsu/cli`
-depends on all twenty adapter packages, so everyone installs every integration (LanceDB alone is about 230 MB).
+depends on all twenty-one adapter packages, so everyone installs every integration (LanceDB alone is about 250 MB).
 
 **Acceptance criteria**
 
@@ -188,11 +188,12 @@ depends on all twenty adapter packages, so everyone installs every integration (
 - [ ] AC4: A plugin works only through the adapter interfaces of `@qajitsu/core` (INV-12): it cannot replace the guard, the verifier, status computation, masking or publish gates, and it gets secrets only through the secret provider.
 - [ ] AC5: The plugins and versions a run used are recorded with the run (REQ-OBS-10).
 - [ ] AC6: Offline installations take plugins from the offline bundle of `qj setup --download` (REQ-GEN-06).
-- [ ] AC7: Each plugin has a manifest: name, version, plugin type (ticket source, test-case source, publisher, runner, environment provider, secret provider, tool), the range of the core's adapter API it works with, required secrets, network hosts and permissions.
+- [ ] AC7: Each plugin has a manifest: name, version, plugin types (those of the inventory, `docs/architecture/plugins.md`: ticket source, ticket workflow, bug tracker, test-case source, publisher, code host, runner, environment provider, device provider, secret provider, evidence store, evidence archive, knowledge store, document source, message capture, test data, mock server, tool, chain, wallet), the range of the core's adapter API it works with, required secrets, network hosts and permissions.
 - [ ] AC8: A plugin whose core API range does not match is refused with a clear message.
 - [ ] AC9: A plugin reaches the network only to the hosts in its manifest that are also on the environment allowlist, and never writes results, evidence or the frozen plan; the guard enforces it like for agents.
 
 - [ ] AC10: Removing a plugin a project still uses is refused with the projects and settings that use it; removing one no project uses deletes its files and records it.
+- [ ] AC11: Every plugin is moved out of the core, or added, in its own pull request with its contract tests run against the installed plugin, its adversarial suite where it touches statuses, evidence or secrets, and its inventory entry (REQ-GEN-14) updated.
 
 ### REQ-GEN-12 · Plugin tiers, dev kit and registry
 
@@ -236,7 +237,7 @@ Installing every tool "just in case" costs gigabytes and time. QAJitsu looks at 
 
 ### REQ-GEN-14 · Plugin inventory before the plugin system
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: later
 - Related: REQ-GEN-02, REQ-GEN-11, REQ-GEN-12, REQ-GEN-13, ADR-0011
@@ -250,5 +251,5 @@ none needs a redesign later.
 - [x] AC1: `docs/architecture/plugins.md` lists every existing integration package (today under `packages/adapters/`) and every integration named in the requirements, each with: plugin type, interface in `@qajitsu/core`, status (exists, planned, idea), the requirements that need it, external dependencies and their install size, network hosts, secrets and the proposed tier (REQ-GEN-12).
 - [x] AC2: The inventory covers at least: ticket systems and test management (Jira Cloud and Data Center, Xray, Zephyr Scale, Zephyr Squad, TestRail, and candidates such as Azure DevOps, Linear, qTest), code hosts (GitHub, GitLab, Bitbucket, Azure Repos), runners (API, web, mobile with Appium and Maestro, desktop, performance, security, contract, chain plugins and wallets), environment providers (compose, remote, preview platforms, device farms), knowledge stores and sources, secret managers, message capture, evidence storage (local, WORM, REQ-VER-19) and publishers.
 - [x] AC3: For each plugin type the inventory names the interface it implements and the gaps: an interface that does not fit a listed plugin is changed in an ADR before implementation starts.
-- [ ] AC4: The inventory decides what the core keeps and what becomes a plugin, and in which order integrations move out into plugins; it is reviewed and accepted before REQ-GEN-11 is implemented.
+- [x] AC4: The inventory decides what the core keeps and what becomes a plugin, and in which order integrations move out into plugins; it is reviewed and accepted before REQ-GEN-11 is implemented.
 - [x] AC5: A check keeps it current: an integration package or a requirement naming an integration that is missing from the inventory fails `pnpm req:check`.
