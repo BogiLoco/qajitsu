@@ -121,3 +121,9 @@ Status: `todo` (no test yet) · `covered` (test exists, file name in brackets). 
 - done · The plan writes another run's marker into a record → the attempt's own marker always wins (`tests/adversarial/test-data-isolation.test.ts`).
 - done · Data that cannot be created, or a project without `test_data` → BLOCKED before any step; the executor is never called.
 - done · Test data sent to an origin outside the allowlist → refused before the request (`packages/cli/src/test-data.test.ts`).
+
+## Environment readiness for the ticket (REQ-ENV-13)
+
+- done · An unreachable, malformed or look-alike version (a prefix, another path, a number) → not ready (`tests/adversarial/env-readiness.test.ts`).
+- done · A check answering a truthy string, a redirect or a failing script → not ready.
+- done · The configuration tries to override → refused; only `qj run --env-not-confirmed "<reason>"` by a person runs anyway, and its results are never verified for a release (`packages/cli/src/commands/env-readiness.test.ts`).

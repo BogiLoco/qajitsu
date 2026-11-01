@@ -30,6 +30,7 @@ import {
   type ApprovalStep,
   type CertificateSummary,
 } from "@qajitsu/core";
+import { readinessSummary, type ReadinessReport } from "@qajitsu/core";
 import {
   buildTransitionGraph,
   renderGraphSvg,
@@ -72,6 +73,13 @@ export interface RunEnvironment {
   readonly deployedSha?: string | undefined;
   /** Stubbed services (REQ-ENV-05/AC2). */
   readonly stubs?: readonly string[] | undefined;
+  /** The environment readiness of the run in one line, and its checks (REQ-ENV-13/AC3). */
+  readonly readiness?: string | undefined;
+  readonly readinessChecks?: readonly {
+    readonly name: string;
+    readonly ok: boolean;
+    readonly observed: string;
+  }[];
 }
 
 /**
@@ -173,9 +181,16 @@ export async function computeVerdict(
     .optional()
     .catch(undefined)
     .parse(ws.record.data["versions"]);
-  const environment = (ws.record.data["environment"] as RunEnvironment | undefined) ?? {
-    name: "–",
-    baseUrl: "–",
+  const readinessEnv = ws.record.data["readiness_env"] as ReadinessReport | undefined;
+  const environment: RunEnvironment = {
+    ...((ws.record.data["environment"] as RunEnvironment | undefined) ?? { name: "–", baseUrl: "–" }),
+    // REQ-ENV-13/AC3+AC5: the readiness report goes into every report of the run.
+    ...(readinessEnv
+      ? {
+          readiness: readinessSummary(readinessEnv),
+          readinessChecks: readinessEnv.checks.map((c) => ({ name: c.name, ok: c.ok, observed: c.observed })),
+        }
+      : {}),
   };
   const results = new Map<string, CaseResultFile>();
   const malformed: string[] = [];

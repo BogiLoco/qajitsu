@@ -207,3 +207,24 @@ Commit `ae9a935` plus the fixes listed below; models: `local/gemma4:e2b` (planne
 
 The previous pass (2026-10-17/18, findings F0–F27) is summarised in the pull requests of `feat/exploretests` and
 `fix/anthropic-trial`.
+
+## Pass of 2026-10-30/31: API bodies, waits, test data, environment readiness
+
+`qj` on the lab project with gemma4:e2b through Ollama, and the demo-shop self-test (`pnpm test:e2e`) in the
+production sandbox: DEMO-16 (multipart upload, file download, processing that becomes ready: BUG-21, BUG-22), DEMO-17
+(products created per case: BUG-23) and DEMO-7 (a CSV download in the browser).
+
+| ID  | Where                      | Defect                                                                                                                                                       | Fix                                                                                                                   |
+| --- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| S1  | sandbox (`qj run`)         | the child got only status, fields, texts and elements for `plan.expect()`: a download, state, manifest or message expectation errored (BLOCKED) in real runs | the child gets every planned field; DEMO-7 now runs in the self-test                                                  |
+| S2  | `ui.upload`, `plan.expect` | a key every object has (`toString`) passed the static check and the child's lookup                                                                           | only the plan's own keys count                                                                                        |
+| W1  | waits                      | a later round could leave out the check that kept failing and count as met (adversarial test before the commit)                                              | a round is met only when it checked every planned field                                                               |
+| C1  | `qj gc`                    | the audit archive's retention compared the file time on disk with the run's clock; the test failed from the day the dates met                                | counted from the journal's last entry                                                                                 |
+| G1  | `qj fetch`                 | a mirror partly removed from the cache (a cleaner of `/tmp`) failed with `GIT_FAILED`                                                                        | cloned again; a healthy mirror is kept when the origin is unreachable                                                 |
+| D1  | `qj plan` (gemma4:e2b)     | the planner read products by `{id}` without creating them, so a case would test a record that does not exist                                                 | flagged: "reads a record the case never creates"; sent back once, then shown to the reviewer, and approval refuses it |
+| D2  | `qj run` (gemma4:e2b)      | the author made up a product id (`some_product_id`) instead of `data.get("shelf")`: a false FAILED, which triage called a product bug                        | a spec must read every record of its test data; otherwise it goes back to the author                                  |
+| D3  | `qj plan` (gemma4:e2b)     | records put under `data` were refused with "Use aliases like user:standard", which did not help the model                                                    | the message points to `test_data`                                                                                     |
+
+Still a limit of the 2B model: it ignores the kinds of test data and a reviewer's instruction about them in about half
+of the runs; code stops such plans at approval, so nothing wrong runs. With the fixture plans every case behaves as the
+seeded bugs say.

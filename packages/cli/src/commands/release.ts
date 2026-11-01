@@ -91,7 +91,12 @@ async function ticketRow(
           .filter((c) => c.status !== "PASSED")
           .map((c) => ({ caseId: c.caseId, title: titles.get(c.caseId) ?? "", status: c.status })),
         gatesOk: v.ok,
-        ...(v.ok ? {} : { problem: `publish gates failed: ${v.failed.map((g) => g.gate).join(", ")}` }),
+        ...(v.ok
+          ? // REQ-ENV-13/AC5: a run on an environment nobody confirmed is never verified for a release.
+            v.environment.readiness?.startsWith("environment not confirmed")
+            ? { problem: v.environment.readiness }
+            : {}
+          : { problem: `publish gates failed: ${v.failed.map((g) => g.gate).join(", ")}` }),
       };
     } catch (error) {
       return { ...base, runId: entry.runId, gatesOk: false, problem: masker.maskText(message(error)) };

@@ -645,3 +645,35 @@ describe("numbers written as text (REQ-PLAN-12)", () => {
     expect(input.cases[0]?.steps[0]?.expect.fields).toEqual({ total: "10.50" });
   });
 });
+
+describe("records a case reads but never creates (REQ-EXEC-53/AC1, dogfood 2026-10-31)", () => {
+  const reads = [
+    {
+      action: "GET /products/{id}",
+      expect: { description: "Low stock", status: 200, fields: { low_stock: true } },
+    },
+  ];
+
+  it("REQ-EXEC-53/AC1: with test data kinds, a read of an unknown record is flagged; created by test_data or a POST it is not", () => {
+    expect(checkPlanExpectations(plan(reads), { testDataKinds: ["product"] })).toEqual([
+      {
+        caseId: "TC-01",
+        stepId: "S1",
+        kind: "record",
+        reason:
+          "GET /products/{id} reads a record the case never creates: list it in the case's test_data (kinds: product) or add a step that creates it first",
+      },
+    ]);
+    const withData = plan(reads);
+    const c = withData.cases[0];
+    if (c) Object.assign(c, { test_data: [{ name: "lamp", kind: "product", with: { stock: 3 } }] });
+    expect(checkPlanExpectations(withData, { testDataKinds: ["product"] })).toEqual([]);
+    const posted = plan([
+      { action: "POST /admin/products", expect: { description: "Created", status: 201 } },
+      ...reads,
+    ]);
+    expect(checkPlanExpectations(posted, { testDataKinds: ["product"] })).toEqual([]);
+    // Without test data the project cannot create records, so nothing is asked of the planner.
+    expect(checkPlanExpectations(plan(reads))).toEqual([]);
+  });
+});

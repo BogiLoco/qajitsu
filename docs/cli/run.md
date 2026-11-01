@@ -4,7 +4,7 @@ Roadmap stage 3. Executes the **approved** plan of a run against a provided envi
 evidence and reports. Statuses are computed by code from runner output only (invariant 1).
 
 ```text
-qajitsu run <TICKET> [--run <id>] [--env <profile|url>]
+qajitsu run <TICKET> [--run <id>] [--env <profile|url>] [--keep] [--env-not-confirmed "<reason>"]
 ```
 
 ## What happens
@@ -17,6 +17,14 @@ qajitsu run <TICKET> [--run <id>] [--env <profile|url>]
 3. Health check: an unhealthy environment makes every case **BLOCKED** (REQ-ENV-01/AC1).
 4. Deployed version: the profile's `version_path` is compared with the analysed SHAs. Mismatch: a terminal asks;
    CI warns or fails per `environments.on_version_mismatch` (REQ-ENV-02). The deployed SHA goes into `run.json` and the report.
+   4a. Environment readiness for the ticket (REQ-ENV-13), when `environments.readiness` is configured: every repository
+   of the change must be deployed (its deployed commit, read from a JSON endpoint or a script, is the change or
+   contains it), and every configured check must hold (health, migrations, feature flags for the ticket's labels,
+   account logins, scripts). The report goes to `run.json` (`readiness_env`), `report.html`, the certificate and, per
+   `readiness.comment`, a ticket comment. Not ready: every case is **BLOCKED** with the failed checks and their
+   observed values; with `readiness.wait` it is checked again until the deployment arrives or the time is up.
+   `--env-not-confirmed "<reason>"` runs anyway: the reason and the person are recorded, every report says
+   "environment not confirmed" and `qj release` never counts the run as verified.
 5. Specs: the **author** agent writes `specs/TC-xx.spec.ts` for cases without one (REQ-EXEC-01). Every spec, also
    hand-written ones, passes static checks first (REQ-EXEC-03): only `import type` from `@qajitsu/steps`, no
    `process`/`fetch`/`eval`/dynamic import, one `step()` per plan step, at least one `verify()` per step, every
@@ -26,6 +34,10 @@ qajitsu run <TICKET> [--run <id>] [--env <profile|url>]
    and installed packages, no file writes, no child processes, no secrets in the environment). The parent logs in
    every account alias for each attempt (REQ-CFG-07) and is the only writer of `results/` and `evidence/`
    (invariant 2). One retry by default (`environments.retries`); success only on a retry is FLAKY (REQ-EXEC-08).
+   Before each attempt the case's `test_data` is created through the application's API or the data hook, marked
+   `qj-<ticket>-<run>-<case>-a<attempt>`, and removed after it (`--keep` leaves it); data that cannot be created
+   makes the attempt BLOCKED before any step (REQ-EXEC-53). A step with a planned `wait` repeats its actions and
+   checks until they hold or the time is up (REQ-EXEC-46).
 7. Verdict: `computeStatus` per case, evidence manifest re-hashed, publish gates (every approved case has one status,
    plan unchanged, PASSED is proven, FAILED is explained, manifest intact, no secrets in outgoing artifacts).
 8. Reports in `report/`: `matrix.md`, `matrix.csv`, `matrix.xlsx`, `report.html` (self-contained), `gates.json`.
@@ -46,8 +58,25 @@ export async function run({ step, verify, plan, api }: CaseContext): Promise<voi
 }
 ```
 
+Bodies other than JSON (REQ-EXEC-45) are made by the client; files are keys of the case's `files` in the plan:
+
+```ts
+const user = api.as("user:standard");
+await user.post("/documents", user.multipart({ fields: { title: "Invoice 7" }, files: { file: "invoice" } }));
+await user.post("/login", user.form({ user: "anna" }));
+await user.put("/documents/1/raw", user.binary("invoice"));
+await user.post("/notes", user.text("id,name\n1,Lamp", "text/csv"));
+// A response that is a file is checked like a download in the same step.
+const pdf = await user.get(`/documents/${id}/file`);
+verify("S2", "download.size", undefined, plan.expect("TC-01.S2.download.size"));
+// Records of the plan's test_data, created for this attempt.
+const lamp = data.get("lamp");
+```
+
 Each API call becomes `evidence/<case>/attempt-<n>/<step>-<nn>.json` (method, URL, masked headers and bodies,
 status, duration, assertions with expected and actual, a masked cURL) listed in `evidence/manifest.json` with SHA-256.
+A file response is kept as its own evidence file (`<step>-download-<name>`) and the call record points to it with its
+SHA-256; a waiting step adds `<step>-wait.json` with every round; test data adds `test-data.json` (masked).
 
 ## Exit codes
 

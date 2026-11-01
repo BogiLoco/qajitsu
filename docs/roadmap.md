@@ -319,7 +319,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-ENV-08](requirements/environment.md#req-env-08--message-capture-email-sms-and-webhooks) Message capture: email, SMS and webhooks (should, implemented, AC 5/5)
 - [REQ-ENV-09](requirements/environment.md#req-env-09--account-pools) Account pools (should, implemented, AC 5/5)
 - [REQ-ENV-12](requirements/environment.md#req-env-12--desktop-test-machines) Desktop test machines (could, proposed, AC 0/4)
-- [REQ-ENV-13](requirements/environment.md#req-env-13--environment-readiness-for-the-ticket) Environment readiness for the ticket (must, accepted, AC 0/6)
+- [REQ-ENV-13](requirements/environment.md#req-env-13--environment-readiness-for-the-ticket) Environment readiness for the ticket (must, implemented, AC 6/6)
 - [REQ-EXEC-11](requirements/execution.md#req-exec-11--human-in-the-loop-steps) Human-in-the-loop steps (should, implemented, AC 7/7)
 - [REQ-EXEC-12](requirements/execution.md#req-exec-12--visual-regression) Visual regression (could, implemented, AC 4/4)
 - [REQ-EXEC-13](requirements/execution.md#req-exec-13--browser-and-viewport-matrix) Browser and viewport matrix (could, implemented, AC 3/3)

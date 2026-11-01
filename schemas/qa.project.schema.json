@@ -1631,6 +1631,202 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 16
+        },
+        "readiness": {
+          "type": "object",
+          "properties": {
+            "versions": {
+              "default": {},
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_-]*$"
+              },
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "url": {
+                        "type": "string",
+                        "pattern": "^(\\/|https?:\\/\\/)\\S*$"
+                      },
+                      "sha": {
+                        "default": "sha",
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "as": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$"
+                      }
+                    },
+                    "required": [
+                      "url"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "command": {
+                        "type": "string",
+                        "pattern": "^hooks\\/[\\w.-]+(\\/[\\w.-]+)*$"
+                      }
+                    },
+                    "required": [
+                      "command"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "checks": {
+              "default": [],
+              "maxItems": 50,
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "url": {
+                        "type": "string",
+                        "pattern": "^(\\/|https?:\\/\\/)\\S*$"
+                      },
+                      "status": {
+                        "default": 200,
+                        "type": "integer",
+                        "minimum": 100,
+                        "maximum": 599
+                      },
+                      "json": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "equals": {},
+                      "as": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$"
+                      },
+                      "labels": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        }
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "url"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "accounts": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9_-]*:[a-z0-9_.-]+$"
+                        }
+                      },
+                      "labels": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        }
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "accounts"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      "command": {
+                        "type": "string",
+                        "pattern": "^hooks\\/[\\w.-]+(\\/[\\w.-]+)*$"
+                      },
+                      "labels": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 100
+                        }
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "command"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "wait": {
+              "type": "object",
+              "properties": {
+                "timeout_s": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 86400
+                },
+                "interval_s": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 3600
+                }
+              },
+              "required": [
+                "timeout_s",
+                "interval_s"
+              ],
+              "additionalProperties": false
+            },
+            "comment": {
+              "default": "not_ready",
+              "type": "string",
+              "enum": [
+                "never",
+                "not_ready",
+                "always"
+              ]
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

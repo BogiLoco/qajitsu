@@ -258,6 +258,8 @@ export function checkSpecSource(
   const verifiedSteps = new Set<string>();
   const verifiedFields = new Set<string>();
   const downloadSteps = new Set<string>();
+  /** Test data records the spec reads with data.get() (REQ-EXEC-53/AC1). */
+  const dataRead = new Set<string>();
   const add = (check: SpecProblem["check"], message: string, node?: ts.Node): void => {
     problems.push({ check, message, ...(node ? { line: lineOf(sf, node) } : {}) });
   };
@@ -423,6 +425,7 @@ export function checkSpecSource(
             `data.get(): '${first.text}' is not a test_data record of ${caseId} in the plan`,
             first,
           );
+        else dataRead.add(first.text);
       }
       // REQ-EXEC-67/AC5: a secret is named by an account of the case and a field, never passed as a value.
       if (onUi && name === "fillSecret") {
@@ -533,6 +536,14 @@ export function checkSpecSource(
   };
   visit(sf);
 
+  // REQ-EXEC-53/AC1: a record created for the case is useless unless the spec reads it; a made-up id instead of
+  // data.get() would test a record that does not exist (dogfood 2026-10-31: a false FAILED).
+  for (const d of planCase.test_data ?? [])
+    if (!dataRead.has(d.name))
+      add(
+        "coverage",
+        `the plan creates test data ${d.name} for ${caseId} but the spec never reads it: use const ${d.name.replace(/-(\w)/g, (_, c: string) => c.toUpperCase())} = data.get("${d.name}") and its id, never a made-up one`,
+      );
   for (const step of planCase.steps) {
     const count = stepCalls.get(step.id) ?? 0;
     if (count === 0) add("coverage", `plan step ${step.id} has no step("${step.id}") call`);
