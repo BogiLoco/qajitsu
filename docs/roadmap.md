@@ -401,7 +401,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-GEN-08](requirements/generic.md#req-gen-08--consistent-doctor-output-and-exit-codes) Consistent `doctor` output and exit codes (should, implemented, AC 3/3)
 - [REQ-GEN-12](requirements/generic.md#req-gen-12--plugin-tiers-dev-kit-and-registry) Plugin tiers, dev kit and registry (could, proposed, AC 0/9)
 - [REQ-GEN-13](requirements/generic.md#req-gen-13--doctor-recommends-what-to-install-from-the-application) Doctor recommends what to install from the application (should, accepted, AC 0/6)
-- [REQ-GEN-14](requirements/generic.md#req-gen-14--plugin-inventory-before-the-plugin-system) Plugin inventory before the plugin system (must, accepted, AC 0/5)
+- [REQ-GEN-14](requirements/generic.md#req-gen-14--plugin-inventory-before-the-plugin-system) Plugin inventory before the plugin system (must, in-progress, AC 4/5)
 - [REQ-NFR-09](requirements/non-functional.md#req-nfr-09--exploratory-pass-over-every-command-before-a-release) Exploratory pass over every command before a release (should, implemented, AC 4/4)
 - [REQ-NFR-10](requirements/non-functional.md#req-nfr-10--a-merge-needs-green-ci-on-the-nodejs-version-ci-uses) A merge needs green CI, on the Node.js version CI uses (must, in-progress, AC 3/4)
 - [REQ-PRJ-09](requirements/projects.md#req-prj-09--export-and-import-of-a-project-profile) Export and import of a project profile (could, implemented, AC 2/2)

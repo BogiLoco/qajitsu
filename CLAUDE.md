@@ -32,7 +32,7 @@ The non-negotiable invariants live in `.claude/rules/architecture-invariants.md`
 | `pnpm test:adversarial`             | Lying-agent scenarios against guard, gates and verifier                                                                              |
 | `pnpm test:e2e`                     | Full flow on `examples/demo-shop` (from stage 3)                                                                                     |
 | `pnpm test:hooks`                   | node:test suite of `.claude/hooks`                                                                                                   |
-| `pnpm req:check` / `pnpm req:index` | Validate requirements / regenerate their index and roadmap lists                                                                     |
+| `pnpm req:check` / `pnpm req:index` | Validate requirements and the plugin inventory / regenerate their index, roadmap lists and inventory table                           |
 | `pnpm req:list -- --stage N`        | Requirements of a stage (also `--status in-progress`)                                                                                |
 | `pnpm build` / `pnpm qajitsu <cmd>` | Build packages to `dist/` / run the built CLI                                                                                        |
 | `pnpm format`                       | Prettier write                                                                                                                       |

@@ -46,4 +46,4 @@ Satisfy the contract suite. Respect: Zod-parse every response; map HTTP errors t
 
 ## 8. Docs and finish
 
-`docs/adapters/<kind>-<name>.md` (setup, scopes/permissions, limits), changeset (minor), then `/verify` and `/review-change`.
+`docs/adapters/<kind>-<name>.md` (setup, scopes/permissions, limits), an entry in `docs/architecture/plugins.md` (type, interface, dependencies with install size, hosts, secrets, tier; `pnpm req:check` fails without it), changeset (minor), then `/verify` and `/review-change`.

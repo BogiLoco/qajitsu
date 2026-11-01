@@ -26,4 +26,4 @@ Each adapter implements one interface from `@qajitsu/core` (REQ-GEN-02, ADR-0005
 | `testcases`            | TestCaseSource  | later         | REQ-CTX-08                | implemented |
 | `evidence-s3`          | EvidenceArchive | later         | REQ-VER-19                | implemented |
 
-Planned later (no package yet): Bitbucket, Azure DevOps, Kubernetes. Xray, Zephyr and TestRail cases are read by `testcases`; every integration becomes a plugin (REQ-GEN-11, REQ-GEN-14). Jira Data Center is part of `ticket-jira` and `publish-jira`; device farms are part of `runner-mobile`.
+Every package here and every planned integration is in the [plugin inventory](../../docs/architecture/plugins.md) (REQ-GEN-14), with its interface, dependencies, hosts, secrets and tier; `pnpm req:check` fails when one is missing. Planned later (no package yet): Bitbucket, Azure DevOps, Kubernetes. Xray, Zephyr and TestRail cases are read by `testcases`; every integration becomes a plugin (REQ-GEN-11, REQ-GEN-14). Jira Data Center is part of `ticket-jira` and `publish-jira`; device farms are part of `runner-mobile`.

@@ -236,7 +236,7 @@ Installing every tool "just in case" costs gigabytes and time. QAJitsu looks at 
 
 ### REQ-GEN-14 · Plugin inventory before the plugin system
 
-- Status: accepted
+- Status: in-progress
 - Priority: must
 - Stage: later
 - Related: REQ-GEN-02, REQ-GEN-11, REQ-GEN-12, REQ-GEN-13, ADR-0011
@@ -247,8 +247,8 @@ none needs a redesign later.
 
 **Acceptance criteria**
 
-- [ ] AC1: `docs/architecture/plugins.md` lists every existing integration package (today under `packages/adapters/`) and every integration named in the requirements, each with: plugin type, interface in `@qajitsu/core`, status (exists, planned, idea), the requirements that need it, external dependencies and their install size, network hosts, secrets and the proposed tier (REQ-GEN-12).
-- [ ] AC2: The inventory covers at least: ticket systems and test management (Jira Cloud and Data Center, Xray, Zephyr Scale, Zephyr Squad, TestRail, and candidates such as Azure DevOps, Linear, qTest), code hosts (GitHub, GitLab, Bitbucket, Azure Repos), runners (API, web, mobile with Appium and Maestro, desktop, performance, security, contract, chain plugins and wallets), environment providers (compose, remote, preview platforms, device farms), knowledge stores and sources, secret managers, message capture, evidence storage (local, WORM, REQ-VER-19) and publishers.
-- [ ] AC3: For each plugin type the inventory names the interface it implements and the gaps: an interface that does not fit a listed plugin is changed in an ADR before implementation starts.
+- [x] AC1: `docs/architecture/plugins.md` lists every existing integration package (today under `packages/adapters/`) and every integration named in the requirements, each with: plugin type, interface in `@qajitsu/core`, status (exists, planned, idea), the requirements that need it, external dependencies and their install size, network hosts, secrets and the proposed tier (REQ-GEN-12).
+- [x] AC2: The inventory covers at least: ticket systems and test management (Jira Cloud and Data Center, Xray, Zephyr Scale, Zephyr Squad, TestRail, and candidates such as Azure DevOps, Linear, qTest), code hosts (GitHub, GitLab, Bitbucket, Azure Repos), runners (API, web, mobile with Appium and Maestro, desktop, performance, security, contract, chain plugins and wallets), environment providers (compose, remote, preview platforms, device farms), knowledge stores and sources, secret managers, message capture, evidence storage (local, WORM, REQ-VER-19) and publishers.
+- [x] AC3: For each plugin type the inventory names the interface it implements and the gaps: an interface that does not fit a listed plugin is changed in an ADR before implementation starts.
 - [ ] AC4: The inventory decides what the core keeps and what becomes a plugin, and in which order integrations move out into plugins; it is reviewed and accepted before REQ-GEN-11 is implemented.
-- [ ] AC5: A check keeps it current: an integration package or a requirement naming an integration that is missing from the inventory fails `pnpm req:check`.
+- [x] AC5: A check keeps it current: an integration package or a requirement naming an integration that is missing from the inventory fails `pnpm req:check`.

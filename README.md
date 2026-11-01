@@ -1438,7 +1438,8 @@ qj evidence DEMO-1 --failed
 
 - New requirement first: `docs/requirements/` (`/requirement` in Claude Code), then plan and test-first code.
 - New integration (ticket system, code host, secret store, environment, runner, publisher): an adapter in
-  `packages/adapters/<kind>-<name>` implementing the interface from `@qajitsu/core` (`/new-adapter` in Claude Code).
+  `packages/adapters/<kind>-<name>` implementing the interface from `@qajitsu/core` (`/new-adapter` in Claude Code),
+  listed in the [plugin inventory](docs/architecture/plugins.md); `pnpm req:check` fails while it is missing there.
 - New agent role or prompt: `packages/agents` (roles, prompts, structured output schemas).
 - New check that decides a status: `packages/verifier`, always with adversarial tests.
 - Architecture decisions: `docs/adr/`.
@@ -1451,7 +1452,7 @@ More: [docs/guides/getting-started.md](docs/guides/getting-started.md), [docs/ar
 
 ```sh
 pnpm install
-pnpm verify          # typecheck, lint, format, tests with coverage, hook tests, requirements check
+pnpm verify          # typecheck, lint, format, tests with coverage, hook tests, requirements and plugin inventory check
 pnpm test:e2e        # demo-shop self-test (Docker and Android suites skip themselves when unavailable)
 pnpm run docs        # API reference and guides into docs-site/ (`pnpm docs` would open npm's page instead)
 ```
