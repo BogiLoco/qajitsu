@@ -373,7 +373,7 @@ describe("plugins: install, load, remove (REQ-GEN-11)", () => {
         { id: "secrets-vault", setting: "secrets.vault" },
         { id: "testcases", setting: "test_cases[0].type: xray" },
         { id: "knowledge-lancedb", setting: "knowledge.store: lancedb" },
-        { id: "runner-api", setting: "API cases" },
+        { id: "runner-api", setting: "test runs" },
       ]),
     );
     expect(pluginNeeds(config, { knowledge: false }).map((n) => n.id)).not.toContain("knowledge-lancedb");

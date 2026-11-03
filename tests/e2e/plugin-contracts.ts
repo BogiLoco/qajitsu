@@ -1,5 +1,6 @@
 import type {
   AdapterDeps,
+  AttemptExecutor,
   CodeHost,
   DocumentSource,
   EvidenceArchive,
@@ -10,6 +11,7 @@ import type {
   TicketSource,
   VectorStore,
 } from "@qajitsu/core";
+import { attemptExecutorContract } from "../contract/attempt-executor.contract.js";
 import { codeHostContract } from "../contract/code-host.contract.js";
 import { envProviderContract } from "../contract/env-provider.contract.js";
 import { publisherContract } from "../contract/publisher.contract.js";
@@ -361,6 +363,17 @@ export const pluginContracts: readonly PluginContract[] = [
         async () => composeProvider(await create(), composeFailingService),
         true,
       );
+    },
+  },
+  {
+    id: "runner-api",
+    run: (installed) => {
+      // The production sandbox from the installed plugin's own folder: its child process and the permission model.
+      const executor: AttemptExecutor = async (input) =>
+        (
+          await installed<{ createSandboxExecutor(o?: object): AttemptExecutor }>("runner-api")
+        ).createSandboxExecutor()(input);
+      attemptExecutorContract("sandbox (installed plugin)", () => executor);
     },
   },
 ];

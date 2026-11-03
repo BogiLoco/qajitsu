@@ -1,7 +1,9 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { runUsage, saveRunUsage } from "../run-usage.js";
 import { join, relative, sep } from "node:path";
-import { runCases, type RunCasesOptions } from "@qajitsu/adapter-runner-api";
+import type * as RunnerApiPlugin from "@qajitsu/adapter-runner-api";
+import type { RunCasesOptions } from "@qajitsu/adapter-runner-api";
+import { sessionPlugins } from "./plugin.js";
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
 import { runAuditor, runBlockedHints, runTriage, type AuditInput } from "@qajitsu/agents";
 import {
@@ -175,6 +177,7 @@ export async function runCanary(
     });
     const dir = session.ws.path("checks", "canary");
     try {
+      const { runCases } = await sessionPlugins(session).load<typeof RunnerApiPlugin>("runner-api");
       const results = await runCases({
         ...base,
         events,

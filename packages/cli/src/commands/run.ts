@@ -7,14 +7,12 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { compareDeployedSha, createRemoteEnvProvider } from "@qajitsu/adapter-env-remote";
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
-import {
-  createSandboxExecutor,
-  type BrowserFactory,
-  loadContractValidator,
-  runCases,
-  type AttemptExecutor,
-  type ContractValidator,
-  type RunCasesOptions,
+import type * as RunnerApiPlugin from "@qajitsu/adapter-runner-api";
+import type {
+  AttemptExecutor,
+  BrowserFactory,
+  ContractValidator,
+  RunCasesOptions,
 } from "@qajitsu/adapter-runner-api";
 import {
   browserUnavailable,
@@ -85,7 +83,7 @@ import type { CommandExec } from "@qajitsu/adapter-env-compose";
 import { headlessFor, prepareLiveRun, type LiveOptions, type LiveRun } from "./live.js";
 import { RegressionRunSchema } from "./pack.js";
 import { runVersions } from "../versions.js";
-import { pluginVersions } from "./plugin.js";
+import { pluginVersions, sessionPlugins } from "./plugin.js";
 import { createProgressPrinter, liveScreenshots, teeEvents } from "./progress.js";
 import { checkRunReadiness, commentEnvReadiness, formatEnvReadiness } from "../env-readiness.js";
 import { publisherFor } from "./publish.js";
@@ -975,6 +973,8 @@ async function executeCases(
     onDevice: () => undefined,
   },
 ): Promise<string[]> {
+  // REQ-GEN-11/AC2: every lane runs through the API runner plugin.
+  const api = await sessionPlugins(session).load<typeof RunnerApiPlugin>("runner-api");
   const { ws, events, project, masker } = session;
   const specsDir = ws.path("specs");
   const existing = new Set(
@@ -1134,7 +1134,7 @@ async function executeCases(
   const testHeaders = await testHeadersFor(env, session.resolveSecret);
   const executorFor = (combo: WebCombination | undefined): AttemptExecutor =>
     ports.executor ??
-    createSandboxExecutor({
+    api.createSandboxExecutor({
       ...(httpCredentials ? { httpCredentials } : {}),
       testHeaders,
       // The browser starts only when a spec uses ui.* (REQ-EXEC-05, REQ-EXEC-07).
@@ -1183,7 +1183,7 @@ async function executeCases(
   let contract: ContractValidator | undefined;
   for (const [alias, repo] of Object.entries(project.config.repos)) {
     if (repo.openapi === undefined || ws.record.repos[alias] === undefined) continue;
-    contract = await loadContractValidator(ws.path("repos", alias, repo.openapi));
+    contract = await api.loadContractValidator(ws.path("repos", alias, repo.openapi));
     events.emit("run", SYSTEM, "contract.loaded", { repo: alias, file: repo.openapi });
     break;
   }
@@ -1315,7 +1315,7 @@ async function executeCases(
     const cases = active.filter((c) => c.type === lane);
     if (cases.length === 0) return;
     events.emit("run", SYSTEM, "lane.start", { lane, cases: cases.length, workers: lanes[lane] });
-    const laneRan = await runCases({
+    const laneRan = await api.runCases({
       ...base,
       ...watched,
       // REQ-EXEC-16/AC3: only the primary run pauses; one case at a time so the person follows one.
@@ -1338,7 +1338,7 @@ async function executeCases(
       blocked,
       concurrency,
       run: (combo, cases, dir) =>
-        runCases({
+        api.runCases({
           ...base,
           lane: "web",
           executor: executorFor(combo),
@@ -1377,11 +1377,11 @@ async function executeCases(
       onDevice: run.onDevice,
       sequential: lanes.sequential,
       run: (factory, cases, where) =>
-        runCases({
+        api.runCases({
           ...base,
           ...(where.primary ? watched : {}),
           lane: "mobile",
-          executor: ports.mobileExecutor?.(factory) ?? createSandboxExecutor({ browser: factory }),
+          executor: ports.mobileExecutor?.(factory) ?? api.createSandboxExecutor({ browser: factory }),
           ...(live?.pause && where.primary ? { pause: live.pause } : {}),
           plan: { ...plan, cases },
           specs: new Map([...specs].filter(([id]) => cases.some((c) => c.id === id))),
@@ -1416,7 +1416,7 @@ async function executeCases(
     specs,
     blocked,
     run: (localePlan, locale, dir) =>
-      runCases({
+      api.runCases({
         ...base,
         executor: executorFor(primary),
         plan: localePlan,

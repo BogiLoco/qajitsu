@@ -163,7 +163,7 @@ describe("qj plugin (REQ-GEN-11)", () => {
     const r = await qj(["plugin", "list"]);
     expect(r.exitCode).toBe(0);
     expect(r.out).toMatch(/✘ knowledge-lancedb\s+not installed; needed by knowledge\.store: lancedb/);
-    expect(r.out).toMatch(/✔ runner-api\s+0\.0\.0 part of this installation; needed by API cases/);
+    expect(r.out).toMatch(/✔ runner-api\s+0\.0\.0 part of this installation; needed by test runs/);
     expect(r.out).toMatch(/✔ secrets-vault\s+0\.0\.0 part of this installation$/m);
   });
 

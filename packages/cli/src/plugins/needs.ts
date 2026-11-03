@@ -8,8 +8,9 @@ export interface PluginNeed {
 
 /**
  * The official plugins a project's configuration needs (REQ-GEN-11/AC2, AC10), each with the setting that needs it,
- * so `qj doctor` can name what is missing and `qj plugin remove` what still uses a plugin. The API and web runners are
- * needed by every project; the knowledge store only when the project has a knowledge base.
+ * so `qj doctor` can name what is missing and `qj plugin remove` what still uses a plugin. The API runner is needed by
+ * every run, the web and mobile runners by the test types that use them, the knowledge store only when the project has
+ * a knowledge base.
  *
  * @param config - The project's configuration.
  * @param options - Whether the project has a knowledge base on disk, and its online knowledge sources.
@@ -31,9 +32,11 @@ export function pluginNeeds(
       host.type === "local" ? "codehost-local" : `codehost-${host.type}`,
       `code_hosts.${alias}.type: ${host.type}`,
     );
-  need("runner-api", "API cases");
-  need("runner-web", "web cases");
-  if (config.mobile !== undefined) need("runner-mobile", "mobile");
+  // Every lane runs through the API runner; the web and mobile runners only for the test types the project has.
+  need("runner-api", "test runs");
+  if (config.test_types.includes("web")) need("runner-web", "test_types: web");
+  if (config.test_types.includes("mobile") || config.mobile !== undefined)
+    need("runner-mobile", config.test_types.includes("mobile") ? "test_types: mobile" : "mobile");
   if (config.build !== undefined || Object.values(config.services).some((s) => s.kind === "compose"))
     need("env-compose", config.build !== undefined ? "build" : "services (compose)");
   if (config.secrets.vault) need("secrets-vault", "secrets.vault");

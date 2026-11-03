@@ -290,12 +290,6 @@ importers:
 
   packages/adapters/runner-api:
     dependencies:
-      '@qajitsu/core':
-        specifier: workspace:*
-        version: link:../../core
-      '@qajitsu/steps':
-        specifier: workspace:*
-        version: link:../../steps
       ajv:
         specifier: ^8.20.0
         version: 8.20.0
@@ -315,6 +309,12 @@ importers:
       '@qajitsu/adapter-evidence-local':
         specifier: workspace:*
         version: link:../evidence-local
+      '@qajitsu/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@qajitsu/steps':
+        specifier: workspace:*
+        version: link:../../steps
       '@types/pngjs':
         specifier: ^6.0.5
         version: 6.0.5
@@ -471,9 +471,6 @@ importers:
       '@qajitsu/adapter-files':
         specifier: workspace:*
         version: link:../adapters/files
-      '@qajitsu/adapter-runner-api':
-        specifier: workspace:*
-        version: link:../adapters/runner-api
       '@qajitsu/adapter-runner-mobile':
         specifier: workspace:*
         version: link:../adapters/runner-mobile
@@ -550,6 +547,9 @@ importers:
       '@qajitsu/adapter-publish-jira':
         specifier: workspace:*
         version: link:../adapters/publish-jira
+      '@qajitsu/adapter-runner-api':
+        specifier: workspace:*
+        version: link:../adapters/runner-api
       '@qajitsu/adapter-secrets-cli':
         specifier: workspace:*
         version: link:../adapters/secrets-cli
