@@ -3,12 +3,8 @@ import { join } from "node:path";
 import { createGitHubCodeHost } from "@qajitsu/adapter-codehost-github";
 import { createGitLabCodeHost } from "@qajitsu/adapter-codehost-gitlab";
 import { createLocalCodeHost } from "@qajitsu/adapter-codehost-local";
-import {
-  createAwsSecretProvider,
-  createGcpSecretProvider,
-  createOnePasswordSecretProvider,
-  type SecretCliExec,
-} from "@qajitsu/adapter-secrets-cli";
+import type * as SecretsCliPlugin from "@qajitsu/adapter-secrets-cli";
+import type { SecretCliExec } from "@qajitsu/adapter-secrets-cli";
 import type * as DopplerPlugin from "@qajitsu/adapter-secrets-doppler";
 import { createEnvSecretProvider } from "@qajitsu/adapter-secrets-env";
 import type * as VaultPlugin from "@qajitsu/adapter-secrets-vault";
@@ -99,6 +95,7 @@ export function createCliSecretResolver(project: LoadedProject, ports: RuntimePo
   };
   const { vault, doppler, op, aws, gcp } = project.config.secrets;
   const cli = { env: ports.env, ...(ports.secretCliExec ? { exec: ports.secretCliExec } : {}) };
+  const secretsCli = () => pluginLoader(ports).load<typeof SecretsCliPlugin>("secrets-cli");
   return createSecretResolver(
     [
       env,
@@ -131,17 +128,27 @@ export function createCliSecretResolver(project: LoadedProject, ports: RuntimePo
             ),
           ]
         : []),
-      ...(op ? [createOnePasswordSecretProvider(cli)] : []),
+      ...(op
+        ? [lazySecretProvider("op", async () => (await secretsCli()).createOnePasswordSecretProvider(cli))]
+        : []),
       ...(aws
         ? [
-            createAwsSecretProvider({
-              ...cli,
-              region: aws.region,
-              ...(aws.profile ? { profile: aws.profile } : {}),
-            }),
+            lazySecretProvider("aws", async () =>
+              (await secretsCli()).createAwsSecretProvider({
+                ...cli,
+                region: aws.region,
+                ...(aws.profile ? { profile: aws.profile } : {}),
+              }),
+            ),
           ]
         : []),
-      ...(gcp ? [createGcpSecretProvider({ ...cli, project: gcp.project })] : []),
+      ...(gcp
+        ? [
+            lazySecretProvider("gcp", async () =>
+              (await secretsCli()).createGcpSecretProvider({ ...cli, project: gcp.project }),
+            ),
+          ]
+        : []),
     ],
     (value) => {
       masker.register(value);

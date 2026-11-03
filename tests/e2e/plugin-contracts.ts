@@ -144,4 +144,33 @@ export const pluginContracts: readonly PluginContract[] = [
       );
     },
   },
+  {
+    id: "secrets-cli",
+    run: (installed) => {
+      type Exec = (
+        command: string,
+        args: readonly string[],
+        options: { env: Record<string, string> },
+      ) => Promise<string>;
+      const cli = () =>
+        installed<{
+          createOnePasswordSecretProvider(o: { env: Record<string, string>; exec: Exec }): SecretProvider;
+        }>("secrets-cli");
+      secretProviderContract(
+        "op (installed plugin)",
+        (secrets) => {
+          const exec: Exec = (_command, args) => {
+            const value = secrets[String(args.at(-1)).split("/").at(-1) ?? ""];
+            return value === undefined
+              ? Promise.reject(new Error("op exited with 1"))
+              : Promise.resolve(value);
+          };
+          return lazy(async () =>
+            (await cli()).createOnePasswordSecretProvider({ env: { PATH: "/usr/bin" }, exec }),
+          );
+        },
+        "secret://op/QA/jira/",
+      );
+    },
+  },
 ];

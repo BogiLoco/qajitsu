@@ -352,7 +352,7 @@ importers:
         version: 6.0.5
 
   packages/adapters/secrets-cli:
-    dependencies:
+    devDependencies:
       '@qajitsu/core':
         specifier: workspace:*
         version: link:../../core
@@ -465,9 +465,6 @@ importers:
       '@qajitsu/adapter-runner-web':
         specifier: workspace:*
         version: link:../adapters/runner-web
-      '@qajitsu/adapter-secrets-cli':
-        specifier: workspace:*
-        version: link:../adapters/secrets-cli
       '@qajitsu/adapter-secrets-env':
         specifier: workspace:*
         version: link:../adapters/secrets-env
@@ -526,6 +523,9 @@ importers:
       '@qajitsu/adapter-knowledge-lancedb':
         specifier: workspace:*
         version: link:../adapters/knowledge-lancedb
+      '@qajitsu/adapter-secrets-cli':
+        specifier: workspace:*
+        version: link:../adapters/secrets-cli
       '@qajitsu/adapter-secrets-doppler':
         specifier: workspace:*
         version: link:../adapters/secrets-doppler
