@@ -25,9 +25,10 @@ const spec = (ticket: string, id: string) =>
   fileURLToPath(new URL(`../../../../fixtures/specs/${ticket.toLowerCase()}/${id}.spec.ts`, import.meta.url));
 
 const cleanups: (() => Promise<void>)[] = [];
+// Closing browsers can take longer than the default 10 s hook limit when the whole suite runs in parallel.
 afterEach(async () => {
   for (const c of cleanups.splice(0)) await c();
-});
+}, 30_000);
 
 const attempt = async (
   ticket: string,
