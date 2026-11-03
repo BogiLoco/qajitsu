@@ -228,3 +228,24 @@ production sandbox: DEMO-16 (multipart upload, file download, processing that be
 Still a limit of the 2B model: it ignores the kinds of test data and a reviewer's instruction about them in about half
 of the runs; code stops such plans at approval, so nothing wrong runs. With the fixture plans every case behaves as the
 seeded bugs say.
+
+## Pass of 2026-11-03: the published CLI with installed plugins
+
+Every package was packed as it would be published, and the CLI was installed from those tarballs into a clean
+folder. That installation contains only the five core adapters (95 MB on disk). The lab project's plugins were then
+installed with `qj plugin add --file`: runner-api, runner-web, runner-mobile, env-compose and knowledge-lancedb.
+
+Runs with that `qj`, the reviewed plans and specs of the repository, and gemma4:e2b:
+
+- DEMO-16 (API): 3 PASSED, GO. With `BUG_DOCUMENT_TRUNCATED`, TC-01 FAILED, NO-GO.
+- DEMO-11 (web: service worker, offline): 2 PASSED, GO.
+- `run.json` records each plugin with its version and source.
+
+| ID  | Where                     | Defect                                                                                                                                                              | Fix                                                                                        |
+| --- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| P1  | spec type check           | the verifier looked for the steps types in a sibling folder, which a pnpm installation does not have: every spec BLOCKED with "Cannot find module '@qajitsu/steps'" | the verifier depends on `@qajitsu/steps` and resolves it                                   |
+| P2  | installed web runner      | npm resolved `playwright-core` `^1.63.0` to a newer version than the installed browsers: every web attempt errored                                                  | `playwright-core` pinned to `1.63.0` in the CLI and the runners; a contract test checks it |
+| P3  | `qj plugin add` (LanceDB) | npm installed LanceDB's optional embedding helpers (onnxruntime, 362 MB) that QAJitsu never loads                                                                   | `omit_optional` in the manifest: installed as empty packages                               |
+| P4  | plugin guard              | the first scan found five manifests that declared less than their code does                                                                                         | corrected; a contract test runs the scan on every adapter                                  |
+| P5  | `pnpm pack` after a move  | `tsc` keeps stale files in `dist/`: `ticket-jira` still carried the moved `file-source.js`, and the guard refused it                                                | packed after `pnpm clean`; CI publishes from a fresh checkout                              |
+| P6  | `qj plugin remove`        | removing a plugin that comes with the installation said "still used"                                                                                                | says it comes with the installation                                                        |
