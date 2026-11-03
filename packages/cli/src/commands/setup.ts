@@ -35,7 +35,13 @@ import {
 import { createCliSecretResolver, type RuntimePorts } from "../adapters.js";
 import type { LoadedProject } from "../project.js";
 import { execVersion, playwrightInfo } from "../versions.js";
-import { installMissingPlugins, pluginLoader, projectPlugins } from "./plugin.js";
+import {
+  bundlePlugins,
+  importPluginBundle,
+  installMissingPlugins,
+  pluginLoader,
+  projectPlugins,
+} from "./plugin.js";
 import type { CommandIO } from "./fetch.js";
 
 /** Flags of `qj setup` (REQ-GEN-06). */
@@ -423,6 +429,17 @@ export async function runSetupCommand(
         for (const f of result.failed) log(`✘ plugin ${f}`);
         pluginsFailed = result.failed.length > 0;
       }
+    }
+    // REQ-GEN-11/AC6: the plugins go into the offline bundle, and come out of it on the offline machine.
+    if (project && bundle !== undefined && report.stopped === undefined) {
+      const result = await bundlePlugins(project, ports, bundle, log);
+      for (const f of result.failed) log(`✘ plugin ${f}`);
+      pluginsFailed = result.failed.length > 0;
+    }
+    if (options.from !== undefined) {
+      const result = await importPluginBundle(resolve(io.cwd, options.from), ports, log);
+      for (const f of result.failed) log(`✘ plugin ${f}`);
+      pluginsFailed = result.failed.length > 0;
     }
     if (options.check === true) return report.prechecks.every((p) => p.ok) ? 0 : 2;
     const code = setupExitCode(report);

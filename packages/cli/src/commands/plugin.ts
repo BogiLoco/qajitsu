@@ -1,15 +1,18 @@
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { cp, mkdir, readFile, rm } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import {
+  PLUGIN_API_VERSION,
   QajitsuError,
   listProjects,
+  parsePluginManifest,
   parseOnlineLocator,
   projectPaths,
   qajitsuHome,
   readKnowledgeSources,
   type ResolvedProject,
 } from "@qajitsu/core";
-import { loadToolchainConfig, networkFor } from "@qajitsu/toolchain";
+import { loadToolchainConfig, networkFor, satisfies } from "@qajitsu/toolchain";
 import type { RuntimePorts } from "../adapters.js";
 import type { DoctorCheck } from "../doctor.js";
 import { catalogueEntry, installCommand, readCatalogue, type PluginCatalogue } from "../plugins/catalogue.js";
@@ -21,7 +24,13 @@ import {
   type PluginLoader,
 } from "../plugins/load.js";
 import { pluginNeeds, type PluginNeed } from "../plugins/needs.js";
-import { pluginsRoot, readInstalledPlugins, type InstalledPlugin } from "../plugins/store.js";
+import {
+  appendPluginHistory,
+  pluginsRoot,
+  readInstalledPlugins,
+  writeInstalledPlugins,
+  type InstalledPlugin,
+} from "../plugins/store.js";
 import { loadProject, type LoadedProject } from "../project.js";
 import type { CommandIO } from "./fetch.js";
 import { runTool } from "./setup.js";
@@ -191,14 +200,18 @@ async function installRequirements(
     readonly ports: RuntimePorts;
     readonly iports: PluginInstallPorts;
     readonly log: (line: string) => void;
+    /** Whether a plugin is already there; by default in this installation. */
+    readonly available?: (id: string) => Promise<boolean>;
   },
   seen = new Set<string>([record.id]),
 ): Promise<string[]> {
   const installed: string[] = [];
+  const available =
+    context.available ??
+    (async (id: string) => (await pluginLoader(context.ports).availability(id)) !== undefined);
   for (const name of record.requires) {
     const entry = catalogueEntry(context.catalogue, name);
-    if (seen.has(entry.id) || (await pluginLoader(context.ports).availability(entry.id)) !== undefined)
-      continue;
+    if (seen.has(entry.id) || (await available(entry.id))) continue;
     seen.add(entry.id);
     context.log(`plugin ${entry.id}: installing ${entry.package}@${entry.version}, needed by ${record.id}`);
     const required = await installPlugin({
@@ -212,6 +225,109 @@ async function installRequirements(
     installed.push(entry.id, ...(await installRequirements(required, context, seen)));
   }
   return installed;
+}
+
+/**
+ * Puts the plugins a project needs, installed with their dependencies, into an offline bundle (`qj setup --download`,
+ * REQ-GEN-11/AC6): each is checked against its published checksum like `qj plugin add`; plugins this installation
+ * carries are left out.
+ *
+ * @returns The ids put into the bundle and the failures with their reasons.
+ */
+export async function bundlePlugins(
+  project: LoadedProject,
+  ports: RuntimePorts,
+  bundleDir: string,
+  log: (line: string) => void,
+): Promise<{ readonly bundled: string[]; readonly failed: string[] }> {
+  const root = join(bundleDir, "plugins");
+  const { catalogue } = pluginHome(ports);
+  const loader = pluginLoader(ports);
+  const iports = await installPorts(ports, project);
+  const inBundle = async (id: string): Promise<boolean> =>
+    (await loader.availability(id))?.source === "bundled" ||
+    (await readInstalledPlugins(root)).some((p) => p.id === id);
+  const bundled: string[] = [];
+  const failed: string[] = [];
+  for (const id of [...new Set((await projectPlugins(project, ports)).map((s) => s.id))]) {
+    if (await inBundle(id)) continue;
+    const entry = catalogueEntry(catalogue, id);
+    log(`plugin ${id}: into the bundle, ${entry.package}@${entry.version}`);
+    try {
+      const record = await installPlugin({
+        root,
+        id,
+        source: { kind: "registry", package: entry.package, version: entry.version },
+        expectedPackage: entry.package,
+        hostPackages: HOST_PACKAGES,
+        ports: iports,
+      });
+      bundled.push(
+        id,
+        ...(await installRequirements(record, { root, catalogue, ports, iports, log, available: inBundle })),
+      );
+    } catch (error) {
+      failed.push(`${id}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return { bundled, failed };
+}
+
+/**
+ * Installs the plugins of an offline bundle (`qj setup --from`, REQ-GEN-11/AC6) without any network: each plugin's
+ * folder is copied into this installation after its manifest and core API range are checked again, and recorded with
+ * the checksum it was downloaded with.
+ *
+ * @returns The ids installed and the failures with their reasons.
+ */
+export async function importPluginBundle(
+  bundleDir: string,
+  ports: RuntimePorts,
+  log: (line: string) => void,
+): Promise<{ readonly installed: string[]; readonly failed: string[] }> {
+  const from = join(bundleDir, "plugins");
+  const { root } = pluginHome(ports);
+  const installed: string[] = [];
+  const failed: string[] = [];
+  for (const record of await readInstalledPlugins(from)) {
+    try {
+      const source = join(from, record.id, record.version);
+      const manifest = parsePluginManifest(
+        JSON.parse(
+          await readFile(join(source, "node_modules", ...record.package.split("/"), "package.json"), "utf8"),
+        ) as unknown,
+      );
+      if (manifest.name !== record.package || !satisfies(PLUGIN_API_VERSION, manifest.coreApi))
+        throw new QajitsuError(
+          "PLUGIN_INCOMPATIBLE",
+          `${manifest.name}@${manifest.version} does not fit this QAJitsu (core API ${PLUGIN_API_VERSION}).`,
+          { plugin: record.id },
+        );
+      const target = join(root, record.id, record.version);
+      await rm(join(root, record.id), { recursive: true, force: true });
+      await mkdir(join(root, record.id), { recursive: true });
+      await cp(source, target, { recursive: true, verbatimSymlinks: true });
+      const now = ports.now().toISOString();
+      const others = (await readInstalledPlugins(root)).filter((p) => p.id !== record.id);
+      await writeInstalledPlugins(root, [
+        ...others,
+        { ...record, path: target, installed_at: now, from: `offline bundle ${bundleDir}` },
+      ]);
+      await appendPluginHistory(root, {
+        at: now,
+        action: "add",
+        id: record.id,
+        version: record.version,
+        source: `offline bundle ${bundleDir}`,
+        integrity: record.integrity,
+      });
+      log(`✔ plugin ${record.id} ${record.version} installed from the bundle`);
+      installed.push(record.id);
+    } catch (error) {
+      failed.push(`${record.id}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return { installed, failed };
 }
 
 /** Projects and settings that use a plugin, across every registered project (REQ-GEN-11/AC10). */

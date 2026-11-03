@@ -199,9 +199,11 @@ After installing, every tool is smoke-tested; nothing that failed is reported re
   published checksum), `appium=3.7.0`, `uiautomator2=8.6.0`, `xcuitest=…`, `xcode=16.4`. Browser versions are those of
   QAJitsu's Playwright.
 - `--download <dir>`: install every managed tool the project needs into `<dir>` (also when this machine has them) and
-  write `bundle.json` with a digest of every folder
+  write `bundle.json` with a digest of every folder; the plugins the project needs go into `<dir>/plugins/`, installed
+  with their dependencies and checked against their published checksums (REQ-GEN-11/AC6)
 - `--from <dir>`: install from such a bundle without network: same system and processor only, every folder checked
-  against its digest, AVDs created on this machine, smoke-tested
+  against its digest, AVDs created on this machine, smoke-tested; its plugins are copied into `~/.qajitsu/plugins/`
+  after their manifests and core API range are checked again
 - `--smoke`: also boot the emulator once
 - `--ignore-check <check>`: do not stop on this precheck (`virtualisation`, `memory`, `disk`, `system image`;
   repeatable). It is still printed, marked as ignored. Meant for building an image on a machine without KVM for hosts

@@ -371,4 +371,22 @@ describe("qj plugin (REQ-GEN-11)", () => {
     expect(existsSync(join(qjHome, "plugins", "ticket-jira", "0.0.0"))).toBe(true);
     expect(existsSync(join(qjHome, "plugins", "publish-jira", "0.0.0"))).toBe(true);
   });
+
+  it("REQ-GEN-11/AC6: setup --download puts the plugins into the bundle; setup --from installs them offline", async () => {
+    await project();
+    const bundle = join(home, "bundle");
+    const download = await qj(["setup", "--download", bundle, "--yes"]);
+    expect(download.out + download.err).toContain("plugin knowledge-lancedb: into the bundle");
+    expect(existsSync(join(bundle, "plugins", "knowledge-lancedb", "0.0.0"))).toBe(true);
+    // The offline machine: no network, nothing installed yet.
+    await rm(join(qjHome, "plugins"), { recursive: true, force: true });
+    const offline: RuntimePorts = { ...ports(), fetch: () => Promise.reject(new Error("offline")) };
+    const imported = await qj(["setup", "--from", bundle, "--yes"], offline);
+    expect(imported.out + imported.err).toContain(
+      "✔ plugin knowledge-lancedb 0.0.0 installed from the bundle",
+    );
+    expect((await pluginCheck(await loaded(), offline)).ok).toBe(true);
+    const history = await readFile(join(qjHome, "plugins", "history.jsonl"), "utf8");
+    expect(history).toContain("offline bundle");
+  });
 });
