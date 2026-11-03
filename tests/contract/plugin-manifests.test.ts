@@ -66,4 +66,18 @@ describe("plugin manifests of the adapter packages (REQ-GEN-11)", () => {
       } else expect(cli.dependencies?.[pkg.name], `${pkg.name} still ships with the CLI`).toBeDefined();
     },
   );
+
+  it("REQ-GEN-11/AC3: playwright-core is pinned to one exact version in the CLI and every plugin that uses it", () => {
+    // qj setup installs the browsers of one Playwright version; a plugin resolving a newer one would not find them.
+    const versions = ["cli", ...adapters.map((d) => `adapters/${d}`)].flatMap((p) => {
+      const pkg = JSON.parse(readFileSync(join(root, "packages", p, "package.json"), "utf8")) as {
+        dependencies?: Record<string, string>;
+      };
+      const v = pkg.dependencies?.["playwright-core"];
+      return v === undefined ? [] : [[p, v] as const];
+    });
+    expect(versions.length).toBeGreaterThan(1);
+    for (const [, v] of versions) expect(v).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(new Set(versions.map(([, v]) => v)).size).toBe(1);
+  });
 });

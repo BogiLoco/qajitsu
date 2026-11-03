@@ -9,6 +9,8 @@ import { PlanSchema } from "@qajitsu/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startShop } from "../../examples/demo-shop/api/server.mjs";
 import { attemptExecutorContract } from "../contract/attempt-executor.contract.js";
+import { webExecutorContract } from "../contract/web-executor.contract.js";
+import { createPlaywrightBrowserFactory } from "@qajitsu/adapter-runner-web";
 
 const childScript = fileURLToPath(
   new URL("../../packages/adapters/runner-api/dist/child.js", import.meta.url),
@@ -22,6 +24,14 @@ const plan = PlanSchema.parse({
 const PASSWORD = "fictional-demo-password";
 
 attemptExecutorContract("sandbox (production)", () => createSandboxExecutor({ childScript }));
+webExecutorContract("sandbox with the browser (production)", () =>
+  Promise.resolve(
+    createSandboxExecutor({
+      childScript,
+      browser: createPlaywrightBrowserFactory({ webSession: { storage: "sessionStorage", key: "token" } }),
+    }),
+  ),
+);
 
 describe("sandboxed API runner (REQ-EXEC-04, invariant 2)", () => {
   let shop: { url: string; close: () => Promise<void> };

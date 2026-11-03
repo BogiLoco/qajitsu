@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRemoteEnvProvider } from "@qajitsu/adapter-env-remote";
 import type { BrowserFactory } from "@qajitsu/adapter-runner-api";
-import { createPlaywrightBrowserFactory } from "@qajitsu/adapter-runner-web";
+import type * as RunnerWebPlugin from "@qajitsu/adapter-runner-web";
+import { lazyBrowserFactory } from "../plugins/lazy.js";
+import { sessionPlugins } from "./plugin.js";
 import {
   createAccountLeases,
   resolveEnvironment,
@@ -59,16 +61,20 @@ export function snapshotBrowser(
   const web = session.project.config.web;
   return (
     ports.snapshotBrowser ??
-    createPlaywrightBrowserFactory({
-      browser: web.browser,
-      video: "off",
-      headless: true,
-      actionTimeoutMs: web.action_timeout_ms,
-      testIdAttribute: web.test_id_attribute,
-      webSession: env.profile.web_session,
-      ...(httpCredentials ? { httpCredentials } : {}),
-      observations: { console: false, httpErrors: false, accessibility: false },
-    })
+    lazyBrowserFactory(async () =>
+      (
+        await sessionPlugins(session).load<typeof RunnerWebPlugin>("runner-web")
+      ).createPlaywrightBrowserFactory({
+        browser: web.browser,
+        video: "off",
+        headless: true,
+        actionTimeoutMs: web.action_timeout_ms,
+        testIdAttribute: web.test_id_attribute,
+        webSession: env.profile.web_session,
+        ...(httpCredentials ? { httpCredentials } : {}),
+        observations: { console: false, httpErrors: false, accessibility: false },
+      }),
+    )
   );
 }
 
@@ -94,6 +100,8 @@ export function snapshotLogin(
         masker.register(v);
       },
     },
+    undefined,
+    session.plugins,
   );
   return async (aliases) => {
     const file = join(scratch, `${aliases.join("-").replace(/[^\w-]/g, "_")}.txt`);

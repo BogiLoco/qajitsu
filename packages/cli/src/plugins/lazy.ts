@@ -1,3 +1,5 @@
+import type { BrowserLoginRunner } from "@qajitsu/adapter-env-remote";
+import type { BrowserFactory, BrowserSession } from "@qajitsu/adapter-runner-api";
 import type { BugTracker, Publisher, TicketWorkflow } from "@qajitsu/core";
 
 /** One loading per wrapper: the first call starts it, later calls share it, a failure is repeated to every call. */
@@ -42,4 +44,32 @@ export function lazyWorkflow(id: string, make: () => Promise<TicketWorkflow>): T
     findInStatus: async (query, signal) => (await get()).findInStatus(query, signal),
     inGroup: async (account, group, signal) => (await get()).inGroup(account, group, signal),
   };
+}
+
+/**
+ * A browser factory whose plugin loads when a spec first drives the browser (REQ-GEN-11/AC2): an attempt that never
+ * uses `ui.*` needs no web runner, and closing an unused session returns no evidence.
+ */
+export function lazyBrowserFactory(make: () => Promise<BrowserFactory>): BrowserFactory {
+  const factory = once(make);
+  return (input) => {
+    let session: Promise<BrowserSession> | undefined;
+    let started: BrowserSession | undefined;
+    const open = (): Promise<BrowserSession> =>
+      (session ??= factory().then((f) => {
+        started = f(input);
+        return started;
+      }));
+    return {
+      driver: async () => (await open()).driver(),
+      browser: () => started?.browser?.(),
+      close: async (failed) => (session === undefined ? [] : (await session).close(failed)),
+    };
+  };
+}
+
+/** A browser login (SSO, REQ-EXEC-55/AC2) whose plugin loads on the first login that needs a browser. */
+export function lazyBrowserLogin(make: () => Promise<BrowserLoginRunner>): BrowserLoginRunner {
+  const login = once(make);
+  return async (flow, values, where) => (await login())(flow, values, where);
 }

@@ -14,11 +14,7 @@ import type {
   ContractValidator,
   RunCasesOptions,
 } from "@qajitsu/adapter-runner-api";
-import {
-  browserUnavailable,
-  compareImages,
-  createPlaywrightBrowserFactory,
-} from "@qajitsu/adapter-runner-web";
+import type * as RunnerWebPlugin from "@qajitsu/adapter-runner-web";
 import { buildChangeContext, checkSpec, healSpec, runAuthor } from "@qajitsu/agents";
 import {
   AnalysisSchema,
@@ -83,6 +79,7 @@ import type { CommandExec } from "@qajitsu/adapter-env-compose";
 import { headlessFor, prepareLiveRun, type LiveOptions, type LiveRun } from "./live.js";
 import { RegressionRunSchema } from "./pack.js";
 import { runVersions } from "../versions.js";
+import { lazyBrowserFactory } from "../plugins/lazy.js";
 import { pluginVersions, sessionPlugins } from "./plugin.js";
 import { createProgressPrinter, liveScreenshots, teeEvents } from "./progress.js";
 import { checkRunReadiness, commentEnvReadiness, formatEnvReadiness } from "../env-readiness.js";
@@ -975,6 +972,11 @@ async function executeCases(
 ): Promise<string[]> {
   // REQ-GEN-11/AC2: every lane runs through the API runner plugin.
   const api = await sessionPlugins(session).load<typeof RunnerApiPlugin>("runner-api");
+  // The web runner plugin: up front when the plan has web cases, otherwise only if a spec drives a browser.
+  const webRunner = () => sessionPlugins(session).load<typeof RunnerWebPlugin>("runner-web");
+  const web = plan.cases.some((c) => c.type === "web") ? await webRunner() : undefined;
+  const browserUnavailable = (browser: WebBrowser): string | undefined =>
+    web ? web.browserUnavailable(browser) : "the web runner plugin is not loaded (qj plugin add runner-web)";
   const { ws, events, project, masker } = session;
   const specsDir = ws.path("specs");
   const existing = new Set(
@@ -1138,33 +1140,35 @@ async function executeCases(
       ...(httpCredentials ? { httpCredentials } : {}),
       testHeaders,
       // The browser starts only when a spec uses ui.* (REQ-EXEC-05, REQ-EXEC-07).
-      browser: createPlaywrightBrowserFactory({
-        // A farm-only browser never reaches here: its combinations are BLOCKED before they run (REQ-EXEC-66/AC4).
-        browser:
-          combo && browserEngine(combo.browser) !== undefined
-            ? (combo.browser as LocalBrowser)
-            : project.config.web.browser,
-        ...(combo?.device !== undefined
-          ? { device: combo.device }
-          : combo
-            ? { viewport: { width: combo.viewport.width, height: combo.viewport.height } }
-            : {}),
-        video: project.config.web.video,
-        // REQ-EXEC-16/AC2: --headed shows the browser, --slow-mo slows every action down.
-        headless: headlessFor(project.config.web.headless, live),
-        slowMoMs: live?.slowMoMs,
-        actionTimeoutMs: project.config.web.action_timeout_ms,
-        testIdAttribute: project.config.web.test_id_attribute,
-        webSession: env.profile.web_session,
-        ...(httpCredentials ? { httpCredentials } : {}),
-        testHeaders,
-        // REQ-EVD-07/AC5: each passive check can be switched off.
-        observations: {
-          console: project.config.observations.console,
-          httpErrors: project.config.observations.http_errors,
-          accessibility: project.config.observations.accessibility,
-        },
-      }),
+      browser: lazyBrowserFactory(async () =>
+        (await webRunner()).createPlaywrightBrowserFactory({
+          // A farm-only browser never reaches here: its combinations are BLOCKED before they run (REQ-EXEC-66/AC4).
+          browser:
+            combo && browserEngine(combo.browser) !== undefined
+              ? (combo.browser as LocalBrowser)
+              : project.config.web.browser,
+          ...(combo?.device !== undefined
+            ? { device: combo.device }
+            : combo
+              ? { viewport: { width: combo.viewport.width, height: combo.viewport.height } }
+              : {}),
+          video: project.config.web.video,
+          // REQ-EXEC-16/AC2: --headed shows the browser, --slow-mo slows every action down.
+          headless: headlessFor(project.config.web.headless, live),
+          slowMoMs: live?.slowMoMs,
+          actionTimeoutMs: project.config.web.action_timeout_ms,
+          testIdAttribute: project.config.web.test_id_attribute,
+          webSession: env.profile.web_session,
+          ...(httpCredentials ? { httpCredentials } : {}),
+          testHeaders,
+          // REQ-EVD-07/AC5: each passive check can be switched off.
+          observations: {
+            console: project.config.observations.console,
+            httpErrors: project.config.observations.http_errors,
+            accessibility: project.config.observations.accessibility,
+          },
+        }),
+      ),
     });
   const executor = executorFor(primary);
   // REQ-EXEC-12: baselines are read from .qa/baselines/ by this trusted code; specs and agents never touch them.
@@ -1176,7 +1180,8 @@ async function executeCases(
         (b) => new Uint8Array(b),
         () => undefined,
       ),
-    compare: (baseline, actual) => compareImages(baseline, actual, project.config.visual.color_threshold),
+    compare: async (baseline, actual) =>
+      (await webRunner()).compareImages(baseline, actual, project.config.visual.color_threshold),
   });
   const primaryVariant = primary?.id ?? "default";
   // The contract is read from the worktree, i.e. from exactly the analysed version of the code.
@@ -1223,6 +1228,7 @@ async function executeCases(
         Object.values(plan.cases.find((c) => c.id === caseId)?.data ?? {}).filter((v) =>
           v.startsWith("user:"),
         ),
+      session.plugins,
     ),
     contract,
     // REQ-EXEC-53: the records cases need, marked with this run; `--keep` leaves them for debugging.

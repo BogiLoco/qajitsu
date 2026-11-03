@@ -22,6 +22,7 @@ import {
   type CreateComposeEnvProvider,
 } from "../support/compose-fixture.js";
 import { ticketSourceContract } from "../contract/ticket-source.contract.js";
+import { webExecutorContract } from "../contract/web-executor.contract.js";
 import { jiraPublishRoutes, jiraPublishSecrets } from "../support/jira-publish-fixture.js";
 import { GITHUB_TOKEN, githubRoutes, githubScenario } from "../support/github-fixture.js";
 import { GITLAB_TOKEN, gitlabRoutes, gitlabScenario } from "../support/gitlab-fixture.js";
@@ -374,6 +375,23 @@ export const pluginContracts: readonly PluginContract[] = [
           await installed<{ createSandboxExecutor(o?: object): AttemptExecutor }>("runner-api")
         ).createSandboxExecutor()(input);
       attemptExecutorContract("sandbox (installed plugin)", () => executor);
+    },
+  },
+  {
+    id: "runner-web",
+    run: (installed) => {
+      // The installed web runner drives the browser for the installed API runner's sandbox.
+      webExecutorContract("sandbox with the browser (installed plugins)", async () => {
+        const api = await installed<{ createSandboxExecutor(o: { browser: unknown }): AttemptExecutor }>(
+          "runner-api",
+        );
+        const web = await installed<{ createPlaywrightBrowserFactory(o: object): unknown }>("runner-web");
+        return api.createSandboxExecutor({
+          browser: web.createPlaywrightBrowserFactory({
+            webSession: { storage: "sessionStorage", key: "token" },
+          }),
+        });
+      });
     },
   },
 ];

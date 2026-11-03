@@ -989,7 +989,10 @@ the command with `qj plugin add <id>`.
 
 **What a plugin package needs.** It depends on QAJitsu's own packages as `peerDependencies`, never as
 `dependencies`, so npm does not fetch a second copy. Each plugin pull request (REQ-GEN-11/AC11) moves its package to
-peer dependencies, removes it from `@qajitsu/cli`'s dependencies and loads it through the plugin loader.
+peer dependencies, removes it from `@qajitsu/cli`'s dependencies and loads it through the plugin loader. A plugin that needs another plugin lists it as a peer dependency too, and `qj plugin add` installs both.
+Third-party versions coupled to tools that `qj setup` installs are pinned exactly. For example, `playwright-core` is
+`1.63.0` in the CLI and in every runner, because the browsers are installed for one Playwright version. An installed
+web runner that resolved a newer version found no browser. A contract test checks this.
 
 ## Core and plugins
 
@@ -1055,6 +1058,7 @@ request, and its contract runs against the installed copy (`tests/e2e/plugins-in
 | `publish-jira` | 2026-11-03 | 140.4 MB |
 | `env-compose` | 2026-11-03 | 140.3 MB |
 | `runner-api` | 2026-11-03 | 140.3 MB |
+| `runner-web` | 2026-11-03 | 136.9 MB |
 <!-- moved-out:end -->
 
 New integrations (Bitbucket, Azure DevOps, Maestro and the rest) start as plugins once their wave's mechanism exists.
