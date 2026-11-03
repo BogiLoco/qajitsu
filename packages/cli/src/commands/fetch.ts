@@ -91,7 +91,7 @@ export async function runFetch(
         masker.register(value);
       },
     };
-    const { ticketSource, codeHosts, testCaseSources } = buildAdapters(project, deps, ports);
+    const { ticketSource, codeHosts, testCaseSources } = await buildAdapters(project, deps, ports);
     const git = createGitRepos({
       cacheDir: resolveConfigPath(
         project.config.workspace.git_cache ?? "~/.qa-cache/git",

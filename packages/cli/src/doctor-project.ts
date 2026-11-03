@@ -141,7 +141,7 @@ export async function projectChecks(
 
   if (options.online) {
     const logger = createCliLogger({ file: devNull, mask: (v) => masker.maskJson(v) });
-    const { ticketSource, codeHosts } = buildAdapters(
+    const { ticketSource, codeHosts } = await buildAdapters(
       project,
       {
         fetch: ports.fetch,

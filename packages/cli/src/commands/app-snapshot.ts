@@ -180,19 +180,24 @@ export async function planSnapshot(
 }
 
 /** The code hosts of the project, for an app built by CI (REQ-ENV-06/AC1). */
-const codeHostsOf = (session: RunSession, ports: RuntimePorts): Readonly<Record<string, CodeHost>> =>
-  buildAdapters(
-    session.project,
-    {
-      fetch: ports.fetch,
-      logger: session.logger,
-      now: ports.now,
-      resolveSecret: (r) => session.resolveSecret(r),
-      registerSecret: (v) => {
-        session.masker.register(v);
+const codeHostsOf = async (
+  session: RunSession,
+  ports: RuntimePorts,
+): Promise<Readonly<Record<string, CodeHost>>> =>
+  (
+    await buildAdapters(
+      session.project,
+      {
+        fetch: ports.fetch,
+        logger: session.logger,
+        now: ports.now,
+        resolveSecret: (r) => session.resolveSecret(r),
+        registerSecret: (v) => {
+          session.masker.register(v);
+        },
       },
-    },
-    ports,
+      ports,
+    )
   ).codeHosts;
 
 /** Records the environment's pages and the app's first screen into `ui/snapshot.json` (REQ-EXEC-22/AC7+AC9). */
@@ -257,7 +262,7 @@ async function recordForPlanner(
         : mobile?.ios?.farm !== undefined;
     if (mobile && (appWithoutCode || options.force)) {
       const device = await (ports.mobileDevice?.() ??
-        prepareMobile(session, env.baseUrl, codeHostsOf(session, ports), ports.env["APPIUM_HOME"], {
+        prepareMobile(session, env.baseUrl, await codeHostsOf(session, ports), ports.env["APPIUM_HOME"], {
           // AC9: with qj plan --build the app may be built from the worktree too.
           allowBuild: options.buildBaseUrl !== undefined,
           fetch: ports.fetch,

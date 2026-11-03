@@ -165,7 +165,7 @@ async function checkoutTestsRepo(
   const [alias, repo] = entry;
   const resolveSecret = createCliSecretResolver(project, ports, masker);
   const logger = createCliLogger({ file: join(target, "qajitsu.log"), mask: (v) => masker.maskJson(v) });
-  const { codeHosts } = buildAdapters(
+  const { codeHosts } = await buildAdapters(
     project,
     {
       fetch: ports.fetch,

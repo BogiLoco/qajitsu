@@ -241,28 +241,29 @@ function mobileDevices(
   return {
     get: () => {
       if (device) return device;
-      const { codeHosts } = buildAdapters(
-        session.project,
-        {
-          fetch: ports.fetch,
-          logger: session.logger,
-          now: ports.now,
-          resolveSecret: (r) => session.resolveSecret(r),
-          registerSecret: (v) => {
-            session.masker.register(v);
-          },
-        },
-        ports,
-      );
       session.events.emit("run", SYSTEM, "mobile.prepare", { cases: options.cases });
-      device =
-        ports.mobileDevice?.() ??
-        prepareMobile(session, env.baseUrl, codeHosts, ports.env["APPIUM_HOME"], {
+      const prepared = async (): Promise<PreparedMobile> => {
+        const { codeHosts } = await buildAdapters(
+          session.project,
+          {
+            fetch: ports.fetch,
+            logger: session.logger,
+            now: ports.now,
+            resolveSecret: (r) => session.resolveSecret(r),
+            registerSecret: (v) => {
+              session.masker.register(v);
+            },
+          },
+          ports,
+        );
+        return prepareMobile(session, env.baseUrl, codeHosts, ports.env["APPIUM_HOME"], {
           allowBuild: options.build,
           // REQ-EXEC-16/AC2: --headed shows the emulator window.
           headed: options.headed,
           fetch: ports.fetch,
         });
+      };
+      device = ports.mobileDevice?.() ?? prepared();
       return device;
     },
     started: () => device !== undefined,

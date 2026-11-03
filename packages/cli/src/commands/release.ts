@@ -191,7 +191,7 @@ export async function runRelease(
         masker.register(v);
       },
     };
-    const { ticketSource } = buildAdapters(project, deps, ports);
+    const { ticketSource } = await buildAdapters(project, deps, ports);
     if (!ticketSource.findTickets)
       throw new ConfigError(
         "RELEASE_UNSUPPORTED",

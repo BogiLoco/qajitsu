@@ -70,18 +70,20 @@ export async function appVersions(
   });
   const runs = await latestRunCommits(root);
   const hosts = options.online
-    ? buildAdapters(
-        project,
-        {
-          fetch: ports.fetch,
-          logger: createCliLogger({ file: devNull, mask: (v) => masker.maskJson(v) }),
-          now: ports.now,
-          resolveSecret,
-          registerSecret: (v) => {
-            masker.register(v);
+    ? (
+        await buildAdapters(
+          project,
+          {
+            fetch: ports.fetch,
+            logger: createCliLogger({ file: devNull, mask: (v) => masker.maskJson(v) }),
+            now: ports.now,
+            resolveSecret,
+            registerSecret: (v) => {
+              masker.register(v);
+            },
           },
-        },
-        ports,
+          ports,
+        )
       ).codeHosts
     : {};
   for (const [alias, repo] of Object.entries(config.repos)) {

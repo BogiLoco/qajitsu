@@ -1,7 +1,7 @@
 import type { CommandExec } from "@qajitsu/adapter-env-compose";
 import { join } from "node:path";
-import { createGitHubCodeHost } from "@qajitsu/adapter-codehost-github";
-import { createGitLabCodeHost } from "@qajitsu/adapter-codehost-gitlab";
+import type * as GitHubPlugin from "@qajitsu/adapter-codehost-github";
+import type * as GitLabPlugin from "@qajitsu/adapter-codehost-gitlab";
 import { createLocalCodeHost } from "@qajitsu/adapter-codehost-local";
 import type * as SecretsCliPlugin from "@qajitsu/adapter-secrets-cli";
 import type { SecretCliExec } from "@qajitsu/adapter-secrets-cli";
@@ -9,12 +9,8 @@ import type * as DopplerPlugin from "@qajitsu/adapter-secrets-doppler";
 import { createEnvSecretProvider } from "@qajitsu/adapter-secrets-env";
 import type * as VaultPlugin from "@qajitsu/adapter-secrets-vault";
 import { createFileCaseSource, createFileTicketSource } from "@qajitsu/adapter-files";
-import {
-  createTestRailCaseSource,
-  createXrayCaseSource,
-  createZephyrCaseSource,
-} from "@qajitsu/adapter-testcases";
-import { createJiraCloudTicketSource } from "@qajitsu/adapter-ticket-jira";
+import type * as TestCasesPlugin from "@qajitsu/adapter-testcases";
+import type * as JiraPlugin from "@qajitsu/adapter-ticket-jira";
 import {
   ConfigError,
   createSecretResolver,
@@ -164,17 +160,19 @@ export function createCliSecretResolver(project: LoadedProject, ports: RuntimePo
  * @param deps - Adapter dependencies (fetch, logger, clock, secret resolver).
  * @param ports - Runtime ports.
  */
-export function buildAdapters(
+export async function buildAdapters(
   project: LoadedProject,
   deps: AdapterDeps,
   ports: RuntimePorts,
-): ProjectAdapters {
+): Promise<ProjectAdapters> {
   const { config, qaDir } = project;
   const jira = config.jira;
+  // REQ-GEN-11/AC2: each integration comes from its plugin; a missing one stops here with the install command.
+  const plugins = pluginLoader(ports);
   const ticketSource =
     jira.type === "file"
       ? createFileTicketSource(resolveConfigPath(jira.tickets_dir ?? ".", qaDir, ports.home))
-      : createJiraCloudTicketSource(
+      : (await plugins.load<typeof JiraPlugin>("ticket-jira")).createJiraCloudTicketSource(
           {
             baseUrl: jira.base_url ?? "",
             flavor: jira.type === "datacenter" ? "datacenter" : "cloud",
@@ -189,7 +187,7 @@ export function buildAdapters(
   for (const [alias, host] of Object.entries(config.code_hosts)) {
     switch (host.type) {
       case "github":
-        codeHosts[alias] = createGitHubCodeHost(
+        codeHosts[alias] = (await plugins.load<typeof GitHubPlugin>("codehost-github")).createGitHubCodeHost(
           {
             alias,
             baseUrl: host.base_url,
@@ -206,7 +204,7 @@ export function buildAdapters(
         );
         break;
       case "gitlab":
-        codeHosts[alias] = createGitLabCodeHost(
+        codeHosts[alias] = (await plugins.load<typeof GitLabPlugin>("codehost-gitlab")).createGitLabCodeHost(
           { alias, baseUrl: host.base_url, token: host.token ?? "" },
           deps,
         );
@@ -221,23 +219,40 @@ export function buildAdapters(
         break;
     }
   }
-  const testCaseSources = config.test_cases.map((t): TestCaseSource => {
+  const testCaseSources: TestCaseSource[] = [];
+  for (const t of config.test_cases) {
+    if (t.type === "file") {
+      testCaseSources.push(createFileCaseSource(resolveConfigPath(t.path, qaDir, ports.home)));
+      continue;
+    }
+    const cases = await plugins.load<typeof TestCasesPlugin>("testcases");
     switch (t.type) {
       case "xray":
-        return createXrayCaseSource(
-          { baseUrl: t.base_url, clientId: t.client_id, clientSecret: t.client_secret, jql: t.jql },
-          deps,
+        testCaseSources.push(
+          cases.createXrayCaseSource(
+            { baseUrl: t.base_url, clientId: t.client_id, clientSecret: t.client_secret, jql: t.jql },
+            deps,
+          ),
         );
+        break;
       case "zephyr":
-        return createZephyrCaseSource({ baseUrl: t.base_url, token: t.token }, deps);
+        testCaseSources.push(cases.createZephyrCaseSource({ baseUrl: t.base_url, token: t.token }, deps));
+        break;
       case "testrail":
-        return createTestRailCaseSource(
-          { baseUrl: t.base_url, user: t.user, token: t.token, projectId: t.project_id, suiteId: t.suite_id },
-          deps,
+        testCaseSources.push(
+          cases.createTestRailCaseSource(
+            {
+              baseUrl: t.base_url,
+              user: t.user,
+              token: t.token,
+              projectId: t.project_id,
+              suiteId: t.suite_id,
+            },
+            deps,
+          ),
         );
-      case "file":
-        return createFileCaseSource(resolveConfigPath(t.path, qaDir, ports.home));
+        break;
     }
-  });
+  }
   return { ticketSource, codeHosts, testCaseSources };
 }
