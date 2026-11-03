@@ -52,6 +52,14 @@ export function pluginLoader(ports: RuntimePorts): PluginLoader {
   return loader;
 }
 
+/**
+ * The plugin loader of a run session (REQ-GEN-11/AC2); a session built by hand (tests) loads the plugins this
+ * installation carries.
+ */
+export function sessionPlugins(session: { readonly plugins?: PluginLoader | undefined }): PluginLoader {
+  return session.plugins ?? createPluginLoader({ root: "", catalogue: readCatalogue() });
+}
+
 /** Installing from the npm registry the toolchain uses (a company mirror, a proxy, a CA), npm without a shell. */
 async function installPorts(
   ports: RuntimePorts,

@@ -255,12 +255,13 @@ importers:
 
   packages/adapters/messages-webhooksite:
     dependencies:
-      '@qajitsu/core':
-        specifier: workspace:*
-        version: link:../../core
       zod:
         specifier: 'catalog:'
         version: 4.6.5
+    devDependencies:
+      '@qajitsu/core':
+        specifier: workspace:*
+        version: link:../../core
 
   packages/adapters/publish-jira:
     dependencies:
@@ -450,9 +451,6 @@ importers:
       '@qajitsu/adapter-evidence-s3':
         specifier: workspace:*
         version: link:../adapters/evidence-s3
-      '@qajitsu/adapter-messages-webhooksite':
-        specifier: workspace:*
-        version: link:../adapters/messages-webhooksite
       '@qajitsu/adapter-publish-jira':
         specifier: workspace:*
         version: link:../adapters/publish-jira
@@ -523,6 +521,9 @@ importers:
       '@qajitsu/adapter-knowledge-lancedb':
         specifier: workspace:*
         version: link:../adapters/knowledge-lancedb
+      '@qajitsu/adapter-messages-webhooksite':
+        specifier: workspace:*
+        version: link:../adapters/messages-webhooksite
       '@qajitsu/adapter-secrets-cli':
         specifier: workspace:*
         version: link:../adapters/secrets-cli

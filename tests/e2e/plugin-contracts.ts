@@ -1,4 +1,6 @@
-import type { AdapterDeps, DocumentSource, SecretProvider, VectorStore } from "@qajitsu/core";
+import type { AdapterDeps, DocumentSource, MessageCapture, SecretProvider, VectorStore } from "@qajitsu/core";
+import { messageCaptureContract } from "../contract/message-capture.contract.js";
+import { webhookSiteConfig, webhookSiteFixture } from "../support/webhook-site-fixture.js";
 import { documentSourceContract } from "../contract/document-source.contract.js";
 import { confluenceConfig, confluenceFixture } from "../support/confluence-fixture.js";
 import { vectorStoreContract } from "../contract/vector-store.contract.js";
@@ -170,6 +172,18 @@ export const pluginContracts: readonly PluginContract[] = [
           );
         },
         "secret://op/QA/jira/",
+      );
+    },
+  },
+  {
+    id: "messages-webhooksite",
+    run: (installed) => {
+      messageCaptureContract("webhook.site (installed plugin)", webhookSiteFixture, async (deps) =>
+        (
+          await installed<{
+            createWebhookSiteCapture(c: typeof webhookSiteConfig, d: AdapterDeps): MessageCapture;
+          }>("messages-webhooksite")
+        ).createWebhookSiteCapture(webhookSiteConfig, deps),
       );
     },
   },

@@ -1,7 +1,8 @@
-import { createWebhookSiteCapture } from "@qajitsu/adapter-messages-webhooksite";
+import type * as WebhookSitePlugin from "@qajitsu/adapter-messages-webhooksite";
 import { ConfigError, type CaseMessages, type MessageCapture, type MessageInbox } from "@qajitsu/core";
 import type { RuntimePorts } from "../adapters.js";
 import type { RunSession } from "../session.js";
+import { sessionPlugins } from "./plugin.js";
 
 /** Replaceable message capture (tests use an in-memory one). */
 export interface MessagePorts {
@@ -13,6 +14,17 @@ export interface RunMessages {
   readonly forCase: (caseId: string) => CaseMessages;
   /** Deletes every inbox of the run (AC5); failures are reported, never fatal. */
   readonly deleteAll: () => Promise<string[]>;
+}
+
+/** A message capture whose plugin is loaded on first use. */
+function lazyCapture(make: () => Promise<MessageCapture>): MessageCapture {
+  let capture: Promise<MessageCapture> | undefined;
+  const get = (): Promise<MessageCapture> => (capture ??= make());
+  return {
+    createInbox: async (label, signal) => (await get()).createInbox(label, signal),
+    messages: async (inboxId, signal) => (await get()).messages(inboxId, signal),
+    deleteInbox: async (inboxId, signal) => (await get()).deleteInbox(inboxId, signal),
+  };
 }
 
 /**
@@ -38,17 +50,22 @@ export function runMessages(
     );
   const capture =
     ports.messageCapture?.(session) ??
-    createWebhookSiteCapture(
-      { baseUrl: config.base_url, emailDomain: config.email_domain, apiKey: config.api_key },
-      {
-        fetch: ports.fetch,
-        logger,
-        now: ports.now,
-        resolveSecret: session.resolveSecret,
-        registerSecret: (v) => {
-          masker.register(v);
+    // REQ-GEN-11/AC2: the webhook.site plugin loads when the first inbox is needed.
+    lazyCapture(async () =>
+      (
+        await sessionPlugins(session).load<typeof WebhookSitePlugin>("messages-webhooksite")
+      ).createWebhookSiteCapture(
+        { baseUrl: config.base_url, emailDomain: config.email_domain, apiKey: config.api_key },
+        {
+          fetch: ports.fetch,
+          logger,
+          now: ports.now,
+          resolveSecret: session.resolveSecret,
+          registerSecret: (v) => {
+            masker.register(v);
+          },
         },
-      },
+      ),
     );
   const inboxes = new Map<string, Promise<MessageInbox>>();
   let recording: Promise<void> = Promise.resolve();
