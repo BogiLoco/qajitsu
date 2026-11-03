@@ -17,7 +17,7 @@ import type { RuntimePorts } from "../adapters.js";
 import { readCatalogue } from "../plugins/catalogue.js";
 import { bundledPackageDir, createPluginLoader } from "../plugins/load.js";
 import { loadProject } from "../project.js";
-import { pluginCheck, pluginVersions } from "./plugin.js";
+import { optionalPlugin, pluginCheck, pluginVersions } from "./plugin.js";
 import { npmTarball } from "../../../../tests/support/npm-tarball.js";
 
 const LANCE = "@qajitsu/adapter-knowledge-lancedb";
@@ -233,5 +233,10 @@ describe("qj plugin (REQ-GEN-11)", () => {
     expect(r.exitCode).toBe(3);
     expect(r.err).toContain("[PLUGIN_MISSING]");
     expect(r.err).toContain("qj plugin add knowledge-lancedb");
+  });
+
+  it("REQ-GEN-11/AC2: work that needs nothing without a plugin skips it instead of failing", async () => {
+    expect(await optionalPlugin(loader(), "knowledge-lancedb")).toBeUndefined();
+    expect(await optionalPlugin(loader(), "codehost-local")).toEqual({});
   });
 });

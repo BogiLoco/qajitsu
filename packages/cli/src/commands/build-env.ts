@@ -1,12 +1,9 @@
 import { readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { basename } from "node:path";
-import {
-  BuildStartError,
-  createComposeEnvProvider,
-  type BuildEnvironment,
-  type CommandExec,
-} from "@qajitsu/adapter-env-compose";
+import type * as ComposePlugin from "@qajitsu/adapter-env-compose";
+import type { BuildEnvironment, CommandExec } from "@qajitsu/adapter-env-compose";
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
+import { sessionPlugins } from "./plugin.js";
 import {
   CaseResultFileSchema,
   ConfigError,
@@ -101,6 +98,9 @@ export async function prepareBuild(
       `The --build configuration is invalid:\n${problems.map((p) => `  ✘ ${p.where}: ${p.problem}`).join("\n")}`,
       { problems },
     );
+  // REQ-GEN-11/AC2: --build starts the application through the compose plugin.
+  const { BuildStartError, createComposeEnvProvider } =
+    await sessionPlugins(session).load<typeof ComposePlugin>("env-compose");
   try {
     return {
       build: await createComposeEnvProvider({

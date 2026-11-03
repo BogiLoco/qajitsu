@@ -27,6 +27,7 @@ import type { CommandIO } from "./fetch.js";
 import { runInit } from "./init.js";
 import { removeRun } from "./runs.js";
 import type { CommandExec } from "@qajitsu/adapter-env-compose";
+import { pluginLoader } from "./plugin.js";
 
 const fail = (io: CommandIO, error: unknown): number => {
   const code = error instanceof QajitsuError ? ` [${error.code}]` : "";
@@ -323,7 +324,9 @@ export async function runProjectRemove(
     for (const ticket of tickets) {
       const key = TicketKeySchema.parse(ticket);
       for (const r of (await readRunIndex(paths.runs, key)).runs)
-        io.write(`${await removeRun(paths.runs, key, r.runId, ports.buildExec)}\n`);
+        io.write(
+          `${await removeRun(paths.runs, key, r.runId, ports.buildExec, ports.now(), pluginLoader(ports))}\n`,
+        );
     }
     const audit = join(paths.runs, ".audit");
     if (options.deleteAudit !== true && (await readdir(audit).catch(() => [])).length > 0) {

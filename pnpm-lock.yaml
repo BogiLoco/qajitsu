@@ -191,12 +191,13 @@ importers:
 
   packages/adapters/env-compose:
     dependencies:
-      '@qajitsu/core':
-        specifier: workspace:*
-        version: link:../../core
       yaml:
         specifier: 'catalog:'
         version: 2.9.1
+    devDependencies:
+      '@qajitsu/core':
+        specifier: workspace:*
+        version: link:../../core
 
   packages/adapters/env-remote:
     dependencies:
@@ -461,9 +462,6 @@ importers:
       '@qajitsu/adapter-codehost-local':
         specifier: workspace:*
         version: link:../adapters/codehost-local
-      '@qajitsu/adapter-env-compose':
-        specifier: workspace:*
-        version: link:../adapters/env-compose
       '@qajitsu/adapter-env-remote':
         specifier: workspace:*
         version: link:../adapters/env-remote
@@ -531,6 +529,9 @@ importers:
       '@qajitsu/adapter-codehost-gitlab':
         specifier: workspace:*
         version: link:../adapters/codehost-gitlab
+      '@qajitsu/adapter-env-compose':
+        specifier: workspace:*
+        version: link:../adapters/env-compose
       '@qajitsu/adapter-evidence-s3':
         specifier: workspace:*
         version: link:../adapters/evidence-s3

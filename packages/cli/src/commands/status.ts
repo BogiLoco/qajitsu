@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
+import { optionalPlugin, pluginLoader } from "./plugin.js";
 import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
-import { runningEnvironments } from "@qajitsu/adapter-env-compose";
+import type * as ComposePlugin from "@qajitsu/adapter-env-compose";
 import { dirname, join } from "node:path";
 import {
   ConfigError,
@@ -279,7 +280,9 @@ async function projectStatus(project: LoadedProject, ports: RuntimePorts): Promi
   // REQ-PRJ-05/AC6: environments of this project's runs that are still running, so none is forgotten for days.
   const runsRoot = rootOf(project, ports);
   const digests = await readRunDigests(runsRoot);
-  const running = (await runningEnvironments(ports.dockerExec)).filter((e) =>
+  // Without the compose plugin no environment of QAJitsu can be running.
+  const compose = await optionalPlugin<typeof ComposePlugin>(pluginLoader(ports), "env-compose");
+  const running = (compose ? await compose.runningEnvironments(ports.dockerExec) : []).filter((e) =>
     existsSync(join(runsRoot, e.ticket, e.runId)),
   );
   const environments =

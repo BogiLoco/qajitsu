@@ -2,7 +2,10 @@ import { lockedUntil } from "./archive.js";
 import { formatVersions } from "@qajitsu/report";
 import { readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { removeRunResources, type CommandExec } from "@qajitsu/adapter-env-compose";
+import type * as ComposePlugin from "@qajitsu/adapter-env-compose";
+import type { CommandExec } from "@qajitsu/adapter-env-compose";
+import type { PluginLoader } from "../plugins/load.js";
+import { optionalPlugin, pluginLoader, sessionPlugins } from "./plugin.js";
 import {
   ConfigError,
   updateRunIndex,
@@ -185,6 +188,7 @@ async function cleanOne(
   runId: string,
   exec: CommandExec | undefined,
   then?: () => Promise<void>,
+  plugins?: PluginLoader,
 ): Promise<string> {
   const ws = await openRunWorkspace(root, ticket, runId);
   let release: () => Promise<void>;
@@ -194,7 +198,11 @@ async function cleanOne(
     return `${runId}: in use by another process, skipped`;
   }
   try {
-    const removed = await removeRunResources(ws.runId, exec);
+    // Without the compose plugin QAJitsu started no containers, so there are none to remove.
+    const compose = await optionalPlugin<typeof ComposePlugin>(plugins ?? sessionPlugins({}), "env-compose");
+    const removed = compose
+      ? await compose.removeRunResources(ws.runId, exec)
+      : { containers: 0, volumes: 0, networks: 0 };
     const files = await cleanRunFiles(ws);
     await then?.();
     return `${runId}: ${String(removed.containers)} container(s), ${String(removed.volumes)} volume(s), ${String(removed.networks)} network(s), ${String(files.length)} worktree/env path(s) removed`;
@@ -215,6 +223,7 @@ export async function removeRun(
   runId: string,
   exec: CommandExec | undefined,
   now: Date = new Date(),
+  plugins?: PluginLoader,
 ): Promise<string> {
   // REQ-VER-19/AC2: a run kept write-once is not deleted here before its retention ends.
   const until = await openRunWorkspace(root, ticket, runId).then(
@@ -223,10 +232,17 @@ export async function removeRun(
   );
   if (until !== undefined)
     return `${ticket}/${runId}: kept, it is locked in write-once storage until ${until}`;
-  const cleaned = await cleanOne(root, ticket, runId, exec, async () => {
-    await archiveJournal(root, ticket, runId);
-    await deleteRun(root, ticket, runId);
-  });
+  const cleaned = await cleanOne(
+    root,
+    ticket,
+    runId,
+    exec,
+    async () => {
+      await archiveJournal(root, ticket, runId);
+      await deleteRun(root, ticket, runId);
+    },
+    plugins,
+  );
   return cleaned.endsWith("skipped") ? `${ticket}/${cleaned}` : `removed ${ticket}/${runId}`;
 }
 
@@ -310,7 +326,8 @@ export async function runClean(
     const ids = options.all === true ? index.runs.map((r) => r.runId) : [options.run ?? index.latest ?? ""];
     if (ids.length === 0 || ids[0] === "")
       throw new ConfigError("RUN_NOT_FOUND", `No run for ${ticket}.`, {});
-    for (const id of ids) io.write(`${await cleanOne(root, ticket, id, ports.buildExec)}\n`);
+    for (const id of ids)
+      io.write(`${await cleanOne(root, ticket, id, ports.buildExec, undefined, pluginLoader(ports))}\n`);
     return 0;
   } catch (error) {
     return fail(io, error);
@@ -344,7 +361,9 @@ export async function runGc(
         }
         try {
           // REQ-OBS-05/AC2: the journal outlives the run under the audit retention; no archive, no delete.
-          io.write(`${await removeRun(root, ticket, runId, ports.buildExec, ports.now())}\n`);
+          io.write(
+            `${await removeRun(root, ticket, runId, ports.buildExec, ports.now(), pluginLoader(ports))}\n`,
+          );
         } catch (error) {
           io.writeError(
             `${ticket}/${runId}: kept, its journal could not be archived (${error instanceof Error ? error.message : String(error)})\n`,
@@ -394,7 +413,9 @@ export async function runWorkReset(
           io.write(`${ticket}/${r.runId}: marked keep, kept\n`);
           continue;
         }
-        io.write(`${await removeRun(root, ticket, r.runId, ports.buildExec, ports.now())}\n`);
+        io.write(
+          `${await removeRun(root, ticket, r.runId, ports.buildExec, ports.now(), pluginLoader(ports))}\n`,
+        );
       }
     }
     const latest = (await readRunIndex(root, ticket)).latest;

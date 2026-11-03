@@ -18,8 +18,13 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@qajitsu/core": "workspace:*",
     "yaml": "catalog:"
+  },
+  "peerDependencies": {
+    "@qajitsu/core": "workspace:^"
+  },
+  "devDependencies": {
+    "@qajitsu/core": "workspace:*"
   },
   "qajitsu": {
     "plugin": {

@@ -60,6 +60,14 @@ export function sessionPlugins(session: { readonly plugins?: PluginLoader | unde
   return session.plugins ?? createPluginLoader({ root: "", catalogue: readCatalogue() });
 }
 
+/**
+ * A plugin when it is there, else undefined (REQ-GEN-11/AC2): for work that has nothing to do without it, such as
+ * removing the containers of a run when the compose plugin, which alone starts them, is not installed.
+ */
+export async function optionalPlugin<T>(loader: PluginLoader, id: string): Promise<T | undefined> {
+  return (await loader.availability(id)) === undefined ? undefined : loader.load<T>(id);
+}
+
 /** Installing from the npm registry the toolchain uses (a company mirror, a proxy, a CA), npm without a shell. */
 async function installPorts(
   ports: RuntimePorts,

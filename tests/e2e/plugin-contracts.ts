@@ -11,7 +11,14 @@ import type {
   VectorStore,
 } from "@qajitsu/core";
 import { codeHostContract } from "../contract/code-host.contract.js";
+import { envProviderContract } from "../contract/env-provider.contract.js";
 import { publisherContract } from "../contract/publisher.contract.js";
+import {
+  composeApiService,
+  composeFailingService,
+  composeProvider,
+  type CreateComposeEnvProvider,
+} from "../support/compose-fixture.js";
 import { ticketSourceContract } from "../contract/ticket-source.contract.js";
 import { jiraPublishRoutes, jiraPublishSecrets } from "../support/jira-publish-fixture.js";
 import { GITHUB_TOKEN, githubRoutes, githubScenario } from "../support/github-fixture.js";
@@ -340,6 +347,20 @@ export const pluginContracts: readonly PluginContract[] = [
           ));
         return { id: "jira-cloud", publish: async (input, signal) => (await get()).publish(input, signal) };
       });
+    },
+  },
+  {
+    id: "env-compose",
+    run: (installed) => {
+      const create = async (): Promise<CreateComposeEnvProvider> =>
+        (await installed<{ createComposeEnvProvider: CreateComposeEnvProvider }>("env-compose"))
+          .createComposeEnvProvider;
+      envProviderContract(
+        "compose (installed plugin)",
+        async () => composeProvider(await create(), composeApiService),
+        async () => composeProvider(await create(), composeFailingService),
+        true,
+      );
     },
   },
 ];
