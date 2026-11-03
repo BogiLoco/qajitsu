@@ -61,6 +61,9 @@ Rules:
   generated) is one step that checks it with "wait": {"timeout_s": 30, "interval_s": 2} next to its "expect": the
   step's request or page check is repeated until every expectation of the step holds or the time is up. Take the
   time from the ticket; never add a wait to a step whose result is immediate.
+- A GraphQL API: a step is "POST /graphql" with "graphql": {"operation": "Query.product"} naming one of the
+  operations under "GraphQL operations"; its expectations read the answer like JSON ("data.product.price"), and
+  "errors.0.message" when the case expects an error.
 - A step that creates something that must not exist twice (an order, a payment, a booking) sets
   "idempotency_key": true: its requests carry a key, so a retry on a busy shared environment never repeats it.
 - An API case can send files as well: "files" as below, the body as multipart, a form, raw binary or text; a request

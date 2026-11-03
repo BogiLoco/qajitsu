@@ -73,6 +73,21 @@ const BUGS = [
     caseId: "TC-01",
     specs: ["TC-01", "TC-02"],
   },
+  // GraphQL (REQ-EXEC-48): a price as text breaks the schema; an error next to the data fails even with HTTP 200.
+  {
+    bug: "BUG-24",
+    flag: "BUG_GRAPHQL_PRICE_AS_TEXT",
+    ticket: "DEMO-18",
+    caseId: "TC-01",
+    specs: ["TC-01", "TC-02", "TC-03"],
+  },
+  {
+    bug: "BUG-25",
+    flag: "BUG_GRAPHQL_ERROR_WITH_DATA",
+    ticket: "DEMO-18",
+    caseId: "TC-02",
+    specs: ["TC-01", "TC-02", "TC-03"],
+  },
   // An outcome that never comes: the planned wait ends at its timeout with FAILED (REQ-EXEC-46).
   {
     bug: "BUG-22",
@@ -198,6 +213,7 @@ describe("demo-shop self-test (REQ-NFR-04/AC1)", () => {
     ["DEMO-7", ["TC-01", "TC-02", "TC-03"]],
     ["DEMO-16", ["TC-01", "TC-02", "TC-03"]],
     ["DEMO-17", ["TC-01", "TC-02"]],
+    ["DEMO-18", ["TC-01", "TC-02", "TC-03"]],
   ] as const)("%s: every case is PASSED with all bugs off", async (ticket, specs) => {
     const { exitCode, statuses, out } = await pipeline(ticket, specs);
     expect(

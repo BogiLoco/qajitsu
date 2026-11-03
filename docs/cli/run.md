@@ -47,6 +47,15 @@ qajitsu run <TICKET> [--run <id>] [--env <profile|url>] [--keep] [--env-not-conf
    - A case still rate limited after `retry_budget_s` (30 s by default) is BLOCKED with "rate limited", never FAILED
      or PASSED. A step whose plan expects that status gets the response as it came.
    - A keyed request carries `Idempotency-Key: qj-<case>-<step>-a<attempt>-<n>`, the same on every retry.
+     GraphQL (REQ-EXEC-48): a spec calls `api.graphql(query, variables)` (`POST /graphql`, or another `path`). After the
+     attempt, code checks every such call against the schema of the analysed commit. That schema is
+     `repos.<alias>.graphql`: an SDL file in the repository, or an endpoint path like `/graphql`, which is introspected on
+     the environment.
+   - A query that cannot be parsed, does not fit the schema or skips the plan step's `graphql.operation` is the spec's
+     error: BLOCKED.
+   - An `errors` array where the plan expects data fails the step, even with HTTP 200.
+   - Data that does not fit the schema's types fails it too.
+   - Expectations read the answer by path, like JSON: `fields.data.product.price`, `fields.errors.0.message`.
 7. Verdict: `computeStatus` per case, evidence manifest re-hashed, publish gates (every approved case has one status,
    plan unchanged, PASSED is proven, FAILED is explained, manifest intact, no secrets in outgoing artifacts).
 8. Reports in `report/`: `matrix.md`, `matrix.csv`, `matrix.xlsx`, `report.html` (self-contained), `gates.json`.

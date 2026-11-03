@@ -221,7 +221,7 @@ export function stepsWithoutActions(source: string): string[] {
 }
 
 /** Requests of the api client; called on `api` itself they go out without any login. */
-const HTTP_VERBS = new Set(["get", "post", "put", "patch", "delete"]);
+const HTTP_VERBS = new Set(["get", "post", "put", "patch", "delete", "graphql"]);
 
 /**
  * Lint, plan coverage and assertion lock of one spec (REQ-EXEC-03/AC1..AC3, invariant 4). Pure AST

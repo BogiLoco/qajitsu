@@ -221,6 +221,27 @@ describe("demo-shop seeded bugs (REQ-NFR-04, BUGS.md)", () => {
     expect((await call(shop, "GET", "/me")).status).toBe(401);
   });
 
+  it("BUG-24 and BUG-25: GraphQL answers prices as numbers and lists without errors, unless a flag says otherwise", async () => {
+    const gql = async (flag: string | undefined, query: string) => {
+      const shop = await start(flag);
+      return (await call(shop, "POST", "/graphql", { query })).body;
+    };
+    expect(await gql(undefined, '{ product(id: "P-2") { price } }')).toEqual({
+      data: { product: { price: 24.99 } },
+    });
+    expect(await gql("BUG_GRAPHQL_PRICE_AS_TEXT", '{ product(id: "P-2") { price } }')).toEqual({
+      data: { product: { price: "24.99" } },
+    });
+    expect((await gql("BUG_GRAPHQL_ERROR_WITH_DATA", "{ products { id } }"))["errors"]).toEqual([
+      { message: "Price cache unavailable", path: ["products"] },
+    ]);
+    expect((await gql(undefined, "{ order { id } }"))["errors"]).toEqual([
+      { message: 'Cannot query field "order" on type "Query".' },
+    ]);
+    expect((await gql(undefined, "{ product("))["errors"]).toHaveLength(1);
+    expect((await gql(undefined, "mutation { x }"))["errors"]).toHaveLength(1);
+  });
+
   it("REQ-NFR-04/AC1: every seeded bug can be switched on in a --build run (dogfood 2026-10-25)", () => {
     const config = parse(readFileSync(new URL("../.qa/qa.project.yaml", import.meta.url), "utf8")) as {
       services: { api: { env: Record<string, { overridable?: boolean }> } };

@@ -21,7 +21,10 @@ qajitsu doctor --models
    for each attempt (REQ-EXEC-53; only kinds of `test_data.kinds`, or any kind with a data hook, otherwise the
    planner is sent back), per step a `wait: { timeout_s, interval_s }` for an outcome that comes later
    (REQ-EXEC-46), and per step `idempotency_key: true` for a request that must not happen twice, such as an order or
-   a payment (REQ-EXEC-54/AC4). The review shows all of them.
+   a payment (REQ-EXEC-54/AC4), and per step `graphql: { operation: "Query.product" }` for a GraphQL call. The
+   operation is one the planner sees under "GraphQL operations": code reads them from the schema of the analysed
+   commit, and a draft that names another one goes back to the planner (REQ-EXEC-48/AC1). The review shows all of
+   them.
 5. In a terminal: `[a]ccept`, `[r]evise` (free text, creates the next version and shows `+ added`, `- removed`,
    `~ changed` cases), `[e]dit` (opens `$EDITOR`; the edit is schema- and source-checked before it becomes a version)
    or `[q]uit`. Accepting a plan with open questions needs an explicit `yes` (REQ-PLAN-05).

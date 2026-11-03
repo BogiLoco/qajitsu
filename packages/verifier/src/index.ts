@@ -27,3 +27,4 @@ export * from "./certificate.js";
 export * from "./spec-quality.js";
 export * from "./readiness.js";
 export * from "./timestamp.js";
+export * from "./graphql.js";

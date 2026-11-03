@@ -106,6 +106,11 @@ export interface RunCasesOptions {
   readonly keepTestData?: boolean | undefined;
   /** The run's limits for a shared environment (REQ-EXEC-54): one policy for every lane of the run. */
   readonly traffic?: TrafficPolicy | undefined;
+  /**
+   * Checks an attempt after it ran, like the OpenAPI contract: it may add failed assertions or make the attempt an error
+   * (the GraphQL schema, REQ-EXEC-48), never a passing assertion (invariant 1).
+   */
+  readonly checkAttempt?: ((record: AttemptRecord) => AttemptRecord) | undefined;
 }
 
 /**
@@ -357,10 +362,12 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
       // REQ-EXEC-53/AC1: the records go too, unless the run keeps them for debugging.
       .finally(() => data.finish());
     const dataEvidence = await data.finish();
-    const record = applyContract(
+    const contracted = applyContract(
       dataEvidence ? { ...executed, evidence: [...executed.evidence, dataEvidence] } : executed,
       options.contract,
     );
+    // REQ-EXEC-48: further checks of the attempt by trusted code (the GraphQL schema), before its status is computed.
+    const record = options.checkAttempt ? options.checkAttempt(contracted) : contracted;
     const evidencePaths: string[] = [];
     for (const item of record.evidence) {
       const stored = await options.evidence.put(

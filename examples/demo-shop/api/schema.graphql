@@ -1,0 +1,12 @@
+# The shop's GraphQL API (DEMO-18): products with their price and whether they are in stock.
+type Query {
+  product(id: ID!): Product
+  products: [Product!]!
+}
+
+type Product {
+  id: ID!
+  name: String!
+  price: Float!
+  inStock: Boolean!
+}

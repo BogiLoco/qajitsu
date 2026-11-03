@@ -152,6 +152,14 @@ async function start(m: StartMessage): Promise<void> {
       put: (path: string, b?: unknown, o?: unknown) => send("PUT", path, b, o),
       patch: (path: string, b?: unknown, o?: unknown) => send("PATCH", path, b, o),
       delete: (path: string, o?: unknown) => send("DELETE", path, undefined, o),
+      // REQ-EXEC-48/AC2: plain data; the parent checks the query and marks the call as GraphQL.
+      graphql: (query: unknown, variables?: unknown, o?: { path?: unknown }) =>
+        send(
+          "POST",
+          typeof o?.path === "string" ? o.path : "/graphql",
+          { __qjBody: "graphql", query, ...(variables === undefined ? {} : { variables }) },
+          o,
+        ),
       as: (a: string) => client(a),
       // REQ-EXEC-45/AC1: body descriptors are plain data; the parent resolves files from the plan and checks them.
       multipart: (parts: { fields?: unknown; files?: unknown } = {}) => ({

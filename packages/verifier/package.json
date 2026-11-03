@@ -20,6 +20,7 @@
   "dependencies": {
     "@qajitsu/core": "workspace:*",
     "@qajitsu/steps": "workspace:*",
+    "graphql": "16.11.0",
     "typescript": "catalog:"
   }
 }

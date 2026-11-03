@@ -760,6 +760,21 @@ function testDataProblems(plan: Plan, context: ChangeContext): string[] {
   );
 }
 
+/** Steps of a draft citing a GraphQL operation the schema does not have (REQ-EXEC-48/AC1). */
+function graphqlProblems(plan: Plan, context: ChangeContext): string[] {
+  if (!context.graphql) return [];
+  const known = context.graphql.operations.map((o) => o.replace(/[(:].*$/, ""));
+  return plan.cases.flatMap((c) =>
+    c.steps.flatMap((s) =>
+      s.graphql !== undefined && !known.includes(s.graphql.operation)
+        ? [
+            `${c.id}.${s.id}: ${s.graphql.operation} is not an operation of the GraphQL schema; use one of ${known.join(", ")}`,
+          ]
+        : [],
+    ),
+  );
+}
+
 /** A revision request for an existing plan version (REQ-PLAN-04). */
 export interface PlanRevision {
   readonly previous: Plan;
@@ -864,6 +879,7 @@ export async function runPlanner(
       // REQ-CTX-06/AC2: claimed existing coverage must name real tests of the tests repository.
       const errors = [
         ...testDataProblems(plan.data, context),
+        ...graphqlProblems(plan.data, context),
         ...issuesAsErrors(checkPlanSources(plan.data, sources)),
         ...checkExistingCoverage(plan.data, sources),
       ];

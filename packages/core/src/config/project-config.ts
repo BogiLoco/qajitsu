@@ -157,6 +157,17 @@ const RepoSchema = z.strictObject({
     .regex(/^(?!\/)(?!.*\.\.)[\w./-]+\.(ya?ml|json)$/, "Relative path to a .yaml or .json file")
     .optional(),
   /**
+   * The GraphQL schema (REQ-EXEC-48/AC1): an SDL file inside the repository (`.graphql`, `.gql`), or the path of the
+   * endpoint on the test environment to introspect (`/graphql`); responses are checked against it.
+   */
+  graphql: z
+    .string()
+    .regex(
+      /^((?!\/)(?!.*\.\.)[\w./-]+\.(graphqls?|gql)|\/[\w/-]*)$/,
+      "A relative path to a .graphql or .gql file, or an endpoint path like /graphql",
+    )
+    .optional(),
+  /**
    * Tests repository only: folder that `qj promote` writes regression packs to (REQ-PUB-08); default: `qajitsu/`
    * inside the repository's `tests/`, `test/` or `e2e/` folder.
    */

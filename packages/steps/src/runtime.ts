@@ -120,6 +120,15 @@ export interface ApiClient {
   readonly binary: (fileKey: string) => ApiBody;
   /** A plain text body, `text/plain` unless another text type is given. */
   readonly text: (text: string, type?: string) => ApiBody;
+  /**
+   * A GraphQL query or mutation (REQ-EXEC-48/AC2), sent as `POST /graphql` (or `options.path`) with its variables;
+   * expectations read `data.<field>` and `errors` like JSON fields.
+   */
+  readonly graphql: (
+    query: string,
+    variables?: Readonly<Record<string, unknown>>,
+    options?: ApiCallOptions & { readonly path?: string },
+  ) => Promise<ApiResponse>;
 }
 
 /** Read access to the approved plan's expectations (invariant 4). */
@@ -845,6 +854,28 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       throw new Error(`URL ${url.origin} is not in the environment allowlist`);
     const accountHeaders = alias === undefined ? {} : options.accounts[alias];
     if (accountHeaders === undefined) throw new Error(`Unknown account alias '${alias ?? ""}'`);
+    // REQ-EXEC-48/AC2: a GraphQL call is a JSON body of its query and variables, marked so the verifier checks it.
+    const graphql =
+      typeof body === "object" &&
+      body !== null &&
+      !Array.isArray(body) &&
+      (body as { __qjBody?: unknown }).__qjBody === "graphql"
+        ? (body as { query?: unknown; variables?: unknown })
+        : undefined;
+    if (
+      graphql !== undefined &&
+      (typeof graphql.query !== "string" ||
+        (graphql.variables !== undefined &&
+          (typeof graphql.variables !== "object" ||
+            graphql.variables === null ||
+            Array.isArray(graphql.variables))))
+    )
+      throw new Error("api.graphql: the query must be a string and the variables an object");
+    if (graphql !== undefined)
+      body = {
+        query: graphql.query,
+        ...(graphql.variables === undefined ? {} : { variables: graphql.variables }),
+      };
     const special =
       typeof body === "object" && body !== null && !Array.isArray(body) && "__qjBody" in body
         ? await requestBody(stepId, body)
@@ -941,6 +972,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       record: {
         method,
         url: masker.maskText(url.toString()),
+        ...(graphql !== undefined ? { graphql: true } : {}),
         request: { headers: maskedHeaders, body: special ? special.evidence : maskValue(body) },
         response: {
           status: response.status,
@@ -1701,6 +1733,13 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       put: (path, body, o) => send("PUT", path, body, o),
       patch: (path, body, o) => send("PATCH", path, body, o),
       delete: (path, o) => send("DELETE", path, undefined, o),
+      graphql: (query, variables, o) =>
+        send(
+          "POST",
+          o?.path ?? "/graphql",
+          { __qjBody: "graphql", query, ...(variables ? { variables } : {}) },
+          o,
+        ),
       as: (a) => client(a),
       ...bodies,
     };

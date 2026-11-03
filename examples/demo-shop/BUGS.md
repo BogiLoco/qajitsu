@@ -28,6 +28,8 @@ assert that the targeting case ends FAILED with the flag on and PASSED with it o
 | BUG-21 | `BUG_DOCUMENT_TRUNCATED`         | documents | api    | A downloaded invoice document misses the last byte of the uploaded PDF      | DEMO-16        | later |
 | BUG-22 | `BUG_DOCUMENT_NEVER_READY`       | documents | api    | An uploaded document stays processing and never becomes ready               | DEMO-16        | later |
 | BUG-23 | `BUG_LOW_STOCK_OFF_BY_ONE`       | products  | api    | A product with exactly three left is not shown as low stock                 | DEMO-17        | later |
+| BUG-24 | `BUG_GRAPHQL_PRICE_AS_TEXT`      | graphql   | api    | GraphQL answers a product's price as text instead of a number               | DEMO-18        | later |
+| BUG-25 | `BUG_GRAPHQL_ERROR_WITH_DATA`    | graphql   | api    | The product list comes with an error in `errors`, still with HTTP 200       | DEMO-18        | later |
 
 Rules:
 

@@ -2,6 +2,7 @@
 // demo-shop REST API: a small, fictional shop used to test QAJitsu itself (REQ-NFR-04).
 // Seeded bugs are off by default and switched on with environment flags (see ../BUGS.md).
 // Usage: DEMO_USER_PASSWORD=... node api/server.mjs [--port 3000]
+import { answerGraphql } from "./graphql.mjs";
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
@@ -33,6 +34,8 @@ export const BUG_FLAGS = [
   "BUG_DOCUMENT_TRUNCATED",
   "BUG_DOCUMENT_NEVER_READY",
   "BUG_LOW_STOCK_OFF_BY_ONE",
+  "BUG_GRAPHQL_PRICE_AS_TEXT",
+  "BUG_GRAPHQL_ERROR_WITH_DATA",
 ];
 
 const PRODUCTS = [
@@ -152,6 +155,8 @@ export function createShop(options) {
     if (route === "GET /health") return json(res, 200, { status: "ok" });
     if (route === "GET /version") return json(res, 200, { sha: options.sha ?? "unknown" });
     if (route === "GET /products") return json(res, 200, PRODUCTS);
+    // GraphQL over the same products (DEMO-18): errors are answered with HTTP 200, as GraphQL servers do.
+    if (route === "POST /graphql") return json(res, 200, answerGraphql(await body(req), PRODUCTS, bugs));
     // The board's history, newest first, ten per page (REQ-EXEC-40 demo): H-50 is the oldest event.
     if (route === "GET /board/history") {
       const page = Math.max(0, Math.min(4, Number(url.searchParams.get("page") ?? "0") || 0));

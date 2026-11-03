@@ -104,6 +104,8 @@ Rules (checked by code; a violating spec is rejected):
   client.text("text", "text/csv"); files are the keys of the case's "files" in the plan (never a path or content).
   A request whose response is a file (a PDF, an image, an export) keeps it: check it in the same step with
   verify("<step id>", "download.<name|type|size|sha256|rows|texts.<n>|fields.<key>>", undefined, plan.expect(...)).
+- A step with "graphql" in the plan calls client.graphql("<query naming the plan's operation>", { <variables> });
+  read the answer with res.json("data.<field>") and res.json("errors.0.message") like JSON fields.
 - Every verify("<step id>", ...) is written inside the function of that same step, never after it or in another step.
 - Every step has at least one verify("<step id>", "<field>", <actual value>, plan.expect("<case>.<step>.<field>")).
   Fields are "status", "fields.<key>" (read with res.json("<key>")) or "texts.<n>". The expected value is ALWAYS plan.expect(...) with exactly the same step and field; never a literal.

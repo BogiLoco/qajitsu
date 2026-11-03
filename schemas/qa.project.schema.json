@@ -1554,6 +1554,10 @@
             "type": "string",
             "pattern": "^(?!\\/)(?!.*\\.\\.)[\\w./-]+\\.(ya?ml|json)$"
           },
+          "graphql": {
+            "type": "string",
+            "pattern": "^((?!\\/)(?!.*\\.\\.)[\\w./-]+\\.(graphqls?|gql)|\\/[\\w/-]*)$"
+          },
           "promote_dir": {
             "type": "string",
             "pattern": "^(?!\\/)(?!.*\\.\\.)[\\w./-]+$"

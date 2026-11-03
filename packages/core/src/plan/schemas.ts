@@ -435,6 +435,17 @@ export const TestCaseSchema = z.strictObject({
            * a retry after a timeout or a `429` does not create a second order or payment.
            */
           idempotency_key: z.boolean().optional(),
+          /** REQ-EXEC-48/AC1: the GraphQL operation the step covers, checked against the schema of the analysed commit. */
+          graphql: z
+            .strictObject({
+              operation: z
+                .string()
+                .regex(
+                  /^(Query|Mutation|Subscription)\.[_A-Za-z][_0-9A-Za-z]*$/,
+                  "Query.<field>, Mutation.<field> or Subscription.<field>",
+                ),
+            })
+            .optional(),
         })
         .superRefine((step, ctx) => {
           if (step.manual === true && step.wait !== undefined)

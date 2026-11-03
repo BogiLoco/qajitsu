@@ -821,6 +821,19 @@
                 },
                 "idempotency_key": {
                   "type": "boolean"
+                },
+                "graphql": {
+                  "type": "object",
+                  "properties": {
+                    "operation": {
+                      "type": "string",
+                      "pattern": "^(Query|Mutation|Subscription)\\.[_A-Za-z][_0-9A-Za-z]*$"
+                    }
+                  },
+                  "required": [
+                    "operation"
+                  ],
+                  "additionalProperties": false
                 }
               },
               "required": [
