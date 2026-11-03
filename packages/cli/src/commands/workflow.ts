@@ -4,7 +4,7 @@ import { createFileWorkflow } from "@qajitsu/adapter-files";
 import type * as JiraPublishPlugin from "@qajitsu/adapter-publish-jira";
 import type { PluginLoader } from "../plugins/load.js";
 import { lazyWorkflow } from "../plugins/lazy.js";
-import { sessionPlugins } from "./plugin.js";
+import { jiraMediaHosts, pluginFetch, sessionPlugins } from "./plugin.js";
 import {
   admitRun,
   moveTicket,
@@ -50,7 +50,13 @@ export function workflowFor(
     (await sessionPlugins(deps).load<typeof JiraPublishPlugin>("publish-jira")).createJiraWorkflow(
       { flavor, baseUrl: jira.base_url ?? "", email: jira.email, token: jira.token ?? "" },
       {
-        fetch: deps.fetch,
+        fetch: pluginFetch(
+          sessionPlugins(deps),
+          deps.fetch,
+          "publish-jira",
+          [project.config.jira.base_url],
+          jiraMediaHosts(project.config),
+        ),
         logger: deps.logger,
         now: deps.now,
         resolveSecret: deps.resolveSecret,

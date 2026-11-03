@@ -12,7 +12,7 @@ import { createCliSecretResolver } from "../adapters.js";
 import { createCliLogger } from "../logger.js";
 import { loadProject } from "../project.js";
 import type { CommandIO } from "./fetch.js";
-import { pluginLoader } from "./plugin.js";
+import { jiraMediaHosts, pluginFetch, pluginLoader } from "./plugin.js";
 
 /**
  * `qajitsu pull <TICKET> --run <id>`: downloads the evidence zip a (CI) run attached to the ticket and
@@ -52,7 +52,13 @@ export async function runPull(
         mediaHosts: project.config.publish.media_hosts,
       },
       {
-        fetch: ports.fetch,
+        fetch: pluginFetch(
+          pluginLoader(ports),
+          ports.fetch,
+          "publish-jira",
+          [project.config.jira.base_url],
+          jiraMediaHosts(project.config),
+        ),
         logger: createCliLogger({ file: join(target, "pull.log"), mask: (v) => masker.maskJson(v) }),
         now: ports.now,
         resolveSecret: createCliSecretResolver(project, ports, masker),

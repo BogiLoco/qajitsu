@@ -2,7 +2,7 @@ import type * as WebhookSitePlugin from "@qajitsu/adapter-messages-webhooksite";
 import { ConfigError, type CaseMessages, type MessageCapture, type MessageInbox } from "@qajitsu/core";
 import type { RuntimePorts } from "../adapters.js";
 import type { RunSession } from "../session.js";
-import { sessionPlugins } from "./plugin.js";
+import { pluginFetch, sessionPlugins } from "./plugin.js";
 
 /** Replaceable message capture (tests use an in-memory one). */
 export interface MessagePorts {
@@ -57,7 +57,7 @@ export function runMessages(
       ).createWebhookSiteCapture(
         { baseUrl: config.base_url, emailDomain: config.email_domain, apiKey: config.api_key },
         {
-          fetch: ports.fetch,
+          fetch: pluginFetch(sessionPlugins(session), ports.fetch, "messages-webhooksite", [config.base_url]),
           logger,
           now: ports.now,
           resolveSecret: session.resolveSecret,

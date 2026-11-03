@@ -2,9 +2,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { lstat, mkdir, readlink, rm, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { PLUGIN_API_VERSION, PluginError, parsePluginManifest } from "@qajitsu/core";
+import { PLUGIN_API_VERSION, PluginError, parsePluginManifest, type PluginManifest } from "@qajitsu/core";
 import { satisfies } from "@qajitsu/toolchain";
 import { catalogueEntry, installCommand, type PluginCatalogue } from "./catalogue.js";
+import { assertPluginCode } from "./code.js";
 import { readInstalledPlugins } from "./store.js";
 
 /** QAJitsu's own packages: always the installation's copies, never a plugin's (REQ-GEN-11/AC4). */
@@ -40,6 +41,12 @@ export interface PluginLoader {
   load<T>(id: string): Promise<T>;
   /** The plugins loaded so far, in order. */
   used(): readonly PluginAvailability[];
+  /**
+   * The manifest of a plugin that is there (REQ-GEN-11/AC7), for the hosts its network guard allows.
+   *
+   * @throws {PluginError} `PLUGIN_MISSING` or `PLUGIN_MANIFEST_INVALID`.
+   */
+  manifest(id: string): Promise<PluginManifest>;
 }
 
 /** The folder of a package resolved by the CLI, or undefined when this installation does not carry it. */
@@ -139,9 +146,33 @@ export function createPluginLoader(options: {
     return { id: entry.id, package: installed.package, version: installed.version, source: "installed" };
   };
 
+  /** The package folder of a plugin that is there, bundled or installed. */
+  const packageDir = async (found: PluginAvailability): Promise<string> =>
+    found.source === "bundled"
+      ? (bundled(found.package) ?? "")
+      : join(
+          (await readInstalledPlugins(options.root)).find((p) => p.id === found.id)?.path ?? "",
+          "node_modules",
+          ...found.package.split("/"),
+        );
+
   return {
     availability,
     used: () => [...used],
+    manifest: async (id) => {
+      const found = await availability(id);
+      if (found === undefined)
+        throw new PluginError(
+          "PLUGIN_MISSING",
+          `The ${id} plugin is not installed. Install it with: ${installCommand(id)}`,
+          {
+            plugin: id,
+          },
+        );
+      return parsePluginManifest(
+        JSON.parse(readFileSync(join(await packageDir(found), "package.json"), "utf8")) as unknown,
+      );
+    },
     load: async <T>(id: string): Promise<T> => {
       const found = await availability(id);
       if (found === undefined) {
@@ -166,6 +197,8 @@ export function createPluginLoader(options: {
             `${manifest.name}@${manifest.version} works with core API ${manifest.coreApi}; this QAJitsu has ${PLUGIN_API_VERSION}. Install the version of this release: ${installCommand(found.id)}`,
             { plugin: found.id, coreApi: manifest.coreApi, have: PLUGIN_API_VERSION },
           );
+        // REQ-GEN-11/AC9: a plugin changed on disk since its install is checked again before it runs.
+        await assertPluginCode(found.id, pkgDir, manifest);
         // The plugins it needs are linked next to QAJitsu's own packages, from this installation or its plugins.
         const required: Record<string, string> = {};
         for (const name of installed?.requires ?? []) {

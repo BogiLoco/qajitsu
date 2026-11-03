@@ -29,7 +29,7 @@ import type { PluginCatalogue } from "./plugins/catalogue.js";
 import type { PluginLoader } from "./plugins/load.js";
 import type { PlaywrightInfo, VersionExec } from "./versions.js";
 import { resolveConfigPath } from "./project.js";
-import { pluginLoader } from "./commands/plugin.js";
+import { pluginFetch, pluginLoader } from "./commands/plugin.js";
 
 /** Process-level ports the CLI injects into adapters. */
 export interface RuntimePorts {
@@ -104,7 +104,7 @@ export function createCliSecretResolver(project: LoadedProject, ports: RuntimePo
                   mount: vault.mount,
                   ...(vault.namespace ? { namespace: vault.namespace } : {}),
                   token: bootstrap(vault.token),
-                  fetch: ports.fetch,
+                  fetch: pluginFetch(pluginLoader(ports), ports.fetch, "secrets-vault", [vault.address]),
                 },
               ),
             ),
@@ -119,7 +119,7 @@ export function createCliSecretResolver(project: LoadedProject, ports: RuntimePo
                 project: doppler.project,
                 config: doppler.config,
                 token: bootstrap(doppler.token),
-                fetch: ports.fetch,
+                fetch: pluginFetch(pluginLoader(ports), ports.fetch, "secrets-doppler", []),
               }),
             ),
           ]
@@ -181,7 +181,7 @@ export async function buildAdapters(
             acceptanceCriteriaField: jira.acceptance_criteria_field,
             projectKey: jira.project_key,
           },
-          deps,
+          { ...deps, fetch: pluginFetch(plugins, deps.fetch, "ticket-jira", [jira.base_url]) },
         );
   const codeHosts: Record<string, CodeHost> = {};
   for (const [alias, host] of Object.entries(config.code_hosts)) {
@@ -200,13 +200,13 @@ export async function buildAdapters(
                 }
               : undefined,
           },
-          deps,
+          { ...deps, fetch: pluginFetch(plugins, deps.fetch, "codehost-github", [host.base_url]) },
         );
         break;
       case "gitlab":
         codeHosts[alias] = (await plugins.load<typeof GitLabPlugin>("codehost-gitlab")).createGitLabCodeHost(
           { alias, baseUrl: host.base_url, token: host.token ?? "" },
-          deps,
+          { ...deps, fetch: pluginFetch(plugins, deps.fetch, "codehost-gitlab", [host.base_url]) },
         );
         break;
       case "local":
@@ -226,17 +226,18 @@ export async function buildAdapters(
       continue;
     }
     const cases = await plugins.load<typeof TestCasesPlugin>("testcases");
+    const caseDeps = { ...deps, fetch: pluginFetch(plugins, deps.fetch, "testcases", [t.base_url]) };
     switch (t.type) {
       case "xray":
         testCaseSources.push(
           cases.createXrayCaseSource(
             { baseUrl: t.base_url, clientId: t.client_id, clientSecret: t.client_secret, jql: t.jql },
-            deps,
+            caseDeps,
           ),
         );
         break;
       case "zephyr":
-        testCaseSources.push(cases.createZephyrCaseSource({ baseUrl: t.base_url, token: t.token }, deps));
+        testCaseSources.push(cases.createZephyrCaseSource({ baseUrl: t.base_url, token: t.token }, caseDeps));
         break;
       case "testrail":
         testCaseSources.push(

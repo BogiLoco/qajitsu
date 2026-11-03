@@ -5,6 +5,7 @@ import { basename, join } from "node:path";
 import { PLUGIN_API_VERSION, PluginError, parsePluginManifest, type PluginManifest } from "@qajitsu/core";
 import { acquireSetupLock, satisfies, type RunExec } from "@qajitsu/toolchain";
 import { z } from "zod";
+import { assertPluginCode } from "./code.js";
 import { packageJsonFromTarball } from "./tarball.js";
 import {
   appendPluginHistory,
@@ -184,6 +185,8 @@ export async function installPlugin(input: {
       JSON.parse(await readFile(join(pkgDir, "package.json"), "utf8")) as unknown,
     );
     compatible(id, manifest);
+    // REQ-GEN-11/AC9: its code may do only what its manifest declares.
+    await assertPluginCode(id, pkgDir, manifest);
     await rm(join(staging, ".omitted"), { recursive: true, force: true });
     // QAJitsu's own packages and other plugins always come from the installation, never from the plugin's folder.
     const scoped = join(staging, "node_modules", "@qajitsu");

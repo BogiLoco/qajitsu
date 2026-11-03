@@ -4,7 +4,7 @@ import { createFilePublisher } from "@qajitsu/adapter-files";
 import type * as JiraPublishPlugin from "@qajitsu/adapter-publish-jira";
 import type { PluginLoader } from "../plugins/load.js";
 import { lazyPublisher } from "../plugins/lazy.js";
-import { pluginLoader } from "./plugin.js";
+import { jiraMediaHosts, pluginFetch, pluginLoader } from "./plugin.js";
 import {
   ConfigError,
   GateFailedError,
@@ -130,7 +130,13 @@ export function projectPublisher(
         maxAttachmentBytes: project.config.publish.max_attachment_mb * 1_000_000,
       },
       {
-        fetch: ports.fetch,
+        fetch: pluginFetch(
+          plugins,
+          ports.fetch,
+          "publish-jira",
+          [project.config.jira.base_url],
+          jiraMediaHosts(project.config),
+        ),
         logger: deps.logger,
         now: ports.now,
         resolveSecret: deps.resolveSecret,

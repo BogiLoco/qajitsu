@@ -987,6 +987,15 @@ folder, and QAJitsu's own packages are linked into `~/.qajitsu/plugins/node_modu
 are deleted, so every plugin runs against the installation's core, steps, guard and verifier. A missing plugin stops
 the command with `qj plugin add <id>`.
 
+**Guard (ADR-0015).**
+
+- At install, and again when an installed plugin is loaded, its own code is checked against its permissions. Node's
+  network, process and file modules, reads of `process.env` and the global `fetch` must be declared, and no plugin may
+  refer to `plan.approved.yaml`. A plugin that does more is refused.
+- Every HTTP call of an integration plugin goes through a guarded `fetch`: only to the hosts of its manifest and the
+  URLs the project configures for it.
+- A contract test runs the same code check over every adapter in this repository.
+
 **What a plugin package needs.** It depends on QAJitsu's own packages as `peerDependencies`, never as
 `dependencies`, so npm does not fetch a second copy. Each plugin pull request (REQ-GEN-11/AC11) moves its package to
 peer dependencies, removes it from `@qajitsu/cli`'s dependencies and loads it through the plugin loader. A plugin that needs another plugin lists it as a peer dependency too, and `qj plugin add` installs both.

@@ -23,6 +23,7 @@ import {
   type PluginAvailability,
   type PluginLoader,
 } from "../plugins/load.js";
+import { guardedFetch } from "../plugins/network.js";
 import { pluginNeeds, type PluginNeed } from "../plugins/needs.js";
 import {
   appendPluginHistory,
@@ -75,6 +76,36 @@ export function sessionPlugins(session: { readonly plugins?: PluginLoader | unde
  */
 export async function optionalPlugin<T>(loader: PluginLoader, id: string): Promise<T | undefined> {
   return (await loader.availability(id)) === undefined ? undefined : loader.load<T>(id);
+}
+
+/**
+ * The `fetch` of an integration plugin (REQ-GEN-11/AC9, ADR-0015): only to the hosts of its manifest and, for
+ * `config`, the URLs the project configures for it; read from the manifest on the first request.
+ *
+ * @param loader - The plugin loader.
+ * @param fetchImpl - The process's fetch.
+ * @param id - The plugin.
+ * @param configured - URLs the project configures for this plugin.
+ */
+export function pluginFetch(
+  loader: PluginLoader,
+  fetchImpl: typeof globalThis.fetch,
+  id: string,
+  configured: readonly (string | undefined)[],
+  configuredHosts: readonly string[] = [],
+): typeof globalThis.fetch {
+  let guarded: Promise<typeof globalThis.fetch> | undefined;
+  return async (input, init) => {
+    guarded ??= loader
+      .manifest(id)
+      .then((m) => guardedFetch(fetchImpl, { plugin: id, hosts: m.hosts, configured, configuredHosts }));
+    return (await guarded)(input, init);
+  };
+}
+
+/** The hosts Jira's attachments redirect to (`publish.media_hosts`), each with its subdomains. */
+export function jiraMediaHosts(config: LoadedProject["config"]): string[] {
+  return config.publish.media_hosts.flatMap((h) => [h, `*.${h}`]);
 }
 
 /** Installing from the npm registry the toolchain uses (a company mirror, a proxy, a CA), npm without a shell. */

@@ -37,8 +37,14 @@ export const PLUGIN_TYPES = [
 /** One plugin type. */
 export type PluginType = (typeof PLUGIN_TYPES)[number];
 
-/** What a plugin may do besides implementing its interfaces: reach the network, start processes, write files. */
-export const PLUGIN_PERMISSIONS = ["network", "exec", "filesystem"] as const;
+/**
+ * What a plugin may do besides implementing its interfaces (ADR-0015): reach the network, start processes, use files,
+ * read the process environment. The guard checks a plugin's code against them (REQ-GEN-11/AC9).
+ */
+export const PLUGIN_PERMISSIONS = ["network", "exec", "filesystem", "environment"] as const;
+
+/** One plugin permission. */
+export type PluginPermission = (typeof PLUGIN_PERMISSIONS)[number];
 
 const ManifestBlockSchema = z.strictObject({
   types: z.array(z.enum(PLUGIN_TYPES)).min(1),
@@ -73,7 +79,7 @@ export interface PluginManifest {
   readonly coreApi: string;
   readonly secrets: readonly string[];
   readonly hosts: readonly string[];
-  readonly permissions: readonly (typeof PLUGIN_PERMISSIONS)[number][];
+  readonly permissions: readonly PluginPermission[];
   readonly omitOptional: readonly string[];
 }
 

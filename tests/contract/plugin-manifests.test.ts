@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PLUGIN_API_VERSION, parsePluginManifest } from "@qajitsu/core";
+import { checkPluginCode, pluginCodeProblems } from "@qajitsu/guard";
 import { satisfies } from "@qajitsu/toolchain";
 import { describe, expect, it } from "vitest";
 
@@ -97,5 +98,19 @@ describe("plugin manifests of the adapter packages (REQ-GEN-11)", () => {
       "@qajitsu/adapter-files",
       "@qajitsu/adapter-secrets-env",
     ]);
+  });
+
+  it.each(adapters)("REQ-GEN-11/AC9: the code of %s keeps to the permissions of its manifest", (dir) => {
+    const src = join(root, "packages", "adapters", dir, "src");
+    const files = readdirSync(src, { recursive: true, withFileTypes: true })
+      .filter((d) => d.isFile() && d.name.endsWith(".ts") && !d.name.endsWith(".test.ts"))
+      .map((d) => {
+        const path = join(d.parentPath, d.name);
+        return { path: path.slice(root.length + 1), text: readFileSync(path, "utf8") };
+      });
+    const pkg = JSON.parse(
+      readFileSync(join(root, "packages", "adapters", dir, "package.json"), "utf8"),
+    ) as unknown;
+    expect(pluginCodeProblems(checkPluginCode(files, parsePluginManifest(pkg).permissions))).toBeUndefined();
   });
 });

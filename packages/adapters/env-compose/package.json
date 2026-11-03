@@ -41,7 +41,8 @@
       "permissions": [
         "network",
         "exec",
-        "filesystem"
+        "filesystem",
+        "environment"
       ]
     }
   }

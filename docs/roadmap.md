@@ -257,7 +257,7 @@ documentation site and the Claude Code plugin are available.
 - [REQ-GEN-03](requirements/generic.md#req-gen-03--init-and-doctor) `init` and `doctor` (must, implemented, AC 5/5)
 - [REQ-GEN-04](requirements/generic.md#req-gen-04--claude-code-plugin-interface) Claude Code plugin interface (could, implemented, AC 1/1)
 - [REQ-GEN-10](requirements/generic.md#req-gen-10--ready-to-run-images-and-a-compose-stack) Ready-to-run images and a Compose stack (should, proposed, AC 0/6)
-- [REQ-GEN-11](requirements/generic.md#req-gen-11--integrations-as-plugins-installed-on-demand) Integrations as plugins, installed on demand (should, in-progress, AC 6/11)
+- [REQ-GEN-11](requirements/generic.md#req-gen-11--integrations-as-plugins-installed-on-demand) Integrations as plugins, installed on demand (should, implemented, AC 11/11)
 - [REQ-NFR-07](requirements/non-functional.md#req-nfr-07--platforms) Platforms (should, implemented, AC 2/2)
 - [REQ-NFR-13](requirements/non-functional.md#req-nfr-13--native-components-for-trust-critical-and-heavy-processing) Native components for trust-critical and heavy processing (could, proposed, AC 0/6)
 - [REQ-SKILL-03](requirements/skills.md#req-skill-03--skill-candidates-from-approved-work) Skill candidates from approved work (could, proposed, AC 0/4)

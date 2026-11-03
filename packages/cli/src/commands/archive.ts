@@ -16,7 +16,7 @@ import type { RuntimePorts } from "../adapters.js";
 import { openSession, type ModelPorts, type RunSession } from "../session.js";
 import { buildAuditExport } from "./audit-trail.js";
 import type { CommandIO } from "./fetch.js";
-import { sessionPlugins } from "./plugin.js";
+import { pluginFetch, sessionPlugins } from "./plugin.js";
 
 /** What QAJitsu recorded about the write-once copy of a run (`certificate/archive.json`). */
 export type ArchiveRecord =
@@ -81,7 +81,7 @@ async function archiveOf(
   return createS3Archive(
     { endpoint: config.endpoint, region: config.region, bucket: config.bucket, pathStyle: config.path_style },
     {
-      fetch: fetchImpl,
+      fetch: pluginFetch(sessionPlugins(session), fetchImpl, "evidence-s3", [config.endpoint]),
       now,
       credentials: async () => ({
         accessKeyId: await session.resolveSecret(config.access_key_id),

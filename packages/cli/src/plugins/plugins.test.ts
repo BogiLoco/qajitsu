@@ -10,6 +10,7 @@ import { catalogueEntry, readCatalogue, type PluginCatalogue } from "./catalogue
 import { installPlugin, removePlugin, type PluginInstallPorts } from "./install.js";
 import { bundledPackageDir, createPluginLoader, linkHostPackages } from "./load.js";
 import { pluginNeeds } from "./needs.js";
+import { guardedFetch } from "./network.js";
 import { readInstalledPlugins } from "./store.js";
 import { packageJsonFromTarball } from "./tarball.js";
 import { npmTarball } from "../../../../tests/support/npm-tarball.js";
@@ -549,5 +550,37 @@ describe("plugins: install, load, remove (REQ-GEN-11)", () => {
     });
     await linked.load("knowledge-lancedb");
     expect(await readlink(join(root, "node_modules", "@qajitsu", "adapter-runner-api"))).toBe(apiDir);
+  });
+
+  it("REQ-GEN-11/AC9: the network guard allows manifest hosts, their subdomains and what the project configures", async () => {
+    const sent: string[] = [];
+    const f = guardedFetch(
+      (input) => {
+        sent.push(input instanceof Request ? input.url : input.toString());
+        return Promise.resolve(new Response("{}"));
+      },
+      {
+        plugin: "publish-jira",
+        hosts: ["*.atlassian.net", "config"],
+        configured: ["https://jira.example.com", undefined, "not a url"],
+        configuredHosts: ["example.org", "*.example.org"],
+      },
+    );
+    await f("https://shop.atlassian.net/rest/api/3/myself");
+    await f("https://jira.example.com/rest/api/2/issue/X-1");
+    await f("https://media.example.org/file");
+    await f(new Request("https://example.org/file"));
+    await expect(f("https://jira.example.com:8443/x")).rejects.toThrow(
+      "publish-jira may not reach jira.example.com",
+    );
+    const strict = guardedFetch(() => Promise.resolve(new Response("{}")), {
+      plugin: "secrets-doppler",
+      hosts: ["api.doppler.com"],
+      configured: ["https://elsewhere.example"],
+    });
+    await expect(strict("https://elsewhere.example/x")).rejects.toThrow(/its manifest names api.doppler.com/);
+    const none = guardedFetch(() => Promise.resolve(new Response("{}")), { plugin: "x", hosts: [] });
+    await expect(none("https://a.example/")).rejects.toThrow(/no host/);
+    expect(sent).toHaveLength(4);
   });
 });

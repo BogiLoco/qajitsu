@@ -35,7 +35,9 @@
         "config"
       ],
       "permissions": [
-        "network"
+        "network",
+        "exec",
+        "environment"
       ]
     }
   }

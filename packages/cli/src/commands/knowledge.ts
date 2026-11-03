@@ -27,7 +27,7 @@ import type * as ConfluencePlugin from "@qajitsu/adapter-knowledge-confluence";
 import { createFileBugSource } from "@qajitsu/adapter-files";
 import type * as JiraPlugin from "@qajitsu/adapter-ticket-jira";
 import type { PluginLoader } from "../plugins/load.js";
-import { pluginLoader } from "./plugin.js";
+import { pluginFetch, pluginLoader } from "./plugin.js";
 
 /** Replaceable parts of the knowledge commands (tests use a fake embedder). */
 export interface KnowledgePorts {
@@ -89,11 +89,12 @@ async function openKnowledgeContext(
         {},
       );
     const { createChromaStore } = await pluginLoader(ports).load<typeof ChromaPlugin>("knowledge-chroma");
+    const url = await resolveSecret(config.chroma.url);
     store = await createChromaStore({
-      url: await resolveSecret(config.chroma.url),
+      url,
       token: config.chroma.token === undefined ? undefined : await resolveSecret(config.chroma.token),
       collection: `qajitsu-${resolved.slug}`,
-      fetch: ports.fetch,
+      fetch: pluginFetch(pluginLoader(ports), ports.fetch, "knowledge-chroma", [url]),
     });
   } else
     // REQ-GEN-11/AC2: a missing store plugin stops with the command that installs it.
@@ -619,7 +620,7 @@ async function onlineSource(
     return filtered(
       createConfluenceSource(
         { baseUrl, flavor, email: c.email ?? jira.email, token, space: locator.space, page: locator.page },
-        deps,
+        { ...deps, fetch: pluginFetch(plugins, deps.fetch, "knowledge-confluence", [baseUrl]) },
       ),
     );
   }
@@ -644,7 +645,7 @@ async function onlineSource(
           projectKey: jira.project_key,
           component: locator.component,
         },
-        deps,
+        { ...deps, fetch: pluginFetch(plugins, deps.fetch, "ticket-jira", [jira.base_url]) },
       ),
     );
   }
