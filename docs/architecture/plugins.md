@@ -1032,5 +1032,17 @@ Every plugin is easy to add and to install on demand: it implements the core int
 request with its contract tests against the installed plugin, its adversarial suite where it touches statuses,
 evidence or secrets, and its entry here updated. A wave is a sequence of such pull requests, not one large change.
 
+**Moved out so far.** `@qajitsu/cli` size is measured with every transitive dependency; each row is its own pull
+request, and its contract runs against the installed copy (`tests/e2e/plugins-installed.e2e.test.ts`).
+
+<!-- moved-out:start -->
+
+| Plugin              | Moved out  | CLI after            |
+| ------------------- | ---------- | -------------------- |
+| `knowledge-lancedb` | 2026-11-03 | 141 MB (from 389 MB) |
+| `knowledge-chroma`  | 2026-11-03 | 141 MB               |
+
+<!-- moved-out:end -->
+
 New integrations (Bitbucket, Azure DevOps, Maestro and the rest) start as plugins once their wave's mechanism exists.
 Until then they are built as packages under `packages/adapters/`, and the check above keeps them listed here.
