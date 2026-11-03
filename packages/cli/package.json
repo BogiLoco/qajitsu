@@ -29,7 +29,6 @@
     "@qajitsu/adapter-env-compose": "workspace:*",
     "@qajitsu/adapter-env-remote": "workspace:*",
     "@qajitsu/adapter-evidence-local": "workspace:*",
-    "@qajitsu/adapter-evidence-s3": "workspace:*",
     "@qajitsu/adapter-publish-jira": "workspace:*",
     "@qajitsu/adapter-runner-api": "workspace:*",
     "@qajitsu/adapter-runner-mobile": "workspace:*",
@@ -52,6 +51,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@qajitsu/adapter-evidence-s3": "workspace:*",
     "@qajitsu/adapter-knowledge-chroma": "workspace:*",
     "@qajitsu/adapter-knowledge-confluence": "workspace:*",
     "@qajitsu/adapter-knowledge-lancedb": "workspace:*",

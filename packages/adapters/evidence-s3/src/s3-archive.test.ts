@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { startFakeS3 } from "../../../../tests/support/fake-s3.js";
+import { evidenceArchiveContract } from "../../../../tests/contract/evidence-archive.contract.js";
 import { createS3Archive } from "./s3-archive.js";
 import { signV4 } from "./sigv4.js";
 
@@ -18,6 +19,15 @@ const archiveOn = async (objectLock = true) => {
   );
   return { s3, archive };
 };
+
+evidenceArchiveContract("s3", (t) =>
+  Promise.resolve(
+    createS3Archive(
+      { endpoint: t.endpoint, region: "us-east-1", bucket: t.bucket, pathStyle: true },
+      { fetch: globalThis.fetch, now: () => new Date(), credentials: () => Promise.resolve(t.credentials) },
+    ),
+  ),
+);
 
 describe("S3 Object Lock archive (REQ-VER-19)", () => {
   it("REQ-VER-19/AC1: SigV4 matches the example of the AWS documentation", () => {

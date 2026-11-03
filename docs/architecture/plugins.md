@@ -1047,6 +1047,7 @@ request, and its contract runs against the installed copy (`tests/e2e/plugins-in
 | `secrets-doppler` | 2026-11-03 | 141.0 MB |
 | `secrets-cli` | 2026-11-03 | 140.9 MB |
 | `messages-webhooksite` | 2026-11-03 | 140.9 MB |
+| `evidence-s3` | 2026-11-03 | 140.9 MB |
 <!-- moved-out:end -->
 
 New integrations (Bitbucket, Azure DevOps, Maestro and the rest) start as plugins once their wave's mechanism exists.

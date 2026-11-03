@@ -1,4 +1,12 @@
-import type { AdapterDeps, DocumentSource, MessageCapture, SecretProvider, VectorStore } from "@qajitsu/core";
+import type {
+  AdapterDeps,
+  DocumentSource,
+  EvidenceArchive,
+  MessageCapture,
+  SecretProvider,
+  VectorStore,
+} from "@qajitsu/core";
+import { evidenceArchiveContract } from "../contract/evidence-archive.contract.js";
 import { messageCaptureContract } from "../contract/message-capture.contract.js";
 import { webhookSiteConfig, webhookSiteFixture } from "../support/webhook-site-fixture.js";
 import { documentSourceContract } from "../contract/document-source.contract.js";
@@ -184,6 +192,32 @@ export const pluginContracts: readonly PluginContract[] = [
             createWebhookSiteCapture(c: typeof webhookSiteConfig, d: AdapterDeps): MessageCapture;
           }>("messages-webhooksite")
         ).createWebhookSiteCapture(webhookSiteConfig, deps),
+      );
+    },
+  },
+  {
+    id: "evidence-s3",
+    run: (installed) => {
+      evidenceArchiveContract("s3 (installed plugin)", async (t) =>
+        (
+          await installed<{
+            createS3Archive(
+              c: { endpoint: string; region: string; bucket: string; pathStyle: boolean },
+              d: {
+                fetch: typeof fetch;
+                now: () => Date;
+                credentials: () => Promise<{ accessKeyId: string; secretAccessKey: string }>;
+              },
+            ): EvidenceArchive;
+          }>("evidence-s3")
+        ).createS3Archive(
+          { endpoint: t.endpoint, region: "us-east-1", bucket: t.bucket, pathStyle: true },
+          {
+            fetch: globalThis.fetch,
+            now: () => new Date(),
+            credentials: () => Promise.resolve(t.credentials),
+          },
+        ),
       );
     },
   },

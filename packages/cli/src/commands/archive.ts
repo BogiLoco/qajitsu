@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
-import { createS3Archive } from "@qajitsu/adapter-evidence-s3";
+import type * as S3Plugin from "@qajitsu/adapter-evidence-s3";
 import {
   CERTIFICATE_DIR,
   CERTIFICATE_FILE,
@@ -16,6 +16,7 @@ import type { RuntimePorts } from "../adapters.js";
 import { openSession, type ModelPorts, type RunSession } from "../session.js";
 import { buildAuditExport } from "./audit-trail.js";
 import type { CommandIO } from "./fetch.js";
+import { sessionPlugins } from "./plugin.js";
 
 /** What QAJitsu recorded about the write-once copy of a run (`certificate/archive.json`). */
 export type ArchiveRecord =
@@ -68,13 +69,15 @@ export function plannedStorage(
 }
 
 /** The project's write-once storage, credentials from the secret provider. */
-function archiveOf(
-  session: Pick<RunSession, "project" | "resolveSecret">,
+async function archiveOf(
+  session: Pick<RunSession, "project" | "resolveSecret" | "plugins">,
   fetchImpl: typeof globalThis.fetch,
   now: () => Date,
-): EvidenceArchive | undefined {
+): Promise<EvidenceArchive | undefined> {
   const config = session.project.config.archive;
   if (!config) return undefined;
+  // REQ-GEN-11/AC2: the S3 plugin; a missing one stops the archiving with the command that installs it.
+  const { createS3Archive } = await sessionPlugins(session).load<typeof S3Plugin>("evidence-s3");
   return createS3Archive(
     { endpoint: config.endpoint, region: config.region, bucket: config.bucket, pathStyle: config.path_style },
     {
@@ -107,7 +110,7 @@ export async function archiveRun(
   now: () => Date,
   options: { readonly force?: boolean } = {},
 ): Promise<string | undefined> {
-  const archive = archiveOf(session, fetchImpl, now);
+  const archive = await archiveOf(session, fetchImpl, now);
   const config = session.project.config.archive;
   if (!archive || !config) return undefined;
   const { ws, events, masker } = session;
