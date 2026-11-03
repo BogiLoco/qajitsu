@@ -12,39 +12,14 @@ import {
   testDeps,
   type Route,
 } from "../../../../tests/support/fake-fetch.js";
+import { jiraConfig, jiraRoutes, jiraSecrets } from "../../../../tests/support/jira-fixture.js";
 import { createFileTicketSource } from "@qajitsu/adapter-files";
 import { createJiraCloudTicketSource } from "./jira-cloud.js";
 
-const BASE = "https://jira.example.com";
-const secrets = {
-  "secret://env/JIRA_EMAIL": "qa@example.com",
-  "secret://env/JIRA_TOKEN": "jira-api-token-123",
-};
-const config = { baseUrl: BASE, email: "secret://env/JIRA_EMAIL", token: "secret://env/JIRA_TOKEN" };
-
-const routes = (overrides: Route[] = []): Route[] => [
-  ...overrides,
-  {
-    match: /^\/rest\/api\/3\/issue\/SHOP-482\?/,
-    reply: jsonReply(fixture("jira/cloud/issue-SHOP-482.json")),
-  },
-  {
-    match: /^\/rest\/api\/3\/issue\/SHOP-483\?/,
-    reply: jsonReply(fixture("jira/cloud/issue-SHOP-483-custom-ac.json")),
-  },
-  {
-    match: /dev-status.*applicationType=GitHub&dataType=pullrequest/,
-    reply: jsonReply(fixture("jira/cloud/dev-status-github-pullrequest.json")),
-  },
-  {
-    match: /dev-status.*applicationType=GitLab&dataType=pullrequest/,
-    reply: jsonReply(fixture("jira/cloud/dev-status-gitlab-pullrequest.json")),
-  },
-  {
-    match: /dev-status.*dataType=branch/,
-    reply: jsonReply(fixture("jira/cloud/dev-status-github-pullrequest.json")),
-  },
-];
+const BASE = jiraConfig.baseUrl;
+const secrets = jiraSecrets;
+const config = jiraConfig;
+const routes = jiraRoutes;
 
 const cloud = (extra: Route[] = []) => {
   const fake = createFakeFetch(routes(extra));

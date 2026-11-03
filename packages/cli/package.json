@@ -35,7 +35,6 @@
     "@qajitsu/adapter-runner-mobile": "workspace:*",
     "@qajitsu/adapter-runner-web": "workspace:*",
     "@qajitsu/adapter-secrets-env": "workspace:*",
-    "@qajitsu/adapter-ticket-jira": "workspace:*",
     "@qajitsu/agents": "workspace:*",
     "@qajitsu/core": "workspace:*",
     "@qajitsu/models": "workspace:*",
@@ -60,6 +59,7 @@
     "@qajitsu/adapter-secrets-doppler": "workspace:*",
     "@qajitsu/adapter-secrets-vault": "workspace:*",
     "@qajitsu/adapter-testcases": "workspace:*",
+    "@qajitsu/adapter-ticket-jira": "workspace:*",
     "@types/pngjs": "^6.0.5",
     "pngjs": "7.0.0"
   }

@@ -407,9 +407,6 @@ importers:
 
   packages/adapters/ticket-jira:
     dependencies:
-      '@qajitsu/core':
-        specifier: workspace:*
-        version: link:../../core
       zod:
         specifier: 'catalog:'
         version: 4.6.5
@@ -417,6 +414,9 @@ importers:
       '@qajitsu/adapter-files':
         specifier: workspace:*
         version: link:../files
+      '@qajitsu/core':
+        specifier: workspace:*
+        version: link:../../core
 
   packages/agents:
     dependencies:
@@ -486,9 +486,6 @@ importers:
       '@qajitsu/adapter-secrets-env':
         specifier: workspace:*
         version: link:../adapters/secrets-env
-      '@qajitsu/adapter-ticket-jira':
-        specifier: workspace:*
-        version: link:../adapters/ticket-jira
       '@qajitsu/agents':
         specifier: workspace:*
         version: link:../agents
@@ -556,6 +553,9 @@ importers:
       '@qajitsu/adapter-testcases':
         specifier: workspace:*
         version: link:../adapters/testcases
+      '@qajitsu/adapter-ticket-jira':
+        specifier: workspace:*
+        version: link:../adapters/ticket-jira
       '@types/pngjs':
         specifier: ^6.0.5
         version: 6.0.5

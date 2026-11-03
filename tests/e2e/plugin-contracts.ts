@@ -5,8 +5,11 @@ import type {
   MessageCapture,
   SecretProvider,
   TestCaseSource,
+  TicketSource,
   VectorStore,
 } from "@qajitsu/core";
+import { ticketSourceContract } from "../contract/ticket-source.contract.js";
+import { jiraConfig, jiraRoutes, jiraSecrets } from "../support/jira-fixture.js";
 import { testCaseSourceContract } from "../contract/test-case-source.contract.js";
 import { xrayConfig, xrayFixture } from "../support/xray-fixture.js";
 import { evidenceArchiveContract } from "../contract/evidence-archive.contract.js";
@@ -17,7 +20,7 @@ import { confluenceConfig, confluenceFixture } from "../support/confluence-fixtu
 import { vectorStoreContract } from "../contract/vector-store.contract.js";
 import { secretProviderContract } from "../contract/secret-provider.contract.js";
 import { createFakeChroma } from "../support/fake-chroma.js";
-import { createFakeFetch, jsonReply } from "../support/fake-fetch.js";
+import { createFakeFetch, jsonReply, testDeps } from "../support/fake-fetch.js";
 
 /** The contract suite of one plugin that moved out, run against its installed copy (REQ-GEN-11/AC11). */
 export interface PluginContract {
@@ -233,6 +236,22 @@ export const pluginContracts: readonly PluginContract[] = [
             "testcases",
           )
         ).createXrayCaseSource(xrayConfig, deps),
+      );
+    },
+  },
+  {
+    id: "ticket-jira",
+    run: (installed) => {
+      const fake = createFakeFetch(jiraRoutes());
+      const deps = testDeps(fake.fetch, jiraSecrets);
+      const source = (): Promise<TicketSource> =>
+        installed<{ createJiraCloudTicketSource(c: typeof jiraConfig, d: AdapterDeps): TicketSource }>(
+          "ticket-jira",
+        ).then((m) => m.createJiraCloudTicketSource(jiraConfig, deps));
+      ticketSourceContract(
+        "jira cloud (installed plugin)",
+        () => ({ getTicket: async (key, signal) => (await source()).getTicket(key, signal) }),
+        { known: "SHOP-482", missing: "SHOP-999" },
       );
     },
   },
