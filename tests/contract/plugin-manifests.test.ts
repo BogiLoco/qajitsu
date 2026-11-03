@@ -46,4 +46,24 @@ describe("plugin manifests of the adapter packages (REQ-GEN-11)", () => {
     const allowed = types.get(`packages/adapters/${dir}`) ?? new Set<string>();
     expect(manifest.types.filter((t) => !allowed.has(t))).toEqual([]);
   });
+
+  it.each(adapters)(
+    "REQ-GEN-11/AC1: %s, once a plugin, is not a dependency of the published CLI and brings no own core",
+    (dir) => {
+      const read = (p: string) =>
+        JSON.parse(readFileSync(join(root, "packages", p, "package.json"), "utf8")) as {
+          name: string;
+          dependencies?: Record<string, string>;
+          peerDependencies?: Record<string, string>;
+        };
+      const pkg = read(`adapters/${dir}`);
+      const cli = read("cli");
+      const plugin = pkg.peerDependencies?.["@qajitsu/core"] !== undefined;
+      // A plugin that moved out uses the installation's core: never its own copy, and the CLI does not carry it.
+      if (plugin) {
+        expect(Object.keys(pkg.dependencies ?? {}).filter((d) => d.startsWith("@qajitsu/"))).toEqual([]);
+        expect(cli.dependencies?.[pkg.name]).toBeUndefined();
+      } else expect(cli.dependencies?.[pkg.name], `${pkg.name} still ships with the CLI`).toBeDefined();
+    },
+  );
 });

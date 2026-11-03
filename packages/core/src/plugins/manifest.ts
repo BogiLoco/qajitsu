@@ -49,6 +49,14 @@ const ManifestBlockSchema = z.strictObject({
   /** Hosts it connects to; `config` stands for the URL the project configures. */
   hosts: z.array(z.string().min(1).max(200)).max(50).default([]),
   permissions: z.array(z.enum(PLUGIN_PERMISSIONS)).default([]),
+  /**
+   * Optional dependencies the plugin never loads (an SDK's own embedding helpers): installed as empty packages, so an
+   * installation does not carry them.
+   */
+  omit_optional: z
+    .array(z.string().regex(/^(@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/, "an npm package name"))
+    .max(50)
+    .default([]),
 });
 
 const PackageSchema = z.object({
@@ -66,6 +74,7 @@ export interface PluginManifest {
   readonly secrets: readonly string[];
   readonly hosts: readonly string[];
   readonly permissions: readonly (typeof PLUGIN_PERMISSIONS)[number][];
+  readonly omitOptional: readonly string[];
 }
 
 /**
@@ -100,5 +109,6 @@ export function parsePluginManifest(packageJson: unknown): PluginManifest {
     secrets: block.secrets,
     hosts: block.hosts,
     permissions: block.permissions,
+    omitOptional: block.omit_optional,
   };
 }

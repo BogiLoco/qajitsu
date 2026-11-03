@@ -743,6 +743,9 @@ certificates are never indexed.
 
 ### `qajitsu knowledge add [paths...]`
 
+The store is a plugin: LanceDB (`qj plugin add knowledge-lancedb`) or Chroma. Without it the command stops with exit
+code `3` and the install command (REQ-GEN-11/AC2).
+
 Registers files and folders (recursive) as sources and indexes them: Markdown, text, HTML, DOCX, PDF (with a text layer) and OpenAPI (one chunk
 group per operation); other files are skipped and listed. Adding a registered path again only processes new or
 changed files and prints counts of added, updated, unchanged, skipped and removed files (REQ-KNOW-02).

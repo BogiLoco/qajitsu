@@ -652,7 +652,7 @@ of them before any adapter moves out of the core installation.
 - Tier: official open source
 - Placement: plugin
 - Names: LanceDB
-- Notes: The largest integration by far; the first to move out.
+- Notes: The largest integration by far, and the first one out of the CLI (2026-11-03): `qj plugin add knowledge-lancedb`. It omits LanceDB's optional embedding helpers (`omit_optional`), because QAJitsu embeds through the models layer.
 
 ### Chroma
 
@@ -969,7 +969,9 @@ in the same change, with its ADR.
 REQ-GEN-11, implemented in `packages/cli/src/plugins/`. **Manifest.** Each plugin's `package.json` has
 `qajitsu.plugin`: its types (those of this page), the range of the core's adapter API it works with (`core_api`,
 checked against `PLUGIN_API_VERSION` of `@qajitsu/core`), the secrets, hosts (`config` for the URL the project
-configures) and permissions (`network`, `exec`, `filesystem`) it needs. A contract test checks every adapter
+configures) and permissions (`network`, `exec`, `filesystem`) it needs. The manifest can also list `omit_optional`:
+optional dependencies the plugin never loads. They are installed as empty packages, the same way the workspace
+ignores them for pnpm (`ignoredOptionalDependencies`). The manifest is read from the tarball before npm runs. A contract test checks every adapter
 package's manifest against this inventory.
 
 **Catalogue.** `packages/cli/plugins.json` pins the version of every official plugin for a release. It is written by
@@ -1014,7 +1016,9 @@ Every plugin is easy to add and to install on demand: it implements the core int
 **Migration order.** Each wave starts only after the previous one runs from installed plugins in CI.
 
 1. **Knowledge** (`knowledge-lancedb`, `knowledge-chroma`, `knowledge-confluence`). LanceDB alone is 251 MB, and
-   most projects do not use it. Knowledge is optional, so a mistake cannot affect a result. This wave proves loading,
+   most projects do not use it. **`knowledge-lancedb` moved out on 2026-11-03:** the published CLI went from 389 MB
+   (312 packages) to 141 MB (290). The installed plugin is 245 MB, because LanceDB's own embedding helpers
+   (`@huggingface/transformers` with onnxruntime, `openai`, 362 MB more) are omitted. Knowledge is optional, so a mistake cannot affect a result. This wave proves loading,
    `qj doctor` messages and offline bundles.
 2. **Optional services** (`secrets-vault`, `secrets-doppler`, `secrets-cli`, `messages-webhooksite`, `evidence-s3`,
    `testcases`). These packages are small and have simple interfaces, and only some projects use them.

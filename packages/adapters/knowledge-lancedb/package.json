@@ -19,8 +19,13 @@
   },
   "dependencies": {
     "@lancedb/lancedb": "0.39.0",
-    "@qajitsu/core": "workspace:*",
     "apache-arrow": "18.1.0"
+  },
+  "peerDependencies": {
+    "@qajitsu/core": "workspace:^"
+  },
+  "devDependencies": {
+    "@qajitsu/core": "workspace:*"
   },
   "qajitsu": {
     "plugin": {
@@ -32,6 +37,10 @@
       "hosts": [],
       "permissions": [
         "filesystem"
+      ],
+      "omit_optional": [
+        "@huggingface/transformers",
+        "openai"
       ]
     }
   }

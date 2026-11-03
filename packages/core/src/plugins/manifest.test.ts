@@ -27,7 +27,16 @@ describe("plugin manifest (REQ-GEN-11)", () => {
       secrets: [],
       hosts: [],
       permissions: ["filesystem"],
+      omitOptional: [],
     });
+  });
+
+  it("REQ-GEN-11/AC7: optional dependencies a plugin never loads are named in its manifest", () => {
+    expect(
+      parsePluginManifest(pkg({ ...good, omit_optional: ["@huggingface/transformers", "openai"] }))
+        .omitOptional,
+    ).toEqual(["@huggingface/transformers", "openai"]);
+    expect(() => parsePluginManifest(pkg({ ...good, omit_optional: ["../escape"] }))).toThrow(PluginError);
   });
 
   it("REQ-GEN-11/AC7: the plugin types are those of the inventory", () => {

@@ -2,9 +2,10 @@ import { createHash, randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { PLUGIN_API_VERSION, PluginError, parsePluginManifest } from "@qajitsu/core";
+import { PLUGIN_API_VERSION, PluginError, parsePluginManifest, type PluginManifest } from "@qajitsu/core";
 import { acquireSetupLock, satisfies, type RunExec } from "@qajitsu/toolchain";
 import { z } from "zod";
+import { packageJsonFromTarball } from "./tarball.js";
 import {
   appendPluginHistory,
   readInstalledPlugins,
@@ -119,7 +120,39 @@ export async function installPlugin(input: {
             const data = new Uint8Array(b);
             return { data, integrity: sha512(data), from: source.path };
           });
+    // The manifest is checked from the tarball before npm runs, and again as installed.
+    const early = parsePluginManifest(packageJsonFromTarball(got.data));
+    if (input.expectedPackage !== undefined && early.name !== input.expectedPackage)
+      throw new PluginError(
+        "PLUGIN_WRONG_PACKAGE",
+        `The tarball contains ${early.name}, not ${input.expectedPackage}.`,
+        { expected: input.expectedPackage, found: early.name },
+      );
+    compatible(id, early);
     await mkdir(staging, { recursive: true });
+    // Optional dependencies the plugin never loads are installed as empty packages (npm has no way to skip one).
+    const overrides: Record<string, string> = {};
+    for (const [i, name] of early.omitOptional.entries()) {
+      const stub = join(staging, ".omitted", String(i));
+      await mkdir(stub, { recursive: true });
+      await writeFile(
+        join(stub, "package.json"),
+        JSON.stringify({
+          name,
+          version: "0.0.0-omitted",
+          description: "Left out by QAJitsu: the plugin never loads it.",
+        }),
+      );
+      overrides[name] = `file:./.omitted/${String(i)}`;
+    }
+    await writeFile(
+      join(staging, "package.json"),
+      JSON.stringify({
+        name: "qajitsu-plugin-staging",
+        private: true,
+        ...(early.omitOptional.length > 0 ? { overrides } : {}),
+      }),
+    );
     const tgz = join(staging, basename(source.kind === "file" ? source.path : `${id}.tgz`));
     await writeFile(tgz, got.data);
     const res = await ports.run(
@@ -131,6 +164,7 @@ export async function installPlugin(input: {
         "--ignore-scripts",
         "--omit=dev",
         "--legacy-peer-deps",
+        "--install-links",
         "--no-package-lock",
         "--no-fund",
         "--no-audit",
@@ -145,17 +179,12 @@ export async function installPlugin(input: {
         `npm could not install ${id}: ${(res.stderr || res.stdout).trim().split("\n").slice(-5).join(" ")}`,
         { plugin: id },
       );
-    const pkgName = await installedPackageName(staging, input.expectedPackage);
-    const pkgDir = join(staging, "node_modules", ...pkgName.split("/"));
+    const pkgDir = installedPackageDir(staging, early.name);
     const manifest = parsePluginManifest(
       JSON.parse(await readFile(join(pkgDir, "package.json"), "utf8")) as unknown,
     );
-    if (!satisfies(PLUGIN_API_VERSION, manifest.coreApi))
-      throw new PluginError(
-        "PLUGIN_INCOMPATIBLE",
-        `${manifest.name}@${manifest.version} works with core API ${manifest.coreApi}; this QAJitsu has ${PLUGIN_API_VERSION}. Install the plugin version of this release.`,
-        { plugin: id, coreApi: manifest.coreApi, have: PLUGIN_API_VERSION },
-      );
+    compatible(id, manifest);
+    await rm(join(staging, ".omitted"), { recursive: true, force: true });
     for (const host of input.hostPackages)
       await rm(join(staging, "node_modules", ...host.split("/")), { recursive: true, force: true });
     await rm(tgz, { force: true });
@@ -190,22 +219,22 @@ export async function installPlugin(input: {
   }
 }
 
-/** The one package npm installed from the tarball: the only dependency npm saved in the staging package.json. */
-async function installedPackageName(staging: string, expected: string | undefined): Promise<string> {
-  const pkg = JSON.parse(await readFile(join(staging, "package.json"), "utf8").catch(() => "{}")) as {
-    dependencies?: Record<string, string>;
-  };
-  const names = Object.keys(pkg.dependencies ?? {});
-  const name = expected ?? (names.length === 1 ? names[0] : undefined);
-  if (name === undefined || !existsSync(join(staging, "node_modules", ...name.split("/"), "package.json")))
+/** A plugin for another range of the core's adapter API is never installed (REQ-GEN-11/AC8). */
+function compatible(id: string, manifest: PluginManifest): void {
+  if (!satisfies(PLUGIN_API_VERSION, manifest.coreApi))
     throw new PluginError(
-      "PLUGIN_WRONG_PACKAGE",
-      expected === undefined
-        ? "The tarball does not contain exactly one package."
-        : `The tarball does not contain ${expected}.`,
-      { expected },
+      "PLUGIN_INCOMPATIBLE",
+      `${manifest.name}@${manifest.version} works with core API ${manifest.coreApi}; this QAJitsu has ${PLUGIN_API_VERSION}. Install the plugin version of this release.`,
+      { plugin: id, coreApi: manifest.coreApi, have: PLUGIN_API_VERSION },
     );
-  return name;
+}
+
+/** The folder npm installed the tarball's package into; it must be there. */
+function installedPackageDir(staging: string, name: string): string {
+  const dir = join(staging, "node_modules", ...name.split("/"));
+  if (!existsSync(join(dir, "package.json")))
+    throw new PluginError("PLUGIN_WRONG_PACKAGE", `npm did not install ${name} from the tarball.`, { name });
+  return dir;
 }
 
 /**

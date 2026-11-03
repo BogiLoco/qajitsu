@@ -709,6 +709,10 @@ keys, `password: ...`) are replaced with `***`.
 
 ### Adding documents
 
+The default store, LanceDB, is a plugin of about 250 MB that most projects do not need, so it is not part of the
+installation: `qj plugin add knowledge-lancedb` once (or `qj setup`, which installs it for a project with a
+knowledge base). Without it, every `qj knowledge` command stops and names that command.
+
 ```sh
 qj knowledge add docs/                                   # a folder, recursively
 qj knowledge add specs/payments.pdf rules/limits.docx    # single files

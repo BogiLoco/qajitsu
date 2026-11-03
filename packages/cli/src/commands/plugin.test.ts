@@ -12,9 +12,16 @@ import { readCatalogue } from "../plugins/catalogue.js";
 import { bundledPackageDir, createPluginLoader } from "../plugins/load.js";
 import { loadProject } from "../project.js";
 import { pluginCheck, pluginVersions } from "./plugin.js";
+import { npmTarball } from "../../../../tests/support/npm-tarball.js";
 
 const LANCE = "@qajitsu/adapter-knowledge-lancedb";
-const TARBALL = new TextEncoder().encode("lancedb plugin tarball");
+const TARBALL = npmTarball({
+  "package.json": {
+    name: LANCE,
+    version: "0.0.0",
+    qajitsu: { plugin: { types: ["knowledge store"], core_api: "^1.0.0" } },
+  },
+});
 const integrity = `sha512-${createHash("sha512").update(TARBALL).digest("base64")}`;
 
 let home: string;

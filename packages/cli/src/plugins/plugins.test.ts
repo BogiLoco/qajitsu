@@ -11,13 +11,14 @@ import { installPlugin, removePlugin, type PluginInstallPorts } from "./install.
 import { bundledPackageDir, createPluginLoader, linkHostPackages } from "./load.js";
 import { pluginNeeds } from "./needs.js";
 import { readInstalledPlugins } from "./store.js";
+import { packageJsonFromTarball } from "./tarball.js";
+import { npmTarball } from "../../../../tests/support/npm-tarball.js";
 
 const PKG = "@qajitsu/adapter-knowledge-lancedb";
 const catalogue: PluginCatalogue = {
   schema: 1,
   plugins: { "knowledge-lancedb": { package: PKG, version: "1.2.3" } },
 };
-const TARBALL = new TextEncoder().encode("fake tarball bytes");
 const urlOf = (input: string | URL | Request): string =>
   input instanceof Request ? input.url : input.toString();
 const integrity = (data: Uint8Array): string =>
@@ -47,6 +48,7 @@ const manifest = (overrides: Record<string, unknown> = {}): Record<string, unkno
   },
   ...overrides,
 });
+const TARBALL = npmTarball({ "package.json": manifest(), "dist/index.js": "export const ok = true;\n" });
 
 /** npm as the installer sees it: puts the package (and a bundled copy of core) into the staging folder. */
 const fakeNpm =
@@ -60,9 +62,14 @@ const fakeNpm =
     await writeFile(join(dir, "dist", "index.js"), "export const ok = true;\n");
     await mkdir(join(prefix, "node_modules", "@qajitsu", "core"), { recursive: true });
     await writeFile(join(prefix, "node_modules", "@qajitsu", "core", "package.json"), "{}");
+    // npm keeps the staging package.json (its overrides) and adds the installed package.
+    const staged = JSON.parse(await readFile(join(prefix, "package.json"), "utf8")) as Record<
+      string,
+      unknown
+    >;
     await writeFile(
       join(prefix, "package.json"),
-      JSON.stringify({ dependencies: { [String(pkg["name"])]: "file:x.tgz" } }),
+      JSON.stringify({ ...staged, dependencies: { [String(pkg["name"])]: "file:x.tgz" } }),
     );
     return { code: 0, stdout: "", stderr: "" };
   };
@@ -392,5 +399,90 @@ describe("plugins: install, load, remove (REQ-GEN-11)", () => {
     );
     expect(bundledPackageDir("@qajitsu/core")).toMatch(/packages\/core$/);
     expect(bundledPackageDir("@qajitsu/adapter-not-there")).toBeUndefined();
+  });
+
+  it("REQ-GEN-11/AC7: the manifest is read from the tarball itself; anything else is refused", () => {
+    expect(packageJsonFromTarball(TARBALL)).toMatchObject({ name: PKG, version: "1.2.3" });
+    expect(() => packageJsonFromTarball(new TextEncoder().encode("not a tarball"))).toThrow(/gzipped/);
+    expect(() => packageJsonFromTarball(npmTarball({ "README.md": "# no manifest" }))).toThrow(
+      /no package.json/,
+    );
+  });
+
+  it("REQ-GEN-11/AC8: a tarball for another core API version, or another package, never reaches npm", async () => {
+    const calls: string[][] = [];
+    const file = join(root, "other.tgz");
+    await writeFile(
+      file,
+      npmTarball({
+        "package.json": manifest({ qajitsu: { plugin: { types: ["knowledge store"], core_api: "^9.0.0" } } }),
+      }),
+    );
+    const source = { kind: "file" as const, path: file };
+    const run = fakeNpm(manifest(), calls);
+    const incompatible = await failure(
+      installPlugin({ root, id: "knowledge-lancedb", source, hostPackages: [], ports: ports({ run }) }),
+    );
+    expect(incompatible.code).toBe("PLUGIN_INCOMPATIBLE");
+    await writeFile(file, npmTarball({ "package.json": manifest({ name: "@evil/store" }) }));
+    const wrong = await failure(
+      installPlugin({
+        root,
+        id: "knowledge-lancedb",
+        source,
+        expectedPackage: PKG,
+        hostPackages: [],
+        ports: ports({ run }),
+      }),
+    );
+    expect(wrong.code).toBe("PLUGIN_WRONG_PACKAGE");
+    expect(wrong.message).toContain("@evil/store");
+    expect(calls).toEqual([]);
+  });
+
+  it("REQ-GEN-11/AC3: optional dependencies the manifest omits are installed as empty packages", async () => {
+    const withOmit = manifest({
+      qajitsu: {
+        plugin: {
+          types: ["knowledge store"],
+          core_api: "^1.0.0",
+          omit_optional: ["@huggingface/transformers", "openai"],
+        },
+      },
+    });
+    const file = join(root, "lance.tgz");
+    await writeFile(file, npmTarball({ "package.json": withOmit }));
+    let staged: { overrides?: Record<string, string> } = {};
+    const stubs: unknown[] = [];
+    const inner = fakeNpm(withOmit);
+    const run: RunExec = async (cmd, args, options) => {
+      const prefix = args[args.indexOf("--prefix") + 1] ?? "";
+      staged = JSON.parse(await readFile(join(prefix, "package.json"), "utf8")) as typeof staged;
+      for (const spec of Object.values(staged.overrides ?? {}))
+        stubs.push(
+          JSON.parse(await readFile(join(prefix, spec.replace("file:./", ""), "package.json"), "utf8")),
+        );
+      return inner(cmd, args, options);
+    };
+    const calls: string[][] = [];
+    const record = await installPlugin({
+      root,
+      id: "knowledge-lancedb",
+      source: { kind: "file", path: file },
+      hostPackages: [],
+      ports: ports({
+        run: async (cmd, args, options) => {
+          calls.push([...args]);
+          return run(cmd, args, options);
+        },
+      }),
+    });
+    expect(staged.overrides).toEqual({
+      "@huggingface/transformers": "file:./.omitted/0",
+      openai: "file:./.omitted/1",
+    });
+    expect(stubs).toMatchObject([{ name: "@huggingface/transformers" }, { name: "openai" }]);
+    expect(calls[0]).toContain("--install-links");
+    expect(existsSync(join(record.path, ".omitted"))).toBe(false);
   });
 });

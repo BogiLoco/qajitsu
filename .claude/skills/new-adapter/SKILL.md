@@ -13,7 +13,7 @@ argument-hint: "[interface] [name], e.g. CodeHost bitbucket"
 
 ## 2. Scaffold
 
-Create `packages/adapters/<kind>-<name>/` following [skeleton.md](skeleton.md): `package.json` (`@qajitsu/adapter-<kind>-<name>`), `src/index.ts` exporting `create<Name><Interface>(config, deps)`, `src/config.ts` with the Zod config schema, `src/<name>.test.ts`. The `package.json` carries the plugin manifest under `qajitsu.plugin` (`types` from the plugin inventory, `core_api: "^1.0.0"`, `secrets`, `hosts`, `permissions`; REQ-GEN-11/AC7) and depends on `@qajitsu/*` packages as `peerDependencies`, so an installed plugin runs against the installation's core (see `docs/architecture/plugins.md`). Run `pnpm plugins:catalogue` to add it to the CLI's catalogue.
+Create `packages/adapters/<kind>-<name>/` following [skeleton.md](skeleton.md): `package.json` (`@qajitsu/adapter-<kind>-<name>`), `src/index.ts` exporting `create<Name><Interface>(config, deps)`, `src/config.ts` with the Zod config schema, `src/<name>.test.ts`. The `package.json` carries the plugin manifest under `qajitsu.plugin` (`types` from the plugin inventory, `core_api: "^1.0.0"`, `secrets`, `hosts`, `permissions`, and `omit_optional` for optional dependencies it never loads; REQ-GEN-11/AC7) and depends on `@qajitsu/*` packages as `peerDependencies`, so an installed plugin runs against the installation's core (see `docs/architecture/plugins.md`). Run `pnpm plugins:catalogue` to add it to the CLI's catalogue.
 
 ## 3. Contract tests first
 

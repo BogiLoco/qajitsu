@@ -32,7 +32,6 @@
     "@qajitsu/adapter-evidence-s3": "workspace:*",
     "@qajitsu/adapter-knowledge-chroma": "workspace:*",
     "@qajitsu/adapter-knowledge-confluence": "workspace:*",
-    "@qajitsu/adapter-knowledge-lancedb": "workspace:*",
     "@qajitsu/adapter-messages-webhooksite": "workspace:*",
     "@qajitsu/adapter-publish-jira": "workspace:*",
     "@qajitsu/adapter-runner-api": "workspace:*",
@@ -59,6 +58,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@qajitsu/adapter-knowledge-lancedb": "workspace:*",
     "@types/pngjs": "^6.0.5",
     "pngjs": "7.0.0"
   }
