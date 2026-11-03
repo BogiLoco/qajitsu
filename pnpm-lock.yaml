@@ -276,9 +276,6 @@ importers:
 
   packages/adapters/publish-jira:
     dependencies:
-      '@qajitsu/core':
-        specifier: workspace:*
-        version: link:../../core
       zod:
         specifier: 'catalog:'
         version: 4.6.5
@@ -286,6 +283,9 @@ importers:
       '@qajitsu/adapter-files':
         specifier: workspace:*
         version: link:../files
+      '@qajitsu/core':
+        specifier: workspace:*
+        version: link:../../core
 
   packages/adapters/runner-api:
     dependencies:
@@ -467,9 +467,6 @@ importers:
       '@qajitsu/adapter-files':
         specifier: workspace:*
         version: link:../adapters/files
-      '@qajitsu/adapter-publish-jira':
-        specifier: workspace:*
-        version: link:../adapters/publish-jira
       '@qajitsu/adapter-runner-api':
         specifier: workspace:*
         version: link:../adapters/runner-api
@@ -543,6 +540,9 @@ importers:
       '@qajitsu/adapter-messages-webhooksite':
         specifier: workspace:*
         version: link:../adapters/messages-webhooksite
+      '@qajitsu/adapter-publish-jira':
+        specifier: workspace:*
+        version: link:../adapters/publish-jira
       '@qajitsu/adapter-secrets-cli':
         specifier: workspace:*
         version: link:../adapters/secrets-cli

@@ -3,7 +3,9 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createFilePublisher } from "@qajitsu/adapter-files";
-import { createJiraPublisher } from "@qajitsu/adapter-publish-jira";
+import type * as JiraPublishPlugin from "@qajitsu/adapter-publish-jira";
+import { lazyPublisher } from "../plugins/lazy.js";
+import { sessionPlugins } from "./plugin.js";
 import {
   ConfigError,
   GateFailedError,
@@ -150,23 +152,26 @@ export function publisherFor(session: RunSession, ports: RuntimePorts): Publishe
   const { project, ws, masker, logger } = session;
   const jira = project.config.jira;
   if (jira.type === "file") return createFilePublisher(ws.path("report", "published"));
-  return createJiraPublisher(
-    {
-      flavor: jira.type,
-      baseUrl: jira.base_url ?? "",
-      email: jira.email,
-      token: jira.token ?? "",
-      maxAttachmentBytes: project.config.publish.max_attachment_mb * 1_000_000,
-    },
-    {
-      fetch: ports.fetch,
-      logger,
-      now: ports.now,
-      resolveSecret: session.resolveSecret,
-      registerSecret: (v) => {
-        masker.register(v);
+  const flavor = jira.type;
+  return lazyPublisher(`jira-${flavor}`, async () =>
+    (await sessionPlugins(session).load<typeof JiraPublishPlugin>("publish-jira")).createJiraPublisher(
+      {
+        flavor,
+        baseUrl: jira.base_url ?? "",
+        email: jira.email,
+        token: jira.token ?? "",
+        maxAttachmentBytes: project.config.publish.max_attachment_mb * 1_000_000,
       },
-    },
+      {
+        fetch: ports.fetch,
+        logger,
+        now: ports.now,
+        resolveSecret: session.resolveSecret,
+        registerSecret: (v) => {
+          masker.register(v);
+        },
+      },
+    ),
   );
 }
 

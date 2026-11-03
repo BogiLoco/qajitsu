@@ -1,7 +1,10 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createFilePublisher } from "@qajitsu/adapter-files";
-import { createJiraPublisher } from "@qajitsu/adapter-publish-jira";
+import type * as JiraPublishPlugin from "@qajitsu/adapter-publish-jira";
+import type { PluginLoader } from "../plugins/load.js";
+import { lazyPublisher } from "../plugins/lazy.js";
+import { pluginLoader } from "./plugin.js";
 import {
   ConfigError,
   GateFailedError,
@@ -115,23 +118,27 @@ export function projectPublisher(
 ): Publisher {
   const jira = project.config.jira;
   if (jira.type === "file") return createFilePublisher(join(outDir, "published"));
-  return createJiraPublisher(
-    {
-      flavor: jira.type,
-      baseUrl: jira.base_url ?? "",
-      email: jira.email,
-      token: jira.token ?? "",
-      maxAttachmentBytes: project.config.publish.max_attachment_mb * 1_000_000,
-    },
-    {
-      fetch: ports.fetch,
-      logger: deps.logger,
-      now: ports.now,
-      resolveSecret: deps.resolveSecret,
-      registerSecret: (v) => {
-        deps.masker.register(v);
+  const flavor = jira.type;
+  const plugins: PluginLoader = pluginLoader(ports);
+  return lazyPublisher(`jira-${flavor}`, async () =>
+    (await plugins.load<typeof JiraPublishPlugin>("publish-jira")).createJiraPublisher(
+      {
+        flavor,
+        baseUrl: jira.base_url ?? "",
+        email: jira.email,
+        token: jira.token ?? "",
+        maxAttachmentBytes: project.config.publish.max_attachment_mb * 1_000_000,
       },
-    },
+      {
+        fetch: ports.fetch,
+        logger: deps.logger,
+        now: ports.now,
+        resolveSecret: deps.resolveSecret,
+        registerSecret: (v) => {
+          deps.masker.register(v);
+        },
+      },
+    ),
   );
 }
 

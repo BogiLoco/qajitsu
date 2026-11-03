@@ -4,13 +4,16 @@ import type {
   DocumentSource,
   EvidenceArchive,
   MessageCapture,
+  Publisher,
   SecretProvider,
   TestCaseSource,
   TicketSource,
   VectorStore,
 } from "@qajitsu/core";
 import { codeHostContract } from "../contract/code-host.contract.js";
+import { publisherContract } from "../contract/publisher.contract.js";
 import { ticketSourceContract } from "../contract/ticket-source.contract.js";
+import { jiraPublishRoutes, jiraPublishSecrets } from "../support/jira-publish-fixture.js";
 import { GITHUB_TOKEN, githubRoutes, githubScenario } from "../support/github-fixture.js";
 import { GITLAB_TOKEN, gitlabRoutes, gitlabScenario } from "../support/gitlab-fixture.js";
 import { jiraConfig, jiraRoutes, jiraSecrets } from "../support/jira-fixture.js";
@@ -304,6 +307,39 @@ export const pluginContracts: readonly PluginContract[] = [
         },
         gitlabScenario,
       );
+    },
+  },
+  {
+    id: "publish-jira",
+    run: (installed) => {
+      publisherContract("jira cloud (installed plugin)", () => {
+        let publisher: Promise<Publisher> | undefined;
+        const get = (): Promise<Publisher> =>
+          (publisher ??= installed<{
+            createJiraPublisher(
+              c: {
+                flavor: "cloud";
+                baseUrl: string;
+                email: string;
+                token: string;
+                maxAttachmentBytes: number;
+              },
+              d: AdapterDeps,
+            ): Publisher;
+          }>("publish-jira").then((m) =>
+            m.createJiraPublisher(
+              {
+                flavor: "cloud",
+                baseUrl: "https://jira.example.com",
+                email: "secret://env/JIRA_EMAIL",
+                token: "secret://env/JIRA_TOKEN",
+                maxAttachmentBytes: 1e9,
+              },
+              testDeps(createFakeFetch(jiraPublishRoutes()).fetch, jiraPublishSecrets),
+            ),
+          ));
+        return { id: "jira-cloud", publish: async (input, signal) => (await get()).publish(input, signal) };
+      });
     },
   },
 ];
