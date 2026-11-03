@@ -11,7 +11,7 @@ import {
 } from "@qajitsu/adapter-secrets-cli";
 import { createDopplerSecretProvider } from "@qajitsu/adapter-secrets-doppler";
 import { createEnvSecretProvider } from "@qajitsu/adapter-secrets-env";
-import { createVaultSecretProvider } from "@qajitsu/adapter-secrets-vault";
+import type * as VaultPlugin from "@qajitsu/adapter-secrets-vault";
 import {
   createFileCaseSource,
   createTestRailCaseSource,
@@ -26,6 +26,7 @@ import {
   type CodeHost,
   type GitExec,
   type ResolvedProject,
+  type SecretProvider,
   type TestCaseSource,
   type TicketSource,
 } from "@qajitsu/core";
@@ -36,6 +37,7 @@ import type { PluginCatalogue } from "./plugins/catalogue.js";
 import type { PluginLoader } from "./plugins/load.js";
 import type { PlaywrightInfo, VersionExec } from "./versions.js";
 import { resolveConfigPath } from "./project.js";
+import { pluginLoader } from "./commands/plugin.js";
 
 /** Process-level ports the CLI injects into adapters. */
 export interface RuntimePorts {
@@ -72,6 +74,18 @@ export interface ProjectAdapters {
 }
 
 /**
+ * A secret manager whose plugin is loaded on first use (REQ-GEN-11/AC2): its scheme is known before, so references to
+ * other providers never load it, and a missing plugin fails the first lookup with the command that installs it.
+ */
+function lazySecretProvider(scheme: string, make: () => Promise<SecretProvider>): SecretProvider {
+  let provider: Promise<SecretProvider> | undefined;
+  return {
+    scheme,
+    resolve: async (reference, signal) => (await (provider ??= make())).resolve(reference, signal),
+  };
+}
+
+/**
  * The secret resolver of the CLI: `env` provider over the process environment and the project's
  * `.env.local`; every resolved value is registered with the masker (REQ-CFG-03, invariant 8).
  */
@@ -90,13 +104,17 @@ export function createCliSecretResolver(project: LoadedProject, ports: RuntimePo
       env,
       ...(vault
         ? [
-            createVaultSecretProvider({
-              address: vault.address,
-              mount: vault.mount,
-              ...(vault.namespace ? { namespace: vault.namespace } : {}),
-              token: bootstrap(vault.token),
-              fetch: ports.fetch,
-            }),
+            lazySecretProvider("vault", async () =>
+              (await pluginLoader(ports).load<typeof VaultPlugin>("secrets-vault")).createVaultSecretProvider(
+                {
+                  address: vault.address,
+                  mount: vault.mount,
+                  ...(vault.namespace ? { namespace: vault.namespace } : {}),
+                  token: bootstrap(vault.token),
+                  fetch: ports.fetch,
+                },
+              ),
+            ),
           ]
         : []),
       ...(doppler

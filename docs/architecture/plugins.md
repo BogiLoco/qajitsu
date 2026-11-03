@@ -1043,6 +1043,7 @@ request, and its contract runs against the installed copy (`tests/e2e/plugins-in
 | `knowledge-chroma`  | 2026-11-03 | 141 MB               |
 
 | `knowledge-confluence` | 2026-11-03 | 141.0 MB |
+| `secrets-vault` | 2026-11-03 | 141.0 MB |
 <!-- moved-out:end -->
 
 New integrations (Bitbucket, Azure DevOps, Maestro and the rest) start as plugins once their wave's mechanism exists.

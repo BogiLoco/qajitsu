@@ -370,7 +370,7 @@ importers:
         version: link:../../core
 
   packages/adapters/secrets-vault:
-    dependencies:
+    devDependencies:
       '@qajitsu/core':
         specifier: workspace:*
         version: link:../../core
@@ -474,9 +474,6 @@ importers:
       '@qajitsu/adapter-secrets-env':
         specifier: workspace:*
         version: link:../adapters/secrets-env
-      '@qajitsu/adapter-secrets-vault':
-        specifier: workspace:*
-        version: link:../adapters/secrets-vault
       '@qajitsu/adapter-testcases':
         specifier: workspace:*
         version: link:../adapters/testcases
@@ -532,6 +529,9 @@ importers:
       '@qajitsu/adapter-knowledge-lancedb':
         specifier: workspace:*
         version: link:../adapters/knowledge-lancedb
+      '@qajitsu/adapter-secrets-vault':
+        specifier: workspace:*
+        version: link:../adapters/secrets-vault
       '@types/pngjs':
         specifier: ^6.0.5
         version: 6.0.5
