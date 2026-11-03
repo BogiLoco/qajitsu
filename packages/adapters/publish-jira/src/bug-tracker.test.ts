@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createFakeFetch, jsonReply, testDeps } from "../../../../tests/support/fake-fetch.js";
-import { createFileBugTracker, createJiraBugTracker } from "./bug-tracker.js";
+import { createFileBugTracker } from "@qajitsu/adapter-files";
+import { createJiraBugTracker } from "./bug-tracker.js";
 
 const SECRETS = {
   "secret://env/JIRA_EMAIL": "qa@example.com",

@@ -31,7 +31,7 @@ of them before any adapter moves out of the core installation.
 | [Azure DevOps Boards and Test Plans](#azure-devops-boards-and-test-plans) | ticket source, test-case source, ticket workflow, publisher | TicketSource, TestCaseSource, TicketWorkflow, Publisher | idea | plugin | official open source |
 | [Linear](#linear) | ticket source, ticket workflow | TicketSource, TicketWorkflow | idea | plugin | official open source |
 | [Notion](#notion) | ticket source, document source | TicketSource, DocumentSource | idea | plugin | official open source |
-| [Ticket files](#ticket-files) | ticket source | TicketSource | idea | core | official open source |
+| [Local files](#local-files) | ticket source, ticket workflow, publisher, bug tracker, document source, test-case source | TicketSource, TicketWorkflow, Publisher, BugTracker, DocumentSource, TestCaseSource | exists | core | official open source |
 | [GitHub and GitHub Enterprise Server](#github-and-github-enterprise-server) | code host | CodeHost | exists | plugin | official open source |
 | [GitLab](#gitlab) | code host | CodeHost | exists | plugin | official open source |
 | [Local git repositories](#local-git-repositories) | code host | CodeHost | exists | core | official open source |
@@ -228,20 +228,20 @@ of them before any adapter moves out of the core installation.
 - Placement: plugin
 - Names: Notion
 
-### Ticket files
+### Local files
 
-- Type: ticket source
-- Interface: TicketSource
-- Status: idea
-- Package: -
-- Requirements: REQ-CTX-09
-- Dependencies: none
+- Type: ticket source, ticket workflow, publisher, bug tracker, document source, test-case source
+- Interface: TicketSource, TicketWorkflow, Publisher, BugTracker, DocumentSource, TestCaseSource
+- Status: exists
+- Package: packages/adapters/files
+- Requirements: REQ-CTX-09, REQ-CTX-01, REQ-CTX-08, REQ-PUB-01, REQ-KNOW-12, REQ-GEN-11
+- Dependencies: zod (shared)
 - Hosts: none
 - Secrets: none
 - Tier: official open source
 - Placement: core
 - Names: -
-- Notes: Local Markdown and JSON tickets (REQ-CTX-09/AC2). The core keeps them so a project without a ticket system still works (REQ-GEN-11/AC1).
+- Notes: Tickets as `<KEY>.json` files with their workflow, the publisher and bug tracker that write files, resolved bugs for the knowledge base and manual cases from CSV or Excel. The core keeps them, so a project without a ticket system works from ticket to published result without any plugin (REQ-GEN-11/AC1). Moved out of `ticket-jira`, `publish-jira` and `testcases` on 2026-11-03, so those can become plugins. Markdown tickets (REQ-CTX-09/AC2) are still to come.
 
 ## Code hosts
 

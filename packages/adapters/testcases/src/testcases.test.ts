@@ -5,13 +5,8 @@ import { TicketKeySchema, xlsxRows } from "@qajitsu/core";
 import { zip } from "@qajitsu/report";
 import { afterEach, describe, expect, it } from "vitest";
 import { createFakeFetch, jsonReply, testDeps } from "../../../../tests/support/fake-fetch.js";
-import {
-  createFileCaseSource,
-  createTestRailCaseSource,
-  createXrayCaseSource,
-  createZephyrCaseSource,
-  parseCsv,
-} from "./index.js";
+import { createFileCaseSource, parseCsv } from "@qajitsu/adapter-files";
+import { createTestRailCaseSource, createXrayCaseSource, createZephyrCaseSource } from "./index.js";
 
 const ticket = TicketKeySchema.parse("SHOP-482");
 const secrets = {

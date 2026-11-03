@@ -2,12 +2,13 @@ import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import {
   AdapterError,
+  MAX_IMPORTED_CASES as MAX_CASES,
+  toImportedCase as toCase,
   xlsxRows,
   type ImportedCase,
   type TestCaseSource,
   type TicketKey,
 } from "@qajitsu/core";
-import { MAX_CASES, toCase } from "./common.js";
 
 /**
  * Parses CSV text (RFC 4180 quotes; comma or semicolon separated, as Excel writes it in many locales).

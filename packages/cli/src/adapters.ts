@@ -8,13 +8,13 @@ import type { SecretCliExec } from "@qajitsu/adapter-secrets-cli";
 import type * as DopplerPlugin from "@qajitsu/adapter-secrets-doppler";
 import { createEnvSecretProvider } from "@qajitsu/adapter-secrets-env";
 import type * as VaultPlugin from "@qajitsu/adapter-secrets-vault";
+import { createFileCaseSource, createFileTicketSource } from "@qajitsu/adapter-files";
 import {
-  createFileCaseSource,
   createTestRailCaseSource,
   createXrayCaseSource,
   createZephyrCaseSource,
 } from "@qajitsu/adapter-testcases";
-import { createFileTicketSource, createJiraCloudTicketSource } from "@qajitsu/adapter-ticket-jira";
+import { createJiraCloudTicketSource } from "@qajitsu/adapter-ticket-jira";
 import {
   ConfigError,
   createSecretResolver,

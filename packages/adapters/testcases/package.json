@@ -22,6 +22,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@qajitsu/adapter-files": "workspace:*",
     "@qajitsu/report": "workspace:*"
   },
   "qajitsu": {

@@ -29,6 +29,10 @@
       "package": "@qajitsu/adapter-evidence-s3",
       "version": "0.0.0"
     },
+    "files": {
+      "package": "@qajitsu/adapter-files",
+      "version": "0.0.0"
+    },
     "knowledge-chroma": {
       "package": "@qajitsu/adapter-knowledge-chroma",
       "version": "0.0.0"

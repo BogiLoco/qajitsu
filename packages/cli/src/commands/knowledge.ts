@@ -24,6 +24,7 @@ import { registerConfiguredSecrets } from "../session.js";
 import type { CommandIO } from "./fetch.js";
 import type * as ChromaPlugin from "@qajitsu/adapter-knowledge-chroma";
 import type * as ConfluencePlugin from "@qajitsu/adapter-knowledge-confluence";
+import { createFileBugSource } from "@qajitsu/adapter-files";
 import type * as JiraPlugin from "@qajitsu/adapter-ticket-jira";
 import type { PluginLoader } from "../plugins/load.js";
 import { pluginLoader } from "./plugin.js";
@@ -623,7 +624,6 @@ async function onlineSource(
     );
   }
   if (locator?.kind === "jira") {
-    const { createFileBugSource, createJiraBugSource } = await plugins.load<typeof JiraPlugin>("ticket-jira");
     if (jira.type === "file") {
       if (jira.tickets_dir === undefined)
         throw new ConfigError("KNOWLEDGE_JIRA_NOT_CONFIGURED", "jira.tickets_dir is not set.", {});
@@ -633,6 +633,7 @@ async function onlineSource(
     }
     if (jira.base_url === undefined || jira.token === undefined)
       throw new ConfigError("KNOWLEDGE_JIRA_NOT_CONFIGURED", "jira.base_url and jira.token are needed.", {});
+    const { createJiraBugSource } = await plugins.load<typeof JiraPlugin>("ticket-jira");
     return filtered(
       createJiraBugSource(
         {

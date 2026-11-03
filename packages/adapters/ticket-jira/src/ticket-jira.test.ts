@@ -12,7 +12,7 @@ import {
   testDeps,
   type Route,
 } from "../../../../tests/support/fake-fetch.js";
-import { createFileTicketSource } from "./file-source.js";
+import { createFileTicketSource } from "@qajitsu/adapter-files";
 import { createJiraCloudTicketSource } from "./jira-cloud.js";
 
 const BASE = "https://jira.example.com";
@@ -213,7 +213,6 @@ describe("doctor access check (REQ-GEN-03/AC2)", () => {
     expect(await source.check?.()).toEqual({ ok: true, detail: "Jira Cloud reachable, token accepted" });
     const failing = cloud([{ match: /^\/rest\/api\/3\/myself$/, reply: jsonReply({}, 401) }]);
     expect((await failing.source.check?.())?.ok).toBe(false);
-    const { createFileTicketSource } = await import("./file-source.js");
     expect((await createFileTicketSource("/definitely/missing").check?.())?.ok).toBe(false);
   });
 });

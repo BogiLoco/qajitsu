@@ -5,7 +5,7 @@ import { RunIdSchema, TicketKeySchema, type PublishInput } from "@qajitsu/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { createFakeFetch, jsonReply, testDeps, type Route } from "../../../../tests/support/fake-fetch.js";
 import { publisherContract } from "../../../../tests/contract/publisher.contract.js";
-import { createFilePublisher } from "./file-publisher.js";
+import { createFilePublisher } from "@qajitsu/adapter-files";
 import { createJiraPublisher } from "./jira-publisher.js";
 
 const BASE = "https://jira.example.com";

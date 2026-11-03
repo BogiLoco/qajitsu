@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RunId, TicketKey } from "@qajitsu/core";
 import { afterEach, describe, expect, it } from "vitest";
-import { createFilePublisher } from "./file-publisher.js";
+import { createFilePublisher } from "./publisher.js";
 
 let dir: string;
 afterEach(async () => {

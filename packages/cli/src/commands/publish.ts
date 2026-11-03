@@ -2,7 +2,8 @@ import { formatDecision } from "@qajitsu/verifier";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createFilePublisher, createJiraPublisher } from "@qajitsu/adapter-publish-jira";
+import { createFilePublisher } from "@qajitsu/adapter-files";
+import { createJiraPublisher } from "@qajitsu/adapter-publish-jira";
 import {
   ConfigError,
   GateFailedError,

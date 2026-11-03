@@ -1,6 +1,7 @@
 import { appendFile, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { createFileWorkflow, createJiraWorkflow } from "@qajitsu/adapter-publish-jira";
+import { createFileWorkflow } from "@qajitsu/adapter-files";
+import { createJiraWorkflow } from "@qajitsu/adapter-publish-jira";
 import {
   admitRun,
   moveTicket,

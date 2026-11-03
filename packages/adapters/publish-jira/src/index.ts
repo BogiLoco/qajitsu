@@ -5,8 +5,7 @@
  * @packageDocumentation
  */
 export { createJiraPublisher, type JiraPublisherConfig } from "./jira-publisher.js";
-export { createFilePublisher } from "./file-publisher.js";
-export { createFileBugTracker, createJiraBugTracker } from "./bug-tracker.js";
+export { createJiraBugTracker } from "./bug-tracker.js";
 export { createJiraAttachmentReader, type TicketAttachment } from "./attachments.js";
 
 /** Adapter metadata used by `qajitsu doctor` and the adapter table in the docs. */
@@ -18,4 +17,4 @@ export const ADAPTER = {
   requirements: ["REQ-PUB-01", "REQ-PUB-02", "REQ-PUB-03", "REQ-PUB-04"],
   status: "implemented",
 } as const;
-export { createFileWorkflow, createJiraWorkflow } from "./workflow.js";
+export { createJiraWorkflow } from "./workflow.js";

@@ -51,7 +51,8 @@ export function pluginNeeds(
   // Knowledge sources added from online systems (`confluence:SHOP`, `jira:payments`) need their plugin too.
   for (const source of options.onlineSources ?? []) {
     if (source.startsWith("confluence:")) need("knowledge-confluence", `knowledge source ${source}`);
-    if (source.startsWith("jira:")) need("ticket-jira", `knowledge source ${source}`);
+    if (source.startsWith("jira:") && config.jira.type !== "file")
+      need("ticket-jira", `knowledge source ${source}`);
   }
   return needs;
 }

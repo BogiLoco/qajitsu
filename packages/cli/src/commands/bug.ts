@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
-import { createFileBugTracker, createJiraBugTracker } from "@qajitsu/adapter-publish-jira";
+import { createFileBugTracker } from "@qajitsu/adapter-files";
+import { createJiraBugTracker } from "@qajitsu/adapter-publish-jira";
 import {
   ConfigError,
   GateFailedError,

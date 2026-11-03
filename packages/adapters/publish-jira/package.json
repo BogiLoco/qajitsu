@@ -40,5 +40,8 @@
         "network"
       ]
     }
+  },
+  "devDependencies": {
+    "@qajitsu/adapter-files": "workspace:*"
   }
 }
