@@ -80,4 +80,22 @@ describe("plugin manifests of the adapter packages (REQ-GEN-11)", () => {
     for (const [, v] of versions) expect(v).toMatch(/^\d+\.\d+\.\d+$/);
     expect(new Set(versions.map(([, v]) => v)).size).toBe(1);
   });
+
+  it("REQ-GEN-11/AC1: the core installation carries only the core adapters; every other integration is a plugin", () => {
+    const cli = JSON.parse(readFileSync(join(root, "packages", "cli", "package.json"), "utf8")) as {
+      dependencies: Record<string, string>;
+    };
+    // The core keeps what works without any external system (docs/architecture/plugins.md, ADR-0011).
+    expect(
+      Object.keys(cli.dependencies)
+        .filter((d) => d.startsWith("@qajitsu/adapter-"))
+        .sort(),
+    ).toEqual([
+      "@qajitsu/adapter-codehost-local",
+      "@qajitsu/adapter-env-remote",
+      "@qajitsu/adapter-evidence-local",
+      "@qajitsu/adapter-files",
+      "@qajitsu/adapter-secrets-env",
+    ]);
+  });
 });

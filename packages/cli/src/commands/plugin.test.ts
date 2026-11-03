@@ -306,4 +306,69 @@ describe("qj plugin (REQ-GEN-11)", () => {
     expect(r.out).toContain("Installed runner-api, which runner-web needs");
     expect(existsSync(join(qjHome, "plugins", "runner-api", "0.0.0"))).toBe(true);
   });
+
+  it("REQ-GEN-11/AC1: qj init installs the official plugins the chosen setup needs", async () => {
+    const pkgs = ["ticket-jira", "publish-jira"].map((id) => ({
+      id,
+      pkg: {
+        name: `@qajitsu/adapter-${id}`,
+        version: "0.0.0",
+        qajitsu: { plugin: { types: ["ticket source"], core_api: "^1.0.0" } },
+      },
+    }));
+    const tarballs = new Map(pkgs.map((p) => [p.id, npmTarball({ "package.json": p.pkg })]));
+    const sha = (t: Uint8Array) => `sha512-${createHash("sha512").update(t).digest("base64")}`;
+    const registryOfJira: typeof fetch = (input) => {
+      const url = input instanceof Request ? input.url : input.toString();
+      for (const { id, pkg } of pkgs) {
+        const t = tarballs.get(id) ?? new Uint8Array();
+        if (url === `https://registry.npmjs.org/${pkg.name.replace("/", "%2f")}/0.0.0`)
+          return Promise.resolve(
+            Response.json({ dist: { tarball: `https://registry.npmjs.org/${id}.tgz`, integrity: sha(t) } }),
+          );
+        if (url === `https://registry.npmjs.org/${id}.tgz`) return Promise.resolve(new Response(t));
+      }
+      return Promise.resolve(new Response("", { status: 404 }));
+    };
+    const npmAny: RunExec = async (_cmd, args) => {
+      const prefix = args[args.indexOf("--prefix") + 1] ?? "";
+      const pkg = packageJsonFromTarball(new Uint8Array(await readFile(args.at(-1) ?? ""))) as {
+        name: string;
+      };
+      const dir = join(prefix, "node_modules", ...pkg.name.split("/"));
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, "package.json"), JSON.stringify(pkg));
+      return { code: 0, stdout: "", stderr: "" };
+    };
+    const missingJira = createPluginLoader({
+      root: join(qjHome, "plugins"),
+      catalogue: readCatalogue(),
+      bundled: (name) => (name.includes("-jira") ? undefined : bundledPackageDir(name)),
+      importModule: () => Promise.resolve({}),
+    });
+    const repo = join(home, "shop");
+    await mkdir(repo, { recursive: true });
+    const r = await qj(
+      [
+        "init",
+        "shop",
+        "--yes",
+        "--qa-dir",
+        join(repo, ".qa"),
+        "--jira-url",
+        "https://shop.atlassian.net",
+        "--project-key",
+        "SHOP",
+      ],
+      {
+        ...ports(missingJira),
+        fetch: registryOfJira,
+        toolchain: { host: { os: "darwin", arch: "arm64" }, run: npmAny },
+      },
+    );
+    expect(r.out).toContain("plugin ticket-jira: installing @qajitsu/adapter-ticket-jira@0.0.0");
+    expect(r.out).toContain("plugin publish-jira: installing @qajitsu/adapter-publish-jira@0.0.0");
+    expect(existsSync(join(qjHome, "plugins", "ticket-jira", "0.0.0"))).toBe(true);
+    expect(existsSync(join(qjHome, "plugins", "publish-jira", "0.0.0"))).toBe(true);
+  });
 });

@@ -27,7 +27,7 @@ import type { CommandIO } from "./fetch.js";
 import { runInit } from "./init.js";
 import { removeRun } from "./runs.js";
 import type { CommandExec } from "@qajitsu/adapter-env-compose";
-import { pluginLoader } from "./plugin.js";
+import { installMissingPlugins, pluginLoader } from "./plugin.js";
 
 const fail = (io: CommandIO, error: unknown): number => {
   const code = error instanceof QajitsuError ? ` [${error.code}]` : "";
@@ -114,6 +114,11 @@ export async function runProjectInit(
       const project = await loadProject(dirname(qaDir));
       if (prefixes.length === 0 && project.config.jira.project_key)
         prefixes = [project.config.jira.project_key];
+      // REQ-GEN-11/AC1: the official plugins the chosen setup needs, so the usual flow needs no extra step.
+      const plugins = await installMissingPlugins(project, ports, (line) => {
+        io.write(`${line}\n`);
+      });
+      for (const failed of plugins.failed) problems.push(`plugin ${failed}`);
       const checks = await projectChecks(project, ports, { online: false });
       // REQ-GEN-08/AC1: the same missing tools doctor names (Compose, browsers), not only the project checks.
       const tools = await toolVersions({
