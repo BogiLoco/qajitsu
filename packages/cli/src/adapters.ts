@@ -9,7 +9,7 @@ import {
   createOnePasswordSecretProvider,
   type SecretCliExec,
 } from "@qajitsu/adapter-secrets-cli";
-import { createDopplerSecretProvider } from "@qajitsu/adapter-secrets-doppler";
+import type * as DopplerPlugin from "@qajitsu/adapter-secrets-doppler";
 import { createEnvSecretProvider } from "@qajitsu/adapter-secrets-env";
 import type * as VaultPlugin from "@qajitsu/adapter-secrets-vault";
 import {
@@ -119,12 +119,16 @@ export function createCliSecretResolver(project: LoadedProject, ports: RuntimePo
         : []),
       ...(doppler
         ? [
-            createDopplerSecretProvider({
-              project: doppler.project,
-              config: doppler.config,
-              token: bootstrap(doppler.token),
-              fetch: ports.fetch,
-            }),
+            lazySecretProvider("doppler", async () =>
+              (
+                await pluginLoader(ports).load<typeof DopplerPlugin>("secrets-doppler")
+              ).createDopplerSecretProvider({
+                project: doppler.project,
+                config: doppler.config,
+                token: bootstrap(doppler.token),
+                fetch: ports.fetch,
+              }),
+            ),
           ]
         : []),
       ...(op ? [createOnePasswordSecretProvider(cli)] : []),

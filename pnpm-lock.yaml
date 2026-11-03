@@ -358,7 +358,7 @@ importers:
         version: link:../../core
 
   packages/adapters/secrets-doppler:
-    dependencies:
+    devDependencies:
       '@qajitsu/core':
         specifier: workspace:*
         version: link:../../core
@@ -468,9 +468,6 @@ importers:
       '@qajitsu/adapter-secrets-cli':
         specifier: workspace:*
         version: link:../adapters/secrets-cli
-      '@qajitsu/adapter-secrets-doppler':
-        specifier: workspace:*
-        version: link:../adapters/secrets-doppler
       '@qajitsu/adapter-secrets-env':
         specifier: workspace:*
         version: link:../adapters/secrets-env
@@ -529,6 +526,9 @@ importers:
       '@qajitsu/adapter-knowledge-lancedb':
         specifier: workspace:*
         version: link:../adapters/knowledge-lancedb
+      '@qajitsu/adapter-secrets-doppler':
+        specifier: workspace:*
+        version: link:../adapters/secrets-doppler
       '@qajitsu/adapter-secrets-vault':
         specifier: workspace:*
         version: link:../adapters/secrets-vault

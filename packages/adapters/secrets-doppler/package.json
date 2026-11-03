@@ -17,7 +17,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json"
   },
-  "dependencies": {
+  "peerDependencies": {
+    "@qajitsu/core": "workspace:^"
+  },
+  "devDependencies": {
     "@qajitsu/core": "workspace:*"
   },
   "qajitsu": {

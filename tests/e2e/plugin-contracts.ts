@@ -105,4 +105,43 @@ export const pluginContracts: readonly PluginContract[] = [
       );
     },
   },
+  {
+    id: "secrets-doppler",
+    run: (installed) => {
+      const TOKEN = "dp.st.fictional-token";
+      secretProviderContract(
+        "doppler (installed plugin)",
+        (secrets) => {
+          const fake = createFakeFetch([
+            {
+              method: "GET",
+              match: /^\/v3\/configs\/config\/secrets\/download\?/,
+              reply: (r) =>
+                r.headers["authorization"] === `Bearer ${TOKEN}`
+                  ? jsonReply(secrets)(r)
+                  : jsonReply({ messages: ["Invalid token"] }, 401)(r),
+            },
+          ]);
+          return lazy(async () =>
+            (
+              await installed<{
+                createDopplerSecretProvider(o: {
+                  token: () => Promise<string>;
+                  project: string;
+                  config: string;
+                  fetch: typeof fetch;
+                }): SecretProvider;
+              }>("secrets-doppler")
+            ).createDopplerSecretProvider({
+              token: () => Promise.resolve(TOKEN),
+              project: "shop",
+              config: "ci",
+              fetch: fake.fetch,
+            }),
+          );
+        },
+        "secret://doppler/",
+      );
+    },
+  },
 ];
