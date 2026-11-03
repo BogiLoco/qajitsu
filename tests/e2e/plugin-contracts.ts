@@ -12,6 +12,7 @@ import type {
 import { codeHostContract } from "../contract/code-host.contract.js";
 import { ticketSourceContract } from "../contract/ticket-source.contract.js";
 import { GITHUB_TOKEN, githubRoutes, githubScenario } from "../support/github-fixture.js";
+import { GITLAB_TOKEN, gitlabRoutes, gitlabScenario } from "../support/gitlab-fixture.js";
 import { jiraConfig, jiraRoutes, jiraSecrets } from "../support/jira-fixture.js";
 import { testCaseSourceContract } from "../contract/test-case-source.contract.js";
 import { xrayConfig, xrayFixture } from "../support/xray-fixture.js";
@@ -277,6 +278,31 @@ export const pluginContracts: readonly PluginContract[] = [
           );
         },
         githubScenario,
+      );
+    },
+  },
+  {
+    id: "codehost-gitlab",
+    run: (installed) => {
+      codeHostContract(
+        "gitlab (installed plugin)",
+        async (o) => {
+          const fake = createFakeFetch(
+            o?.unauthorized ? [{ match: /.*/, reply: jsonReply({}, 401) }] : gitlabRoutes,
+          );
+          return (
+            await installed<{
+              createGitLabCodeHost(
+                c: { alias: string; baseUrl: string; token: string },
+                d: AdapterDeps,
+              ): CodeHost;
+            }>("codehost-gitlab")
+          ).createGitLabCodeHost(
+            { alias: "gitlab", baseUrl: "https://gitlab.example.com", token: "secret://env/GITLAB_TOKEN" },
+            testDeps(fake.fetch, { "secret://env/GITLAB_TOKEN": GITLAB_TOKEN }),
+          );
+        },
+        gitlabScenario,
       );
     },
   },

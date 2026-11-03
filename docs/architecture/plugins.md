@@ -1051,6 +1051,7 @@ request, and its contract runs against the installed copy (`tests/e2e/plugins-in
 | `testcases` | 2026-11-03 | 140.8 MB |
 | `ticket-jira` | 2026-11-03 | 140.7 MB |
 | `codehost-github` | 2026-11-03 | 140.6 MB |
+| `codehost-gitlab` | 2026-11-03 | 140.5 MB |
 <!-- moved-out:end -->
 
 New integrations (Bitbucket, Azure DevOps, Maestro and the rest) start as plugins once their wave's mechanism exists.
