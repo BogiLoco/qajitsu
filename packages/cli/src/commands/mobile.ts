@@ -5,14 +5,10 @@ import { platform } from "node:os";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { createServer } from "node:net";
 import type { BrowserFactory } from "@qajitsu/adapter-runner-api";
+import { sessionPlugins } from "./plugin.js";
 import { androidSdkRoot } from "@qajitsu/toolchain";
-import {
-  connectAppium,
-  createAppiumDeviceFactory,
-  startAndroidEmulator,
-  startAppium,
-  type RunningAppium,
-} from "@qajitsu/adapter-runner-mobile";
+import type * as MobilePlugin from "@qajitsu/adapter-runner-mobile";
+import type { RunningAppium } from "@qajitsu/adapter-runner-mobile";
 import {
   AdapterError,
   mobileDevices,
@@ -297,6 +293,9 @@ export async function prepareMobile(
   const { project } = session;
   const mobile = project.config.mobile;
   if (!mobile) return { ok: false, reason: "mobile cases need the mobile section in .qa/qa.project.yaml" };
+  // REQ-GEN-11/AC2: devices are driven through the mobile runner plugin.
+  const runner = await sessionPlugins(session).load<typeof MobilePlugin>("runner-mobile");
+  const { connectAppium, createAppiumDeviceFactory, startAndroidEmulator } = runner;
   const stops: (() => Promise<void>)[] = [];
   const stop = async (): Promise<void> => {
     for (const s of stops.reverse()) await s().catch(() => undefined);
@@ -367,7 +366,7 @@ export async function prepareMobile(
             : { serial: firstSerial ?? "emulator-5554", appId: android.app_id },
         ).catch(() => undefined),
       });
-      const appium = await appiumServer(mobile, project.qaDir, appiumHome, sdk);
+      const appium = await appiumServer(runner, mobile, project.qaDir, appiumHome, sdk);
       if (appium.stop) stops.push(appium.stop);
       const factories: BrowserFactory[] = [];
       for (const device of started) {
@@ -487,13 +486,14 @@ export function farmCapabilities(
 }
 
 async function appiumServer(
+  runner: typeof MobilePlugin,
   mobile: MobileConfig,
   qaDir: string,
   appiumHome: string | undefined,
   sdkRoot: string,
 ): Promise<{ url: string; stop?: () => Promise<void> }> {
   if (mobile.appium.url) return { url: mobile.appium.url };
-  const running: RunningAppium = await startAppium({
+  const running: RunningAppium = await runner.startAppium({
     bin:
       mobile.appium.bin?.includes("/") === true
         ? resolve(qaDir, mobile.appium.bin)

@@ -13,6 +13,7 @@ import type {
 } from "@qajitsu/core";
 import { attemptExecutorContract } from "../contract/attempt-executor.contract.js";
 import { codeHostContract } from "../contract/code-host.contract.js";
+import { deviceFactoryContract, type CreateDeviceFactory } from "../contract/device-factory.contract.js";
 import { envProviderContract } from "../contract/env-provider.contract.js";
 import { publisherContract } from "../contract/publisher.contract.js";
 import {
@@ -392,6 +393,17 @@ export const pluginContracts: readonly PluginContract[] = [
           }),
         });
       });
+    },
+  },
+  {
+    id: "runner-mobile",
+    run: (installed) => {
+      deviceFactoryContract(
+        "appium (installed plugin)",
+        async () =>
+          (await installed<{ createAppiumDeviceFactory: CreateDeviceFactory }>("runner-mobile"))
+            .createAppiumDeviceFactory,
+      );
     },
   },
 ];

@@ -975,6 +975,8 @@ async function executeCases(
   // The web runner plugin: up front when the plan has web cases, otherwise only if a spec drives a browser.
   const webRunner = () => sessionPlugins(session).load<typeof RunnerWebPlugin>("runner-web");
   const web = plan.cases.some((c) => c.type === "web") ? await webRunner() : undefined;
+  // The mobile runner plugin, before any lane starts, when the plan has mobile cases.
+  if (plan.cases.some((c) => c.type === "mobile")) await sessionPlugins(session).load("runner-mobile");
   const browserUnavailable = (browser: WebBrowser): string | undefined =>
     web ? web.browserUnavailable(browser) : "the web runner plugin is not loaded (qj plugin add runner-web)";
   const { ws, events, project, masker } = session;

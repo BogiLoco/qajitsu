@@ -1059,6 +1059,7 @@ request, and its contract runs against the installed copy (`tests/e2e/plugins-in
 | `env-compose` | 2026-11-03 | 140.3 MB |
 | `runner-api` | 2026-11-03 | 140.3 MB |
 | `runner-web` | 2026-11-03 | 136.9 MB |
+| `runner-mobile` | 2026-11-03 | 85.8 MB |
 <!-- moved-out:end -->
 
 New integrations (Bitbucket, Azure DevOps, Maestro and the rest) start as plugins once their wave's mechanism exists.

@@ -1,5 +1,6 @@
 import type { AttemptInput } from "@qajitsu/adapter-runner-api";
 import { describe, expect, it } from "vitest";
+import { deviceFactoryContract } from "../../../../tests/contract/device-factory.contract.js";
 import {
   appiumLocator,
   createAppiumDeviceFactory,
@@ -45,6 +46,8 @@ const fakeClient = () => {
   return { client, calls };
 };
 const input = { secrets: ["token-123"] } as unknown as AttemptInput;
+
+deviceFactoryContract("appium (source)", () => Promise.resolve(createAppiumDeviceFactory));
 
 describe("Appium device driver (REQ-EXEC-06, REQ-EVD-03)", () => {
   it("REQ-EXEC-06/AC1: maps selectors to accessibility ids and UiSelector/predicates; rejects web-only kinds", () => {
