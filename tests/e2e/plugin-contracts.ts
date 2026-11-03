@@ -1,5 +1,6 @@
 import type {
   AdapterDeps,
+  CodeHost,
   DocumentSource,
   EvidenceArchive,
   MessageCapture,
@@ -8,7 +9,9 @@ import type {
   TicketSource,
   VectorStore,
 } from "@qajitsu/core";
+import { codeHostContract } from "../contract/code-host.contract.js";
 import { ticketSourceContract } from "../contract/ticket-source.contract.js";
+import { GITHUB_TOKEN, githubRoutes, githubScenario } from "../support/github-fixture.js";
 import { jiraConfig, jiraRoutes, jiraSecrets } from "../support/jira-fixture.js";
 import { testCaseSourceContract } from "../contract/test-case-source.contract.js";
 import { xrayConfig, xrayFixture } from "../support/xray-fixture.js";
@@ -252,6 +255,28 @@ export const pluginContracts: readonly PluginContract[] = [
         "jira cloud (installed plugin)",
         () => ({ getTicket: async (key, signal) => (await source()).getTicket(key, signal) }),
         { known: "SHOP-482", missing: "SHOP-999" },
+      );
+    },
+  },
+  {
+    id: "codehost-github",
+    run: (installed) => {
+      codeHostContract(
+        "github (installed plugin)",
+        async (o) => {
+          const fake = createFakeFetch(
+            o?.unauthorized ? [{ match: /.*/, reply: jsonReply({}, 401) }] : githubRoutes,
+          );
+          return (
+            await installed<{
+              createGitHubCodeHost(c: { alias: string; token: string }, d: AdapterDeps): CodeHost;
+            }>("codehost-github")
+          ).createGitHubCodeHost(
+            { alias: "github", token: "secret://env/GITHUB_TOKEN" },
+            testDeps(fake.fetch, { "secret://env/GITHUB_TOKEN": GITHUB_TOKEN }),
+          );
+        },
+        githubScenario,
       );
     },
   },

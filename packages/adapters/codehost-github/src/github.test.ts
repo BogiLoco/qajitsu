@@ -7,47 +7,14 @@ import {
   fixture,
   jsonReply,
   testDeps,
-  textReply,
   type Route,
 } from "../../../../tests/support/fake-fetch.js";
+import { GITHUB_TOKEN, H2, githubRoutes, githubScenario } from "../../../../tests/support/github-fixture.js";
 import { createAppJwt } from "./github-app.js";
 import { createGitHubCodeHost } from "./github.js";
 
-const H1 = "1".repeat(40);
-const H2 = "2".repeat(40);
-const TOKEN = "github-token-value";
-
-const routes: Route[] = [
-  {
-    match: /^\/repos\/example-org\/shop-web\/pulls\?state=all/,
-    reply: jsonReply(fixture("github/pulls-list.json")),
-  },
-  { match: /^\/repos\/example-org\/shop-web\/branches\?/, reply: jsonReply(fixture("github/branches.json")) },
-  {
-    match: /^\/repos\/example-org\/shop-web\/pulls\/12\/comments/,
-    reply: jsonReply(fixture("github/pull-12-review-comments.json")),
-  },
-  {
-    match: /^\/repos\/example-org\/shop-web\/issues\/12\/comments/,
-    reply: jsonReply(fixture("github/issue-12-comments.json")),
-  },
-  {
-    match: /^\/repos\/example-org\/shop-web\/pulls\/12$/,
-    reply: (req) =>
-      req.headers["accept"] === "application/vnd.github.diff"
-        ? new Response(fixture("github/pull-12.diff"))
-        : new Response(fixture("github/pull-12.json")),
-  },
-  {
-    match: /^\/repos\/example-org\/shop-web\/commits\//,
-    reply: jsonReply(fixture("github/commit-spike.json")),
-  },
-  { match: /^\/repos\/example-org\/shop-web$/, reply: jsonReply({ default_branch: "main" }) },
-  {
-    match: /^\/repos\/example-org\/shop-web\/compare\/main\.\.\.2{40}$/,
-    reply: textReply(fixture("github/pull-12.diff")),
-  },
-];
+const TOKEN = GITHUB_TOKEN;
+const routes = githubRoutes;
 
 const build = (options: { unauthorized?: boolean; baseUrl?: string; extra?: Route[] } = {}) => {
   const fake = createFakeFetch(
@@ -67,14 +34,7 @@ const build = (options: { unauthorized?: boolean; baseUrl?: string; extra?: Rout
   return { host, ...fake };
 };
 
-codeHostContract("github", (o) => build(o).host, {
-  repo: "example-org/shop-web",
-  changeUrl: "https://github.com/example-org/shop-web/pull/12",
-  change: { kind: "pr", id: "12", headSha: H1 },
-  branchOnly: { id: "spike/SHOP-482-ui", headSha: H2 },
-  token: TOKEN,
-  cloneUrl: "https://github.com/example-org/shop-web.git",
-});
+codeHostContract("github", (o) => build(o).host, githubScenario);
 
 describe("GitHub code host (REQ-CTX-02)", () => {
   const key = TicketKeySchema.parse("SHOP-482");
