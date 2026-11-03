@@ -12,9 +12,12 @@ export interface PluginNeed {
  * needed by every project; the knowledge store only when the project has a knowledge base.
  *
  * @param config - The project's configuration.
- * @param options - Whether the project has a knowledge base on disk.
+ * @param options - Whether the project has a knowledge base on disk, and its online knowledge sources.
  */
-export function pluginNeeds(config: ProjectConfig, options: { readonly knowledge: boolean }): PluginNeed[] {
+export function pluginNeeds(
+  config: ProjectConfig,
+  options: { readonly knowledge: boolean; readonly onlineSources?: readonly string[] },
+): PluginNeed[] {
   const needs: PluginNeed[] = [];
   const need = (id: string, setting: string): void => {
     if (!needs.some((n) => n.id === id && n.setting === setting)) needs.push({ id, setting });
@@ -45,5 +48,10 @@ export function pluginNeeds(config: ProjectConfig, options: { readonly knowledge
   if (options.knowledge)
     need(`knowledge-${config.knowledge.store}`, `knowledge.store: ${config.knowledge.store}`);
   if (config.knowledge.confluence !== undefined) need("knowledge-confluence", "knowledge.confluence");
+  // Knowledge sources added from online systems (`confluence:SHOP`, `jira:payments`) need their plugin too.
+  for (const source of options.onlineSources ?? []) {
+    if (source.startsWith("confluence:")) need("knowledge-confluence", `knowledge source ${source}`);
+    if (source.startsWith("jira:")) need("ticket-jira", `knowledge source ${source}`);
+  }
   return needs;
 }

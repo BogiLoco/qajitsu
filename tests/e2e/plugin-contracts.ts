@@ -1,4 +1,6 @@
-import type { VectorStore } from "@qajitsu/core";
+import type { AdapterDeps, DocumentSource, VectorStore } from "@qajitsu/core";
+import { documentSourceContract } from "../contract/document-source.contract.js";
+import { confluenceConfig, confluenceFixture } from "../support/confluence-fixture.js";
 import { vectorStoreContract } from "../contract/vector-store.contract.js";
 import { createFakeChroma } from "../support/fake-chroma.js";
 
@@ -40,6 +42,18 @@ export const pluginContracts: readonly PluginContract[] = [
           collection: `qajitsu-${key}`,
           fetch: server.fetch,
         }),
+      );
+    },
+  },
+  {
+    id: "knowledge-confluence",
+    run: (installed) => {
+      documentSourceContract("confluence (installed plugin)", confluenceFixture, async (deps) =>
+        (
+          await installed<{
+            createConfluenceSource(c: typeof confluenceConfig, d: AdapterDeps): DocumentSource;
+          }>("knowledge-confluence")
+        ).createConfluenceSource(confluenceConfig, deps),
       );
     },
   },

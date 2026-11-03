@@ -3,7 +3,13 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { projectPaths, registerProject, setActiveProject, resolveProject } from "@qajitsu/core";
+import {
+  projectPaths,
+  registerProject,
+  resolveProject,
+  setActiveProject,
+  writeKnowledgeSources,
+} from "@qajitsu/core";
 import type { RunExec } from "@qajitsu/toolchain";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createProgram } from "../program.js";
@@ -130,6 +136,25 @@ describe("qj plugin (REQ-GEN-11)", () => {
     );
     await rm(projectPaths(qjHome, "shop").knowledge, { recursive: true });
     expect((await pluginCheck(await loaded(), ports())).ok).toBe(true);
+  });
+
+  it("REQ-GEN-11/AC2: an online knowledge source needs its plugin", async () => {
+    await project();
+    await writeKnowledgeSources(projectPaths(qjHome, "shop").knowledge, [
+      {
+        name: "shop-wiki",
+        kind: "confluence",
+        path: "confluence:SHOP",
+        include: [],
+        exclude: [],
+        tags: [],
+        added_at: "2026-11-03T10:00:00.000Z",
+      },
+    ]);
+    const r = await qj(["plugin", "list"]);
+    expect(r.out).toMatch(
+      /knowledge-confluence\s+0\.0\.0 part of this installation; needed by knowledge source confluence:SHOP/,
+    );
   });
 
   it("REQ-GEN-11/AC3: plugin list shows every plugin, where it is and what needs it", async () => {

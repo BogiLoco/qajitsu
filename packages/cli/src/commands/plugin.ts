@@ -1,6 +1,14 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { QajitsuError, listProjects, projectPaths, qajitsuHome, type ResolvedProject } from "@qajitsu/core";
+import {
+  QajitsuError,
+  listProjects,
+  parseOnlineLocator,
+  projectPaths,
+  qajitsuHome,
+  readKnowledgeSources,
+  type ResolvedProject,
+} from "@qajitsu/core";
 import { loadToolchainConfig, networkFor } from "@qajitsu/toolchain";
 import type { RuntimePorts } from "../adapters.js";
 import type { DoctorCheck } from "../doctor.js";
@@ -59,9 +67,18 @@ async function installPorts(
   };
 }
 
-/** Whether the project has a knowledge base on disk (the store is needed only then). */
-const hasKnowledge = (project: LoadedProject): boolean =>
-  project.project !== undefined && existsSync(project.project.paths.knowledge);
+/** Whether the project has a knowledge base on disk (the store is needed only then), and its online sources. */
+async function knowledgeOf(
+  project: LoadedProject,
+): Promise<{ readonly knowledge: boolean; readonly onlineSources: readonly string[] }> {
+  const dir = project.project?.paths.knowledge;
+  if (dir === undefined || !existsSync(dir)) return { knowledge: false, onlineSources: [] };
+  const sources = await readKnowledgeSources(dir).catch(() => []);
+  return {
+    knowledge: true,
+    onlineSources: sources.map((s) => s.path).filter((p) => parseOnlineLocator(p) !== undefined),
+  };
+}
 
 /** A needed plugin with where it is, or undefined when it is missing. */
 export interface PluginState extends PluginNeed {
@@ -72,7 +89,7 @@ export interface PluginState extends PluginNeed {
 export async function projectPlugins(project: LoadedProject, ports: RuntimePorts): Promise<PluginState[]> {
   const loader = pluginLoader(ports);
   const out: PluginState[] = [];
-  for (const need of pluginNeeds(project.config, { knowledge: hasKnowledge(project) }))
+  for (const need of pluginNeeds(project.config, await knowledgeOf(project)))
     out.push({ ...need, found: await loader.availability(need.id) });
   return out;
 }
@@ -159,7 +176,7 @@ async function usersOf(id: string, ports: RuntimePorts, cwd: string): Promise<st
     };
     const project = await loadProject(cwd, resolved, ports.env).catch(() => undefined);
     if (!project) continue;
-    for (const need of pluginNeeds(project.config, { knowledge: hasKnowledge(project) }))
+    for (const need of pluginNeeds(project.config, await knowledgeOf(project)))
       if (need.id === id) users.push(`${record.slug}: ${need.setting}`);
   }
   return users;
@@ -185,7 +202,7 @@ export async function runPluginList(
   try {
     const { root, catalogue } = pluginHome(ports);
     const loader = pluginLoader(ports);
-    const needs = project ? pluginNeeds(project.config, { knowledge: hasKnowledge(project) }) : [];
+    const needs = project ? pluginNeeds(project.config, await knowledgeOf(project)) : [];
     const installed = await readInstalledPlugins(root);
     const lines = ["Plugins:"];
     for (const id of Object.keys(catalogue.plugins)) {
