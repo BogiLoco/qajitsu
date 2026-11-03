@@ -4,8 +4,11 @@ import type {
   EvidenceArchive,
   MessageCapture,
   SecretProvider,
+  TestCaseSource,
   VectorStore,
 } from "@qajitsu/core";
+import { testCaseSourceContract } from "../contract/test-case-source.contract.js";
+import { xrayConfig, xrayFixture } from "../support/xray-fixture.js";
 import { evidenceArchiveContract } from "../contract/evidence-archive.contract.js";
 import { messageCaptureContract } from "../contract/message-capture.contract.js";
 import { webhookSiteConfig, webhookSiteFixture } from "../support/webhook-site-fixture.js";
@@ -218,6 +221,18 @@ export const pluginContracts: readonly PluginContract[] = [
             credentials: () => Promise.resolve(t.credentials),
           },
         ),
+      );
+    },
+  },
+  {
+    id: "testcases",
+    run: (installed) => {
+      testCaseSourceContract("xray (installed plugin)", xrayFixture, async (deps) =>
+        (
+          await installed<{ createXrayCaseSource(c: typeof xrayConfig, d: AdapterDeps): TestCaseSource }>(
+            "testcases",
+          )
+        ).createXrayCaseSource(xrayConfig, deps),
       );
     },
   },
