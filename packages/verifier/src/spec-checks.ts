@@ -1,4 +1,5 @@
 import { existsSync, statSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { plannedFields } from "./expectations.js";
 import { checkSpecQuality } from "./spec-quality.js";
 import { dirname, join } from "node:path";
@@ -706,17 +707,35 @@ export function checkSpecSource(
   return problems;
 }
 
+/** Where Node resolves the steps package from the verifier, or undefined. */
+const resolveStepsPackage = (): string | undefined => {
+  try {
+    return fileURLToPath(import.meta.resolve("@qajitsu/steps"));
+  } catch {
+    return undefined;
+  }
+};
+
 /**
  * Path of the `@qajitsu/steps` type declarations used to type-check specs: the sources when present (monorepo
- * development, always current), otherwise the built declarations (installed package).
+ * development, always current), then the built declarations next to the verifier (the monorepo build, npm's flat
+ * install), then those of the package Node resolves (pnpm keeps a package's dependencies next to it).
  *
  * @param exists - File check, injectable for tests.
+ * @param resolveSteps - Where `@qajitsu/steps` resolves to, injectable for tests.
  */
-export function stepsTypesEntry(exists: (path: string) => boolean = existsSync): string {
+export function stepsTypesEntry(
+  exists: (path: string) => boolean = existsSync,
+  resolveSteps: () => string | undefined = resolveStepsPackage,
+): string {
   const here = dirname(new URL(import.meta.url).pathname);
   // Sources first: in the monorepo they are always current, while dist/ may lag behind the last change.
   const src = join(here, "../../steps/src/index.ts");
-  return exists(src) ? src : join(here, "../../steps/dist/index.d.ts");
+  if (exists(src)) return src;
+  const sibling = join(here, "../../steps/dist/index.d.ts");
+  if (exists(sibling)) return sibling;
+  const resolved = resolveSteps();
+  return resolved === undefined ? sibling : resolved.replace(/\.js$/, ".d.ts");
 }
 
 /**

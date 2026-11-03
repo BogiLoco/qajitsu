@@ -650,6 +650,9 @@ importers:
       '@qajitsu/core':
         specifier: workspace:*
         version: link:../core
+      '@qajitsu/steps':
+        specifier: workspace:*
+        version: link:../steps
       typescript:
         specifier: 'catalog:'
         version: 6.0.3

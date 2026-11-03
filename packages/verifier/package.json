@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@qajitsu/core": "workspace:*",
+    "@qajitsu/steps": "workspace:*",
     "typescript": "catalog:"
   }
 }

@@ -206,6 +206,30 @@ describe("static checks of generated specs (REQ-EXEC-03)", () => {
     expect(formatSpecProblems([{ check: "lint", message: "m" }])).toBe("lint: m");
   });
 
+  it("REQ-EXEC-03/AC1: in an installed QAJitsu the steps types come from where Node resolves the steps package", () => {
+    // pnpm keeps each package's dependencies next to it: there is no sibling steps folder, the package is resolved.
+    const resolved = "/install/node_modules/.pnpm/@qajitsu+steps@1/node_modules/@qajitsu/steps/dist/index.js";
+    expect(
+      stepsTypesEntry(
+        () => false,
+        () => resolved,
+      ),
+    ).toBe("/install/node_modules/.pnpm/@qajitsu+steps@1/node_modules/@qajitsu/steps/dist/index.d.ts");
+    // A sibling folder (npm's flat install, the monorepo build) is still used first.
+    const sibling = stepsTypesEntry(
+      (p) => p.endsWith("/steps/dist/index.d.ts"),
+      () => resolved,
+    );
+    expect(sibling).toMatch(/steps\/dist\/index\.d\.ts$/);
+    expect(sibling).not.toContain(".pnpm");
+    expect(
+      stepsTypesEntry(
+        () => false,
+        () => undefined,
+      ),
+    ).toMatch(/steps\/dist\/index\.d\.ts$/);
+  });
+
   it("REQ-EXEC-05/AC2: CSS selectors are flagged for review but do not block", () => {
     const web = readFileSync(
       new URL("../../../fixtures/specs/demo-4/TC-01.spec.ts", import.meta.url),
