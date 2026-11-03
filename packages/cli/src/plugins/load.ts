@@ -119,6 +119,13 @@ export function createPluginLoader(options: {
       ));
   const used: PluginAvailability[] = [];
 
+  /** The package folder of an installed plugin, by package name. */
+  const installedDir = async (name: string): Promise<string | undefined> => {
+    const record = (await readInstalledPlugins(options.root)).find((p) => p.package === name);
+    const dir = record ? join(record.path, "node_modules", ...name.split("/")) : undefined;
+    return dir !== undefined && existsSync(dir) ? dir : undefined;
+  };
+
   const availability = async (id: string): Promise<PluginAvailability | undefined> => {
     const entry = catalogueEntry(options.catalogue, id);
     const dir = bundled(entry.package);
@@ -159,7 +166,21 @@ export function createPluginLoader(options: {
             `${manifest.name}@${manifest.version} works with core API ${manifest.coreApi}; this QAJitsu has ${PLUGIN_API_VERSION}. Install the version of this release: ${installCommand(found.id)}`,
             { plugin: found.id, coreApi: manifest.coreApi, have: PLUGIN_API_VERSION },
           );
-        await linkHostPackages(options.root, hostDirs());
+        // The plugins it needs are linked next to QAJitsu's own packages, from this installation or its plugins.
+        const required: Record<string, string> = {};
+        for (const name of installed?.requires ?? []) {
+          const dir = bundled(name) ?? (await installedDir(name));
+          if (dir === undefined) {
+            const need = catalogueEntry(options.catalogue, name).id;
+            throw new PluginError(
+              "PLUGIN_MISSING",
+              `The ${found.id} plugin needs the ${need} plugin. Install it with: ${installCommand(need)}`,
+              { plugin: need, requiredBy: found.id },
+            );
+          }
+          required[name] = dir;
+        }
+        await linkHostPackages(options.root, { ...hostDirs(), ...required });
         module = await importModule(pathToFileURL(entryOf(pkgDir)).href);
       }
       if (!used.some((u) => u.id === found.id)) used.push(found);

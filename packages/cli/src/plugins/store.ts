@@ -19,6 +19,8 @@ export const InstalledPluginSchema = z.strictObject({
   from: z.string().min(1),
   installed_at: z.string(),
   path: z.string().min(1),
+  /** Other plugins it needs (its `@qajitsu/adapter-*` peer dependencies), by package name. */
+  requires: z.array(z.string().min(1)).default([]),
 });
 
 /** One installed plugin. */

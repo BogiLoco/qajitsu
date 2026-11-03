@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { PLUGIN_API_VERSION, PluginError, parsePluginManifest, type PluginManifest } from "@qajitsu/core";
 import { acquireSetupLock, satisfies, type RunExec } from "@qajitsu/toolchain";
@@ -185,8 +185,14 @@ export async function installPlugin(input: {
     );
     compatible(id, manifest);
     await rm(join(staging, ".omitted"), { recursive: true, force: true });
+    // QAJitsu's own packages and other plugins always come from the installation, never from the plugin's folder.
+    const scoped = join(staging, "node_modules", "@qajitsu");
+    for (const name of await readdir(scoped).catch(() => [] as string[]))
+      if (`@qajitsu/${name}` !== manifest.name)
+        await rm(join(scoped, name), { recursive: true, force: true });
     for (const host of input.hostPackages)
-      await rm(join(staging, "node_modules", ...host.split("/")), { recursive: true, force: true });
+      if (!host.startsWith("@qajitsu/"))
+        await rm(join(staging, "node_modules", ...host.split("/")), { recursive: true, force: true });
     await rm(tgz, { force: true });
     const target = join(root, id, manifest.version);
     await rm(join(root, id), { recursive: true, force: true });
@@ -201,6 +207,7 @@ export async function installPlugin(input: {
       from: got.from,
       installed_at: ports.now().toISOString(),
       path: target,
+      requires: requiredPlugins(packageJsonFromTarball(got.data)),
     };
     const others = (await readInstalledPlugins(root)).filter((p) => p.id !== id);
     await writeInstalledPlugins(root, [...others, record]);
@@ -217,6 +224,19 @@ export async function installPlugin(input: {
     await rm(staging, { recursive: true, force: true });
     await lock.release();
   }
+}
+
+/** The plugins a plugin needs: its `@qajitsu/adapter-*` peer dependencies, which the installation provides. */
+function requiredPlugins(packageJson: unknown): string[] {
+  const peers =
+    packageJson !== null && typeof packageJson === "object" && "peerDependencies" in packageJson
+      ? (packageJson as { peerDependencies?: unknown }).peerDependencies
+      : undefined;
+  return peers !== null && typeof peers === "object"
+    ? Object.keys(peers)
+        .filter((n) => n.startsWith("@qajitsu/adapter-"))
+        .sort()
+    : [];
 }
 
 /** A plugin for another range of the core's adapter API is never installed (REQ-GEN-11/AC8). */

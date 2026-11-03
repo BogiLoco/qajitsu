@@ -485,4 +485,69 @@ describe("plugins: install, load, remove (REQ-GEN-11)", () => {
     expect(calls[0]).toContain("--install-links");
     expect(existsSync(join(record.path, ".omitted"))).toBe(false);
   });
+
+  it("REQ-GEN-11/AC4: other QAJitsu packages and plugins in a plugin's folder are removed; the plugins it needs are recorded", async () => {
+    const pkg = manifest({ peerDependencies: { "@qajitsu/core": "*", "@qajitsu/adapter-runner-api": "*" } });
+    const file = join(root, "web.tgz");
+    await writeFile(file, npmTarball({ "package.json": pkg }));
+    const inner = fakeNpm(pkg);
+    const run: RunExec = async (cmd, args, options) => {
+      const result = await inner(cmd, args, options);
+      const prefix = args[args.indexOf("--prefix") + 1] ?? "";
+      await mkdir(join(prefix, "node_modules", "@qajitsu", "adapter-runner-api"), { recursive: true });
+      return result;
+    };
+    const record = await installPlugin({
+      root,
+      id: "knowledge-lancedb",
+      source: { kind: "file", path: file },
+      hostPackages: [],
+      ports: ports({ run }),
+    });
+    expect(record.requires).toEqual(["@qajitsu/adapter-runner-api"]);
+    expect(existsSync(join(record.path, "node_modules", "@qajitsu", "adapter-runner-api"))).toBe(false);
+    expect(existsSync(join(record.path, "node_modules", "@qajitsu", "core"))).toBe(false);
+    expect(existsSync(join(record.path, "node_modules", "@qajitsu", "adapter-knowledge-lancedb"))).toBe(true);
+  });
+
+  it("REQ-GEN-11/AC2: a plugin is loaded with the plugins it needs linked; a missing one is named with its install command", async () => {
+    const pkg = manifest({ peerDependencies: { "@qajitsu/adapter-runner-api": "*" } });
+    const file = join(root, "web.tgz");
+    await writeFile(file, npmTarball({ "package.json": pkg }));
+    await installPlugin({
+      root,
+      id: "knowledge-lancedb",
+      source: { kind: "file", path: file },
+      hostPackages: [],
+      ports: ports({ run: fakeNpm(pkg) }),
+    });
+    const two: PluginCatalogue = {
+      schema: 1,
+      plugins: {
+        ...catalogue.plugins,
+        "runner-api": { package: "@qajitsu/adapter-runner-api", version: "1.2.3" },
+      },
+    };
+    const missing = createPluginLoader({
+      root,
+      catalogue: two,
+      bundled: () => undefined,
+      importModule: () => Promise.resolve({}),
+    });
+    const err = await failure(missing.load("knowledge-lancedb"));
+    expect(err.code).toBe("PLUGIN_MISSING");
+    expect(err.message).toContain("needs the runner-api plugin");
+    expect(err.message).toContain("qj plugin add runner-api");
+    const apiDir = join(root, "bundled-runner-api");
+    await mkdir(apiDir);
+    const linked = createPluginLoader({
+      root,
+      catalogue: two,
+      bundled: (n) => (n === "@qajitsu/adapter-runner-api" ? apiDir : undefined),
+      hostDirs: () => ({}),
+      importModule: () => Promise.resolve({}),
+    });
+    await linked.load("knowledge-lancedb");
+    expect(await readlink(join(root, "node_modules", "@qajitsu", "adapter-runner-api"))).toBe(apiDir);
+  });
 });

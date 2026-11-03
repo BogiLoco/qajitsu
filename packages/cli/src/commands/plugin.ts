@@ -21,7 +21,7 @@ import {
   type PluginLoader,
 } from "../plugins/load.js";
 import { pluginNeeds, type PluginNeed } from "../plugins/needs.js";
-import { pluginsRoot, readInstalledPlugins } from "../plugins/store.js";
+import { pluginsRoot, readInstalledPlugins, type InstalledPlugin } from "../plugins/store.js";
 import { loadProject, type LoadedProject } from "../project.js";
 import type { CommandIO } from "./fetch.js";
 import { runTool } from "./setup.js";
@@ -163,7 +163,7 @@ export async function installMissingPlugins(
     const entry = catalogueEntry(catalogue, id);
     log(`plugin ${id}: installing ${entry.package}@${entry.version}`);
     try {
-      await installPlugin({
+      const record = await installPlugin({
         root,
         id,
         source: { kind: "registry", package: entry.package, version: entry.version },
@@ -171,12 +171,47 @@ export async function installMissingPlugins(
         hostPackages: HOST_PACKAGES,
         ports: iports,
       });
-      installed.push(id);
+      installed.push(id, ...(await installRequirements(record, { root, catalogue, ports, iports, log })));
     } catch (error) {
       failed.push(`${id}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
   return { installed, failed };
+}
+
+/**
+ * Installs the plugins an installed plugin needs and lacks (its `@qajitsu/adapter-*` peers), at the versions this
+ * release pins, and theirs in turn; each is logged.
+ */
+async function installRequirements(
+  record: InstalledPlugin,
+  context: {
+    readonly root: string;
+    readonly catalogue: PluginCatalogue;
+    readonly ports: RuntimePorts;
+    readonly iports: PluginInstallPorts;
+    readonly log: (line: string) => void;
+  },
+  seen = new Set<string>([record.id]),
+): Promise<string[]> {
+  const installed: string[] = [];
+  for (const name of record.requires) {
+    const entry = catalogueEntry(context.catalogue, name);
+    if (seen.has(entry.id) || (await pluginLoader(context.ports).availability(entry.id)) !== undefined)
+      continue;
+    seen.add(entry.id);
+    context.log(`plugin ${entry.id}: installing ${entry.package}@${entry.version}, needed by ${record.id}`);
+    const required = await installPlugin({
+      root: context.root,
+      id: entry.id,
+      source: { kind: "registry", package: entry.package, version: entry.version },
+      expectedPackage: entry.package,
+      hostPackages: HOST_PACKAGES,
+      ports: context.iports,
+    });
+    installed.push(entry.id, ...(await installRequirements(required, context, seen)));
+  }
+  return installed;
 }
 
 /** Projects and settings that use a plugin, across every registered project (REQ-GEN-11/AC10). */
@@ -285,6 +320,17 @@ export async function runPluginAdd(
       io.write(
         `Installed ${record.id} ${record.version} (${record.integrity.slice(0, 20)}...) into ${record.path}\n`,
       );
+      // REQ-GEN-11/AC3: the plugins it needs come with it.
+      for (const required of await installRequirements(record, {
+        root,
+        catalogue,
+        ports,
+        iports,
+        log: (line) => {
+          io.write(`${line}\n`);
+        },
+      }))
+        io.write(`Installed ${required}, which ${record.id} needs\n`);
     }
     return 0;
   } catch (error) {

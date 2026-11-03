@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -16,6 +16,7 @@ import { createProgram } from "../program.js";
 import type { RuntimePorts } from "../adapters.js";
 import { readCatalogue } from "../plugins/catalogue.js";
 import { bundledPackageDir, createPluginLoader } from "../plugins/load.js";
+import { packageJsonFromTarball } from "../plugins/tarball.js";
 import { loadProject } from "../project.js";
 import { optionalPlugin, pluginCheck, pluginVersions } from "./plugin.js";
 import { npmTarball } from "../../../../tests/support/npm-tarball.js";
@@ -238,5 +239,71 @@ describe("qj plugin (REQ-GEN-11)", () => {
   it("REQ-GEN-11/AC2: work that needs nothing without a plugin skips it instead of failing", async () => {
     expect(await optionalPlugin(loader(), "knowledge-lancedb")).toBeUndefined();
     expect(await optionalPlugin(loader(), "codehost-local")).toEqual({});
+  });
+
+  it("REQ-GEN-11/AC3: plugin add also installs the plugins a plugin needs", async () => {
+    await project(false);
+    const web = {
+      name: "@qajitsu/adapter-runner-web",
+      version: "0.0.0",
+      peerDependencies: { "@qajitsu/adapter-runner-api": "*" },
+      qajitsu: { plugin: { types: ["runner"], core_api: "^1.0.0" } },
+    };
+    const api = {
+      name: "@qajitsu/adapter-runner-api",
+      version: "0.0.0",
+      qajitsu: { plugin: { types: ["runner"], core_api: "^1.0.0" } },
+    };
+    const tarballs: Record<string, Uint8Array> = {
+      web: npmTarball({ "package.json": web }),
+      api: npmTarball({ "package.json": api }),
+    };
+    const sha = (t: Uint8Array) => `sha512-${createHash("sha512").update(t).digest("base64")}`;
+    const fetchBoth: typeof fetch = (input) => {
+      const url = input instanceof Request ? input.url : input.toString();
+      for (const [key, pkg] of [
+        ["web", web],
+        ["api", api],
+      ] as const) {
+        if (url === `https://registry.npmjs.org/${pkg.name.replace("/", "%2f")}/0.0.0`)
+          return Promise.resolve(
+            Response.json({
+              dist: {
+                tarball: `https://registry.npmjs.org/${key}.tgz`,
+                integrity: sha(tarballs[key] ?? new Uint8Array()),
+              },
+            }),
+          );
+        if (url === `https://registry.npmjs.org/${key}.tgz`)
+          return Promise.resolve(new Response(tarballs[key]));
+      }
+      return Promise.resolve(new Response("", { status: 404 }));
+    };
+    const npmAny: RunExec = async (_cmd, args) => {
+      const prefix = args[args.indexOf("--prefix") + 1] ?? "";
+      const pkg = packageJsonFromTarball(new Uint8Array(await readFile(args.at(-1) ?? ""))) as {
+        name: string;
+      };
+      const dir = join(prefix, "node_modules", ...pkg.name.split("/"));
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, "package.json"), JSON.stringify(pkg));
+      return { code: 0, stdout: "", stderr: "" };
+    };
+    const p: RuntimePorts = {
+      ...ports(
+        createPluginLoader({
+          root: join(qjHome, "plugins"),
+          catalogue: readCatalogue(),
+          bundled: () => undefined,
+        }),
+      ),
+      fetch: fetchBoth,
+      toolchain: { host: { os: "darwin", arch: "arm64" }, run: npmAny },
+    };
+    const r = await qj(["plugin", "add", "runner-web"], p);
+    expect(r.exitCode).toBe(0);
+    expect(r.out).toContain("Installed runner-web 0.0.0");
+    expect(r.out).toContain("Installed runner-api, which runner-web needs");
+    expect(existsSync(join(qjHome, "plugins", "runner-api", "0.0.0"))).toBe(true);
   });
 });
