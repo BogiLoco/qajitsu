@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  type TrafficPolicy,
   CaseResultFileSchema,
   sha256,
   type CaseResultFile,
@@ -103,6 +104,8 @@ export interface RunCasesOptions {
   readonly marker?: string | undefined;
   /** Keeps the created records after the case for debugging (`qj run --keep`). */
   readonly keepTestData?: boolean | undefined;
+  /** The run's limits for a shared environment (REQ-EXEC-54): one policy for every lane of the run. */
+  readonly traffic?: TrafficPolicy | undefined;
 }
 
 /**
@@ -324,7 +327,10 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
           (options.plan.cases.find((c) => c.id === caseId)?.steps ?? []).reduce(
             (ms, st) => ms + (st.wait ? st.wait.timeout_s * 1000 : 0),
             0,
-          ),
+          ) +
+          // REQ-EXEC-54: waiting out Retry-After fits in the limit too.
+          (options.traffic?.retryBudgetMs ?? 0),
+        ...(options.traffic ? { traffic: options.traffic } : {}),
         ...(options.manual ? { manual: options.manual } : {}),
         ...(options.locale ? { locale: options.locale } : {}),
         ...(options.visual ? { visual: options.visual } : {}),
@@ -473,7 +479,14 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
     while (next < ids.length) {
       const id = ids[next];
       next += 1;
-      if (id !== undefined) out.set(id, await runCase(id));
+      if (id === undefined) continue;
+      // REQ-EXEC-54/AC1: the run's cap on cases at once holds across every lane.
+      const release = await options.traffic?.caseSlot();
+      try {
+        out.set(id, await runCase(id));
+      } finally {
+        release?.();
+      }
     }
   };
   await Promise.all(Array.from({ length: Math.max(1, Math.min(options.workers ?? 1, ids.length)) }, worker));

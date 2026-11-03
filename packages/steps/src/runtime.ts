@@ -13,7 +13,7 @@ import type {
   VisualCheck,
   TestCase,
 } from "@qajitsu/core";
-import { plannedFields } from "@qajitsu/core";
+import { plannedFields, retryAfterMs, type TrafficPolicy } from "@qajitsu/core";
 import { checkGesture } from "./gestures.js";
 import type { Masker } from "./masking.js";
 import {
@@ -232,6 +232,11 @@ export interface CaseRuntimeOptions {
   readonly testStateHook?: string | undefined;
   /** How long a download or a new page may take, in ms (15 s by default). */
   readonly waitTimeoutMs?: number | undefined;
+  /**
+   * The run's limits for a shared environment (REQ-EXEC-54): the rate every request waits for, how long the case may
+   * wait out `429` and `503`, and the idempotency header. Without it: no rate, a 30 s budget, `Idempotency-Key`.
+   */
+  readonly traffic?: Pick<TrafficPolicy, "throttle" | "retryBudgetMs" | "idempotencyHeader"> | undefined;
 }
 
 /** The recorder of one attempt. Runs in the trusted process; specs only reach it through these operations. */
@@ -815,9 +820,24 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     return { name, type: type || mimeOf(name), data: response.bytes };
   };
 
+  const limits = options.traffic ?? {
+    throttle: () => Promise.resolve(),
+    retryBudgetMs: 30_000,
+    idempotencyHeader: "Idempotency-Key",
+  };
+  /** How long this attempt has waited out `Retry-After` so far (REQ-EXEC-54/AC3). */
+  let retrySpentMs = 0;
+  /** Idempotency keys handed out per step (REQ-EXEC-54/AC4). */
+  const keysPerStep = new Map<string, number>();
+
   const call: CaseRuntime["call"] = async (alias, method, path, body, opts) => {
     if (currentStep === undefined) throw new Error("API calls must run inside step()");
     const stepId = currentStep;
+    const planStep = planCase.steps.find((s) => s.id === stepId);
+    // REQ-EXEC-54/AC4: a mutating request of a step that asks for it carries a key of its own, the same on retries.
+    const keyed = method !== "GET" && planStep?.idempotency_key === true;
+    const key = keyed ? (keysPerStep.get(stepId) ?? 0) + 1 : 0;
+    if (keyed) keysPerStep.set(stepId, key);
     lastAction.set(stepId, "api");
     const url = new URL(path, options.baseUrl);
     for (const [k, v] of Object.entries(opts.query ?? {})) url.searchParams.set(k, String(v));
@@ -840,15 +860,51 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       // REQ-EXEC-14: a locale run asks the API for that locale; a spec may still set its own header.
       ...(options.locale ? { "accept-language": options.locale } : {}),
       ...opts.headers,
+      ...(keyed
+        ? { [limits.idempotencyHeader]: `qj-${caseId}-${stepId}-a${String(options.attempt)}-${String(key)}` }
+        : {}),
       ...accountHeaders,
     };
     const started = options.now();
-    const response = await options.transport({
-      method,
-      url: url.toString(),
-      headers,
-      ...(special ? { payload: special.payload } : body === undefined ? {} : { body }),
-    });
+    const sent = (): Promise<ApiTransportResponse> =>
+      limits.throttle(url.toString()).then(() =>
+        options.transport({
+          method,
+          url: url.toString(),
+          headers,
+          ...(special ? { payload: special.payload } : body === undefined ? {} : { body }),
+        }),
+      );
+    // REQ-EXEC-54/AC2: only a request that is safe to repeat is sent again: a GET, or one with an idempotency key.
+    const safe = method === "GET" || keyed;
+    const retries: Record<string, unknown>[] = [];
+    let response: ApiTransportResponse;
+    for (;;) {
+      try {
+        response = await sent();
+      } catch (error) {
+        if (!safe || retries.filter((r) => "error" in r).length >= 2) throw error;
+        retries.push({ error: describeError(error), waitedMs: 0 });
+        continue;
+      }
+      const limit =
+        response.status === 429 || response.status === 503
+          ? retryAfterMs(response.headers, options.now())
+          : undefined;
+      // A step that tests the limit itself gets the answer as it came.
+      if (limit === undefined || planStep?.expect.status === response.status) break;
+      if (!safe)
+        throw new Error(
+          `rate limited: ${method} ${url.pathname} answered ${String(response.status)}; the request is not safe to repeat (no idempotency key)`,
+        );
+      if (retrySpentMs + limit > limits.retryBudgetMs)
+        throw new Error(
+          `rate limited: ${method} ${url.pathname} answered ${String(response.status)} (Retry-After ${String(limit / 1000)} s) after ${String(retrySpentMs / 1000)} s of the ${String(limits.retryBudgetMs / 1000)} s budget`,
+        );
+      await sleep(limit);
+      retrySpentMs += limit;
+      retries.push({ status: response.status, waitedMs: limit });
+    }
     const durationMs = options.now() - started;
     const file = responseFile(url.pathname, response);
     const parsed = file === undefined ? parseJson(response.text) : undefined;
@@ -892,6 +948,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
           body: responseBody,
         },
         durationMs,
+        ...(retries.length > 0 ? { retries } : {}),
         curl,
       },
     });

@@ -818,6 +818,9 @@
                     "timeout_s"
                   ],
                   "additionalProperties": false
+                },
+                "idempotency_key": {
+                  "type": "boolean"
                 }
               },
               "required": [

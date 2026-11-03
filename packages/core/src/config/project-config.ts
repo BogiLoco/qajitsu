@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CONTEXT_KINDS, type ContextKind } from "../context/fragments.js";
+import { RateLimitConfigSchema } from "../env/rate-limit.js";
 import { ReadinessConfigSchema } from "../env/readiness.js";
 import { ConfigError } from "../errors.js";
 import { TEST_STATUSES } from "../status.js";
@@ -968,6 +969,8 @@ export const ProjectConfigSchema = z.strictObject({
       web_combinations: z.number().int().min(1).max(8).default(1),
       /** How long a case waits for a free pool account before it is BLOCKED. */
       account_wait_s: z.number().int().min(0).max(3600).default(300),
+      /** A shared environment's limits (REQ-EXEC-54): request rate per host, cases at once, waiting out 429/503. */
+      rate_limit: RateLimitConfigSchema.optional(),
     })
     .default({ sequential: false, workers: {}, web_combinations: 1, account_wait_s: 300 }),
   test_types: z

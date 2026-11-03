@@ -4,7 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
-import { CaseResultFileSchema, PlanSchema, createEventLog, parseEventLines } from "@qajitsu/core";
+import {
+  CaseResultFileSchema,
+  PlanSchema,
+  RateLimitConfigSchema,
+  createEventLog,
+  createTrafficPolicy,
+  parseEventLines,
+} from "@qajitsu/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { startShop } from "../../../../examples/demo-shop/api/server.mjs";
 import { attemptExecutorContract } from "../../../../tests/contract/attempt-executor.contract.js";
@@ -89,6 +96,48 @@ const setup = async (flag?: string) => {
 };
 
 describe("API runner (REQ-EXEC-04, REQ-EXEC-08, REQ-EVD-01)", () => {
+  it("REQ-EXEC-54/AC1: the run's cap on cases at once holds across lanes, and the attempt's limit has room for Retry-After", async () => {
+    const { options } = await setup();
+    let running = 0;
+    let most = 0;
+    const timeouts: number[] = [];
+    const counting: typeof inProcess = async (input) => {
+      running += 1;
+      most = Math.max(most, running);
+      timeouts.push(input.timeoutMs);
+      await new Promise((r) => setTimeout(r, 30));
+      running -= 1;
+      return {
+        caseId: input.caseId,
+        attempt: input.attempt,
+        outcome: "passed",
+        steps: [],
+        assertions: [],
+        evidence: [],
+      };
+    };
+    const traffic = createTrafficPolicy(
+      RateLimitConfigSchema.parse({ parallel_cases: 1, retry_budget_s: 7 }),
+      {
+        now: () => Date.now(),
+        sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      },
+    );
+    const lane = (caseId: string, dir: string) =>
+      runCases({
+        ...options,
+        resultsDir: join(options.resultsDir, dir),
+        timeoutMs: 1000,
+        workers: 2,
+        traffic,
+        specs: new Map([[caseId, join(specDir, `${caseId}.spec.ts`)]]),
+        executor: counting,
+      });
+    await Promise.all([lane("TC-01", "api"), lane("TC-02", "web")]);
+    expect(most).toBe(1);
+    expect(timeouts.every((t) => t >= 8000)).toBe(true);
+  });
+
   it("REQ-EXEC-04/AC1 + REQ-EVD-01/AC1+AC2: runs specs on Playwright APIRequestContext and stores masked evidence per call", async () => {
     const { run, tokens, options, lines } = await setup();
     const specs = new Map([

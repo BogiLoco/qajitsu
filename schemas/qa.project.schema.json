@@ -3189,6 +3189,33 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 3600
+        },
+        "rate_limit": {
+          "type": "object",
+          "properties": {
+            "requests_per_second": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 1000
+            },
+            "parallel_cases": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            },
+            "retry_budget_s": {
+              "default": 30,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3600
+            },
+            "idempotency_header": {
+              "default": "Idempotency-Key",
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9-]{0,63}$"
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

@@ -38,6 +38,15 @@ qajitsu run <TICKET> [--run <id>] [--env <profile|url>] [--keep] [--env-not-conf
    `qj-<ticket>-<run>-<case>-a<attempt>`, and removed after it (`--keep` leaves it); data that cannot be created
    makes the attempt BLOCKED before any step (REQ-EXEC-53). A step with a planned `wait` repeats its actions and
    checks until they hold or the time is up (REQ-EXEC-46).
+   On a shared environment (REQ-EXEC-54), every request of every lane keeps to `execution.rate_limit`, which sets the
+   requests per second to one host and the cases at once across lanes:
+   - A `429` or `503` with `Retry-After` is waited out and retried, only for a request that is safe to repeat: a
+     `GET`, or a request of a step with `idempotency_key: true`. A timeout of a keyed request is retried too. Each
+     retry is recorded in the call's evidence.
+   - A request that is not safe to repeat is never sent twice.
+   - A case still rate limited after `retry_budget_s` (30 s by default) is BLOCKED with "rate limited", never FAILED
+     or PASSED. A step whose plan expects that status gets the response as it came.
+   - A keyed request carries `Idempotency-Key: qj-<case>-<step>-a<attempt>-<n>`, the same on every retry.
 7. Verdict: `computeStatus` per case, evidence manifest re-hashed, publish gates (every approved case has one status,
    plan unchanged, PASSED is proven, FAILED is explained, manifest intact, no secrets in outgoing artifacts).
 8. Reports in `report/`: `matrix.md`, `matrix.csv`, `matrix.xlsx`, `report.html` (self-contained), `gates.json`.

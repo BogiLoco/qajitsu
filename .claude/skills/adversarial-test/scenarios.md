@@ -136,3 +136,9 @@ Status: `todo` (no test yet) · `covered` (test exists, file name in brackets). 
 - done · A plugin calls a host its manifest does not name, or a look-alike of a configured host → refused before the request leaves.
 - done · A tarball that does not match its published checksum, comes from another host than the registry, or holds another package → never installed (`packages/cli/src/plugins/plugins.test.ts`).
 - done · A plugin brings its own copy of the core, guard or verifier → removed; it runs against the installation's.
+
+## Shared environments (REQ-EXEC-54)
+
+- done · An environment that answers 429 forever → the case is BLOCKED "rate limited" after its budget, never FAILED (`tests/adversarial/rate-limit-cannot-launder.test.ts`).
+- done · A spec swallows the rate-limit error and claims the planned status → not PASSED; the order went out once.
+- done · A mutating request without an idempotency key is never repeated (`packages/steps/src/traffic.test.ts`).

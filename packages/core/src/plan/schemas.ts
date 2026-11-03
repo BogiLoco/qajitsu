@@ -430,6 +430,11 @@ export const TestCaseSchema = z.strictObject({
             })
             .refine((w) => w.interval_s <= w.timeout_s, "interval_s must not exceed timeout_s")
             .optional(),
+          /**
+           * REQ-EXEC-54/AC4: the step's mutating requests carry an idempotency key, one per request of the attempt, so
+           * a retry after a timeout or a `429` does not create a second order or payment.
+           */
+          idempotency_key: z.boolean().optional(),
         })
         .superRefine((step, ctx) => {
           if (step.manual === true && step.wait !== undefined)

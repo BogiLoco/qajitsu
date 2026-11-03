@@ -828,17 +828,17 @@ Tests need predictable data; on a shared environment what is in the database cha
 
 ### REQ-EXEC-54 · Shared environments: rate limits and idempotency
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-EXEC-10, REQ-EXEC-19, REQ-PERF-05
 
 **Acceptance criteria**
 
-- [ ] AC1: Requests to one host are limited per project (requests per second, parallel cases), across all lanes of a run.
-- [ ] AC2: `429` and `503` with `Retry-After` are waited out and retried only for requests marked safe to repeat (GET, HEAD, or with an idempotency key); every retry is evidence.
-- [ ] AC3: A case still rate-limited after its budget is BLOCKED with "rate limited", never FAILED or PASSED.
-- [ ] AC4: Mutating requests can carry an idempotency key per step, so a retry after a timeout does not create a second order or payment.
+- [x] AC1: Requests to one host are limited per project (requests per second, parallel cases), across all lanes of a run.
+- [x] AC2: `429` and `503` with `Retry-After` are waited out and retried only for requests marked safe to repeat (GET, HEAD, or with an idempotency key); every retry is evidence.
+- [x] AC3: A case still rate-limited after its budget is BLOCKED with "rate limited", never FAILED or PASSED.
+- [x] AC4: Mutating requests can carry an idempotency key per step, so a retry after a timeout does not create a second order or payment.
 
 ### REQ-EXEC-55 · Automated login: one-time codes, SSO and captcha in test environments
 

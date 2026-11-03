@@ -20,6 +20,8 @@ import {
   AnalysisSchema,
   ConfigError,
   CaseResultFileSchema,
+  RateLimitConfigSchema,
+  createTrafficPolicy,
   acquireRunLock,
   browserEngine,
   createAccountLeases,
@@ -1204,6 +1206,14 @@ async function executeCases(
     },
   };
   const base = {
+    // REQ-EXEC-54: one traffic policy for every lane, so the shared environment sees the run's rate as a whole.
+    traffic: createTrafficPolicy(project.config.execution.rate_limit ?? RateLimitConfigSchema.parse({}), {
+      now: () => ports.now().getTime(),
+      sleep: (ms: number) =>
+        new Promise<void>((done) => {
+          setTimeout(done, ms);
+        }),
+    }),
     // REQ-EXEC-11: manual steps ask a person here (terminal) or through manual/ files (CI); never an agent.
     manual: createManualPrompter(session, io, {
       user: run.user ?? "unknown",
