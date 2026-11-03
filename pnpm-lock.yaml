@@ -329,6 +329,9 @@ importers:
       '@qajitsu/steps':
         specifier: workspace:*
         version: link:../../steps
+      '@qajitsu/toolchain':
+        specifier: workspace:*
+        version: link:../../toolchain
       webdriverio:
         specifier: ^9.32.0
         version: 9.32.0
@@ -341,6 +344,9 @@ importers:
       '@qajitsu/steps':
         specifier: workspace:*
         version: link:../../steps
+      '@qajitsu/toolchain':
+        specifier: workspace:*
+        version: link:../../toolchain
       axe-core:
         specifier: 'catalog:'
         version: 4.13.0

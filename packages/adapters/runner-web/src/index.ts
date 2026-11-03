@@ -4,9 +4,9 @@
  *
  * @packageDocumentation
  */
+export { channelExecutables } from "@qajitsu/toolchain";
 export {
   browserUnavailable,
-  channelExecutables,
   createPlaywrightBrowserFactory,
   locate,
   maskHar,

@@ -14,13 +14,8 @@ import {
 import { PlanSchema, createEventLog, unzip, zip } from "@qajitsu/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { startShop } from "../../../../examples/demo-shop/api/server.mjs";
-import {
-  browserUnavailable,
-  channelExecutables,
-  createPlaywrightBrowserFactory,
-  maskHar,
-  maskTrace,
-} from "./browser.js";
+import { channelExecutables } from "@qajitsu/toolchain";
+import { browserUnavailable, createPlaywrightBrowserFactory, maskHar, maskTrace } from "./browser.js";
 
 const PASSWORD = "fictional-demo-password";
 const plan = (ticket: string) =>

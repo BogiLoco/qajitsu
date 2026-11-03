@@ -5,8 +5,8 @@ import { platform } from "node:os";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { createServer } from "node:net";
 import type { BrowserFactory } from "@qajitsu/adapter-runner-api";
+import { androidSdkRoot } from "@qajitsu/toolchain";
 import {
-  androidSdkRoot,
   connectAppium,
   createAppiumDeviceFactory,
   startAndroidEmulator,

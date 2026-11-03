@@ -1,7 +1,6 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { AdapterError } from "@qajitsu/core";
 
@@ -66,16 +65,6 @@ export const execTool: Exec = (cmd, args, env = {}) =>
  */
 export const spawnTool: Spawn = (cmd, args, env = {}) =>
   spawn(cmd, [...args], { env: { ...baseEnv(), ...env }, stdio: "ignore" });
-
-/** Resolves the Android SDK root: config, `$ANDROID_SDK_ROOT`, `$ANDROID_HOME`, then the macOS default. */
-export function androidSdkRoot(configured?: string): string {
-  return (
-    configured ??
-    process.env["ANDROID_SDK_ROOT"] ??
-    process.env["ANDROID_HOME"] ??
-    join(homedir(), "Library", "Android", "sdk")
-  );
-}
 
 /** A running emulator. */
 export interface RunningEmulator {

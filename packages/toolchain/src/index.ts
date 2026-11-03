@@ -110,3 +110,4 @@ export {
   type SetupReport,
   type ToolResult,
 } from "./setup.js";
+export { androidSdkRoot, channelExecutables } from "./paths.js";

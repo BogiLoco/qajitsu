@@ -1,7 +1,8 @@
 import { EventEmitter } from "node:events";
 import type { ChildProcess } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { androidSdkRoot, startAndroidEmulator, startAppium, type Exec, type Spawn } from "./emulator.js";
+import { androidSdkRoot } from "@qajitsu/toolchain";
+import { startAndroidEmulator, startAppium, type Exec, type Spawn } from "./emulator.js";
 
 const fakeChild = () => {
   const signals: string[] = [];

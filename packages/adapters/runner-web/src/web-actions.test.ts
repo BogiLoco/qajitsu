@@ -6,7 +6,8 @@ import { PlanSchema, unzip } from "@qajitsu/core";
 import { computeStatus } from "@qajitsu/verifier";
 import { afterEach, describe, expect, it } from "vitest";
 import { startShop } from "../../../../examples/demo-shop/api/server.mjs";
-import { channelExecutables, createPlaywrightBrowserFactory } from "./browser.js";
+import { channelExecutables } from "@qajitsu/toolchain";
+import { createPlaywrightBrowserFactory } from "./browser.js";
 
 const PASSWORD = "fictional-demo-password";
 const plan = (ticket: string) =>

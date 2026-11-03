@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import { arch, platform, totalmem } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createEnvSecretProvider } from "@qajitsu/adapter-secrets-env";
-import { startAndroidEmulator } from "@qajitsu/adapter-runner-mobile";
+import type * as MobilePlugin from "@qajitsu/adapter-runner-mobile";
 import { ConfigError, qajitsuHome } from "@qajitsu/core";
 import { createMasker } from "@qajitsu/steps";
 import {
@@ -35,7 +35,7 @@ import {
 import { createCliSecretResolver, type RuntimePorts } from "../adapters.js";
 import type { LoadedProject } from "../project.js";
 import { execVersion, playwrightInfo } from "../versions.js";
-import { installMissingPlugins, projectPlugins } from "./plugin.js";
+import { installMissingPlugins, pluginLoader, projectPlugins } from "./plugin.js";
 import type { CommandIO } from "./fetch.js";
 
 /** Flags of `qj setup` (REQ-GEN-06). */
@@ -225,6 +225,9 @@ export function setupPorts(
       },
       bootEmulator: async (sdk, avd, systemImage, toolEnv) => {
         try {
+          // The smoke test boots the emulator through the mobile runner plugin (REQ-GEN-11/AC2).
+          const { startAndroidEmulator } =
+            await pluginLoader(ports).load<typeof MobilePlugin>("runner-mobile");
           const emulator = await startAndroidEmulator({
             sdkRoot: sdk,
             avd,

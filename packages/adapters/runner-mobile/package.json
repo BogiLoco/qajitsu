@@ -21,6 +21,7 @@
     "@qajitsu/adapter-runner-api": "workspace:*",
     "@qajitsu/core": "workspace:*",
     "@qajitsu/steps": "workspace:*",
+    "@qajitsu/toolchain": "workspace:*",
     "webdriverio": "^9.32.0"
   },
   "qajitsu": {
