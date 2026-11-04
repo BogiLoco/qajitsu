@@ -4,6 +4,11 @@ type Query {
   products: [Product!]!
 }
 
+# Price changes pushed over WebSocket (graphql-transport-ws), REQ-EXEC-48/AC2.
+type Subscription {
+  priceChanged(id: ID!): Product!
+}
+
 type Product {
   id: ID!
   name: String!

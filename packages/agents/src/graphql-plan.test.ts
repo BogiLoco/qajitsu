@@ -81,5 +81,7 @@ describe("planning GraphQL cases (REQ-EXEC-48/AC1)", () => {
   it("REQ-EXEC-48/AC2: the planner and the author are told how GraphQL steps work", () => {
     expect(PLANNER_SYSTEM).toContain('"graphql": {"operation": "Query.product"}');
     expect(AUTHOR_SYSTEM).toContain('client.graphql("<query naming the plan\'s operation>"');
+    expect(PLANNER_SYSTEM).toContain('{"0.data.priceChanged.price": 24.99, "count": 2}');
+    expect(AUTHOR_SYSTEM).toContain('client.subscribe("<subscription query>"');
   });
 });

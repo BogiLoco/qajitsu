@@ -63,10 +63,7 @@ const attempt = (...evidence: EvidenceItem[]): AttemptRecord => ({
   caseId: "TC-01",
   attempt: 1,
   outcome: "passed",
-  steps: [
-    { id: "S1", ok: true },
-    { id: "S2", ok: true },
-  ],
+  steps: [...new Set(evidence.map((e) => e.stepId))].map((id) => ({ id, ok: true })),
   assertions: [
     { stepId: "S1", field: "fields.data.product.price", expected: 12.5, actual: 12.5, pass: true },
   ],
@@ -193,8 +190,27 @@ describe("GraphQL testing (REQ-EXEC-48)", () => {
       stepId: "S1",
       content: new Uint8Array([1]),
     };
-    const record = attempt(rest, broken, bytes);
+    const record = attempt(rest, broken, bytes, exchange("S1", READ, good));
     expect(checkGraphqlAttempt(record, plan, schema)).toEqual(record);
+  });
+
+  it("REQ-EXEC-48/AC2+AC3: a step planned as GraphQL that posts its query as plain JSON is the spec's error: BLOCKED", () => {
+    const plain = {
+      name: "S1-01.json",
+      kind: "response" as const,
+      stepId: "S1",
+      content: JSON.stringify({
+        method: "POST",
+        url: "http://127.0.0.1:3000/graphql",
+        request: { body: { query: READ } },
+        response: { status: 200, body: { data: null, errors: [{ message: "boom" }] } },
+      }),
+    };
+    const dodged = checkGraphqlAttempt(attempt(plain), plan, schema);
+    expect(dodged.outcome).toBe("error");
+    expect(dodged.error).toBe(
+      "S1: the plan's GraphQL operation Query.product was not called with api.graphql() or api.subscribe()",
+    );
   });
 
   it("REQ-EXEC-48/AC3: every kind of type, root and error entry is read the way the schema says", () => {
@@ -264,5 +280,95 @@ describe("GraphQL testing (REQ-EXEC-48)", () => {
       outcome: "error" as const,
     };
     expect(checkGraphqlAttempt(errored, plan, schema).outcome).toBe("error");
+  });
+
+  it("REQ-EXEC-48/AC2+AC3: a subscription's query and every payload are checked like a query's", () => {
+    const subSchema = buildGraphqlSchema(`${SDL}\ntype Subscription { priceChanged(id: ID!): Product! }`);
+    const subPlan = PlanSchema.parse({
+      ...plan,
+      cases: [
+        {
+          ...plan.cases[0],
+          steps: [
+            {
+              id: "S1",
+              action: "WS /graphql",
+              graphql: { operation: "Subscription.priceChanged" },
+              expect: { description: "Prices", messages: { "0.data.priceChanged.price": 12.5 } },
+            },
+          ],
+        },
+      ],
+    });
+    const stream = (query: string, frames: readonly { dir: string; data: string }[]): EvidenceItem => ({
+      name: "S1-websocket-01.json",
+      kind: "log",
+      stepId: "S1",
+      content: JSON.stringify({
+        kind: "websocket",
+        url: "ws://x/graphql",
+        graphql: true,
+        request: { body: { query } },
+        frames,
+      }),
+    });
+    const next = (price: unknown) => ({
+      dir: "received",
+      data: JSON.stringify({
+        id: "1",
+        type: "next",
+        payload: { data: { priceChanged: { id: "P-1", price } } },
+      }),
+    });
+    const SUB = 'subscription { priceChanged(id: "P-1") { id price } }';
+    const good = attempt(stream(SUB, [{ dir: "sent", data: "{}" }, next(12.5), next(11)]));
+    expect(checkGraphqlAttempt(good, subPlan, subSchema)).toEqual(good);
+    const text = checkGraphqlAttempt(attempt(stream(SUB, [next(12.5), next("11.00")])), subPlan, subSchema);
+    expect(text.assertions.filter((a) => a.field === "graphql.schema").map((a) => a.actual)).toEqual([
+      "data.priceChanged.price is a string, the schema says Float!",
+    ]);
+    const failed = checkGraphqlAttempt(
+      attempt(
+        stream(SUB, [
+          { dir: "received", data: JSON.stringify({ type: "error", payload: [{ message: "down" }] }) },
+          { dir: "received", data: "garbage" },
+        ]),
+      ),
+      subPlan,
+      subSchema,
+    );
+    expect(failed.assertions.at(-1)).toMatchObject({ field: "graphql.errors", actual: ["down"] });
+    const odd = attempt(
+      stream(SUB, [
+        { dir: "received", data: 5 as unknown as string },
+        { dir: "received", data: JSON.stringify({ id: "1", type: "next", payload: null }) },
+      ]),
+    );
+    expect(checkGraphqlAttempt(odd, subPlan, subSchema)).toEqual(odd);
+    const elsewhere = { ...attempt(stream(SUB, [next("x")])), caseId: "TC-99" };
+    expect(checkGraphqlAttempt(elsewhere, subPlan, undefined)).toEqual(elsewhere);
+    const unknown = checkGraphqlAttempt(attempt(stream("subscription { ticks }", [])), subPlan, subSchema);
+    expect(unknown.outcome).toBe("error");
+    expect(unknown.error).toContain('Cannot query field "ticks" on type "Subscription"');
+    const plannedErrors = PlanSchema.parse({
+      ...subPlan,
+      cases: [
+        {
+          ...subPlan.cases[0],
+          steps: [
+            {
+              ...subPlan.cases[0]?.steps[0],
+              expect: { description: "Refused", messages: { "0.errors.0.message": "down" } },
+            },
+          ],
+        },
+      ],
+    });
+    const refused = attempt(
+      stream(SUB, [
+        { dir: "received", data: JSON.stringify({ type: "error", payload: [{ message: "down" }] }) },
+      ]),
+    );
+    expect(checkGraphqlAttempt(refused, plannedErrors, subSchema)).toEqual(refused);
   });
 });

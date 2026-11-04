@@ -56,6 +56,10 @@ qajitsu run <TICKET> [--run <id>] [--env <profile|url>] [--keep] [--env-not-conf
    - An `errors` array where the plan expects data fails the step, even with HTTP 200.
    - Data that does not fit the schema's types fails it too.
    - Expectations read the answer by path, like JSON: `fields.data.product.price`, `fields.errors.0.message`.
+   - A subscription is `api.subscribe(query, variables)`: a WebSocket to `/graphql` (or `path`) speaking
+     graphql-transport-ws. Every pushed payload is a message (`messages.0.data.priceChanged.price`), checked like a
+     stream's, and the query and each payload are checked against the schema like a query's.
+   - A step planned as GraphQL that sends its query any other way (`api.post`) is the spec's error: BLOCKED.
 
      WebSocket and server-sent events (REQ-EXEC-47): a spec opens `api.websocket(path)` (then `send()`) or
      `api.events(path)`. The trusted process opens the stream with the account's headers, only to an origin of the

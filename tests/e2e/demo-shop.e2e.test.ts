@@ -79,14 +79,22 @@ const BUGS = [
     flag: "BUG_GRAPHQL_PRICE_AS_TEXT",
     ticket: "DEMO-18",
     caseId: "TC-01",
-    specs: ["TC-01", "TC-02", "TC-03"],
+    specs: ["TC-01", "TC-02", "TC-03", "TC-04"],
   },
   {
     bug: "BUG-25",
     flag: "BUG_GRAPHQL_ERROR_WITH_DATA",
     ticket: "DEMO-18",
     caseId: "TC-02",
-    specs: ["TC-01", "TC-02", "TC-03"],
+    specs: ["TC-01", "TC-02", "TC-03", "TC-04"],
+  },
+  // A GraphQL subscription (REQ-EXEC-48/AC2): a pushed price as text fails the case too.
+  {
+    bug: "BUG-24",
+    flag: "BUG_GRAPHQL_PRICE_AS_TEXT",
+    ticket: "DEMO-18",
+    caseId: "TC-04",
+    specs: ["TC-01", "TC-02", "TC-03", "TC-04"],
   },
   // SOAP (REQ-EXEC-50): an answer outside its WSDL, and a fault with HTTP 200, fail the case.
   {
@@ -251,7 +259,7 @@ describe("demo-shop self-test (REQ-NFR-04/AC1)", () => {
     ["DEMO-7", ["TC-01", "TC-02", "TC-03"]],
     ["DEMO-16", ["TC-01", "TC-02", "TC-03"]],
     ["DEMO-17", ["TC-01", "TC-02"]],
-    ["DEMO-18", ["TC-01", "TC-02", "TC-03"]],
+    ["DEMO-18", ["TC-01", "TC-02", "TC-03", "TC-04"]],
     ["DEMO-19", ["TC-01", "TC-02", "TC-03"]],
     ["DEMO-20", ["TC-01", "TC-02"]],
   ] as const)("%s: every case is PASSED with all bugs off", async (ticket, specs) => {

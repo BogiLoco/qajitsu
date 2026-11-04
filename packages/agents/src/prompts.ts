@@ -63,7 +63,9 @@ Rules:
   time from the ticket; never add a wait to a step whose result is immediate.
 - A GraphQL API: a step is "POST /graphql" with "graphql": {"operation": "Query.product"} naming one of the
   operations under "GraphQL operations"; its expectations read the answer like JSON ("data.product.price"), and
-  "errors.0.message" when the case expects an error.
+  "errors.0.message" when the case expects an error. A subscription ("Subscription.priceChanged") is "WS /graphql"
+  with "stream" and "messages" like a WebSocket step, one message per pushed payload:
+  {"0.data.priceChanged.price": 24.99, "count": 2}.
 - A SOAP or XML API: a step is "POST <path>" with "soap": {"operation": "GetPrice"} naming one of the operations
   under "SOAP operations"; its expectations are XPaths without namespace prefixes under "xml"
   ({"//GetPriceResponse/amount": 24.99, "//GetPriceResponse/@currency": "EUR"}), and "//Fault/faultstring" with

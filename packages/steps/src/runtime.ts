@@ -129,6 +129,15 @@ export interface ApiClient {
   ) => Promise<ApiStream>;
   /** Subscribes to a server-sent events stream of the environment with this client's account (REQ-EXEC-47/AC2). */
   readonly events: (path: string) => Promise<ApiStream>;
+  /**
+   * A GraphQL subscription over WebSocket (graphql-transport-ws) to `/graphql` or another `path` (REQ-EXEC-48/AC2):
+   * every `next` payload is a message, checked with `verify(step, "messages.<n>.data.<field>", ...)`.
+   */
+  readonly subscribe: (
+    query: string,
+    variables?: Record<string, unknown>,
+    options?: { readonly path?: string },
+  ) => Promise<ApiStream>;
   /** A `multipart/form-data` body: text fields and files of the plan by key, `{ field: "<file key>" }`. */
   readonly multipart: (parts: {
     readonly fields?: Readonly<Record<string, string>>;
@@ -303,6 +312,7 @@ export interface CaseRuntime {
     kind: StreamKind,
     path: string,
     protocols?: readonly string[],
+    graphql?: { readonly query: string; readonly variables?: Readonly<Record<string, unknown>> },
   ) => Promise<number>;
   /** Sends on, reads or closes a stream opened with `openStream`. */
   readonly streamOp: (handle: number, op: "send" | "messages" | "close", data?: unknown) => Promise<unknown>;
@@ -499,12 +509,22 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     kind: StreamKind,
     path: string,
     protocols?: readonly string[],
+    graphql?: { readonly query: string; readonly variables?: Readonly<Record<string, unknown>> },
   ): Promise<ApiStream> => {
     if (currentStep === undefined) throw new Error("streams must be opened inside step()");
     const accountHeaders = alias === undefined ? {} : options.accounts[alias];
     if (accountHeaders === undefined) throw new Error(`Unknown account alias '${alias ?? ""}'`);
     lastAction.set(currentStep, "api");
-    return streams.open(currentStep, kind, path, accountHeaders, protocols);
+    // A spec's values are not typed at run time: a null or a list as variables is refused, not sent.
+    const variables: unknown = graphql?.variables;
+    if (
+      graphql !== undefined &&
+      (typeof graphql.query !== "string" ||
+        (variables !== undefined &&
+          (typeof variables !== "object" || variables === null || Array.isArray(variables))))
+    )
+      throw new Error("api.subscribe: the query must be a string and the variables an object");
+    return streams.open(currentStep, kind, path, accountHeaders, protocols, graphql);
   };
 
   /** Browser sessions by name (REQ-EXEC-62); `main` is the case's first one. `driver` is the active session's. */
@@ -1908,6 +1928,11 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       as: (a) => client(a),
       websocket: (path, o) => openStream(alias, "websocket", path, o?.protocols),
       events: (path) => openStream(alias, "sse", path),
+      subscribe: (query, variables, o) =>
+        openStream(alias, "websocket", o?.path ?? "/graphql", ["graphql-transport-ws"], {
+          query,
+          ...(variables === undefined ? {} : { variables }),
+        }),
       ...bodies,
     };
   };
@@ -2014,8 +2039,8 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     pollRound,
     endStep,
     call,
-    openStream: async (alias, kind, path, protocols) => {
-      streamHandles.push(await openStream(alias, kind, path, protocols));
+    openStream: async (alias, kind, path, protocols, graphql) => {
+      streamHandles.push(await openStream(alias, kind, path, protocols, graphql));
       return streamHandles.length - 1;
     },
     streamOp: (handle, op, data) => {

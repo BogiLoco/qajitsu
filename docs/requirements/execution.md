@@ -740,7 +740,7 @@ Jobs, queues and eventual consistency: "the status changes within 30 seconds".
 
 ### REQ-EXEC-48 · GraphQL testing
 
-- Status: in-progress
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-EXEC-04, REQ-EXEC-47, REQ-CTX-01, INV-4
@@ -748,7 +748,7 @@ Jobs, queues and eventual consistency: "the status changes within 30 seconds".
 **Acceptance criteria**
 
 - [x] AC1: The analyst and planner read the GraphQL schema from the repository (SDL files) or from introspection of an allowlisted test environment, and cite the operations and fields a case covers.
-- [ ] AC2: Steps send queries and mutations with variables; subscriptions run over WebSocket (REQ-EXEC-47).
+- [x] AC2: Steps send queries and mutations with variables; subscriptions run over WebSocket (REQ-EXEC-47).
 - [x] AC3: A response is checked against the schema of the analysed commit, and the `errors` array is part of every result: errors where the plan expects data fail the step, even with HTTP 200.
 - [x] AC4: Expectations address response fields by path as for REST.
 

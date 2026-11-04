@@ -197,6 +197,12 @@ const OpSchema = z.discriminatedUnion("op", [
     kind: z.enum(["websocket", "sse"]),
     path: z.string().max(4096),
     protocols: z.array(z.string().max(100)).max(10).optional(),
+    graphql: z
+      .strictObject({
+        query: z.string().max(100_000),
+        variables: z.record(z.string(), z.unknown()).optional(),
+      })
+      .optional(),
   }),
   z.strictObject({
     type: z.literal("op"),
@@ -416,7 +422,18 @@ export function createSandboxExecutor(
                 value = next.again;
               } else if (op.op === "xpath") value = xmlValue(op.text, op.xpath) ?? null;
               else if (op.op === "streamOpen")
-                value = await runtime.openStream(op.alias, op.kind, op.path, op.protocols);
+                value = await runtime.openStream(
+                  op.alias,
+                  op.kind,
+                  op.path,
+                  op.protocols,
+                  op.graphql
+                    ? {
+                        query: op.graphql.query,
+                        ...(op.graphql.variables ? { variables: op.graphql.variables } : {}),
+                      }
+                    : undefined,
+                );
               else if (op.op === "streamOp")
                 value = (await runtime.streamOp(op.handle, op.name, op.data)) ?? null;
               else {

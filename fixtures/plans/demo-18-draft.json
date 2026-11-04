@@ -6,17 +6,29 @@
       "title": "A product is read with its price as a number",
       "type": "api",
       "priority": "high",
-      "source": [{ "kind": "ac", "id": "AC1" }],
-      "data": { "user": "user:standard" },
+      "source": [
+        {
+          "kind": "ac",
+          "id": "AC1"
+        }
+      ],
+      "data": {
+        "user": "user:standard"
+      },
       "steps": [
         {
           "id": "S1",
           "action": "POST /graphql",
-          "graphql": { "operation": "Query.product" },
+          "graphql": {
+            "operation": "Query.product"
+          },
           "expect": {
             "description": "The mug with its price",
             "status": 200,
-            "fields": { "data.product.name": "Mug", "data.product.price": 24.99 }
+            "fields": {
+              "data.product.name": "Mug",
+              "data.product.price": 24.99
+            }
           }
         }
       ],
@@ -27,17 +39,28 @@
       "title": "Every product is listed without errors",
       "type": "api",
       "priority": "high",
-      "source": [{ "kind": "ac", "id": "AC2" }],
-      "data": { "user": "user:standard" },
+      "source": [
+        {
+          "kind": "ac",
+          "id": "AC2"
+        }
+      ],
+      "data": {
+        "user": "user:standard"
+      },
       "steps": [
         {
           "id": "S1",
           "action": "POST /graphql",
-          "graphql": { "operation": "Query.products" },
+          "graphql": {
+            "operation": "Query.products"
+          },
           "expect": {
             "description": "Three products",
             "status": 200,
-            "fields": { "data.products.2.id": "P-3" }
+            "fields": {
+              "data.products.2.id": "P-3"
+            }
           }
         }
       ],
@@ -48,14 +71,65 @@
       "title": "An unknown product is null",
       "type": "api",
       "priority": "medium",
-      "source": [{ "kind": "ac", "id": "AC3" }],
-      "data": { "user": "user:standard" },
+      "source": [
+        {
+          "kind": "ac",
+          "id": "AC3"
+        }
+      ],
+      "data": {
+        "user": "user:standard"
+      },
       "steps": [
         {
           "id": "S1",
           "action": "POST /graphql",
-          "graphql": { "operation": "Query.product" },
-          "expect": { "description": "No product", "status": 200, "fields": { "data.product": null } }
+          "graphql": {
+            "operation": "Query.product"
+          },
+          "expect": {
+            "description": "No product",
+            "status": 200,
+            "fields": {
+              "data.product": null
+            }
+          }
+        }
+      ],
+      "evidence": ["request", "response"]
+    },
+    {
+      "id": "TC-04",
+      "title": "Price changes are pushed to a subscriber",
+      "type": "api",
+      "priority": "medium",
+      "source": [
+        {
+          "kind": "ac",
+          "id": "AC4"
+        }
+      ],
+      "data": {
+        "user": "user:standard"
+      },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "WS /graphql",
+          "graphql": {
+            "operation": "Subscription.priceChanged"
+          },
+          "stream": {
+            "timeout_s": 3
+          },
+          "expect": {
+            "description": "The mug's price, then the markdown",
+            "messages": {
+              "0.data.priceChanged.price": 24.99,
+              "1.data.priceChanged.price": 22.49,
+              "count": 2
+            }
+          }
         }
       ],
       "evidence": ["request", "response"]

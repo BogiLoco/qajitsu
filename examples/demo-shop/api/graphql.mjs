@@ -58,7 +58,7 @@ function parseOperation(source) {
     return out;
   };
   let operation = "query";
-  if (peek()?.value === "query" || peek()?.value === "mutation") operation = take().value;
+  if (["query", "mutation", "subscription"].includes(peek()?.value)) operation = take().value;
   if (peek()?.kind === "name") take();
   if (peek()?.value === "(") {
     while (peek()?.value !== ")") take();
@@ -91,12 +91,7 @@ export function answerGraphql(body, products, bugs) {
   }
   const variables = body.variables ?? {};
   const arg = (a) => (a !== null && typeof a === "object" && "variable" in a ? variables[a.variable] : a);
-  const shape = (p) => ({
-    id: p.id,
-    name: p.name,
-    price: bugs.BUG_GRAPHQL_PRICE_AS_TEXT ? p.price.toFixed(2) : p.price,
-    inStock: p.id !== "P-3",
-  });
+  const shape = (p) => shapeOf(p, bugs);
   const data = {};
   const errors = [];
   for (const s of op.selections) {
@@ -114,4 +109,41 @@ export function answerGraphql(body, products, bugs) {
     } else errors.push({ message: `Cannot query field "${s.name}" on type "Query".` });
   }
   return errors.length > 0 ? { data, errors } : { data };
+}
+
+/** A product as GraphQL answers it; BUG-24 writes the price as text. */
+function shapeOf(p, bugs) {
+  return {
+    id: p.id,
+    name: p.name,
+    price: bugs.BUG_GRAPHQL_PRICE_AS_TEXT ? p.price.toFixed(2) : p.price,
+    inStock: p.id !== "P-3",
+  };
+}
+
+/**
+ * The payloads of a subscription (REQ-EXEC-48/AC2 demo): `priceChanged(id)` pushes the product's price, then the
+ * price after a 10 % markdown. Anything else is one payload of errors.
+ *
+ * @param {{ query?: unknown, variables?: Record<string, unknown> }} body
+ * @param {readonly { id: string, name: string, price: number }[]} products
+ * @param {Record<string, boolean>} bugs
+ */
+export function subscribeGraphql(body, products, bugs) {
+  let op;
+  try {
+    op = parseOperation(String(body?.query ?? ""));
+  } catch (error) {
+    return [{ errors: [{ message: error.message }] }];
+  }
+  const s = op.selections[0];
+  if (op.operation !== "subscription" || s?.name !== "priceChanged")
+    return [{ errors: [{ message: "Only subscription { priceChanged(id) } is offered." }] }];
+  const id =
+    s.args.id !== null && typeof s.args.id === "object" ? body.variables?.[s.args.id.variable] : s.args.id;
+  const p = products.find((x) => x.id === String(id));
+  if (!p) return [{ errors: [{ message: `Unknown product ${String(id)}` }] }];
+  return [p.price, Math.round(p.price * 90) / 100].map((price) => ({
+    data: { priceChanged: pick(shapeOf({ ...p, price }, bugs), s.selections ?? []) },
+  }));
 }

@@ -1,6 +1,7 @@
 // The support chat of the demo shop (REQ-EXEC-47 demo): a minimal WebSocket server on /ws/chat, written by hand so
 // the demo needs no dependency. Text frames only; BUG-17 drops the customer's words from the reply (see ../BUGS.md).
 import { createHash } from "node:crypto";
+import { subscribeGraphql } from "./graphql.mjs";
 
 const GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -44,15 +45,49 @@ const closeFrame = (code, reason) => {
   return Buffer.concat([Buffer.from([0x88, data.length]), data]);
 };
 
-/** Completes the handshake. */
-const accept = (req, socket) => {
+/** Completes the handshake, with the subprotocol the server speaks when it has one. */
+const accept = (req, socket, protocol) => {
   const hash = createHash("sha1")
     .update(String(req.headers["sec-websocket-key"]) + GUID)
     .digest("base64");
   socket.write(
-    `HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${hash}\r\n\r\n`,
+    `HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${hash}\r\n${protocol ? `Sec-WebSocket-Protocol: ${protocol}\r\n` : ""}\r\n`,
   );
 };
+
+/**
+ * GraphQL subscriptions over graphql-transport-ws on /graphql (DEMO-18, REQ-EXEC-48/AC2 demo): `connection_init` is
+ * acknowledged, a `subscribe` gets one `next` per payload and then `complete`.
+ */
+function graphqlSubscriptions(socket, products, bugs) {
+  socket.on("data", (buf) => {
+    const { texts, closed } = readFrames(buf);
+    for (const t of texts) {
+      let message;
+      try {
+        message = JSON.parse(t);
+      } catch {
+        socket.end(closeFrame(4400, "Invalid message received"));
+        return;
+      }
+      if (message.type === "connection_init") socket.write(frame(JSON.stringify({ type: "connection_ack" })));
+      else if (message.type === "subscribe") {
+        const payloads = subscribeGraphql(message.payload, products, bugs);
+        payloads.forEach((payload, i) =>
+          setTimeout(
+            () => {
+              socket.write(frame(JSON.stringify({ id: message.id, type: "next", payload })));
+              if (i === payloads.length - 1)
+                socket.write(frame(JSON.stringify({ id: message.id, type: "complete" })));
+            },
+            20 * (i + 1),
+          ),
+        );
+      }
+    }
+    if (closed) socket.end();
+  });
+}
 
 /**
  * The live price feed (DEMO-20, REQ-EXEC-47/AC1 demo) on /ws/prices, for signed-in clients only: a message
@@ -97,11 +132,20 @@ function prices(socket, products, bugs) {
 export function upgradeChat(req, socket, bugs, shop = {}) {
   const key = req.headers["sec-websocket-key"];
   const path = new URL(req.url ?? "/", "http://x").pathname;
-  if (!["/ws/chat", "/ws/prices"].includes(path) || typeof key !== "string") {
+  if (!["/ws/chat", "/ws/prices", "/graphql"].includes(path) || typeof key !== "string") {
     socket.end("HTTP/1.1 404 Not Found\r\n\r\n");
     return;
   }
   socket.on("error", () => socket.destroy());
+  if (path === "/graphql") {
+    if (!String(req.headers["sec-websocket-protocol"] ?? "").includes("graphql-transport-ws")) {
+      socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
+      return;
+    }
+    accept(req, socket, "graphql-transport-ws");
+    graphqlSubscriptions(socket, shop.products ?? [], bugs);
+    return;
+  }
   if (path === "/ws/prices") {
     if (!shop.signedIn?.(req)) {
       socket.end("HTTP/1.1 401 Unauthorized\r\n\r\n");

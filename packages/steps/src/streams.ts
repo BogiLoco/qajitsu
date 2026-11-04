@@ -66,6 +66,8 @@ export interface StreamRecord {
 
 interface Entry extends StreamRecord {
   readonly url: string;
+  /** A GraphQL subscription over this WebSocket (REQ-EXEC-48/AC2): its query and masked variables. */
+  readonly graphql?: { readonly query: string; readonly variables?: unknown };
   readonly openedAt: number;
   readonly frames: Frame[];
   readonly listeners: (() => void)[];
@@ -107,6 +109,7 @@ export function createStreams(options: {
     path: string,
     headers: Readonly<Record<string, string>>,
     protocols?: readonly string[],
+    graphql?: { readonly query: string; readonly variables?: Readonly<Record<string, unknown>> },
   ): Promise<ApiStream> => {
     if (!options.transport)
       throw new Error(`api.${kind === "sse" ? "events" : "websocket"}: this runner has no streams`);
@@ -128,8 +131,43 @@ export function createStreams(options: {
       frames: [],
       messages: [],
       listeners: [],
+      ...(graphql
+        ? {
+            graphql: {
+              query: graphql.query,
+              ...(graphql.variables === undefined
+                ? {}
+                : { variables: options.masker.maskJson(graphql.variables) }),
+            },
+          }
+        : {}),
     };
     entries.push(entry);
+    const sendFrame = (text: string): void => {
+      entry.frames.push({
+        dir: "sent",
+        atMs: options.now() - entry.openedAt,
+        data: options.masker.maskText(text),
+      });
+      entry.connection?.send(text);
+    };
+    /**
+     * REQ-EXEC-48/AC2: the graphql-transport-ws protocol. The answer to `connection_init` starts the subscription;
+     * every `next` payload is a message, an `error` is `{ errors }`, and `complete` ends the stream.
+     */
+    const graphqlFrame = (text: string): void => {
+      const frame = parse(text) as { type?: unknown; payload?: unknown } | null;
+      const type = typeof frame === "object" && frame !== null ? frame.type : undefined;
+      if (type === "connection_ack" && graphql)
+        sendFrame(JSON.stringify({ id: "1", type: "subscribe", payload: graphql }));
+      else if (type === "ping") sendFrame(JSON.stringify({ type: "pong" }));
+      else if (type === "next") entry.messages.push(frame?.payload);
+      else if (type === "error") entry.messages.push({ errors: frame?.payload });
+      else if (type === "complete") {
+        entry.closed ??= { code: 1000, reason: "complete" };
+        entry.connection?.close();
+      }
+    };
     try {
       entry.connection = await options.transport(
         { kind, url: target.toString(), headers, ...(protocols ? { protocols } : {}) },
@@ -142,11 +180,13 @@ export function createStreams(options: {
               ...(event?.event === undefined ? {} : { event: event.event }),
               ...(event?.id === undefined ? {} : { id: event.id }),
             });
-            entry.messages.push(
-              kind === "sse"
-                ? { event: event?.event ?? "message", id: event?.id ?? null, data: parse(text) }
-                : parse(text),
-            );
+            if (graphql) graphqlFrame(text);
+            else
+              entry.messages.push(
+                kind === "sse"
+                  ? { event: event?.event ?? "message", id: event?.id ?? null, data: parse(text) }
+                  : parse(text),
+              );
             notify(entry);
           },
           close: (code, reason) => {
@@ -166,18 +206,14 @@ export function createStreams(options: {
       );
     }
     const connection = entry.connection;
+    if (graphql) sendFrame(JSON.stringify({ type: "connection_init" }));
     return {
       send: (data) => {
         if (kind === "sse") return Promise.reject(new Error("an event stream cannot send"));
         if (entry.closed)
           return Promise.reject(new Error(`the WebSocket is closed (${String(entry.closed.code)})`));
-        const text = typeof data === "string" ? data : JSON.stringify(data);
-        entry.frames.push({
-          dir: "sent",
-          atMs: options.now() - entry.openedAt,
-          data: options.masker.maskText(text),
-        });
-        connection.send(text);
+        if (graphql) return Promise.reject(new Error("a GraphQL subscription sends nothing after its query"));
+        sendFrame(typeof data === "string" ? data : JSON.stringify(data));
         return Promise.resolve();
       },
       messages: () => Promise.resolve([...entry.messages]),
@@ -223,7 +259,18 @@ export function createStreams(options: {
           stepId: e.stepId,
           kind: "log",
           name: `${e.stepId}-${e.kind === "sse" ? "events" : "websocket"}-${String(n).padStart(2, "0")}.json`,
-          content: `${JSON.stringify({ kind: e.kind, url: e.url, frames: e.frames, closed: e.closed }, null, 2)}\n`,
+          // A subscription is marked like a GraphQL call, so the verifier checks its query and payloads (REQ-EXEC-48).
+          content: `${JSON.stringify(
+            {
+              kind: e.kind,
+              url: e.url,
+              ...(e.graphql ? { graphql: true, request: { body: e.graphql } } : {}),
+              frames: e.frames,
+              closed: e.closed,
+            },
+            null,
+            2,
+          )}\n`,
         };
       });
     },

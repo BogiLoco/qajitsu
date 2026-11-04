@@ -81,11 +81,31 @@ function exchanges(record: AttemptRecord): Exchange[] {
         graphql?: unknown;
         request?: { body?: { query?: unknown } };
         response?: { body?: unknown };
+        frames?: unknown;
       };
       const query = call.request?.body?.query;
       const body = call.response?.body;
-      // Only calls made with api.graphql() are GraphQL; a REST body with a `query` field is not.
+      // Only calls made with api.graphql() or api.subscribe() are GraphQL; a REST body with a `query` field is not.
       if (call.graphql !== true || typeof query !== "string") return [];
+      // REQ-EXEC-48/AC2: a subscription is checked payload by payload; without one its query is still checked.
+      if (Array.isArray(call.frames)) {
+        const payloads = (call.frames as { dir?: unknown; data?: unknown }[]).flatMap((f) => {
+          if (f.dir !== "received" || typeof f.data !== "string") return [];
+          try {
+            const frame = JSON.parse(f.data) as { type?: unknown; payload?: unknown };
+            if (frame.type === "next") return [frame.payload];
+            if (frame.type === "error") return [{ errors: frame.payload }];
+          } catch {
+            // Not a protocol frame.
+          }
+          return [];
+        });
+        return (payloads.length > 0 ? payloads : [{}]).map((payload) => ({
+          stepId: item.stepId,
+          query,
+          response: payload !== null && typeof payload === "object" ? payload : {},
+        }));
+      }
       return [
         {
           stepId: item.stepId,
@@ -217,7 +237,8 @@ function dataProblems(schema: GraphQLSchema, doc: DocumentNode, data: unknown): 
  * Checks the GraphQL exchanges of an attempt (REQ-EXEC-48/AC2+AC3), after it ran and before its status is computed.
  * A query that cannot be parsed, does not fit the schema or skips the plan's operation is the spec's error: the
  * attempt errors (BLOCKED). An `errors` array where the step's plan expects data fails the step even with HTTP 200, and
- * data that does not fit the schema of the analysed commit fails it too. Only failures are added (invariant 1).
+ * data that does not fit the schema of the analysed commit fails it too. A step planned as GraphQL that made no
+ * GraphQL call is the spec's error. Only failures are added (invariant 1).
  *
  * @param record - The attempt as the runner recorded it.
  * @param plan - The approved plan.
@@ -231,7 +252,20 @@ export function checkGraphqlAttempt(
   const planCase = plan.cases.find((c) => c.id === record.caseId);
   const added: AssertionRecord[] = [];
   const specErrors: string[] = [];
-  for (const ex of exchanges(record)) {
+  const all = exchanges(record);
+  // A step the plan makes a GraphQL operation must call it with api.graphql() or api.subscribe(), or its errors
+  // and its types go unchecked.
+  if (record.outcome === "passed" || record.outcome === "failed")
+    for (const step of planCase?.steps ?? [])
+      if (
+        step.graphql !== undefined &&
+        record.steps.some((s) => s.id === step.id) &&
+        !all.some((ex) => ex.stepId === step.id)
+      )
+        specErrors.push(
+          `${step.id}: the plan's GraphQL operation ${step.graphql.operation} was not called with api.graphql() or api.subscribe()`,
+        );
+  for (const ex of all) {
     const step = planCase?.steps.find((s) => s.id === ex.stepId);
     let doc: DocumentNode;
     try {
@@ -270,7 +304,11 @@ export function checkGraphqlAttempt(
     }
     // AC3: errors are part of every result; where the plan expects data they fail the step whatever the HTTP status.
     const errors = Array.isArray(ex.response.errors) ? ex.response.errors : [];
-    const expectsErrors = Object.keys(step?.expect.fields ?? {}).some((f) => f.startsWith("errors"));
+    const expectsErrors = [
+      ...Object.keys(step?.expect.fields ?? {}),
+      // A subscription's payloads are messages: "0.errors.0.message".
+      ...Object.keys(step?.expect.messages ?? {}).map((k) => k.replace(/^\d+\./, "")),
+    ].some((f) => f.startsWith("errors"));
     if (errors.length > 0 && !expectsErrors)
       added.push({
         stepId: ex.stepId,
