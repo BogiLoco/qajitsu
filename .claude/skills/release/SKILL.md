@@ -6,11 +6,13 @@ disable-model-invocation: true
 
 # /release
 
-Publishing to npm happens only in CI (`.github/workflows/release.yml`) after the release PR merges. Locally you only prepare.
+Publishing to npm happens only in CI (`.github/workflows/release.yml`) after the version PR merges; the workflow opens
+that PR itself from the pending changesets (`pnpm version-packages`). Locally you only check. Details: `docs/releasing.md`.
 
 1. Ensure `main` is up to date and `/verify` passes.
 2. `pnpm changeset status` – list pending changesets. If user-visible changes since the last tag have no changeset, stop and list them.
 3. Check bump types: breaking change to CLI flags, exit codes, config schema, statuses or evidence format → major (or minor while `0.x`, called out explicitly in the changelog).
-4. `pnpm changeset version` – updates versions and `CHANGELOG.md` files. Review the generated changelog for clarity; rewrite entries that only make sense to maintainers.
-5. Run `/verify` again, then commit `chore(release): version packages` on a `release/<version>` branch.
-6. Push and open the PR only if the user asks. Never run `npm publish` or `pnpm publish` locally; the guard blocks it.
+4. `pnpm build && pnpm release:check` – packs, inspects and installs what would be published; fix every problem it lists.
+5. After the merge to `main`, review the changelogs in the `chore(release): version packages` PR the workflow opened;
+   rewrite entries that only make sense to maintainers.
+6. Never publish locally; the guard hook and `scripts/publish-guard.mjs` refuse it.

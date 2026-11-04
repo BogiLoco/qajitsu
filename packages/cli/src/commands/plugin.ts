@@ -129,10 +129,12 @@ async function knowledgeOf(
 ): Promise<{ readonly knowledge: boolean; readonly onlineSources: readonly string[] }> {
   const dir = project.project?.paths.knowledge;
   if (dir === undefined || !existsSync(dir)) return { knowledge: false, onlineSources: [] };
-  const sources = await readKnowledgeSources(dir).catch(() => []);
+  // `qj init` creates the folder: a knowledge base is one with sources, or one that was indexed. A sources file that
+  // cannot be read still counts, so the store it needs is not hidden behind the broken file.
+  const sources = await readKnowledgeSources(dir).catch(() => undefined);
   return {
-    knowledge: true,
-    onlineSources: sources.map((s) => s.path).filter((p) => parseOnlineLocator(p) !== undefined),
+    knowledge: sources === undefined || sources.length > 0 || existsSync(join(dir, "index.json")),
+    onlineSources: (sources ?? []).map((s) => s.path).filter((p) => parseOnlineLocator(p) !== undefined),
   };
 }
 

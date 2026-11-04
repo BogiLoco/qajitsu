@@ -3,7 +3,23 @@
   "version": "0.0.0",
   "description": "QAJitsu EvidenceArchive on S3 Object Lock (AWS, MinIO and other S3-compatible storage): write-once evidence and certificates.",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BogiLoco/qajitsu.git",
+    "directory": "packages/adapters/evidence-s3"
+  },
+  "homepage": "https://github.com/BogiLoco/qajitsu/tree/main/packages/adapters/evidence-s3#readme",
+  "bugs": {
+    "url": "https://github.com/BogiLoco/qajitsu/issues"
+  },
   "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "exports": {
     ".": {
       "qajitsu-source": "./src/index.ts",
@@ -12,10 +28,14 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "src",
+    "!src/**/*.test.ts",
+    "NOTICE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "node ../../../scripts/publish-guard.mjs"
   },
   "peerDependencies": {
     "@qajitsu/core": "workspace:^"

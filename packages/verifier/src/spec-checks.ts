@@ -1,4 +1,4 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { plannedFields } from "./expectations.js";
 import { checkSpecQuality } from "./spec-quality.js";
@@ -727,21 +727,34 @@ const resolveStepsPackage = (): string | undefined => {
 };
 
 /**
- * Path of the `@qajitsu/steps` type declarations used to type-check specs: the sources when present (monorepo
- * development, always current), then the built declarations next to the verifier (the monorepo build, npm's flat
- * install), then those of the package Node resolves (pnpm keeps a package's dependencies next to it).
+ * The folder of a module, as a file path: decoded (spaces, non-ASCII) and in the platform's form (`C:\\` on Windows),
+ * which `new URL(...).pathname` is not.
+ *
+ * @param url - The module's `import.meta.url`.
+ */
+export function moduleDir(url: string): string {
+  return dirname(fileURLToPath(url));
+}
+
+/**
+ * Path of the `@qajitsu/steps` type declarations used to type-check specs: in this repository the sources (always
+ * current), then the built declarations next to the verifier (the monorepo build, npm's flat install), then those of
+ * the package Node resolves (pnpm keeps a package's dependencies next to it). An installed QAJitsu ships its sources
+ * too, for source maps, but checks specs against the build its users run.
  *
  * @param exists - File check, injectable for tests.
  * @param resolveSteps - Where `@qajitsu/steps` resolves to, injectable for tests.
+ * @param here - The verifier's own folder, injectable for tests.
  */
 export function stepsTypesEntry(
   exists: (path: string) => boolean = existsSync,
   resolveSteps: () => string | undefined = resolveStepsPackage,
+  here: string = moduleDir(import.meta.url),
 ): string {
-  const here = dirname(new URL(import.meta.url).pathname);
-  // Sources first: in the monorepo they are always current, while dist/ may lag behind the last change.
+  // Sources first in the repository: they are always current, while dist/ may lag behind the last change.
+  const installed = here.split(/[\\/]/).includes("node_modules");
   const src = join(here, "../../steps/src/index.ts");
-  if (exists(src)) return src;
+  if (!installed && exists(src)) return src;
   const sibling = join(here, "../../steps/dist/index.d.ts");
   if (exists(sibling)) return sibling;
   const resolved = resolveSteps();
@@ -773,7 +786,24 @@ function cachingHost(options: ts.CompilerOptions, specs: ReadonlySet<string>): t
   return host;
 }
 
-export function typecheckSpecs(files: readonly string[]): Map<string, SpecProblem[]> {
+export function typecheckSpecs(
+  files: readonly string[],
+  entry: string = stepsTypesEntry(),
+): Map<string, SpecProblem[]> {
+  // Fail closed: without the steps types TypeScript would look for `@qajitsu/steps` next to the spec, where anyone
+  // could have put a package whose types let every call through.
+  if (!existsSync(entry))
+    return new Map(
+      files.map((f) => [
+        f,
+        [
+          {
+            check: "typecheck",
+            message: `the @qajitsu/steps types are not found at ${entry}: the spec cannot be checked`,
+          },
+        ],
+      ]),
+    );
   const options: ts.CompilerOptions = {
     strict: true,
     noEmit: true,
@@ -783,11 +813,37 @@ export function typecheckSpecs(files: readonly string[]): Map<string, SpecProble
     skipLibCheck: true,
     types: [],
     lib: ["lib.es2023.d.ts"],
-    paths: { "@qajitsu/steps": [stepsTypesEntry()] },
+    paths: { "@qajitsu/steps": [entry] },
     allowImportingTsExtensions: true,
   };
-  const program = ts.createProgram([...files], options, cachingHost(options, new Set(files)));
+  const host = cachingHost(options, new Set(files));
+  const program = ts.createProgram([...files], options, host);
   const out = new Map<string, SpecProblem[]>(files.map((f) => [f, []]));
+  // Every import of the steps package, a subpath included, must reach the types the check is made against.
+  const real = (path: string): string => {
+    try {
+      return realpathSync(path);
+    } catch {
+      return path;
+    }
+  };
+  for (const f of files) {
+    const source = program.getSourceFile(f);
+    if (!source) continue;
+    for (const statement of source.statements) {
+      if (!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) continue;
+      const specifier = statement.moduleSpecifier;
+      if (specifier === undefined || !ts.isStringLiteral(specifier)) continue;
+      const name = specifier.text;
+      if (name !== "@qajitsu/steps" && !name.startsWith("@qajitsu/steps/")) continue;
+      const resolved = ts.resolveModuleName(name, f, options, host).resolvedModule?.resolvedFileName;
+      if (resolved === undefined || real(resolved) !== real(entry))
+        out.get(f)?.push({
+          check: "typecheck",
+          message: `${name} resolves to ${resolved ?? "nothing"}, not to the steps types the verifier checks against (${entry})`,
+        });
+    }
+  }
   // Only the specs' own diagnostics count: checking every file of the program (the steps and core sources the spec
   // imports) did the same work again for each spec and was thrown away.
   const diagnostics = files.flatMap((f) => {

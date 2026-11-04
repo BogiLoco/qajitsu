@@ -3,7 +3,23 @@
   "version": "0.0.0",
   "description": "QAJitsu command line: qajitsu (alias qj).",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BogiLoco/qajitsu.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/BogiLoco/qajitsu/tree/main/packages/cli#readme",
+  "bugs": {
+    "url": "https://github.com/BogiLoco/qajitsu/issues"
+  },
   "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "bin": {
     "qajitsu": "./dist/bin.js",
     "qj": "./dist/bin.js"
@@ -17,10 +33,14 @@
   },
   "files": [
     "dist",
-    "plugins.json"
+    "src",
+    "!src/**/*.test.ts",
+    "plugins.json",
+    "NOTICE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "node ../../scripts/publish-guard.mjs"
   },
   "dependencies": {
     "@qajitsu/adapter-codehost-local": "workspace:*",

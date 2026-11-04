@@ -1,0 +1,94 @@
+name: Release
+
+# REQ-GEN-15/AC1+AC2: a merge to main with pending changesets opens or updates the version pull request; merging that
+# pull request publishes every package from a fresh checkout with npm provenance, tags it and creates the GitHub
+# release. Nothing is released from a person's machine (scripts/publish-guard.mjs).
+#
+# Two jobs: `test` runs everything that executes dependency code (install, tests, the networked plugin suite, the
+# release check) with read rights and no secrets; `release` runs only after it, with the write rights and the npm
+# token, and executes nothing but this repository's build and publish steps. Actions are pinned to commits.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# One release at a time, never cancelled half-way through publishing.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  test:
+    if: github.repository == 'BogiLoco/qajitsu'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      # No dependency cache: what is released is built from a fresh install of the lockfile.
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @qajitsu/cli exec playwright-core install --with-deps chromium
+      - run: pnpm verify
+      - run: pnpm build
+      # REQ-GEN-11/AC11: every plugin, packed as published and installed the way `qj plugin add` does, passes its
+      # contract tests against this release's core.
+      - name: plugins as installed
+        run: pnpm exec vitest run --config vitest.e2e.config.ts tests/e2e/plugins-installed.e2e.test.ts
+        env:
+          QAJITSU_E2E_NETWORK: "1"
+      # REQ-GEN-15/AC3+AC4: pack, inspect, install the CLI with npm and run it.
+      - run: node scripts/release-check.mjs
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The npm token lives in this environment only; it can be limited to main and to reviewers in the settings.
+    environment: npm-publish
+    permissions:
+      contents: write # the version branch and the tags
+      pull-requests: write # the version pull request
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+      # pnpm runs no dependency install scripts.
+      - run: pnpm install --frozen-lockfile
+      # With pending changesets: open or update the version pull request, made by code. A pull request opened with
+      # the workflow's own token gets no CI checks; RELEASE_PR_TOKEN (an app or fine-grained token) gives it them.
+      - id: changesets
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
+        with:
+          version: pnpm version-packages
+          title: "chore(release): version packages"
+          commit: "chore(release): version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || secrets.GITHUB_TOKEN }}
+      # Without pending changesets, the version pull request was merged: publish what is not in the registry yet.
+      - name: publish
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: pnpm release
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"
+      - name: tags and GitHub release
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: node scripts/github-release.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}

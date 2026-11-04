@@ -13,13 +13,13 @@ catalog:
   "@vitest/coverage-v8": ^5.0.3
   ai: ^7.0.127
   ai-sdk-ollama: ^4.4.0
-  undici: ^7.30.0
+  undici: ^7.30.1
   axe-core: ^4.13.0
   commander: ^15.0.0
   typescript: ~6.0.3
   vitest: ^5.0.3
   yaml: ^2.9.1
-  zod: ^4.6.5
+  zod: ^4.6.6
 
 # Security fixes for transitive dependencies (REQ-NFR-05/AC4). Review when the parent packages update.
 overrides:
@@ -32,6 +32,15 @@ overrides:
   launch-editor: ^2.14.2
   # GHSA-gfr2-rv44-r23c (high), dev tooling only: markdown-it through typedoc (API docs build).
   markdown-it: ^14.3.3
+  # GHSA-xjj6-f33q-929c, GHSA-4w7w-5xrc-9h26, GHSA-2m5v-pch6-74hx, GHSA-qrxm-fqhp-jwvm (high), via
+  # runner-mobile > webdriverio > webdriver, which pins undici 6; 6.29.1 is the patched 6.x.
+  "undici@>=6.0.0 <6.29.1": ^6.29.1
+  # The same advisories in 7.x, via ai > @ai-sdk/provider-utils and webdriverio > cheerio; 7.30.1 is the patched 7.x.
+  "undici@>=7.0.0 <7.30.1": ^7.30.1
+  # GHSA-27r3-jxmh-p828 (high), via appium > express 5, which accepts body-parser 2.x.
+  "body-parser@>=2.0.0 <2.4.0": ^2.4.0
+  # GHSA-mrwp-f3q8-3g9p (high), via appium > axios; a patch release of the same line.
+  follow-redirects: ^1.16.2
 
 # @lancedb/lancedb lists its own embedding helpers as optional dependencies; QAJitsu embeds through the models layer
 # (REQ-KNOW-08), and @huggingface/transformers would pull onnxruntime-node with an install script.
