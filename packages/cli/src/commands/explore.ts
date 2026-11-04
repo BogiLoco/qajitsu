@@ -4,7 +4,9 @@ import { runUsage, saveRunUsage } from "../run-usage.js";
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
 import { createRemoteEnvProvider, loginAccounts } from "@qajitsu/adapter-env-remote";
 import type { BrowserFactory } from "@qajitsu/adapter-runner-api";
-import { createBrowserLogin, createPlaywrightBrowserFactory } from "@qajitsu/adapter-runner-web";
+import type * as RunnerWebPlugin from "@qajitsu/adapter-runner-web";
+import { lazyBrowserLogin } from "../plugins/lazy.js";
+import { sessionPlugins } from "./plugin.js";
 import { buildChangeContext, runExplorer, type ExplorerReport } from "@qajitsu/agents";
 import {
   CliExploreSessionSchema,
@@ -143,12 +145,14 @@ export async function runExplore(
       );
       return 2;
     }
+    // REQ-GEN-11/AC2: exploring drives a browser through the web runner plugin.
+    const webRunner = () => sessionPlugins(session).load<typeof RunnerWebPlugin>("runner-web");
     const login =
       env.profile.login && Object.keys(env.profile.accounts).length > 0
         ? await loginAccounts(env, {
             fetch: ports.fetch,
             qaDir: project.qaDir,
-            browserLogin: createBrowserLogin(),
+            browserLogin: lazyBrowserLogin(async () => (await webRunner()).createBrowserLogin()),
             resolveSecret: (r) => session.resolveSecret(r),
             registerSecret: (v) => {
               masker.register(v);
@@ -184,7 +188,7 @@ export async function runExplore(
     const httpCredentials = await httpCredentialsFor(env, session.resolveSecret);
     const factory =
       ports.exploreBrowser ??
-      createPlaywrightBrowserFactory({
+      (await webRunner()).createPlaywrightBrowserFactory({
         ...(httpCredentials ? { httpCredentials } : {}),
         browser: project.config.web.browser,
         video: "always",

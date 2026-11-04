@@ -3,16 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { RunIdSchema, TicketKeySchema, type PublishInput } from "@qajitsu/core";
 import { afterEach, describe, expect, it } from "vitest";
-import { createFakeFetch, jsonReply, testDeps, type Route } from "../../../../tests/support/fake-fetch.js";
+import { createFakeFetch, jsonReply, testDeps } from "../../../../tests/support/fake-fetch.js";
 import { publisherContract } from "../../../../tests/contract/publisher.contract.js";
-import { createFilePublisher } from "./file-publisher.js";
+import { jiraPublishRoutes, jiraPublishSecrets } from "../../../../tests/support/jira-publish-fixture.js";
+import { createFilePublisher } from "@qajitsu/adapter-files";
 import { createJiraPublisher } from "./jira-publisher.js";
 
 const BASE = "https://jira.example.com";
-const secrets = {
-  "secret://env/JIRA_EMAIL": "qa@example.com",
-  "secret://env/JIRA_TOKEN": "jira-token-123456",
-};
+const secrets = jiraPublishSecrets;
 const dirs: string[] = [];
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })));
@@ -42,24 +40,7 @@ const input = (dir: string, previous?: PublishInput["previous"]): PublishInput =
   ...(previous ? { previous } : {}),
 });
 
-const routes = (extra: Route[] = []): Route[] => [
-  ...extra,
-  {
-    method: "POST",
-    match: /^\/rest\/api\/[23]\/issue\/SHOP-482\/comment$/,
-    reply: jsonReply({ id: "10001" }, 201),
-  },
-  {
-    method: "PUT",
-    match: /^\/rest\/api\/[23]\/issue\/SHOP-482\/comment\/10001$/,
-    reply: jsonReply({ id: "10001" }),
-  },
-  {
-    method: "POST",
-    match: /^\/rest\/api\/[23]\/issue\/SHOP-482\/attachments$/,
-    reply: (r) => jsonReply((r.files ?? []).map((f, i) => ({ id: 500 + i, filename: f })))(r),
-  },
-];
+const routes = jiraPublishRoutes;
 
 for (const flavor of ["cloud", "datacenter"] as const)
   publisherContract(`jira ${flavor}`, () =>

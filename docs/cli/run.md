@@ -38,6 +38,52 @@ qajitsu run <TICKET> [--run <id>] [--env <profile|url>] [--keep] [--env-not-conf
    `qj-<ticket>-<run>-<case>-a<attempt>`, and removed after it (`--keep` leaves it); data that cannot be created
    makes the attempt BLOCKED before any step (REQ-EXEC-53). A step with a planned `wait` repeats its actions and
    checks until they hold or the time is up (REQ-EXEC-46).
+   On a shared environment (REQ-EXEC-54), every request of every lane keeps to `execution.rate_limit`, which sets the
+   requests per second to one host and the cases at once across lanes:
+   - A `429` or `503` with `Retry-After` is waited out and retried, only for a request that is safe to repeat: a
+     `GET`, or a request of a step with `idempotency_key: true`. A timeout of a keyed request is retried too. Each
+     retry is recorded in the call's evidence.
+   - A request that is not safe to repeat is never sent twice.
+   - A case still rate limited after `retry_budget_s` (30 s by default) is BLOCKED with "rate limited", never FAILED
+     or PASSED. A step whose plan expects that status gets the response as it came.
+   - A keyed request carries `Idempotency-Key: qj-<case>-<step>-a<attempt>-<n>`, the same on every retry.
+     GraphQL (REQ-EXEC-48): a spec calls `api.graphql(query, variables)` (`POST /graphql`, or another `path`). After the
+     attempt, code checks every such call against the schema of the analysed commit. That schema is
+     `repos.<alias>.graphql`: an SDL file in the repository, or an endpoint path like `/graphql`, which is introspected on
+     the environment.
+   - A query that cannot be parsed, does not fit the schema or skips the plan step's `graphql.operation` is the spec's
+     error: BLOCKED.
+   - An `errors` array where the plan expects data fails the step, even with HTTP 200.
+   - Data that does not fit the schema's types fails it too.
+   - Expectations read the answer by path, like JSON: `fields.data.product.price`, `fields.errors.0.message`.
+   - A subscription is `api.subscribe(query, variables)`: a WebSocket to `/graphql` (or `path`) speaking
+     graphql-transport-ws. Every pushed payload is a message (`messages.0.data.priceChanged.price`), checked like a
+     stream's, and the query and each payload are checked against the schema like a query's.
+   - A step planned as GraphQL that sends its query any other way (`api.post`) is the spec's error: BLOCKED.
+
+     WebSocket and server-sent events (REQ-EXEC-47): a spec opens `api.websocket(path)` (then `send()`) or
+     `api.events(path)`. The trusted process opens the stream with the account's headers, only to an origin of the
+     allowlist (`ws:`/`wss:` count as `http:`/`https:`), and keeps every frame sent and received, masked, as
+     `S1-websocket-01.json` or `S1-events-01.json`. `verify(step, "messages.<n>.<path>")` waits for message `n` up to
+     the step's `stream.timeout_s` (10 s by default), and `messages.count` counts the messages until the stream ends or
+     the time is up.
+
+   - A planned message that does not come fails the step, with the close code and reason when the stream ended first
+     (`(no message 1 within 3 s (the stream closed with 1011 price feed down))`).
+   - A stream that cannot be opened, or one to another host, is the step's error: BLOCKED with the reason.
+
+     SOAP and XML (REQ-EXEC-50): a spec calls `api.soap(path, bodyXml, { action, version })`. The body element is
+     wrapped in a SOAP 1.1 envelope (`text/xml`, `SOAPAction`) or a 1.2 one (`application/soap+xml; action=...`). A
+     plain XML request is `api.text(xml, "application/xml")`. `await res.xml("//GetPriceResponse/amount")` reads an
+     XPath over local names, and `verify(step, "xml.<xpath>", ...)` reads that value from the response itself, as the
+     plan's type. After the attempt, code checks every call against `repos.<alias>.wsdl` (the schemas in its `types`)
+     and `repos.<alias>.xsd` of the analysed commit:
+
+   - A fault where the plan expects an answer fails the step, even with HTTP 200. A step expects a fault when it plans
+     status 500 or an XPath on `Fault`.
+   - An answer, SOAP body or plain XML, that does not fit the schemas fails it too (`soap.schema`).
+   - A request that sends neither the plan step's `soap.operation` nor names it in its action, or a SOAP step that
+     makes no `api.soap()` call, is the spec's error: BLOCKED.
 7. Verdict: `computeStatus` per case, evidence manifest re-hashed, publish gates (every approved case has one status,
    plan unchanged, PASSED is proven, FAILED is explained, manifest intact, no secrets in outgoing artifacts).
 8. Reports in `report/`: `matrix.md`, `matrix.csv`, `matrix.xlsx`, `report.html` (self-contained), `gates.json`.

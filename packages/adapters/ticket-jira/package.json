@@ -18,7 +18,32 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@qajitsu/core": "workspace:*",
     "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "@qajitsu/core": "workspace:^"
+  },
+  "devDependencies": {
+    "@qajitsu/adapter-files": "workspace:*",
+    "@qajitsu/core": "workspace:*"
+  },
+  "qajitsu": {
+    "plugin": {
+      "types": [
+        "ticket source",
+        "document source"
+      ],
+      "core_api": "^1.0.0",
+      "secrets": [
+        "API token"
+      ],
+      "hosts": [
+        "*.atlassian.net",
+        "config"
+      ],
+      "permissions": [
+        "network"
+      ]
+    }
   }
 }

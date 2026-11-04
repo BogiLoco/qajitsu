@@ -1,7 +1,10 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { loginAccounts } from "@qajitsu/adapter-env-remote";
-import { createBrowserLogin } from "@qajitsu/adapter-runner-web";
+import type * as RunnerWebPlugin from "@qajitsu/adapter-runner-web";
+import type { PluginLoader } from "../plugins/load.js";
+import { lazyBrowserLogin } from "../plugins/lazy.js";
+import { sessionPlugins } from "./plugin.js";
 import type { BrowserFactory, LoginContext, RunCasesOptions } from "@qajitsu/adapter-runner-api";
 import {
   accountsUsedBy,
@@ -51,12 +54,18 @@ export function accountLogin(
   deps: Parameters<typeof loginAccounts>[1],
   /** Accounts a case names in its data (its sessions, REQ-EXEC-62/AC3), leased besides those its spec names. */
   caseAliases: (caseId: string) => readonly string[] = () => [],
+  /** Loads the web runner for browser logins; without it, the plugins this installation carries. */
+  plugins?: PluginLoader,
 ): RunCasesOptions["login"] {
   const aliases = Object.keys(env.profile.accounts);
   // REQ-EXEC-55/AC2: SSO logins run in a browser; with `reuse` one login serves every case of this run.
   const withBrowser: Parameters<typeof loginAccounts>[1] = {
     ...deps,
-    browserLogin: deps.browserLogin ?? createBrowserLogin(),
+    browserLogin:
+      deps.browserLogin ??
+      lazyBrowserLogin(async () =>
+        (await sessionPlugins({ plugins }).load<typeof RunnerWebPlugin>("runner-web")).createBrowserLogin(),
+      ),
     sessionCache: deps.sessionCache ?? new Map<string, BrowserState>(),
   };
   const used = new Map<string, Promise<string[]>>();

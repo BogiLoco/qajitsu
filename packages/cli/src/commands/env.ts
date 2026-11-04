@@ -1,4 +1,5 @@
-import { writeEnvFiles } from "@qajitsu/adapter-env-compose";
+import type * as ComposePlugin from "@qajitsu/adapter-env-compose";
+import { sessionPlugins } from "./plugin.js";
 import {
   ConfigError,
   QajitsuError,
@@ -127,6 +128,7 @@ export async function runEnvRender(
     const session = await openSession(rawKey, options.run, io.cwd, ports, masker);
     const recorded = (session.ws.record.data["build"] as { ports?: Record<string, number> } | undefined)
       ?.ports;
+    const { writeEnvFiles } = await sessionPlugins(session).load<typeof ComposePlugin>("env-compose");
     const files = await writeEnvFiles({
       config: session.project.config,
       envDir: session.ws.path("env"),

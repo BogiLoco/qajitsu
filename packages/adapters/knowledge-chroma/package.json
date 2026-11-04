@@ -18,7 +18,29 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@qajitsu/core": "workspace:*",
     "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "@qajitsu/core": "workspace:^"
+  },
+  "devDependencies": {
+    "@qajitsu/core": "workspace:*"
+  },
+  "qajitsu": {
+    "plugin": {
+      "types": [
+        "knowledge store"
+      ],
+      "core_api": "^1.0.0",
+      "secrets": [
+        "Chroma token"
+      ],
+      "hosts": [
+        "config"
+      ],
+      "permissions": [
+        "network"
+      ]
+    }
   }
 }

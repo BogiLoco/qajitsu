@@ -13,8 +13,8 @@ export {
   type AppiumElement,
   type MobileRunnerOptions,
 } from "./device.js";
+export { androidSdkRoot } from "@qajitsu/toolchain";
 export {
-  androidSdkRoot,
   execTool,
   spawnTool,
   startAndroidEmulator,

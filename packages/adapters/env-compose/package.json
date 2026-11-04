@@ -18,7 +18,32 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@qajitsu/core": "workspace:*",
     "yaml": "catalog:"
+  },
+  "peerDependencies": {
+    "@qajitsu/core": "workspace:^"
+  },
+  "devDependencies": {
+    "@qajitsu/core": "workspace:*"
+  },
+  "qajitsu": {
+    "plugin": {
+      "types": [
+        "environment provider"
+      ],
+      "core_api": "^1.0.0",
+      "secrets": [
+        "service variables"
+      ],
+      "hosts": [
+        "localhost"
+      ],
+      "permissions": [
+        "network",
+        "exec",
+        "filesystem",
+        "environment"
+      ]
+    }
   }
 }

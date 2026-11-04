@@ -6,3 +6,4 @@
 export * from "./guard.js";
 export * from "./journal.js";
 export * from "./policy.js";
+export * from "./plugin-code.js";

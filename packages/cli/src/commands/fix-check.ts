@@ -92,7 +92,7 @@ export async function runFixCheck(
       typeof meta.change?.targetBranch === "string" ? meta.change.targetBranch : repo.default_ref;
 
     // The version before the fix: where the change branched from its target branch (REQ-VER-11/AC1).
-    const { codeHosts } = buildAdapters(
+    const { codeHosts } = await buildAdapters(
       project,
       {
         fetch: ports.fetch,

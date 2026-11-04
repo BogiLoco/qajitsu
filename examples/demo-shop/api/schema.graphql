@@ -1,0 +1,17 @@
+# The shop's GraphQL API (DEMO-18): products with their price and whether they are in stock.
+type Query {
+  product(id: ID!): Product
+  products: [Product!]!
+}
+
+# Price changes pushed over WebSocket (graphql-transport-ws), REQ-EXEC-48/AC2.
+type Subscription {
+  priceChanged(id: ID!): Product!
+}
+
+type Product {
+  id: ID!
+  name: String!
+  price: Float!
+  inStock: Boolean!
+}

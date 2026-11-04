@@ -1,5 +1,5 @@
 import { inflateSync } from "node:zlib";
-import { PlanSchema } from "@qajitsu/core";
+import { PlanSchema, type NetworkAnalysis } from "@qajitsu/core";
 import { describe, expect, it } from "vitest";
 import { createMasker } from "./masking.js";
 import { createCaseRuntime, createPlanAccessor, type CaseRuntimeOptions } from "./runtime.js";
@@ -707,6 +707,107 @@ describe("web actions in the trusted runtime (REQ-EXEC-38..40, REQ-EXEC-56, ADR-
     expect(r2.outcome).toBe("passed");
     expect(r2.steps[0]?.network).toBeUndefined();
     expect(r2.evidence.some((e) => e.name.endsWith("-network.json"))).toBe(false);
+  });
+
+  it("REQ-EVD-09/AC3+AC4+AC6+AC7: the attempt's traffic analysis is masked, linked to the HAR and decides nothing", async () => {
+    const plan = planWith({ expect: { description: "d", elements: { "testid:total": { text: "10" } } } }, {});
+    const step = [
+      {
+        method: "GET",
+        url: "/app/cart",
+        resourceType: "document",
+        sameOrigin: true,
+        status: 200,
+        securityHeaders: {},
+        cookies: [{ name: "sid", secure: false, httpOnly: false }],
+      },
+      {
+        method: "GET",
+        url: "/api/cart",
+        resourceType: "fetch",
+        sameOrigin: true,
+        status: 200,
+        durationMs: 2500,
+        bytes: 900,
+        bodyText: JSON.stringify({ total: 10, owner: SECRET }),
+      },
+      {
+        method: "GET",
+        url: "/api/session",
+        resourceType: "fetch",
+        sameOrigin: true,
+        status: 200,
+        bodyText: JSON.stringify({ jwt: "eyJhbGciOiJIUzI1.eyJzdWIiOiIxMjM0.SflKxwRJSMeKKF2" }),
+      },
+    ];
+    const run = async (options: Partial<CaseRuntimeOptions>) => {
+      const batches = [step];
+      const { driver } = fakeDriver({
+        property: () => Promise.resolve("10"),
+        takeNetwork: () => batches.shift() ?? [],
+      });
+      const rt = runtimeFor(plan, driver, options);
+      rt.beginStep("S1");
+      await rt.context.ui.goto("/app/cart");
+      await rt.verify("S1", "elements.testid:total.text");
+      await rt.endStep("S1");
+      return { rt, record: await rt.finish() };
+    };
+    const har = JSON.stringify({
+      log: {
+        entries: [
+          { request: { method: "GET", url: "http://127.0.0.1:3000/app/cart" } },
+          { request: { method: "GET", url: "http://127.0.0.1:3000/api/cart" } },
+        ],
+      },
+    });
+    const { rt, record } = await run({
+      network: { bodies: { maxBytes: 10_000 }, budget: { request_ms: 2000 } },
+    });
+    // INV-1 / AC7: a slow request, a body and missing headers never touch the outcome.
+    expect(record.outcome).toBe("passed");
+    const item = rt.networkAnalysis(har);
+    expect(item?.name).toBe("network-analysis.json");
+    const analysis = JSON.parse(String(item?.content)) as NetworkAnalysis;
+    expect(analysis.steps[0]?.warnings).toEqual(["GET /api/cart took 2500 ms, the budget is 2000 ms"]);
+    expect(analysis.steps[0]?.slowest[0]?.har).toBe(1);
+    expect(analysis.bodies).toEqual([
+      {
+        stepId: "S1",
+        method: "GET",
+        url: "/api/cart",
+        har: 1,
+        status: 200,
+        body: { total: 10, owner: "***" },
+      },
+    ]);
+    expect(analysis.security.map((f) => [f.detail, f.har])).toContainEqual([
+      'cookie "sid" without HttpOnly',
+      0,
+    ]);
+    expect(String(item?.content)).not.toContain(SECRET);
+    // Without bodies enabled nothing of a body is kept; a case's own budget wins over the project's.
+    const planBudget = planWith(
+      { expect: { description: "d", elements: { "testid:total": { text: "10" } } } },
+      { network_budget: { request_ms: 5000 } },
+    );
+    const batches = [step];
+    const { driver } = fakeDriver({
+      property: () => Promise.resolve("10"),
+      takeNetwork: () => batches.shift() ?? [],
+    });
+    const own = runtimeFor(planBudget, driver, { network: { budget: { request_ms: 10 } } });
+    own.beginStep("S1");
+    await own.context.ui.goto("/app/cart");
+    await own.verify("S1", "elements.testid:total.text");
+    await own.endStep("S1");
+    await own.finish();
+    const plain = JSON.parse(String(own.networkAnalysis(undefined)?.content)) as NetworkAnalysis;
+    expect(plain.bodies).toEqual([]);
+    expect(plain.steps[0]?.warnings).toEqual([]);
+    expect(plain.steps[0]?.slowest[0]?.har).toBeUndefined();
+    // An attempt without page traffic has no analysis.
+    expect(runtimeFor(plan, fakeDriver().driver).networkAnalysis(har)).toBeUndefined();
   });
 
   it("REQ-EXEC-38..40 + ADR-0013: a driver without a web action refuses it with the reason, on mobile as not available yet", async () => {

@@ -4,8 +4,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { arch, platform, release, type } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { androidSdkRoot } from "@qajitsu/adapter-runner-mobile";
-import { channelExecutables } from "@qajitsu/adapter-runner-web";
+import { androidSdkRoot, channelExecutables } from "@qajitsu/toolchain";
 import { WEB_CHANNELS, webCombinations } from "@qajitsu/core";
 import type { LoadedProject } from "./project.js";
 

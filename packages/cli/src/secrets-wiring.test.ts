@@ -3,6 +3,8 @@ import { createMasker } from "@qajitsu/steps";
 import { describe, expect, it } from "vitest";
 import { createFakeFetch, jsonReply } from "../../../tests/support/fake-fetch.js";
 import { createCliSecretResolver } from "./adapters.js";
+import { readCatalogue } from "./plugins/catalogue.js";
+import { createPluginLoader } from "./plugins/load.js";
 
 const project = (secrets: unknown) => ({
   config: parseProjectConfig({
@@ -87,5 +89,35 @@ describe("secret providers from the project config (REQ-CFG-03/AC3)", () => {
       code: "CONFIG_INVALID",
       context: { issues: [expect.stringContaining("secrets.vault.token") as unknown] },
     });
+  });
+
+  it("REQ-GEN-11/AC2: a secret manager plugin loads on first use only; a missing one names its install command", async () => {
+    const loaded: string[] = [];
+    const resolve = createCliSecretResolver(
+      project({
+        vault: { address: "https://vault.example.com", mount: "kv", token: "secret://env/VAULT_TOKEN" },
+      }),
+      {
+        env: { VAULT_TOKEN: "t", JIRA_TOKEN: "from-env" },
+        home: "/home/qa",
+        now: () => new Date(0),
+        random: () => 0,
+        fetch: () => Promise.reject(new Error("no network")),
+        gitExec: () => Promise.resolve({ stdout: "", stderr: "" }),
+        plugins: createPluginLoader({
+          root: "/nonexistent/plugins",
+          catalogue: readCatalogue(),
+          bundled: () => undefined,
+          importModule: (s) => {
+            loaded.push(s);
+            return Promise.resolve({});
+          },
+        }),
+      },
+      createMasker(),
+    );
+    expect(await resolve("secret://env/JIRA_TOKEN")).toBe("from-env");
+    expect(loaded).toEqual([]);
+    await expect(resolve("secret://vault/ci#JIRA_TOKEN")).rejects.toThrow("qj plugin add secrets-vault");
   });
 });

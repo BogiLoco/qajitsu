@@ -34,17 +34,17 @@ CLI qajitsu / qj  (later: CI action, Claude Code plugin)
             -> Adapters behind interfaces: Jira, GitHub, GitLab, env, secrets, runners, evidence, publish   INV-12
 ```
 
-| Package              | Responsibility                                                                                           | Key requirements                                         |
-| -------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `@qajitsu/core`      | Interfaces, Zod schemas, project config, statuses, errors, ids; later the orchestrator and run workspace | REQ-GEN-01, REQ-GEN-02, REQ-VER-01, REQ-WS-01            |
-| `@qajitsu/guard`     | Default-deny tool policy, write bans, URL allowlist, tool-call journal                                   | REQ-VER-03, REQ-VER-04, REQ-ENV-01                       |
-| `@qajitsu/steps`     | `step()` / `verify()` used by generated tests; masking; evidence recording                               | REQ-EXEC-02, REQ-CFG-06                                  |
-| `@qajitsu/verifier`  | Status computation, publish gates, assertion lock, plan coverage, secret scan                            | REQ-VER-02, REQ-VER-07, REQ-EXEC-03                      |
-| `@qajitsu/report`    | Matrix (md/csv/xlsx), report.html, Jira ADF comment                                                      | REQ-EVD-04, REQ-EVD-05, REQ-PUB-01                       |
-| `@qajitsu/models`    | Model references, role mapping, provider adapters, capability probes                                     | REQ-LLM-01..04                                           |
-| `@qajitsu/agents`    | Agent loop, role definitions, prompts, structured output with repair                                     | REQ-PLAN-*, REQ-EXEC-01, REQ-EXEC-09, REQ-VER-06         |
-| `@qajitsu/cli`       | `qajitsu` / `qj` commands and exit codes                                                                 | REQ-GEN-05, REQ-CI-04                                    |
-| `@qajitsu/adapter-*` | One package per integration, selected by `type` in config                                                | see [adapters README](../../packages/adapters/README.md) |
+| Package              | Responsibility                                                                                                       | Key requirements                                         |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `@qajitsu/core`      | Interfaces, Zod schemas, project config, statuses, errors, ids; later the orchestrator and run workspace             | REQ-GEN-01, REQ-GEN-02, REQ-VER-01, REQ-WS-01            |
+| `@qajitsu/guard`     | Default-deny tool policy, write bans, URL allowlist, tool-call journal                                               | REQ-VER-03, REQ-VER-04, REQ-ENV-01                       |
+| `@qajitsu/steps`     | `step()` / `verify()` used by generated tests; masking; evidence recording                                           | REQ-EXEC-02, REQ-CFG-06                                  |
+| `@qajitsu/verifier`  | Status computation, publish gates, assertion lock, plan coverage, secret scan                                        | REQ-VER-02, REQ-VER-07, REQ-EXEC-03                      |
+| `@qajitsu/report`    | Matrix (md/csv/xlsx), report.html, Jira ADF comment                                                                  | REQ-EVD-04, REQ-EVD-05, REQ-PUB-01                       |
+| `@qajitsu/models`    | Model references, role mapping, provider adapters, capability probes                                                 | REQ-LLM-01..04                                           |
+| `@qajitsu/agents`    | Agent loop, role definitions, prompts, structured output with repair                                                 | REQ-PLAN-*, REQ-EXEC-01, REQ-EXEC-09, REQ-VER-06         |
+| `@qajitsu/cli`       | `qajitsu` / `qj` commands and exit codes                                                                             | REQ-GEN-05, REQ-CI-04                                    |
+| `@qajitsu/adapter-*` | One package per integration, selected by `type` in config; all of them and the planned ones in [plugins](plugins.md) | see [adapters README](../../packages/adapters/README.md) |
 
 Dependency direction: `cli → core orchestration → (agents, verifier, report, guard, steps) → core interfaces ← adapters`.
 Core never imports an adapter (INV-12); only `models` imports provider SDKs (INV-11).

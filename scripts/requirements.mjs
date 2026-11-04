@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Requirements catalogue tooling (REQ-NFR-03, REQ-NFR-08).
 //
-//   node scripts/requirements.mjs check   validate docs/requirements/*.md, exit 1 on problems
-//   node scripts/requirements.mjs index   regenerate the index table in docs/requirements/README.md
+//   node scripts/requirements.mjs check   validate docs/requirements/*.md and the plugin inventory, exit 1 on problems
+//   node scripts/requirements.mjs index   regenerate the index tables (requirements, roadmap, plugin inventory)
 //   node scripts/requirements.mjs list [--stage N] [--status S]   print matching requirements
 //
 // Format rules are documented in docs/requirements/README.md.
@@ -289,10 +289,12 @@ function rank(order, file) {
   return i === -1 ? Number.MAX_SAFE_INTEGER : i;
 }
 
-function main(argv) {
+async function main(argv) {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
   const [command = "check", ...rest] = argv;
   const cat = loadCatalogue(root);
+  // Imported here: plugin-inventory.mjs reuses this module's parser (REQ-GEN-14/AC5).
+  const inventory = await import("./plugin-inventory.mjs");
 
   if (command === "index") {
     writeFileSync(cat.readmePath, replaceIndex(cat.readme, renderIndex(cat.areas)));
@@ -300,6 +302,13 @@ function main(argv) {
     if (cat.roadmap !== undefined) {
       writeFileSync(cat.roadmapPath, replaceStageLists(cat.roadmap, cat.areas));
       process.stdout.write("Updated docs/roadmap.md\n");
+    }
+    const plugins = inventory.loadInventory(root);
+    const updated =
+      plugins.content === undefined ? undefined : inventory.replaceInventoryIndex(plugins.content);
+    if (updated !== undefined) {
+      writeFileSync(join(root, plugins.path), updated);
+      process.stdout.write(`Updated ${plugins.path}\n`);
     }
     return 0;
   }
@@ -316,6 +325,7 @@ function main(argv) {
     if (cat.roadmap !== undefined && replaceStageLists(cat.roadmap, cat.areas) !== cat.roadmap) {
       problems.push("docs/roadmap.md: stage lists are stale, run `pnpm req:index`");
     }
+    problems.push(...inventory.checkInventory(inventory.loadInventory(root)));
     const count = cat.areas.reduce((n, a) => n + a.requirements.length, 0);
     if (problems.length > 0) {
       process.stderr.write(`Requirements check failed (${String(problems.length)} problems):\n`);
@@ -351,5 +361,8 @@ function main(argv) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  process.exitCode = main(process.argv.slice(2));
+  // Not awaited at the top level: plugin-inventory.mjs imports this module, which must finish loading first.
+  void main(process.argv.slice(2)).then((code) => {
+    process.exitCode = code;
+  });
 }

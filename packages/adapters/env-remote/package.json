@@ -20,5 +20,25 @@
   "dependencies": {
     "@qajitsu/core": "workspace:*",
     "zod": "catalog:"
+  },
+  "qajitsu": {
+    "plugin": {
+      "types": [
+        "environment provider"
+      ],
+      "core_api": "^1.0.0",
+      "secrets": [
+        "account credentials",
+        "TOTP seeds"
+      ],
+      "hosts": [
+        "config"
+      ],
+      "permissions": [
+        "network",
+        "exec",
+        "environment"
+      ]
+    }
   }
 }

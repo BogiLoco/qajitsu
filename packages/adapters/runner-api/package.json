@@ -18,16 +18,41 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@qajitsu/core": "workspace:*",
-    "@qajitsu/steps": "workspace:*",
     "ajv": "^8.20.0",
-    "playwright-core": "^1.63.0",
+    "playwright-core": "1.63.0",
     "yaml": "catalog:",
     "zod": "catalog:",
     "pngjs": "7.0.0"
   },
+  "peerDependencies": {
+    "@qajitsu/core": "workspace:^",
+    "@qajitsu/steps": "workspace:^"
+  },
   "devDependencies": {
     "@qajitsu/adapter-evidence-local": "workspace:*",
+    "@qajitsu/core": "workspace:*",
+    "@qajitsu/steps": "workspace:*",
     "@types/pngjs": "^6.0.5"
+  },
+  "qajitsu": {
+    "plugin": {
+      "types": [
+        "runner",
+        "test data"
+      ],
+      "core_api": "^1.0.0",
+      "secrets": [
+        "account credentials"
+      ],
+      "hosts": [
+        "config"
+      ],
+      "permissions": [
+        "network",
+        "exec",
+        "filesystem",
+        "environment"
+      ]
+    }
   }
 }

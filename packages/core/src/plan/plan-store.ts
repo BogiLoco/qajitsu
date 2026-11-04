@@ -195,6 +195,8 @@ export function renderPlanMarkdown(plan: Plan): string {
           ? undefined
           : `checked again every ${String(s.wait.interval_s)} s for up to ${String(s.wait.timeout_s)} s`,
         s.expect.by_locale ? `per locale ${JSON.stringify(s.expect.by_locale)}` : undefined,
+        // REQ-EXEC-54/AC4: the reviewer sees which requests may be repeated safely.
+        s.idempotency_key === true ? "with an idempotency key" : undefined,
       ].filter(Boolean);
       out.push(
         `1. **${s.id}**${s.manual === true ? " _(manual)_" : ""} ${s.action}  `,

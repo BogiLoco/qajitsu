@@ -61,6 +61,22 @@ Rules:
   generated) is one step that checks it with "wait": {"timeout_s": 30, "interval_s": 2} next to its "expect": the
   step's request or page check is repeated until every expectation of the step holds or the time is up. Take the
   time from the ticket; never add a wait to a step whose result is immediate.
+- A GraphQL API: a step is "POST /graphql" with "graphql": {"operation": "Query.product"} naming one of the
+  operations under "GraphQL operations"; its expectations read the answer like JSON ("data.product.price"), and
+  "errors.0.message" when the case expects an error. A subscription ("Subscription.priceChanged") is "WS /graphql"
+  with "stream" and "messages" like a WebSocket step, one message per pushed payload:
+  {"0.data.priceChanged.price": 24.99, "count": 2}.
+- A SOAP or XML API: a step is "POST <path>" with "soap": {"operation": "GetPrice"} naming one of the operations
+  under "SOAP operations"; its expectations are XPaths without namespace prefixes under "xml"
+  ({"//GetPriceResponse/amount": 24.99, "//GetPriceResponse/@currency": "EUR"}), and "//Fault/faultstring" with
+  status 500 when the case expects a fault.
+- A WebSocket or a server-sent events stream: a step is "WS <path>" or "GET <path>" for the stream, with
+  "stream": {"timeout_s": 5} for how long its messages may take, and "messages" in its "expect" by position:
+  {"0.type": "price", "0.price": 24.99, "1.type": "availability", "count": 2}. An event of a stream is
+  {"event", "id", "data"}: {"0.event": "created", "0.data.status": "created"}. "count" is how many arrive before the
+  stream ends or the time is up; plan it when the ticket says "nothing else" or "exactly".
+- A step that creates something that must not exist twice (an order, a payment, a booking) sets
+  "idempotency_key": true: its requests carry a key, so a retry on a busy shared environment never repeats it.
 - An API case can send files as well: "files" as below, the body as multipart, a form, raw binary or text; a request
   whose response is a file (a PDF, an export) expects it with "download".
 - A web case that uploads files lists them in the case: "files": {"avatar": {"fixture": "images/avatar.png"}} (a file

@@ -13,10 +13,13 @@ import {
   type AttemptRecord,
   type CaseRuntime,
   type EvidenceItem,
+  type StreamTransport,
   type UiDriver,
+  xmlValue,
 } from "@qajitsu/steps";
 import { z } from "zod";
-import type { AttemptInput } from "./attempt.js";
+import { harOf, type AttemptInput } from "./attempt.js";
+import { createStreamTransport } from "./streams.js";
 import { createPlaywrightTransport } from "./transport.js";
 import { extraSessions } from "./extra-sessions.js";
 
@@ -186,6 +189,36 @@ const OpSchema = z.discriminatedUnion("op", [
     body: z.unknown().optional(),
     options: Options,
   }),
+  z.strictObject({
+    type: z.literal("op"),
+    id: z.number().int(),
+    op: z.literal("streamOpen"),
+    alias: z.string().optional(),
+    kind: z.enum(["websocket", "sse"]),
+    path: z.string().max(4096),
+    protocols: z.array(z.string().max(100)).max(10).optional(),
+    graphql: z
+      .strictObject({
+        query: z.string().max(100_000),
+        variables: z.record(z.string(), z.unknown()).optional(),
+      })
+      .optional(),
+  }),
+  z.strictObject({
+    type: z.literal("op"),
+    id: z.number().int(),
+    op: z.literal("streamOp"),
+    handle: z.number().int().min(0),
+    name: z.enum(["send", "messages", "close"]),
+    data: z.string().max(1_000_000).optional(),
+  }),
+  z.strictObject({
+    type: z.literal("op"),
+    id: z.number().int(),
+    op: z.literal("xpath"),
+    text: z.string(),
+    xpath: z.string().max(4096),
+  }),
 ]);
 const DoneSchema = z.strictObject({ type: z.literal("done"), error: z.string().max(10_000).optional() });
 
@@ -240,6 +273,8 @@ export function createSandboxExecutor(
     readonly httpCredentials?: { readonly username: string; readonly password: string } | undefined;
     /** Headers the application offers for tests, sent to its origin only (REQ-EXEC-55/AC4). */
     readonly testHeaders?: Readonly<Record<string, string>> | undefined;
+    /** Opens WebSockets and event streams (REQ-EXEC-47); Node's own clients by default. */
+    readonly streams?: StreamTransport;
   } = {},
 ): AttemptExecutor {
   const childScript = options.childScript ?? fileURLToPath(new URL("./child.js", import.meta.url));
@@ -270,7 +305,11 @@ export function createSandboxExecutor(
       ...(input.extractText ? { extractText: input.extractText } : {}),
       ...(input.testStateHook ? { testStateHook: input.testStateHook } : {}),
       ...(input.testData ? { testData: input.testData } : {}),
+      ...(input.traffic ? { traffic: input.traffic } : {}),
+      ...(input.network ? { network: input.network } : {}),
       ...(input.credential ? { credential: input.credential } : {}),
+      // REQ-EXEC-47: WebSockets and event streams are opened here, never in the sandbox.
+      streams: options.streams ?? createStreamTransport(),
       caseId: input.caseId,
       attempt: input.attempt,
       baseUrl: input.baseUrl,
@@ -329,9 +368,10 @@ export function createSandboxExecutor(
               ...(await extra.close(record.outcome !== "passed")),
             ];
             const ran = session?.browser?.();
+            const analysis = runtime.networkAnalysis(harOf(media));
             resolve({
               ...record,
-              evidence: [...record.evidence, ...media],
+              evidence: [...record.evidence, ...media, ...(analysis ? [analysis] : [])],
               ...(ran ? { browser: ran } : {}),
             });
           });
@@ -382,7 +422,23 @@ export function createSandboxExecutor(
                   deadline.resume();
                 }
                 value = next.again;
-              } else {
+              } else if (op.op === "xpath") value = xmlValue(op.text, op.xpath) ?? null;
+              else if (op.op === "streamOpen")
+                value = await runtime.openStream(
+                  op.alias,
+                  op.kind,
+                  op.path,
+                  op.protocols,
+                  op.graphql
+                    ? {
+                        query: op.graphql.query,
+                        ...(op.graphql.variables ? { variables: op.graphql.variables } : {}),
+                      }
+                    : undefined,
+                );
+              else if (op.op === "streamOp")
+                value = (await runtime.streamOp(op.handle, op.name, op.data)) ?? null;
+              else {
                 const r = await runtime.call(op.alias, op.method, op.path, op.body, {
                   ...(op.options.headers ? { headers: op.options.headers } : {}),
                   ...(op.options.query ? { query: op.options.query } : {}),

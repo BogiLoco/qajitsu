@@ -132,8 +132,36 @@ const message = (e: unknown): string => (e instanceof Error ? e.message : String
 
 async function start(m: StartMessage): Promise<void> {
   const client = (alias: string | undefined): Record<string, unknown> => {
+    const stream = async (
+      kind: string,
+      path: unknown,
+      protocols: unknown,
+      graphql?: unknown,
+    ): Promise<unknown> => {
+      const handle = await rpc({
+        op: "streamOpen",
+        alias,
+        kind,
+        path,
+        ...(protocols === undefined ? {} : { protocols }),
+        ...(graphql === undefined ? {} : { graphql }),
+      });
+      const op = (name: string, data?: unknown) =>
+        rpc({ op: "streamOp", handle, name, ...(data === undefined ? {} : { data }) });
+      return {
+        send: (data: unknown) => op("send", typeof data === "string" ? data : JSON.stringify(data)),
+        messages: () => op("messages"),
+        close: () => op("close"),
+      };
+    };
     const send = async (method: string, path: string, body: unknown, options: unknown): Promise<unknown> => {
-      const r = (await rpc({ op: "call", alias, method, path, body, options: options ?? {} })) as {
+      // Only the request options go to the parent; method options such as a SOAP action travel in the body.
+      const o = (options ?? {}) as { headers?: unknown; query?: unknown };
+      const callOptions = {
+        ...(o.headers === undefined ? {} : { headers: o.headers }),
+        ...(o.query === undefined ? {} : { query: o.query }),
+      };
+      const r = (await rpc({ op: "call", alias, method, path, body, options: callOptions })) as {
         status: number;
         headers: Record<string, string>;
         text: string;
@@ -144,7 +172,14 @@ async function start(m: StartMessage): Promise<void> {
       } catch {
         parsed = undefined;
       }
-      return { status: r.status, headers: r.headers, text: r.text, json: (p?: string) => at(parsed, p) };
+      return {
+        status: r.status,
+        headers: r.headers,
+        text: r.text,
+        json: (p?: string) => at(parsed, p),
+        // REQ-EXEC-50/AC3: XPath is evaluated by the parent; the child has no XML parser.
+        xml: (xpath: unknown) => rpc({ op: "xpath", text: r.text, xpath }),
+      };
     };
     return {
       get: (path: string, o?: unknown) => send("GET", path, undefined, o),
@@ -152,7 +187,37 @@ async function start(m: StartMessage): Promise<void> {
       put: (path: string, b?: unknown, o?: unknown) => send("PUT", path, b, o),
       patch: (path: string, b?: unknown, o?: unknown) => send("PATCH", path, b, o),
       delete: (path: string, o?: unknown) => send("DELETE", path, undefined, o),
+      // REQ-EXEC-48/AC2: plain data; the parent checks the query and marks the call as GraphQL.
+      graphql: (query: unknown, variables?: unknown, o?: { path?: unknown }) =>
+        send(
+          "POST",
+          typeof o?.path === "string" ? o.path : "/graphql",
+          { __qjBody: "graphql", query, ...(variables === undefined ? {} : { variables }) },
+          o,
+        ),
+      // REQ-EXEC-50/AC1: plain data; the parent builds the envelope and marks the call as SOAP.
+      soap: (path: string, body: unknown, o?: { action?: unknown; version?: unknown }) =>
+        send(
+          "POST",
+          path,
+          {
+            __qjBody: "soap",
+            body,
+            ...(o?.action === undefined ? {} : { action: o.action }),
+            ...(o?.version === undefined ? {} : { version: o.version }),
+          },
+          o,
+        ),
       as: (a: string) => client(a),
+      // REQ-EXEC-47: the parent opens the stream with the account's authentication and records every frame.
+      websocket: (path: unknown, o?: { protocols?: unknown }) => stream("websocket", path, o?.protocols),
+      events: (path: unknown) => stream("sse", path, undefined),
+      // REQ-EXEC-48/AC2: the parent speaks graphql-transport-ws and keeps every payload.
+      subscribe: (query: unknown, variables?: unknown, o?: { path?: unknown }) =>
+        stream("websocket", typeof o?.path === "string" ? o.path : "/graphql", ["graphql-transport-ws"], {
+          query,
+          ...(variables === undefined ? {} : { variables }),
+        }),
       // REQ-EXEC-45/AC1: body descriptors are plain data; the parent resolves files from the plan and checks them.
       multipart: (parts: { fields?: unknown; files?: unknown } = {}) => ({
         __qjBody: "multipart",

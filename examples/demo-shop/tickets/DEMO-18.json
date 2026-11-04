@@ -1,0 +1,17 @@
+{
+  "key": "DEMO-18",
+  "type": "Story",
+  "status": "Ready for QA",
+  "summary": "Product prices over GraphQL",
+  "description": "The shop's GraphQL API (POST /graphql, schema in api/schema.graphql) lets the new storefront read products: one product by id, or the whole list. Price changes are pushed to subscribers over WebSocket (graphql-transport-ws on /graphql).",
+  "acceptanceCriteria": [
+    "Query product(id) returns the product's name and its price as a number.",
+    "Query products returns every product, without errors.",
+    "An unknown id returns null for product, without errors.",
+    "Subscription priceChanged(id) pushes the product's price, then its price after a 10 % markdown, then completes."
+  ],
+  "labels": ["graphql", "api"],
+  "components": ["shop-api"],
+  "attachments": [],
+  "comments": []
+}

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { NetworkBudgetSchema } from "../observations.js";
 
 /**
  * Where a claim or test case comes from (REQ-PLAN-03/AC1, REQ-PLAN-01/AC2): an acceptance criterion id
@@ -179,6 +180,32 @@ export const ExpectationSchema = z
     /** Texts that must be visible (web/mobile). */
     texts: z.array(z.string()).optional(),
     /**
+     * Values of an XML or SOAP response by XPath over local names (REQ-EXEC-50/AC3), e.g.
+     * `{"//GetPriceResponse/amount": 24.99}`; namespace prefixes are not written.
+     */
+    xml: z
+      .record(z.string().min(1).max(500), z.union([z.string(), z.number(), z.boolean(), z.null()]))
+      .optional(),
+    /**
+     * Messages of the step's WebSocket or server-sent events stream (REQ-EXEC-47/AC1+AC2), by position: `"0.type":
+     * "price"` is a field of the first message received, `"1"` the whole second message, and `"count"` the number
+     * received before the stream ended or its timeout passed. An SSE message is `{ event, id, data }`.
+     */
+    messages: z
+      .record(
+        z
+          .string()
+          .regex(
+            /^(count|\d{1,3}(\.[^.\s]{1,100}){0,10})$/,
+            '"count", or a message position with a path: "0.price"',
+          ),
+        z.union([z.string(), z.number(), z.boolean(), z.null()]),
+      )
+      .refine((m) => m["count"] === undefined || (Number.isInteger(m["count"]) && Number(m["count"]) >= 0), {
+        message: '"count" is a whole number',
+      })
+      .optional(),
+    /**
      * Expected state of UI elements by selector (`testid:place-order`, `role:button:Pay`, `label:Email`,
      * `text:Total`), e.g. `{ "testid:place-order": { "enabled": true } }` (REQ-EXEC-05).
      */
@@ -340,6 +367,8 @@ export const TestCaseSchema = z.strictObject({
     .optional(),
   /** Locales of the project this case also runs in (REQ-EXEC-14/AC1); expectations per locale in `by_locale`. */
   locales: z.array(LocaleNameSchema).optional(),
+  /** Limits of this web case's traffic per step (REQ-EVD-09/AC4): over them is a warning, never a status. */
+  network_budget: NetworkBudgetSchema.optional(),
   /**
    * The browser of a web case (REQ-EXEC-61/AC2+AC3): the time it starts at (frozen until a step moves it), the
    * permissions it grants (everything else stays denied) and its location.
@@ -429,6 +458,28 @@ export const TestCaseSchema = z.strictObject({
               interval_s: z.number().min(0.2).max(60).default(1),
             })
             .refine((w) => w.interval_s <= w.timeout_s, "interval_s must not exceed timeout_s")
+            .optional(),
+          /**
+           * REQ-EXEC-54/AC4: the step's mutating requests carry an idempotency key, one per request of the attempt, so
+           * a retry after a timeout or a `429` does not create a second order or payment.
+           */
+          idempotency_key: z.boolean().optional(),
+          /** REQ-EXEC-47/AC1+AC2: how long the step's planned messages may take to arrive (default 10 s). */
+          stream: z.strictObject({ timeout_s: z.number().min(0.1).max(300) }).optional(),
+          /** REQ-EXEC-50/AC1: the SOAP operation of the WSDL the step calls, checked against the WSDL of the analysed commit. */
+          soap: z
+            .strictObject({ operation: z.string().regex(/^[_A-Za-z][\w.-]{0,99}$/, "A WSDL operation name") })
+            .optional(),
+          /** REQ-EXEC-48/AC1: the GraphQL operation the step covers, checked against the schema of the analysed commit. */
+          graphql: z
+            .strictObject({
+              operation: z
+                .string()
+                .regex(
+                  /^(Query|Mutation|Subscription)\.[_A-Za-z][_0-9A-Za-z]*$/,
+                  "Query.<field>, Mutation.<field> or Subscription.<field>",
+                ),
+            })
             .optional(),
         })
         .superRefine((step, ctx) => {

@@ -1,0 +1,77 @@
+{
+  "summary": "Live prices and order progress for DEMO-20.",
+  "cases": [
+    {
+      "id": "TC-01",
+      "title": "A price subscription answers the price, then the availability",
+      "type": "api",
+      "priority": "high",
+      "source": [
+        {
+          "kind": "ac",
+          "id": "AC1"
+        }
+      ],
+      "data": {
+        "user": "user:standard"
+      },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "WS /ws/prices",
+          "stream": {
+            "timeout_s": 3
+          },
+          "expect": {
+            "description": "Price, then availability, nothing else",
+            "messages": {
+              "0.type": "price",
+              "0.price": 24.99,
+              "1.type": "availability",
+              "1.available": true,
+              "count": 2
+            }
+          }
+        }
+      ],
+      "evidence": ["request", "response"]
+    },
+    {
+      "id": "TC-02",
+      "title": "The order stream sends its statuses in order",
+      "type": "api",
+      "priority": "high",
+      "source": [
+        {
+          "kind": "ac",
+          "id": "AC2"
+        }
+      ],
+      "data": {
+        "user": "user:standard"
+      },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "GET /events/orders",
+          "stream": {
+            "timeout_s": 3
+          },
+          "expect": {
+            "description": "Created, paid, shipped",
+            "messages": {
+              "0.event": "created",
+              "1.event": "paid",
+              "2.event": "shipped",
+              "2.data.status": "shipped",
+              "count": 3
+            }
+          }
+        }
+      ],
+      "evidence": ["request", "response"]
+    }
+  ],
+  "open_questions": [],
+  "out_of_scope": []
+}

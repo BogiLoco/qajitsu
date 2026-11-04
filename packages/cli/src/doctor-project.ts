@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { access, readFile, readdir, stat } from "node:fs/promises";
 import { devNull, platform } from "node:os";
 import { join, resolve } from "node:path";
-import { androidSdkRoot } from "@qajitsu/adapter-runner-mobile";
+import { androidSdkRoot } from "@qajitsu/toolchain";
 import { createMasker } from "@qajitsu/steps";
 import { parse } from "yaml";
 import { buildAdapters, createCliSecretResolver, type RuntimePorts } from "./adapters.js";
@@ -141,7 +141,7 @@ export async function projectChecks(
 
   if (options.online) {
     const logger = createCliLogger({ file: devNull, mask: (v) => masker.maskJson(v) });
-    const { ticketSource, codeHosts } = buildAdapters(
+    const { ticketSource, codeHosts } = await buildAdapters(
       project,
       {
         fetch: ports.fetch,

@@ -32,6 +32,11 @@ repos:
     host: gitlab
     path: shop/platform/backend
     default_ref: main
+    # Contracts of the analysed commit; answers that do not fit them fail the step (REQ-EXEC-04/48/50).
+    # openapi: api/openapi.yaml
+    # graphql: api/schema.graphql        # or an endpoint to introspect: /graphql
+    # wsdl: api/prices.wsdl
+    # xsd: [api/orders.xsd]
   web:
     host: github
     path: example-org/shop-web
@@ -88,7 +93,15 @@ test_types: [api, web]
 # build: { repo: backend, compose_file: docker-compose.yml, base_service: api, profile: local, seed: hooks/seed.mjs }
 #
 # Passive observations while planned cases run (REQ-EVD-07): listed in the report and the Jira comment, never statuses.
-# observations: { console: true, http_errors: true, accessibility: true, ignore: [favicon.ico, color-contrast] }
+# observations:
+#   console: true
+#   http_errors: true
+#   accessibility: true
+#   ignore: [favicon.ico, color-contrast]
+#   # Analysis of the page's traffic (REQ-EVD-09): findings are observations, never results.
+#   network:
+#     response_bodies: { enabled: true, max_kb: 64 }   # keep masked JSON bodies, checked against the OpenAPI
+#     budget: { request_ms: 2000, step_requests: 50, step_kb: 2048 }
 
 # Browser and viewport matrix (REQ-EXEC-13): web cases run in every combination, the first is the primary run.
 # web:
@@ -106,6 +119,9 @@ test_types: [api, web]
 #   web_combinations: 1 # browser combinations of web.matrix at once
 #   account_wait_s: 300
 #   sequential: false
+#   # A shared environment (REQ-EXEC-54): rate per host and cases at once across lanes; 429/503 with Retry-After
+#   # are waited out for up to retry_budget_s, then the case is BLOCKED as rate limited.
+#   rate_limit: { requests_per_second: 5, parallel_cases: 4, retry_budget_s: 30, idempotency_header: Idempotency-Key }
 
 # Visual regression (REQ-EXEC-12): baselines in .qa/baselines/, accepted with `qj baseline accept`.
 # visual: { threshold: 0.001, color_threshold: 0.1 }

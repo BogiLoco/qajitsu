@@ -1,6 +1,10 @@
 import { appendFile, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { createFileWorkflow, createJiraWorkflow } from "@qajitsu/adapter-publish-jira";
+import { createFileWorkflow } from "@qajitsu/adapter-files";
+import type * as JiraPublishPlugin from "@qajitsu/adapter-publish-jira";
+import type { PluginLoader } from "../plugins/load.js";
+import { lazyWorkflow } from "../plugins/lazy.js";
+import { jiraMediaHosts, pluginFetch, sessionPlugins } from "./plugin.js";
 import {
   admitRun,
   moveTicket,
@@ -29,6 +33,8 @@ export function workflowFor(
     readonly logger: RunSession["logger"];
     readonly resolveSecret: (ref: string) => Promise<string>;
     readonly registerSecret: (value: string) => void;
+    /** Loads the Jira plugin; without it, the plugins this installation carries. */
+    readonly plugins?: PluginLoader | undefined;
   },
 ): TicketWorkflow | undefined {
   const flow = project.config.workflow;
@@ -39,15 +45,24 @@ export function workflowFor(
       resolve(project.qaDir, jira.tickets_dir ?? "tickets"),
       Object.values(flow.statuses).filter((s): s is string => s !== undefined),
     );
-  return createJiraWorkflow(
-    { flavor: jira.type, baseUrl: jira.base_url ?? "", email: jira.email, token: jira.token ?? "" },
-    {
-      fetch: deps.fetch,
-      logger: deps.logger,
-      now: deps.now,
-      resolveSecret: deps.resolveSecret,
-      registerSecret: deps.registerSecret,
-    },
+  const flavor = jira.type;
+  return lazyWorkflow(`jira-${flavor}`, async () =>
+    (await sessionPlugins(deps).load<typeof JiraPublishPlugin>("publish-jira")).createJiraWorkflow(
+      { flavor, baseUrl: jira.base_url ?? "", email: jira.email, token: jira.token ?? "" },
+      {
+        fetch: pluginFetch(
+          sessionPlugins(deps),
+          deps.fetch,
+          "publish-jira",
+          [project.config.jira.base_url],
+          jiraMediaHosts(project.config),
+        ),
+        logger: deps.logger,
+        now: deps.now,
+        resolveSecret: deps.resolveSecret,
+        registerSecret: deps.registerSecret,
+      },
+    ),
   );
 }
 
@@ -57,6 +72,7 @@ export function runWorkflow(session: RunSession, ports: RuntimePorts): TicketWor
     fetch: ports.fetch,
     now: ports.now,
     logger: session.logger,
+    plugins: session.plugins,
     resolveSecret: session.resolveSecret,
     registerSecret: (v) => {
       session.masker.register(v);

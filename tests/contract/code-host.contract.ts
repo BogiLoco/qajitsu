@@ -25,14 +25,14 @@ export interface CodeHostScenario {
  */
 export function codeHostContract(
   name: string,
-  create: (options?: { readonly unauthorized?: boolean }) => CodeHost,
+  create: (options?: { readonly unauthorized?: boolean }) => CodeHost | Promise<CodeHost>,
   scenario: CodeHostScenario,
 ): void {
   const key = TicketKeySchema.parse("SHOP-482");
 
   describe(`CodeHost contract: ${name}`, () => {
     it("REQ-CTX-03/AC2: finds PR/MR by title or branch and branches without one, skipping SHOP-4820", async () => {
-      const changes = await create().findChangesForTicket(key, [scenario.repo]);
+      const changes = await (await create()).findChangesForTicket(key, [scenario.repo]);
       const byId = new Map(changes.map((c) => [c.id, c]));
       expect(byId.get(scenario.change.id)).toMatchObject({
         kind: scenario.change.kind,
@@ -50,7 +50,7 @@ export function codeHostContract(
     });
 
     it("REQ-CTX-03/AC3: parses a change URL and resolves it to the exact head SHA", async () => {
-      const host = create();
+      const host = await create();
       const locator = host.parseChangeUrl(scenario.changeUrl);
       expect(locator).toEqual({ repo: scenario.repo, kind: scenario.change.kind, id: scenario.change.id });
       const change = await host.resolveChange(locator!);
@@ -61,7 +61,9 @@ export function codeHostContract(
     });
 
     it("REQ-CTX-03/AC3: resolves a branch, tag or SHA reference", async () => {
-      const change = await create().resolveChange({
+      const change = await (
+        await create()
+      ).resolveChange({
         repo: scenario.repo,
         kind: "branch",
         id: scenario.branchOnly.id,
@@ -70,7 +72,7 @@ export function codeHostContract(
     });
 
     it("REQ-CTX-05: returns the unified diff and review comments of a change", async () => {
-      const host = create();
+      const host = await create();
       const change = await host.resolveChange({
         repo: scenario.repo,
         kind: scenario.change.kind,
@@ -83,7 +85,7 @@ export function codeHostContract(
     });
 
     it("REQ-CTX-02/AC3: puts the token only into clone URL credentials", async () => {
-      const url = new URL(await create().cloneUrl(scenario.repo));
+      const url = new URL(await (await create()).cloneUrl(scenario.repo));
       expect(url.password).toBe(scenario.token);
       url.username = "";
       url.password = "";
@@ -92,7 +94,7 @@ export function codeHostContract(
 
     it("REQ-CTX-02: authentication failures are adapter errors", async () => {
       await expect(
-        create({ unauthorized: true }).findChangesForTicket(key, [scenario.repo]),
+        (await create({ unauthorized: true })).findChangesForTicket(key, [scenario.repo]),
       ).rejects.toMatchObject({
         name: "AdapterError",
         code: expect.stringMatching(/_AUTH$/) as unknown,
@@ -100,7 +102,7 @@ export function codeHostContract(
     });
 
     it("rejects repository paths that could escape the API path", async () => {
-      await expect(create().findChangesForTicket(key, ["../../admin"])).rejects.toMatchObject({
+      await expect((await create()).findChangesForTicket(key, ["../../admin"])).rejects.toMatchObject({
         name: "AdapterError",
       });
     });

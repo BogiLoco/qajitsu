@@ -19,5 +19,19 @@
   },
   "dependencies": {
     "@qajitsu/core": "workspace:*"
+  },
+  "qajitsu": {
+    "plugin": {
+      "types": [
+        "code host"
+      ],
+      "core_api": "^1.0.0",
+      "secrets": [],
+      "hosts": [],
+      "permissions": [
+        "exec",
+        "filesystem"
+      ]
+    }
   }
 }

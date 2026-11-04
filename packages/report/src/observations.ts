@@ -1,4 +1,4 @@
-import { PassiveObservationsSchema, type RunObservation } from "@qajitsu/core";
+import { NetworkAnalysisSchema, PassiveObservationsSchema, type RunObservation } from "@qajitsu/core";
 
 /** The last attempt of a case as far as observations are concerned. */
 export interface ObservedAttempt {
@@ -12,7 +12,13 @@ export interface ObservedAttempt {
   }[];
   /** Content of the attempt's `observations.json`, when there is one. */
   readonly observationsFile?: string | undefined;
+  /** Content of the attempt's `network-analysis.json`, when there is one (REQ-EVD-09). */
+  readonly networkFile?: string | undefined;
 }
+
+/** Where a finding comes from: its HAR entry (REQ-EVD-09/AC7). */
+const harRef = (har: number | undefined): string =>
+  har === undefined ? "" : ` (network.har #${String(har)})`;
 
 /**
  * Collects the passive observations of a run (REQ-EVD-07) from the last attempt of every case: OpenAPI contract
@@ -36,6 +42,32 @@ export function collectObservations(
     out.push(o);
   };
   for (const a of attempts) {
+    // REQ-EVD-09/AC3+AC4+AC6: what code found in the page's traffic.
+    if (a.networkFile !== undefined) {
+      let network;
+      try {
+        network = NetworkAnalysisSchema.safeParse(JSON.parse(a.networkFile));
+      } catch {
+        network = undefined;
+      }
+      if (network?.success) {
+        for (const c of network.data.contract)
+          add({
+            caseId: a.caseId,
+            kind: "ui-contract",
+            text: `${c.stepId} ${c.method} ${c.url} → ${String(c.status)}: ${c.problem}${harRef(c.har)}`,
+          });
+        for (const f of network.data.security)
+          add({
+            caseId: a.caseId,
+            kind: "security",
+            text: `${f.stepId} ${f.method} ${f.url}: ${f.detail}${harRef(f.har)}`,
+          });
+        for (const s of network.data.steps)
+          for (const w of s.warnings)
+            add({ caseId: a.caseId, kind: "performance", text: `${s.stepId}: ${w}` });
+      }
+    }
     for (const x of a.assertions)
       if (x.field === "openapi" && !x.pass)
         add({ caseId: a.caseId, kind: "openapi", text: `${x.stepId}: ${String(x.actual)}` });

@@ -46,8 +46,10 @@ describe("passive observations never change a verdict (REQ-EVD-07/AC4)", () => {
     expect(result.out).toContain("PASSED");
     expect(result.out).not.toMatch(/FAILED|NEEDS_REVIEW|BLOCKED/);
     const html = await readFile(join(p.runDir, "report", "report.html"), "utf8");
-    expect(html).toContain("Observations (6, not test results)");
+    // The six planted ones, and what code found in the page's traffic (REQ-EVD-09/AC6): all listed, none a result.
+    expect(Number(/Observations \((\d+), not test results\)/.exec(html)?.[1])).toBeGreaterThan(6);
     expect(html).toContain("POST /api/telemetry → 503");
+    expect(html).toContain("no content-security-policy header");
     const preview = await p.run(["publish", "DEMO-4"], { ask: ["n"] });
     expect(preview.out).toMatch(/QAJitsu test results: \d+ cases?: \d+ PASSED\n/);
     expect(preview.out).toContain("Observations (found by code, not test results):");

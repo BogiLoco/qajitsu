@@ -1,3 +1,5 @@
+import type { TrafficPolicy } from "../env/rate-limit.js";
+import type { NetworkBudget } from "../observations.js";
 import type { Plan } from "../plan/schemas.js";
 import type { CaseMessages } from "./message-capture.js";
 
@@ -262,6 +264,13 @@ export interface AttemptRequest {
   readonly testStateHook?: string;
   /** Records created for this attempt by name (REQ-EXEC-53/AC1), for the spec's `data.get(name)`. */
   readonly testData?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+  /** The run's limits for a shared environment (REQ-EXEC-54), shared by every lane. */
+  readonly traffic?: TrafficPolicy;
+  /** REQ-EVD-09/AC3+AC4: whether the page's JSON bodies are kept (masked, at most `maxBytes`) and the traffic budget. */
+  readonly network?: {
+    readonly bodies?: { readonly maxBytes: number };
+    readonly budget?: NetworkBudget;
+  };
 }
 
 /** What the trusted parent reports while an attempt runs (REQ-OBS-09). */

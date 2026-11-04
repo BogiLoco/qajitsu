@@ -73,6 +73,59 @@ const BUGS = [
     caseId: "TC-01",
     specs: ["TC-01", "TC-02"],
   },
+  // GraphQL (REQ-EXEC-48): a price as text breaks the schema; an error next to the data fails even with HTTP 200.
+  {
+    bug: "BUG-24",
+    flag: "BUG_GRAPHQL_PRICE_AS_TEXT",
+    ticket: "DEMO-18",
+    caseId: "TC-01",
+    specs: ["TC-01", "TC-02", "TC-03", "TC-04"],
+  },
+  {
+    bug: "BUG-25",
+    flag: "BUG_GRAPHQL_ERROR_WITH_DATA",
+    ticket: "DEMO-18",
+    caseId: "TC-02",
+    specs: ["TC-01", "TC-02", "TC-03", "TC-04"],
+  },
+  // A GraphQL subscription (REQ-EXEC-48/AC2): a pushed price as text fails the case too.
+  {
+    bug: "BUG-24",
+    flag: "BUG_GRAPHQL_PRICE_AS_TEXT",
+    ticket: "DEMO-18",
+    caseId: "TC-04",
+    specs: ["TC-01", "TC-02", "TC-03", "TC-04"],
+  },
+  // SOAP (REQ-EXEC-50): an answer outside its WSDL, and a fault with HTTP 200, fail the case.
+  {
+    bug: "BUG-26",
+    flag: "BUG_SOAP_CURRENCY_MISSING",
+    ticket: "DEMO-19",
+    caseId: "TC-01",
+    specs: ["TC-01", "TC-02", "TC-03"],
+  },
+  {
+    bug: "BUG-27",
+    flag: "BUG_SOAP_FAULT_WITH_200",
+    ticket: "DEMO-19",
+    caseId: "TC-03",
+    specs: ["TC-01", "TC-02", "TC-03"],
+  },
+  // WebSocket and server-sent events (REQ-EXEC-47): a feed that closes early, events out of order.
+  {
+    bug: "BUG-28",
+    flag: "BUG_WS_FEED_CLOSES_EARLY",
+    ticket: "DEMO-20",
+    caseId: "TC-01",
+    specs: ["TC-01", "TC-02"],
+  },
+  {
+    bug: "BUG-29",
+    flag: "BUG_SSE_EVENTS_OUT_OF_ORDER",
+    ticket: "DEMO-20",
+    caseId: "TC-02",
+    specs: ["TC-01", "TC-02"],
+  },
   // An outcome that never comes: the planned wait ends at its timeout with FAILED (REQ-EXEC-46).
   {
     bug: "BUG-22",
@@ -91,7 +144,9 @@ async function pipeline(
   const shop = await startShop({
     env: { DEMO_USER_PASSWORD: PASSWORD, ...(flag ? { [flag]: "1" } : {}) },
   });
-  const { home, project } = await createCliProject(["models: { roles: { default: mock/scripted } }"]);
+  const { home, project } = await createCliProject(["models: { roles: { default: mock/scripted } }"], {
+    withShopApi: true,
+  });
   try {
     await copyFile(
       new URL(`../../examples/demo-shop/tickets/${ticket}.json`, import.meta.url),
@@ -100,10 +155,16 @@ async function pipeline(
     const yaml = join(project, ".qa", "qa.project.yaml");
     await writeFile(
       yaml,
-      (await readFile(yaml, "utf8")).replace(
-        "environments: { allowlist: ['http://localhost:3000'] }",
-        `environments: { default: local, allowlist: ['${shop.url}'] }`,
-      ) +
+      (await readFile(yaml, "utf8"))
+        .replace(
+          "environments: { allowlist: ['http://localhost:3000'] }",
+          `environments: { default: local, allowlist: ['${shop.url}'] }`,
+        )
+        // REQ-EXEC-48/AC3 + REQ-EXEC-50/AC2: answers are checked against the schemas in the analysed commit.
+        .replace(
+          "repos: { shop: { host: local, path: demo-org/demo-shop } }",
+          "repos: { shop: { host: local, path: demo-org/demo-shop, graphql: api/schema.graphql, wsdl: api/prices.wsdl } }",
+        ) +
         // REQ-EXEC-53: the demo's products for tests, as in examples/demo-shop/.qa/qa.project.yaml.
         [
           "",
@@ -198,6 +259,9 @@ describe("demo-shop self-test (REQ-NFR-04/AC1)", () => {
     ["DEMO-7", ["TC-01", "TC-02", "TC-03"]],
     ["DEMO-16", ["TC-01", "TC-02", "TC-03"]],
     ["DEMO-17", ["TC-01", "TC-02"]],
+    ["DEMO-18", ["TC-01", "TC-02", "TC-03", "TC-04"]],
+    ["DEMO-19", ["TC-01", "TC-02", "TC-03"]],
+    ["DEMO-20", ["TC-01", "TC-02"]],
   ] as const)("%s: every case is PASSED with all bugs off", async (ticket, specs) => {
     const { exitCode, statuses, out } = await pipeline(ticket, specs);
     expect(

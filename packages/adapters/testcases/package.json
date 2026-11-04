@@ -18,10 +18,35 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@qajitsu/core": "workspace:*",
     "zod": "catalog:"
   },
+  "peerDependencies": {
+    "@qajitsu/core": "workspace:^"
+  },
   "devDependencies": {
+    "@qajitsu/adapter-files": "workspace:*",
+    "@qajitsu/core": "workspace:*",
     "@qajitsu/report": "workspace:*"
+  },
+  "qajitsu": {
+    "plugin": {
+      "types": [
+        "test-case source"
+      ],
+      "core_api": "^1.0.0",
+      "secrets": [
+        "client secret",
+        "API token"
+      ],
+      "hosts": [
+        "xray.cloud.getxray.app",
+        "api.zephyrscale.smartbear.com",
+        "config"
+      ],
+      "permissions": [
+        "network",
+        "filesystem"
+      ]
+    }
   }
 }

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { createFakeFetch, jsonReply, testDeps } from "../../../../tests/support/fake-fetch.js";
+import { messageCaptureContract } from "../../../../tests/contract/message-capture.contract.js";
+import { webhookSiteConfig, webhookSiteFixture } from "../../../../tests/support/webhook-site-fixture.js";
 import { createWebhookSiteCapture } from "./webhook-site.js";
+
+messageCaptureContract("webhook.site", webhookSiteFixture, (deps) =>
+  Promise.resolve(createWebhookSiteCapture(webhookSiteConfig, deps)),
+);
 
 const UUID = "0b1c2d3e-4f50-6172-8394-a5b6c7d8e9f0";
 

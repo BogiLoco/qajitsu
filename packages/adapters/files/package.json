@@ -1,0 +1,42 @@
+{
+  "name": "@qajitsu/adapter-files",
+  "version": "0.0.0",
+  "description": "QAJitsu local-file adapters of the core installation: tickets, workflow, publisher, bug tracker, resolved bugs and manual cases from files (demo, offline runs, tests).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "qajitsu-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@qajitsu/core": "workspace:*",
+    "zod": "catalog:"
+  },
+  "qajitsu": {
+    "plugin": {
+      "types": [
+        "ticket source",
+        "ticket workflow",
+        "publisher",
+        "bug tracker",
+        "document source",
+        "test-case source"
+      ],
+      "core_api": "^1.0.0",
+      "secrets": [],
+      "hosts": [],
+      "permissions": [
+        "filesystem"
+      ]
+    }
+  }
+}

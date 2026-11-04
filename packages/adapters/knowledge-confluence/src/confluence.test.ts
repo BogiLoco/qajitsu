@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { createFakeFetch, jsonReply, testDeps, type Route } from "../../../../tests/support/fake-fetch.js";
+import { documentSourceContract } from "../../../../tests/contract/document-source.contract.js";
+import { confluenceConfig, confluenceFixture } from "../../../../tests/support/confluence-fixture.js";
 import { createConfluenceSource } from "./confluence.js";
+
+documentSourceContract("confluence", confluenceFixture, (deps) =>
+  Promise.resolve(createConfluenceSource(confluenceConfig, deps)),
+);
 
 const page = (id: number, version = 1) => ({
   id: String(id),

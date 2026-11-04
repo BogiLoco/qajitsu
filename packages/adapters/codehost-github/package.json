@@ -18,7 +18,31 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@qajitsu/core": "workspace:*",
     "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "@qajitsu/core": "workspace:^"
+  },
+  "devDependencies": {
+    "@qajitsu/core": "workspace:*"
+  },
+  "qajitsu": {
+    "plugin": {
+      "types": [
+        "code host"
+      ],
+      "core_api": "^1.0.0",
+      "secrets": [
+        "token or GitHub App private key"
+      ],
+      "hosts": [
+        "api.github.com",
+        "github.com",
+        "config"
+      ],
+      "permissions": [
+        "network"
+      ]
+    }
   }
 }

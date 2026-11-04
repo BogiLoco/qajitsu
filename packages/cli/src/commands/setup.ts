@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import { arch, platform, totalmem } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createEnvSecretProvider } from "@qajitsu/adapter-secrets-env";
-import { startAndroidEmulator } from "@qajitsu/adapter-runner-mobile";
+import type * as MobilePlugin from "@qajitsu/adapter-runner-mobile";
 import { ConfigError, qajitsuHome } from "@qajitsu/core";
 import { createMasker } from "@qajitsu/steps";
 import {
@@ -35,6 +35,13 @@ import {
 import { createCliSecretResolver, type RuntimePorts } from "../adapters.js";
 import type { LoadedProject } from "../project.js";
 import { execVersion, playwrightInfo } from "../versions.js";
+import {
+  bundlePlugins,
+  importPluginBundle,
+  installMissingPlugins,
+  pluginLoader,
+  projectPlugins,
+} from "./plugin.js";
 import type { CommandIO } from "./fetch.js";
 
 /** Flags of `qj setup` (REQ-GEN-06). */
@@ -224,6 +231,9 @@ export function setupPorts(
       },
       bootEmulator: async (sdk, avd, systemImage, toolEnv) => {
         try {
+          // The smoke test boots the emulator through the mobile runner plugin (REQ-GEN-11/AC2).
+          const { startAndroidEmulator } =
+            await pluginLoader(ports).load<typeof MobilePlugin>("runner-mobile");
           const emulator = await startAndroidEmulator({
             sdkRoot: sdk,
             avd,
@@ -407,7 +417,33 @@ export async function runSetupCommand(
         ? `${JSON.stringify(report, null, 2)}\n`
         : `${formatSetupReport(report, root)}\n${bundle !== undefined && report.stopped === undefined ? `Bundle: ${bundle} (copy it to the offline machine, then: qj setup --from <dir>)\n` : ""}`,
     );
-    return options.check === true ? (report.prechecks.every((p) => p.ok) ? 0 : 2) : setupExitCode(report);
+    // REQ-GEN-11/AC3: the plugins the project's settings need are installed with the tools.
+    let pluginsFailed = false;
+    if (project && bundle === undefined && options.from === undefined && (options.only ?? []).length === 0) {
+      if (options.check === true) {
+        const missing = (await projectPlugins(project, ports)).filter((p) => p.found === undefined);
+        for (const m of missing) log(`plugin ${m.id}: would install (${m.setting})`);
+      } else {
+        const result = await installMissingPlugins(project, ports, log);
+        for (const id of result.installed) log(`✔ plugin ${id} installed`);
+        for (const f of result.failed) log(`✘ plugin ${f}`);
+        pluginsFailed = result.failed.length > 0;
+      }
+    }
+    // REQ-GEN-11/AC6: the plugins go into the offline bundle, and come out of it on the offline machine.
+    if (project && bundle !== undefined && report.stopped === undefined) {
+      const result = await bundlePlugins(project, ports, bundle, log);
+      for (const f of result.failed) log(`✘ plugin ${f}`);
+      pluginsFailed = result.failed.length > 0;
+    }
+    if (options.from !== undefined) {
+      const result = await importPluginBundle(resolve(io.cwd, options.from), ports, log);
+      for (const f of result.failed) log(`✘ plugin ${f}`);
+      pluginsFailed = result.failed.length > 0;
+    }
+    if (options.check === true) return report.prechecks.every((p) => p.ok) ? 0 : 2;
+    const code = setupExitCode(report);
+    return code === 0 && pluginsFailed ? 1 : code;
   } catch (error) {
     io.writeError(`Error: ${error instanceof Error ? error.message : String(error)}\n`);
     return 2;

@@ -725,32 +725,32 @@ Jobs, queues and eventual consistency: "the status changes within 30 seconds".
 
 ### REQ-EXEC-47 · WebSocket and server-sent events testing
 
-- Status: in-progress
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-EXEC-04, REQ-ENV-01, INV-1, INV-8, INV-10
 
 **Acceptance criteria**
 
-- [ ] AC1: A step can open a WebSocket (with the test account's authentication), send messages and wait for messages matching the plan (fields, order, count) within a timeout.
-- [ ] AC2: A step can subscribe to a server-sent events stream and check its events the same way.
+- [x] AC1: A step can open a WebSocket (with the test account's authentication), send messages and wait for messages matching the plan (fields, order, count) within a timeout.
+- [x] AC2: A step can subscribe to a server-sent events stream and check its events the same way.
 - [x] AC3: In web cases, the messages of the page's WebSockets can be checked as well as its HTTP traffic.
-- [ ] AC4: Every frame sent and received is evidence, masked; hosts are checked against the environment allowlist, and a socket to another host is refused.
-- [ ] AC5: A connection that cannot be opened or closes early makes the step fail or the case BLOCKED with the close code and reason.
+- [x] AC4: Every frame sent and received is evidence, masked; hosts are checked against the environment allowlist, and a socket to another host is refused.
+- [x] AC5: A connection that cannot be opened or closes early makes the step fail or the case BLOCKED with the close code and reason.
 
 ### REQ-EXEC-48 · GraphQL testing
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-EXEC-04, REQ-EXEC-47, REQ-CTX-01, INV-4
 
 **Acceptance criteria**
 
-- [ ] AC1: The analyst and planner read the GraphQL schema from the repository (SDL files) or from introspection of an allowlisted test environment, and cite the operations and fields a case covers.
-- [ ] AC2: Steps send queries and mutations with variables; subscriptions run over WebSocket (REQ-EXEC-47).
-- [ ] AC3: A response is checked against the schema of the analysed commit, and the `errors` array is part of every result: errors where the plan expects data fail the step, even with HTTP 200.
-- [ ] AC4: Expectations address response fields by path as for REST.
+- [x] AC1: The analyst and planner read the GraphQL schema from the repository (SDL files) or from introspection of an allowlisted test environment, and cite the operations and fields a case covers.
+- [x] AC2: Steps send queries and mutations with variables; subscriptions run over WebSocket (REQ-EXEC-47).
+- [x] AC3: A response is checked against the schema of the analysed commit, and the `errors` array is part of every result: errors where the plan expects data fail the step, even with HTTP 200.
+- [x] AC4: Expectations address response fields by path as for REST.
 
 ### REQ-EXEC-49 · gRPC testing
 
@@ -768,16 +768,16 @@ Jobs, queues and eventual consistency: "the status changes within 30 seconds".
 
 ### REQ-EXEC-50 · SOAP and XML APIs
 
-- Status: accepted
+- Status: implemented
 - Priority: could
 - Stage: later
 - Related: REQ-EXEC-04, REQ-EXEC-45
 
 **Acceptance criteria**
 
-- [ ] AC1: Steps send SOAP 1.1/1.2 and plain XML requests; the planner reads WSDL and XSD files from the repository.
-- [ ] AC2: Responses are validated against the WSDL/XSD of the analysed commit; SOAP faults are part of every result.
-- [ ] AC3: Expectations address XML values by path (XPath) as JSON fields are addressed for REST.
+- [x] AC1: Steps send SOAP 1.1/1.2 and plain XML requests; the planner reads WSDL and XSD files from the repository.
+- [x] AC2: Responses are validated against the WSDL/XSD of the analysed commit; SOAP faults are part of every result.
+- [x] AC3: Expectations address XML values by path (XPath) as JSON fields are addressed for REST.
 
 ### REQ-EXEC-51 · Event-driven APIs (message brokers)
 
@@ -828,17 +828,17 @@ Tests need predictable data; on a shared environment what is in the database cha
 
 ### REQ-EXEC-54 · Shared environments: rate limits and idempotency
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-EXEC-10, REQ-EXEC-19, REQ-PERF-05
 
 **Acceptance criteria**
 
-- [ ] AC1: Requests to one host are limited per project (requests per second, parallel cases), across all lanes of a run.
-- [ ] AC2: `429` and `503` with `Retry-After` are waited out and retried only for requests marked safe to repeat (GET, HEAD, or with an idempotency key); every retry is evidence.
-- [ ] AC3: A case still rate-limited after its budget is BLOCKED with "rate limited", never FAILED or PASSED.
-- [ ] AC4: Mutating requests can carry an idempotency key per step, so a retry after a timeout does not create a second order or payment.
+- [x] AC1: Requests to one host are limited per project (requests per second, parallel cases), across all lanes of a run.
+- [x] AC2: `429` and `503` with `Retry-After` are waited out and retried only for requests marked safe to repeat (GET, HEAD, or with an idempotency key); every retry is evidence.
+- [x] AC3: A case still rate-limited after its budget is BLOCKED with "rate limited", never FAILED or PASSED.
+- [x] AC4: Mutating requests can carry an idempotency key per step, so a retry after a timeout does not create a second order or payment.
 
 ### REQ-EXEC-55 · Automated login: one-time codes, SSO and captcha in test environments
 

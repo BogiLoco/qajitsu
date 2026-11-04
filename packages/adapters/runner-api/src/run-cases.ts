@@ -1,6 +1,11 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  type TrafficPolicy,
+  type AttemptRequest,
+  type NetworkAnalysis,
+  NETWORK_ANALYSIS_FILE,
+  NetworkAnalysisSchema,
   CaseResultFileSchema,
   sha256,
   type CaseResultFile,
@@ -103,6 +108,15 @@ export interface RunCasesOptions {
   readonly marker?: string | undefined;
   /** Keeps the created records after the case for debugging (`qj run --keep`). */
   readonly keepTestData?: boolean | undefined;
+  /** The run's limits for a shared environment (REQ-EXEC-54): one policy for every lane of the run. */
+  readonly traffic?: TrafficPolicy | undefined;
+  /** REQ-EVD-09/AC3+AC4: whether web attempts keep the page's JSON bodies, and the traffic budget per step. */
+  readonly network?: AttemptRequest["network"] | undefined;
+  /**
+   * Checks an attempt after it ran, like the OpenAPI contract: it may add failed assertions or make the attempt an error
+   * (the GraphQL schema, REQ-EXEC-48), never a passing assertion (invariant 1).
+   */
+  readonly checkAttempt?: ((record: AttemptRecord) => AttemptRecord | Promise<AttemptRecord>) | undefined;
 }
 
 /**
@@ -133,6 +147,58 @@ export function applyContract(record: AttemptRecord, contract: ContractValidator
   });
   if (violations.length === 0) return record;
   return { ...record, outcome: "failed", assertions: [...record.assertions, ...violations] };
+}
+
+/**
+ * Checks the JSON bodies a web page received against the API description of the analysed commit (REQ-EVD-09/AC3):
+ * the violations are added to the attempt's `network-analysis.json` as observations, each with its HAR entry. The
+ * attempt's outcome and assertions stay as they are (invariant 1): this is what the page saw, not what the plan checks.
+ *
+ * @param record - The attempt with its evidence.
+ * @param contract - The OpenAPI validator, when the project has a description.
+ */
+export function checkUiContract(
+  record: AttemptRecord,
+  contract: ContractValidator | undefined,
+): AttemptRecord {
+  if (!contract) return record;
+  const at = record.evidence.findIndex(
+    (e) => e.name === NETWORK_ANALYSIS_FILE && typeof e.content === "string",
+  );
+  const item = record.evidence[at];
+  if (!item || typeof item.content !== "string") return record;
+  let analysis: NetworkAnalysis;
+  try {
+    const parsed = NetworkAnalysisSchema.safeParse(JSON.parse(item.content));
+    if (!parsed.success) return record;
+    analysis = parsed.data;
+  } catch {
+    return record;
+  }
+  const contractFindings = analysis.bodies.flatMap((b) => {
+    let url: string;
+    try {
+      // The page's own requests are recorded as paths; the validator reads the path of a full URL.
+      url = new URL(b.url, "http://app.invalid").toString();
+    } catch {
+      return [];
+    }
+    return (contract.check(b.method, url, b.status, b.body) ?? []).map((problem) => ({
+      stepId: b.stepId,
+      method: b.method,
+      url: b.url,
+      ...(b.har === undefined ? {} : { har: b.har }),
+      status: b.status,
+      problem: problem.slice(0, 500),
+    }));
+  });
+  if (contractFindings.length === 0) return record;
+  const evidence = [...record.evidence];
+  evidence[at] = {
+    ...item,
+    content: `${JSON.stringify({ ...analysis, contract: contractFindings.slice(0, 200) }, null, 2)}\n`,
+  };
+  return { ...record, evidence };
 }
 
 type Attempt = CaseResultFile["attempts"][number];
@@ -324,7 +390,11 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
           (options.plan.cases.find((c) => c.id === caseId)?.steps ?? []).reduce(
             (ms, st) => ms + (st.wait ? st.wait.timeout_s * 1000 : 0),
             0,
-          ),
+          ) +
+          // REQ-EXEC-54: waiting out Retry-After fits in the limit too.
+          (options.traffic?.retryBudgetMs ?? 0),
+        ...(options.traffic ? { traffic: options.traffic } : {}),
+        ...(options.network ? { network: options.network } : {}),
         ...(options.manual ? { manual: options.manual } : {}),
         ...(options.locale ? { locale: options.locale } : {}),
         ...(options.visual ? { visual: options.visual } : {}),
@@ -351,10 +421,15 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
       // REQ-EXEC-53/AC1: the records go too, unless the run keeps them for debugging.
       .finally(() => data.finish());
     const dataEvidence = await data.finish();
-    const record = applyContract(
-      dataEvidence ? { ...executed, evidence: [...executed.evidence, dataEvidence] } : executed,
+    const contracted = checkUiContract(
+      applyContract(
+        dataEvidence ? { ...executed, evidence: [...executed.evidence, dataEvidence] } : executed,
+        options.contract,
+      ),
       options.contract,
     );
+    // REQ-EXEC-48: further checks of the attempt by trusted code (the GraphQL schema), before its status is computed.
+    const record = options.checkAttempt ? await options.checkAttempt(contracted) : contracted;
     const evidencePaths: string[] = [];
     for (const item of record.evidence) {
       const stored = await options.evidence.put(
@@ -473,7 +548,14 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
     while (next < ids.length) {
       const id = ids[next];
       next += 1;
-      if (id !== undefined) out.set(id, await runCase(id));
+      if (id === undefined) continue;
+      // REQ-EXEC-54/AC1: the run's cap on cases at once holds across every lane.
+      const release = await options.traffic?.caseSlot();
+      try {
+        out.set(id, await runCase(id));
+      } finally {
+        release?.();
+      }
     }
   };
   await Promise.all(Array.from({ length: Math.max(1, Math.min(options.workers ?? 1, ids.length)) }, worker));

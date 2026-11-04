@@ -105,6 +105,19 @@ content that cannot be read is a failed check or BLOCKED with the reason.
   refused, CORS blocks, redirects to a login page) in `S1-network.json`, next to the failure in the report and, as
   structured data, for the failure hints. The report also shows which case reached which endpoint of the change.
   None of this changes a status or a count.
+- **Code reads the rest of the traffic too** (REQ-EVD-09/AC3..AC7) and writes `network-analysis.json` per attempt.
+  Every finding names its entry in `network.har`, and the report lists them as observations, never as results:
+  - per step, the number and size of the requests and the slowest ones. A budget in `observations.network.budget`,
+    or in a case's `network_budget` (`request_ms`, `step_requests`, `step_kb`), gives a warning when a step goes
+    over it. A step whose slowest request became twice as slow (and 200 ms slower) than in the last run of the same
+    approved plan is listed;
+  - tokens or personal data in URL queries, also to other hosts; mixed content; pages without
+    `content-security-policy`, `x-content-type-options` or frame protection (and HSTS on https); cookies without
+    `HttpOnly` (and `Secure` on https);
+  - with `observations.network.response_bodies.enabled: true`, the JSON bodies of the application's responses,
+    masked, at most `max_kb` each (64 by default) and dropped when one still looks like it holds a secret. They are
+    checked against the OpenAPI description of the analysed commit;
+  - endpoints that appeared, disappeared or changed status or answer shape since the last run of the same plan.
 - **WebSocket frames** of the page pass through the runner and are kept per step (`S1-websocket.json`, masked);
   sockets to hosts outside the allowlist are closed.
 - Uploaded and downloaded files are evidence with their SHA-256 in the manifest. Text is masked before it is stored;

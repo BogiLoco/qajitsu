@@ -1,0 +1,104 @@
+{
+  "summary": "Prices over SOAP for DEMO-19.",
+  "cases": [
+    {
+      "id": "TC-01",
+      "title": "The mug's price is read",
+      "type": "api",
+      "priority": "high",
+      "source": [
+        {
+          "kind": "ac",
+          "id": "AC1"
+        }
+      ],
+      "data": {
+        "user": "user:standard"
+      },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "POST /soap/prices",
+          "soap": {
+            "operation": "GetPrice"
+          },
+          "expect": {
+            "description": "The mug with its amount",
+            "status": 200,
+            "xml": {
+              "//GetPriceResponse/name": "Mug",
+              "//GetPriceResponse/amount": 24.99
+            }
+          }
+        }
+      ],
+      "evidence": ["request", "response"]
+    },
+    {
+      "id": "TC-02",
+      "title": "An unknown product is a fault",
+      "type": "api",
+      "priority": "medium",
+      "source": [
+        {
+          "kind": "ac",
+          "id": "AC2"
+        }
+      ],
+      "data": {
+        "user": "user:standard"
+      },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "POST /soap/prices",
+          "soap": {
+            "operation": "GetPrice"
+          },
+          "expect": {
+            "description": "A client fault",
+            "status": 500,
+            "xml": {
+              "//Fault/faultstring": "Unknown product P-9"
+            }
+          }
+        }
+      ],
+      "evidence": ["request", "response"]
+    },
+    {
+      "id": "TC-03",
+      "title": "The sticker's price is read without a fault",
+      "type": "api",
+      "priority": "high",
+      "source": [
+        {
+          "kind": "ac",
+          "id": "AC3"
+        }
+      ],
+      "data": {
+        "user": "user:standard"
+      },
+      "steps": [
+        {
+          "id": "S1",
+          "action": "POST /soap/prices",
+          "soap": {
+            "operation": "GetPrice"
+          },
+          "expect": {
+            "description": "The sticker's amount",
+            "status": 200,
+            "xml": {
+              "//GetPriceResponse/amount": 0.335
+            }
+          }
+        }
+      ],
+      "evidence": ["request", "response"]
+    }
+  ],
+  "open_questions": [],
+  "out_of_scope": []
+}

@@ -256,7 +256,7 @@ export async function runPromote(
       }
     }
 
-    const { codeHosts } = buildAdapters(
+    const { codeHosts } = await buildAdapters(
       project,
       {
         fetch: ports.fetch,

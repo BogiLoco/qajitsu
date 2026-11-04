@@ -7,25 +7,21 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { compareDeployedSha, createRemoteEnvProvider } from "@qajitsu/adapter-env-remote";
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
-import {
-  createSandboxExecutor,
-  type BrowserFactory,
-  loadContractValidator,
-  runCases,
-  type AttemptExecutor,
-  type ContractValidator,
-  type RunCasesOptions,
+import type * as RunnerApiPlugin from "@qajitsu/adapter-runner-api";
+import type {
+  AttemptExecutor,
+  BrowserFactory,
+  ContractValidator,
+  RunCasesOptions,
 } from "@qajitsu/adapter-runner-api";
-import {
-  browserUnavailable,
-  compareImages,
-  createPlaywrightBrowserFactory,
-} from "@qajitsu/adapter-runner-web";
+import type * as RunnerWebPlugin from "@qajitsu/adapter-runner-web";
 import { buildChangeContext, checkSpec, healSpec, runAuthor } from "@qajitsu/agents";
 import {
   AnalysisSchema,
   ConfigError,
   CaseResultFileSchema,
+  RateLimitConfigSchema,
+  createTrafficPolicy,
   acquireRunLock,
   browserEngine,
   createAccountLeases,
@@ -35,6 +31,7 @@ import {
   loadApprovedPlan,
   parseEventLines,
   type ApprovalStep,
+  type AttemptRecord,
   resolveEnvironment,
   selectExecutableSpecs,
   planForLocale,
@@ -50,7 +47,12 @@ import {
   type WebCombination,
 } from "@qajitsu/core";
 import { createMasker } from "@qajitsu/steps";
-import { checkApprovalRecords, formatSpecProblems } from "@qajitsu/verifier";
+import {
+  checkApprovalRecords,
+  checkGraphqlAttempt,
+  checkSoapAttempt,
+  formatSpecProblems,
+} from "@qajitsu/verifier";
 import { buildAdapters, type RuntimePorts } from "../adapters.js";
 import { codeIndexCache, openSession, type ModelPorts, type RunSession } from "../session.js";
 import { runningBuild } from "./env-up-reuse.js";
@@ -85,6 +87,10 @@ import type { CommandExec } from "@qajitsu/adapter-env-compose";
 import { headlessFor, prepareLiveRun, type LiveOptions, type LiveRun } from "./live.js";
 import { RegressionRunSchema } from "./pack.js";
 import { runVersions } from "../versions.js";
+import { lazyBrowserFactory } from "../plugins/lazy.js";
+import { pluginVersions, sessionPlugins } from "./plugin.js";
+import { graphqlSchemaOf } from "../graphql-schema.js";
+import { soapContractOf } from "../soap-contract.js";
 import { createProgressPrinter, liveScreenshots, teeEvents } from "./progress.js";
 import { checkRunReadiness, commentEnvReadiness, formatEnvReadiness } from "../env-readiness.js";
 import { publisherFor } from "./publish.js";
@@ -240,28 +246,29 @@ function mobileDevices(
   return {
     get: () => {
       if (device) return device;
-      const { codeHosts } = buildAdapters(
-        session.project,
-        {
-          fetch: ports.fetch,
-          logger: session.logger,
-          now: ports.now,
-          resolveSecret: (r) => session.resolveSecret(r),
-          registerSecret: (v) => {
-            session.masker.register(v);
-          },
-        },
-        ports,
-      );
       session.events.emit("run", SYSTEM, "mobile.prepare", { cases: options.cases });
-      device =
-        ports.mobileDevice?.() ??
-        prepareMobile(session, env.baseUrl, codeHosts, ports.env["APPIUM_HOME"], {
+      const prepared = async (): Promise<PreparedMobile> => {
+        const { codeHosts } = await buildAdapters(
+          session.project,
+          {
+            fetch: ports.fetch,
+            logger: session.logger,
+            now: ports.now,
+            resolveSecret: (r) => session.resolveSecret(r),
+            registerSecret: (v) => {
+              session.masker.register(v);
+            },
+          },
+          ports,
+        );
+        return prepareMobile(session, env.baseUrl, codeHosts, ports.env["APPIUM_HOME"], {
           allowBuild: options.build,
           // REQ-EXEC-16/AC2: --headed shows the emulator window.
           headed: options.headed,
           fetch: ports.fetch,
         });
+      };
+      device = ports.mobileDevice?.() ?? prepared();
       return device;
     },
     started: () => device !== undefined,
@@ -772,7 +779,11 @@ export async function runRun(
           await ws.update({
             data: {
               ...ws.record.data,
-              versions: await runVersions(project, { exec: ports.versionExec, playwright: ports.playwright }),
+              versions: {
+                ...(await runVersions(project, { exec: ports.versionExec, playwright: ports.playwright })),
+                // REQ-GEN-11/AC5: the plugins the run uses, with their versions and where they came from.
+                ...(await pluginVersions(project, ports)),
+              },
             },
           });
           const pending = await executeCases(session, plan, env, io, ports, results, {
@@ -969,6 +980,15 @@ async function executeCases(
     onDevice: () => undefined,
   },
 ): Promise<string[]> {
+  // REQ-GEN-11/AC2: every lane runs through the API runner plugin.
+  const api = await sessionPlugins(session).load<typeof RunnerApiPlugin>("runner-api");
+  // The web runner plugin: up front when the plan has web cases, otherwise only if a spec drives a browser.
+  const webRunner = () => sessionPlugins(session).load<typeof RunnerWebPlugin>("runner-web");
+  const web = plan.cases.some((c) => c.type === "web") ? await webRunner() : undefined;
+  // The mobile runner plugin, before any lane starts, when the plan has mobile cases.
+  if (plan.cases.some((c) => c.type === "mobile")) await sessionPlugins(session).load("runner-mobile");
+  const browserUnavailable = (browser: WebBrowser): string | undefined =>
+    web ? web.browserUnavailable(browser) : "the web runner plugin is not loaded (qj plugin add runner-web)";
   const { ws, events, project, masker } = session;
   const specsDir = ws.path("specs");
   const existing = new Set(
@@ -1128,37 +1148,39 @@ async function executeCases(
   const testHeaders = await testHeadersFor(env, session.resolveSecret);
   const executorFor = (combo: WebCombination | undefined): AttemptExecutor =>
     ports.executor ??
-    createSandboxExecutor({
+    api.createSandboxExecutor({
       ...(httpCredentials ? { httpCredentials } : {}),
       testHeaders,
       // The browser starts only when a spec uses ui.* (REQ-EXEC-05, REQ-EXEC-07).
-      browser: createPlaywrightBrowserFactory({
-        // A farm-only browser never reaches here: its combinations are BLOCKED before they run (REQ-EXEC-66/AC4).
-        browser:
-          combo && browserEngine(combo.browser) !== undefined
-            ? (combo.browser as LocalBrowser)
-            : project.config.web.browser,
-        ...(combo?.device !== undefined
-          ? { device: combo.device }
-          : combo
-            ? { viewport: { width: combo.viewport.width, height: combo.viewport.height } }
-            : {}),
-        video: project.config.web.video,
-        // REQ-EXEC-16/AC2: --headed shows the browser, --slow-mo slows every action down.
-        headless: headlessFor(project.config.web.headless, live),
-        slowMoMs: live?.slowMoMs,
-        actionTimeoutMs: project.config.web.action_timeout_ms,
-        testIdAttribute: project.config.web.test_id_attribute,
-        webSession: env.profile.web_session,
-        ...(httpCredentials ? { httpCredentials } : {}),
-        testHeaders,
-        // REQ-EVD-07/AC5: each passive check can be switched off.
-        observations: {
-          console: project.config.observations.console,
-          httpErrors: project.config.observations.http_errors,
-          accessibility: project.config.observations.accessibility,
-        },
-      }),
+      browser: lazyBrowserFactory(async () =>
+        (await webRunner()).createPlaywrightBrowserFactory({
+          // A farm-only browser never reaches here: its combinations are BLOCKED before they run (REQ-EXEC-66/AC4).
+          browser:
+            combo && browserEngine(combo.browser) !== undefined
+              ? (combo.browser as LocalBrowser)
+              : project.config.web.browser,
+          ...(combo?.device !== undefined
+            ? { device: combo.device }
+            : combo
+              ? { viewport: { width: combo.viewport.width, height: combo.viewport.height } }
+              : {}),
+          video: project.config.web.video,
+          // REQ-EXEC-16/AC2: --headed shows the browser, --slow-mo slows every action down.
+          headless: headlessFor(project.config.web.headless, live),
+          slowMoMs: live?.slowMoMs,
+          actionTimeoutMs: project.config.web.action_timeout_ms,
+          testIdAttribute: project.config.web.test_id_attribute,
+          webSession: env.profile.web_session,
+          ...(httpCredentials ? { httpCredentials } : {}),
+          testHeaders,
+          // REQ-EVD-07/AC5: each passive check can be switched off.
+          observations: {
+            console: project.config.observations.console,
+            httpErrors: project.config.observations.http_errors,
+            accessibility: project.config.observations.accessibility,
+          },
+        }),
+      ),
     });
   const executor = executorFor(primary);
   // REQ-EXEC-12: baselines are read from .qa/baselines/ by this trusted code; specs and agents never touch them.
@@ -1170,17 +1192,24 @@ async function executeCases(
         (b) => new Uint8Array(b),
         () => undefined,
       ),
-    compare: (baseline, actual) => compareImages(baseline, actual, project.config.visual.color_threshold),
+    compare: async (baseline, actual) =>
+      (await webRunner()).compareImages(baseline, actual, project.config.visual.color_threshold),
   });
   const primaryVariant = primary?.id ?? "default";
   // The contract is read from the worktree, i.e. from exactly the analysed version of the code.
   let contract: ContractValidator | undefined;
   for (const [alias, repo] of Object.entries(project.config.repos)) {
     if (repo.openapi === undefined || ws.record.repos[alias] === undefined) continue;
-    contract = await loadContractValidator(ws.path("repos", alias, repo.openapi));
+    contract = await api.loadContractValidator(ws.path("repos", alias, repo.openapi));
     events.emit("run", SYSTEM, "contract.loaded", { repo: alias, file: repo.openapi });
     break;
   }
+  // REQ-EXEC-48/AC3: GraphQL answers are checked against the schema of exactly the analysed version of the code.
+  const graphql = await graphqlSchemaOf(session, { env, fetch: ports.fetch });
+  if (graphql) events.emit("run", SYSTEM, "graphql.schema", { source: graphql.source });
+  // REQ-EXEC-50/AC2: SOAP and XML answers are validated against the WSDL and XSD of the analysed commit.
+  const soap = await soapContractOf(session);
+  if (soap) events.emit("run", SYSTEM, "soap.contract", { source: soap.source });
   const leases = createAccountLeases(env.profile, { waitMs: project.config.execution.account_wait_s * 1000 });
   const loginDeps = {
     fetch: ports.fetch,
@@ -1191,6 +1220,27 @@ async function executeCases(
     },
   };
   const base = {
+    // REQ-EXEC-48/AC3: errors where data is expected, and data that does not fit the schema, fail the step.
+    // REQ-EXEC-50/AC2: an unplanned fault, and an answer outside the WSDL or XSD, fail the step.
+    checkAttempt: (record: AttemptRecord) =>
+      checkSoapAttempt(checkGraphqlAttempt(record, plan, graphql?.schema), plan, soap?.validator),
+    // REQ-EVD-09/AC3+AC4: the page's JSON bodies only when the project keeps them; the traffic budget per step.
+    network: {
+      ...(project.config.observations.network.response_bodies.enabled
+        ? { bodies: { maxBytes: project.config.observations.network.response_bodies.max_kb * 1024 } }
+        : {}),
+      ...(project.config.observations.network.budget
+        ? { budget: project.config.observations.network.budget }
+        : {}),
+    },
+    // REQ-EXEC-54: one traffic policy for every lane, so the shared environment sees the run's rate as a whole.
+    traffic: createTrafficPolicy(project.config.execution.rate_limit ?? RateLimitConfigSchema.parse({}), {
+      now: () => ports.now().getTime(),
+      sleep: (ms: number) =>
+        new Promise<void>((done) => {
+          setTimeout(done, ms);
+        }),
+    }),
     // REQ-EXEC-11: manual steps ask a person here (terminal) or through manual/ files (CI); never an agent.
     manual: createManualPrompter(session, io, {
       user: run.user ?? "unknown",
@@ -1217,6 +1267,7 @@ async function executeCases(
         Object.values(plan.cases.find((c) => c.id === caseId)?.data ?? {}).filter((v) =>
           v.startsWith("user:"),
         ),
+      session.plugins,
     ),
     contract,
     // REQ-EXEC-53: the records cases need, marked with this run; `--keep` leaves them for debugging.
@@ -1309,7 +1360,7 @@ async function executeCases(
     const cases = active.filter((c) => c.type === lane);
     if (cases.length === 0) return;
     events.emit("run", SYSTEM, "lane.start", { lane, cases: cases.length, workers: lanes[lane] });
-    const laneRan = await runCases({
+    const laneRan = await api.runCases({
       ...base,
       ...watched,
       // REQ-EXEC-16/AC3: only the primary run pauses; one case at a time so the person follows one.
@@ -1332,7 +1383,7 @@ async function executeCases(
       blocked,
       concurrency,
       run: (combo, cases, dir) =>
-        runCases({
+        api.runCases({
           ...base,
           lane: "web",
           executor: executorFor(combo),
@@ -1371,11 +1422,11 @@ async function executeCases(
       onDevice: run.onDevice,
       sequential: lanes.sequential,
       run: (factory, cases, where) =>
-        runCases({
+        api.runCases({
           ...base,
           ...(where.primary ? watched : {}),
           lane: "mobile",
-          executor: ports.mobileExecutor?.(factory) ?? createSandboxExecutor({ browser: factory }),
+          executor: ports.mobileExecutor?.(factory) ?? api.createSandboxExecutor({ browser: factory }),
           ...(live?.pause && where.primary ? { pause: live.pause } : {}),
           plan: { ...plan, cases },
           specs: new Map([...specs].filter(([id]) => cases.some((c) => c.id === id))),
@@ -1410,7 +1461,7 @@ async function executeCases(
     specs,
     blocked,
     run: (localePlan, locale, dir) =>
-      runCases({
+      api.runCases({
         ...base,
         executor: executorFor(primary),
         plan: localePlan,

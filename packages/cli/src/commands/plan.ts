@@ -1,4 +1,6 @@
 import { modelForRole } from "@qajitsu/agents";
+import { graphqlSchemaOf } from "../graphql-schema.js";
+import { soapContractOf } from "../soap-contract.js";
 import { warnStageBudgets } from "../timing.js";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -27,6 +29,7 @@ import {
   openRunWorkspace,
   parseEventLines,
   readRunIndex,
+  resolveEnvironment,
   formatPlanDiff,
   parsePlan,
   readPlan,
@@ -58,6 +61,7 @@ import {
   formatPlanFlags,
   isAdvisoryFlag,
   formatSourceIssues,
+  graphqlOperations,
   type PlanFlag,
 } from "@qajitsu/verifier";
 import { parse } from "yaml";
@@ -413,6 +417,33 @@ export async function runPlan(
     });
     // REQ-CTX-20/AC5: what people taught earlier runs of the project reaches the analyst and planner as context.
     context = { ...context, lessons: await collectLessons(ws.root, { exclude: ws.runId }) };
+    // REQ-EXEC-48/AC1: the GraphQL operations of the analysed commit; an endpoint is introspected on the environment.
+    const graphqlEnv = await resolveEnvironment({
+      config: session.project.config,
+      qaDir: session.project.qaDir,
+      env: options.env ?? session.project.config.environments.default,
+    }).catch(() => undefined);
+    const graphql = await graphqlSchemaOf(session, { env: graphqlEnv, fetch: ports.fetch }).catch(
+      (error: unknown) => {
+        io.writeError(`GraphQL schema not read: ${error instanceof Error ? error.message : String(error)}\n`);
+        return undefined;
+      },
+    );
+    if (graphql)
+      context = {
+        ...context,
+        graphql: { operations: graphqlOperations(graphql.schema), source: graphql.source },
+      };
+    // REQ-EXEC-50/AC1: the SOAP operations of the analysed commit's WSDL.
+    const soap = await soapContractOf(session).catch((error: unknown) => {
+      io.writeError(`WSDL not read: ${error instanceof Error ? error.message : String(error)}\n`);
+      return undefined;
+    });
+    if (soap)
+      context = {
+        ...context,
+        soap: { operations: soap.operations, elements: soap.elements, source: soap.source },
+      };
     // REQ-EXEC-53: the kinds of test data this project can create for a case.
     const testData = session.project.config.test_data;
     if (testData)

@@ -1,0 +1,93 @@
+{
+  "schema": 1,
+  "plugins": {
+    "codehost-github": {
+      "package": "@qajitsu/adapter-codehost-github",
+      "version": "0.0.0"
+    },
+    "codehost-gitlab": {
+      "package": "@qajitsu/adapter-codehost-gitlab",
+      "version": "0.0.0"
+    },
+    "codehost-local": {
+      "package": "@qajitsu/adapter-codehost-local",
+      "version": "0.0.0"
+    },
+    "env-compose": {
+      "package": "@qajitsu/adapter-env-compose",
+      "version": "0.0.0"
+    },
+    "env-remote": {
+      "package": "@qajitsu/adapter-env-remote",
+      "version": "0.0.0"
+    },
+    "evidence-local": {
+      "package": "@qajitsu/adapter-evidence-local",
+      "version": "0.0.0"
+    },
+    "evidence-s3": {
+      "package": "@qajitsu/adapter-evidence-s3",
+      "version": "0.0.0"
+    },
+    "files": {
+      "package": "@qajitsu/adapter-files",
+      "version": "0.0.0"
+    },
+    "knowledge-chroma": {
+      "package": "@qajitsu/adapter-knowledge-chroma",
+      "version": "0.0.0"
+    },
+    "knowledge-confluence": {
+      "package": "@qajitsu/adapter-knowledge-confluence",
+      "version": "0.0.0"
+    },
+    "knowledge-lancedb": {
+      "package": "@qajitsu/adapter-knowledge-lancedb",
+      "version": "0.0.0"
+    },
+    "messages-webhooksite": {
+      "package": "@qajitsu/adapter-messages-webhooksite",
+      "version": "0.0.0"
+    },
+    "publish-jira": {
+      "package": "@qajitsu/adapter-publish-jira",
+      "version": "0.0.0"
+    },
+    "runner-api": {
+      "package": "@qajitsu/adapter-runner-api",
+      "version": "0.0.0"
+    },
+    "runner-mobile": {
+      "package": "@qajitsu/adapter-runner-mobile",
+      "version": "0.0.0"
+    },
+    "runner-web": {
+      "package": "@qajitsu/adapter-runner-web",
+      "version": "0.0.0"
+    },
+    "secrets-cli": {
+      "package": "@qajitsu/adapter-secrets-cli",
+      "version": "0.0.0"
+    },
+    "secrets-doppler": {
+      "package": "@qajitsu/adapter-secrets-doppler",
+      "version": "0.0.0"
+    },
+    "secrets-env": {
+      "package": "@qajitsu/adapter-secrets-env",
+      "version": "0.0.0"
+    },
+    "secrets-vault": {
+      "package": "@qajitsu/adapter-secrets-vault",
+      "version": "0.0.0"
+    },
+    "testcases": {
+      "package": "@qajitsu/adapter-testcases",
+      "version": "0.0.0"
+    },
+    "ticket-jira": {
+      "package": "@qajitsu/adapter-ticket-jira",
+      "version": "0.0.0"
+    }
+  }
+}

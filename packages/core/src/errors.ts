@@ -34,6 +34,9 @@ export class ConfigError extends QajitsuError {}
 /** An adapter (Jira, GitHub, GitLab, model provider, ...) failed (REQ-GEN-02). */
 export class AdapterError extends QajitsuError {}
 
+/** A plugin is missing, incompatible, unverifiable or still in use (REQ-GEN-11). */
+export class PluginError extends QajitsuError {}
+
 /** The tool guard denied an agent action (REQ-VER-03). */
 export class GuardDeniedError extends QajitsuError {}
 

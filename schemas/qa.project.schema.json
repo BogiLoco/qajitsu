@@ -1554,6 +1554,22 @@
             "type": "string",
             "pattern": "^(?!\\/)(?!.*\\.\\.)[\\w./-]+\\.(ya?ml|json)$"
           },
+          "wsdl": {
+            "type": "string",
+            "pattern": "^(?!\\/)(?!.*\\.\\.)[\\w./-]+\\.wsdl$"
+          },
+          "xsd": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(?!\\/)(?!.*\\.\\.)[\\w./-]+\\.xsd$"
+            }
+          },
+          "graphql": {
+            "type": "string",
+            "pattern": "^((?!\\/)(?!.*\\.\\.)[\\w./-]+\\.(graphqls?|gql)|\\/[\\w/-]*)$"
+          },
           "promote_dir": {
             "type": "string",
             "pattern": "^(?!\\/)(?!.*\\.\\.)[\\w./-]+$"
@@ -2185,7 +2201,13 @@
         "console": true,
         "http_errors": true,
         "accessibility": true,
-        "ignore": []
+        "ignore": [],
+        "network": {
+          "response_bodies": {
+            "enabled": false,
+            "max_kb": 64
+          }
+        }
       },
       "type": "object",
       "properties": {
@@ -2208,6 +2230,59 @@
             "type": "string",
             "minLength": 1
           }
+        },
+        "network": {
+          "default": {
+            "response_bodies": {
+              "enabled": false,
+              "max_kb": 64
+            }
+          },
+          "type": "object",
+          "properties": {
+            "response_bodies": {
+              "default": {
+                "enabled": false,
+                "max_kb": 64
+              },
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "max_kb": {
+                  "default": 64,
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1024
+                }
+              },
+              "additionalProperties": false
+            },
+            "budget": {
+              "type": "object",
+              "properties": {
+                "request_ms": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 600000
+                },
+                "step_requests": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000
+                },
+                "step_kb": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000000
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -3189,6 +3264,33 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 3600
+        },
+        "rate_limit": {
+          "type": "object",
+          "properties": {
+            "requests_per_second": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 1000
+            },
+            "parallel_cases": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            },
+            "retry_budget_s": {
+              "default": 30,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3600
+            },
+            "idempotency_header": {
+              "default": "Idempotency-Key",
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9-]{0,63}$"
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

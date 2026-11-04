@@ -2,11 +2,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { createPlaywrightTransport, executeAttempt, type AttemptInput } from "@qajitsu/adapter-runner-api";
-import { PlanSchema, unzip } from "@qajitsu/core";
+import { PlanSchema, unzip, type NetworkAnalysis } from "@qajitsu/core";
 import { computeStatus } from "@qajitsu/verifier";
 import { afterEach, describe, expect, it } from "vitest";
 import { startShop } from "../../../../examples/demo-shop/api/server.mjs";
-import { channelExecutables, createPlaywrightBrowserFactory } from "./browser.js";
+import { channelExecutables } from "@qajitsu/toolchain";
+import { createPlaywrightBrowserFactory } from "./browser.js";
 
 const PASSWORD = "fictional-demo-password";
 const plan = (ticket: string) =>
@@ -25,9 +26,10 @@ const spec = (ticket: string, id: string) =>
   fileURLToPath(new URL(`../../../../fixtures/specs/${ticket.toLowerCase()}/${id}.spec.ts`, import.meta.url));
 
 const cleanups: (() => Promise<void>)[] = [];
+// Closing browsers can take longer than the default 10 s hook limit when the whole suite runs in parallel.
 afterEach(async () => {
   for (const c of cleanups.splice(0)) await c();
-});
+}, 30_000);
 
 const attempt = async (
   ticket: string,
@@ -532,6 +534,76 @@ describe("web actions (REQ-EXEC-38, REQ-EXEC-39, REQ-EXEC-40, REQ-EXEC-56)", () 
     expect(d.takeNetwork?.()).toEqual([]);
   });
 
+  it("REQ-EVD-09/AC3+AC4+AC6: the driver records timing, size, cookies, headers, the query and, when enabled, JSON bodies", async () => {
+    const app = createServer((req, res) => {
+      if (req.url === "/api/cart") {
+        res.writeHead(200, {
+          "content-type": "application/json",
+          "set-cookie": ["sid=abc; Path=/", "pref=1; HttpOnly; Secure"],
+        });
+        res.end(JSON.stringify({ total: 10 }));
+      } else if ((req.url ?? "").startsWith("/api/search")) {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end("[]");
+      } else {
+        res.writeHead(200, { "content-type": "text/html", "x-content-type-options": "nosniff" });
+        res.end(
+          `<p data-testid="p">ok</p><script>fetch("/api/cart");fetch("/api/search?access_token=t0k&q=mug");</script>`,
+        );
+      }
+    });
+    await new Promise<void>((done) => app.listen(0, "127.0.0.1", done));
+    const url = `http://127.0.0.1:${String((app.address() as { port: number }).port)}`;
+    cleanups.push(
+      () =>
+        new Promise<void>((done) => {
+          app.close(() => {
+            done();
+          });
+        }),
+    );
+    const open = async (bodies: boolean) => {
+      const session = createPlaywrightBrowserFactory({ video: "off", actionTimeoutMs: 1500 })({
+        specFile: spec("DEMO-9", "TC-01"),
+        caseId: "TC-01",
+        attempt: 1,
+        plan: plan("DEMO-9"),
+        baseUrl: url,
+        allowedOrigins: [url],
+        accounts: {},
+        secrets: [],
+        timeoutMs: 30_000,
+        ...(bodies ? { network: { bodies: { maxBytes: 10_000 } } } : {}),
+      });
+      cleanups.push(async () => {
+        await session.close(false);
+      });
+      const d = await session.driver();
+      await d.goto(`${url}/shop`);
+      await d.waitFor("testid:p", "visible");
+      await new Promise((r) => setTimeout(r, 700));
+      return d.takeNetwork?.() ?? [];
+    };
+    const taken = await open(true);
+    const page = taken.find((r) => r.url === "/shop");
+    expect(page?.securityHeaders).toEqual({ "x-content-type-options": "nosniff" });
+    expect(page?.contentType).toBe("text/html");
+    const cart = taken.find((r) => r.url === "/api/cart");
+    expect(cart?.cookies).toEqual([
+      { name: "sid", secure: false, httpOnly: false },
+      { name: "pref", secure: true, httpOnly: true },
+    ]);
+    expect(cart?.durationMs).toBeGreaterThanOrEqual(0);
+    expect(cart?.bytes).toBeGreaterThan(0);
+    expect(cart?.bodyText).toBe('{"total":10}');
+    expect(taken.find((r) => r.url.startsWith("/api/search"))?.query).toEqual({
+      access_token: "t0k",
+      q: "mug",
+    });
+    // Without the project's consent no body is read.
+    expect((await open(false)).find((r) => r.url === "/api/cart")?.bodyText).toBeUndefined();
+  });
+
   it("REQ-EXEC-47/AC3+AC4 + REQ-NFR-04/AC1: the page's WebSocket messages are checked and kept; BUG-17 (reply drops the text) is FAILED", async () => {
     const ok = await attempt("DEMO-12", "TC-01");
     expect(ok.record.error).toBeUndefined();
@@ -541,6 +613,17 @@ describe("web actions (REQ-EXEC-38, REQ-EXEC-39, REQ-EXEC-40, REQ-EXEC-56)", () 
     ) as { direction: string; text: string }[];
     expect(frames.map((f) => f.direction)).toEqual(["sent", "received"]);
     expect(frames[1]?.text).toContain("Support received: Where is my order?");
+    // REQ-EVD-09/AC4+AC6+AC7: the attempt's traffic analysis, every request linked to its HAR entry.
+    const analysis = JSON.parse(
+      String(ok.record.evidence.find((e) => e.name === "network-analysis.json")?.content),
+    ) as NetworkAnalysis;
+    expect(analysis.steps.length).toBeGreaterThan(0);
+    const har = JSON.parse(String(ok.record.evidence.find((e) => e.name === "network.har")?.content)) as {
+      log: { entries: { request: { url: string } }[] };
+    };
+    const linked = analysis.security.filter((f) => f.har !== undefined);
+    expect(linked.length).toBeGreaterThan(0);
+    for (const f of linked) expect(har.log.entries[f.har ?? -1]?.request.url).toContain(f.url.split("?")[0]);
     const bug = await attempt("DEMO-12", "TC-01", "BUG_CHAT_REPLY_DROPS_TEXT");
     expect(bug.status).toBe("FAILED");
     expect(bug.record.assertions.filter((a) => !a.pass).map((a) => [a.field, a.actual])).toEqual([

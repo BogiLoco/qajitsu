@@ -13,11 +13,22 @@ import type {
   VisualCheck,
   TestCase,
 } from "@qajitsu/core";
-import { plannedFields } from "@qajitsu/core";
+import {
+  NETWORK_ANALYSIS_FILE,
+  plannedFields,
+  retryAfterMs,
+  type NetworkBudget,
+  type TrafficPolicy,
+} from "@qajitsu/core";
+import { createStreams, type ApiStream, type StreamKind, type StreamTransport } from "./streams.js";
+import { soapEnvelope, xmlValue } from "./xml.js";
 import { checkGesture } from "./gestures.js";
 import type { Masker } from "./masking.js";
 import {
+  analyzeTraffic,
   diagnoseNetwork,
+  harRequests,
+  linkHar,
   reachedEndpoints,
   type NetworkProblem,
   type ReachedEndpoint,
@@ -50,7 +61,13 @@ export type ApiBody =
     }
   | { readonly __qjBody: "form"; readonly fields: Readonly<Record<string, string>> }
   | { readonly __qjBody: "binary"; readonly file: string }
-  | { readonly __qjBody: "text"; readonly text: string; readonly type?: string };
+  | { readonly __qjBody: "text"; readonly text: string; readonly type?: string }
+  | {
+      readonly __qjBody: "soap";
+      readonly body: string;
+      readonly action?: string;
+      readonly version?: "1.1" | "1.2";
+    };
 
 /** A non-JSON body as the transport sends it: files resolved from the plan by the runtime. */
 export type ApiPayload =
@@ -92,6 +109,8 @@ export interface ApiResponse {
   readonly text: string;
   /** Parsed JSON body, or the value at a dotted path (`lines.0.total`); `undefined` when absent. */
   readonly json: (path?: string) => unknown;
+  /** The value of an XPath over the local names of an XML or SOAP body (REQ-EXEC-50/AC3); `undefined` when absent. */
+  readonly xml: (xpath: string) => Promise<unknown>;
 }
 
 /** Options of one API call. */
@@ -109,6 +128,25 @@ export interface ApiClient {
   readonly delete: (path: string, options?: ApiCallOptions) => Promise<ApiResponse>;
   /** The same client, authenticated as an account alias such as `user:standard`. */
   readonly as: (alias: string) => ApiClient;
+  /**
+   * Opens a WebSocket to a path of the environment with this client's account (REQ-EXEC-47/AC1). Check its messages
+   * with `verify(step, "messages.<n>.<path>" | "messages.count", ...)`: the check waits for them itself.
+   */
+  readonly websocket: (
+    path: string,
+    options?: { readonly protocols?: readonly string[] },
+  ) => Promise<ApiStream>;
+  /** Subscribes to a server-sent events stream of the environment with this client's account (REQ-EXEC-47/AC2). */
+  readonly events: (path: string) => Promise<ApiStream>;
+  /**
+   * A GraphQL subscription over WebSocket (graphql-transport-ws) to `/graphql` or another `path` (REQ-EXEC-48/AC2):
+   * every `next` payload is a message, checked with `verify(step, "messages.<n>.data.<field>", ...)`.
+   */
+  readonly subscribe: (
+    query: string,
+    variables?: Record<string, unknown>,
+    options?: { readonly path?: string },
+  ) => Promise<ApiStream>;
   /** A `multipart/form-data` body: text fields and files of the plan by key, `{ field: "<file key>" }`. */
   readonly multipart: (parts: {
     readonly fields?: Readonly<Record<string, string>>;
@@ -120,6 +158,24 @@ export interface ApiClient {
   readonly binary: (fileKey: string) => ApiBody;
   /** A plain text body, `text/plain` unless another text type is given. */
   readonly text: (text: string, type?: string) => ApiBody;
+  /**
+   * A GraphQL query or mutation (REQ-EXEC-48/AC2), sent as `POST /graphql` (or `options.path`) with its variables;
+   * expectations read `data.<field>` and `errors` like JSON fields.
+   */
+  /**
+   * A SOAP request (REQ-EXEC-50/AC1): the body element is wrapped in the envelope of SOAP 1.1 (default) or 1.2 with
+   * its content type and `SOAPAction`, and sent as `POST <path>`.
+   */
+  readonly soap: (
+    path: string,
+    body: string,
+    options?: ApiCallOptions & { readonly action?: string; readonly version?: "1.1" | "1.2" },
+  ) => Promise<ApiResponse>;
+  readonly graphql: (
+    query: string,
+    variables?: Readonly<Record<string, unknown>>,
+    options?: ApiCallOptions & { readonly path?: string },
+  ) => Promise<ApiResponse>;
 }
 
 /** Read access to the approved plan's expectations (invariant 4). */
@@ -186,6 +242,17 @@ export interface InboxClient {
 // Defined in @qajitsu/core (ADR-0005) and re-exported here for spec authors and runners.
 export type { AttemptRecord, EvidenceItem } from "@qajitsu/core";
 
+/** REQ-EVD-09: what an attempt keeps and checks of the page's traffic. */
+export interface AttemptNetworkOptions {
+  /** AC3: keep the JSON bodies of the application's responses up to this size, masked. */
+  readonly bodies?: { readonly maxBytes: number } | undefined;
+  /** AC4: the project's limits per step; a case's `network_budget` wins. */
+  readonly budget?: NetworkBudget | undefined;
+}
+
+/** A JSON web token or a bearer value: a kept body that holds one is dropped (REQ-EVD-09/AC3). */
+const LOOKS_LIKE_TOKEN = /eyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]{8,}|Bearer\s+[\w.~+/-]{16,}/;
+
 /** Settings of one case attempt. */
 export interface CaseRuntimeOptions {
   /** Account secrets for `ui.fillSecret` (REQ-EXEC-67/AC3), held by the parent only. */
@@ -232,6 +299,15 @@ export interface CaseRuntimeOptions {
   readonly testStateHook?: string | undefined;
   /** How long a download or a new page may take, in ms (15 s by default). */
   readonly waitTimeoutMs?: number | undefined;
+  /**
+   * The run's limits for a shared environment (REQ-EXEC-54): the rate every request waits for, how long the case may
+   * wait out `429` and `503`, and the idempotency header. Without it: no rate, a 30 s budget, `Idempotency-Key`.
+   */
+  readonly traffic?: Pick<TrafficPolicy, "throttle" | "retryBudgetMs" | "idempotencyHeader"> | undefined;
+  /** Opens WebSockets and event streams (REQ-EXEC-47); without it a spec that opens one errors. */
+  readonly streams?: StreamTransport | undefined;
+  /** REQ-EVD-09/AC3+AC4: the project's traffic budget, and whether the page's JSON bodies are kept (masked). */
+  readonly network?: AttemptNetworkOptions | undefined;
 }
 
 /** The recorder of one attempt. Runs in the trusted process; specs only reach it through these operations. */
@@ -252,6 +328,21 @@ export interface CaseRuntime {
     body: unknown,
     options: ApiCallOptions,
   ) => Promise<ApiTransportResponse>;
+  /** Opens a stream of the current step for the sandbox (REQ-EXEC-47); returns its handle number. */
+  readonly openStream: (
+    alias: string | undefined,
+    kind: StreamKind,
+    path: string,
+    protocols?: readonly string[],
+    graphql?: { readonly query: string; readonly variables?: Readonly<Record<string, unknown>> },
+  ) => Promise<number>;
+  /**
+   * REQ-EVD-09/AC3..AC7: the analysis of the page's traffic as `network-analysis.json`, each finding linked to its
+   * entry of the attempt's HAR; called by the runner after the browser closed. Undefined without web traffic.
+   */
+  readonly networkAnalysis: (har: string | undefined) => EvidenceItem | undefined;
+  /** Sends on, reads or closes a stream opened with `openStream`. */
+  readonly streamOp: (handle: number, op: "send" | "messages" | "close", data?: unknown) => Promise<unknown>;
   /** Performs one browser action (REQ-EXEC-05, REQ-EXEC-07). */
   readonly uiOp: (operation: UiOperation) => Promise<void>;
   /** Computes and records an assertion from the step's last response or the live page and the approved plan. */
@@ -304,6 +395,15 @@ function expectationOf(planCase: TestCase, stepId: string, field: string, path: 
     if (!e.fields || !(key in e.fields))
       throw new Error(`plan.expect('${path}'): no expected field '${key}'`);
     value = e.fields[key];
+  } else if (kind === "messages" && rest.length > 0) {
+    const key = rest.join(".");
+    if (!e.messages || !(key in e.messages))
+      throw new Error(`plan.expect('${path}'): no expected message '${key}'`);
+    value = e.messages[key];
+  } else if (kind === "xml" && rest.length > 0) {
+    const key = rest.join(".");
+    if (!e.xml || !(key in e.xml)) throw new Error(`plan.expect('${path}'): no expected XPath '${key}'`);
+    value = e.xml[key];
   } else if (kind === "texts" && rest.length === 1) value = e.texts?.[Number(rest[0])];
   else if (kind === "elements" && rest.length >= 2) {
     const property = rest.at(-1) as UiProperty;
@@ -398,6 +498,8 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   const secretFields = new Set<string>();
   /** Every request the page sent (REQ-EVD-09), as the parent saw it, masked by the driver. */
   const traffic: UiRequest[] = [];
+  /** REQ-EVD-09/AC3..AC6: the requests of every step, in order, for the traffic analysis. */
+  const stepTraffic: { stepId: string; requests: UiRequest[] }[] = [];
   const assertions: AssertionRecord[] = [];
   const media: EvidenceItem[] = [];
   const calls: {
@@ -421,6 +523,38 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       new Promise((resolve) => {
         setTimeout(resolve, ms);
       }));
+  const streams = createStreams({
+    transport: options.streams,
+    baseUrl: options.baseUrl,
+    allowedOrigins: options.allowedOrigins,
+    masker,
+    now: options.now,
+    sleep,
+  });
+  const streamHandles: ApiStream[] = [];
+  /** REQ-EXEC-47/AC1+AC2: a stream of the current step, opened by this process with the account's authentication. */
+  const openStream = async (
+    alias: string | undefined,
+    kind: StreamKind,
+    path: string,
+    protocols?: readonly string[],
+    graphql?: { readonly query: string; readonly variables?: Readonly<Record<string, unknown>> },
+  ): Promise<ApiStream> => {
+    if (currentStep === undefined) throw new Error("streams must be opened inside step()");
+    const accountHeaders = alias === undefined ? {} : options.accounts[alias];
+    if (accountHeaders === undefined) throw new Error(`Unknown account alias '${alias ?? ""}'`);
+    lastAction.set(currentStep, "api");
+    // A spec's values are not typed at run time: a null or a list as variables is refused, not sent.
+    const variables: unknown = graphql?.variables;
+    if (
+      graphql !== undefined &&
+      (typeof graphql.query !== "string" ||
+        (variables !== undefined &&
+          (typeof variables !== "object" || variables === null || Array.isArray(variables))))
+    )
+      throw new Error("api.subscribe: the query must be a string and the variables an object");
+    return streams.open(currentStep, kind, path, accountHeaders, protocols, graphql);
+  };
 
   /** Browser sessions by name (REQ-EXEC-62); `main` is the case's first one. `driver` is the active session's. */
   const sessions = new Map<string, UiDriver>();
@@ -628,6 +762,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     // REQ-EVD-09/AC1: the requests the step sent; what went wrong is shown next to a failed or blocked step.
     const sent = openSessions().flatMap(([, d]) => d.takeNetwork?.() ?? []);
     traffic.push(...sent);
+    if (sent.length > 0) stepTraffic.push({ stepId, requests: sent });
     const failedHere = error !== undefined || assertions.some((a) => a.stepId === stepId && !a.pass);
     const problems = failedHere ? (maskValue(diagnoseNetwork(sent)) as NetworkProblem[]) : [];
     if (problems.length > 0)
@@ -719,7 +854,14 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   const requestBody = async (
     stepId: string,
     body: Record<string, unknown>,
-  ): Promise<{ payload: ApiPayload; evidence: unknown; curl: string[]; contentType?: string }> => {
+  ): Promise<{
+    payload: ApiPayload;
+    evidence: unknown;
+    curl: string[];
+    contentType?: string;
+    headers?: Record<string, string>;
+    soap?: { version: string; action?: string };
+  }> => {
     const invalid = (): Error =>
       new Error("api: invalid request body; use api.multipart, form, binary or text");
     const strings = (v: unknown): Record<string, string> => {
@@ -783,6 +925,32 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         contentType: f.type,
       };
     }
+    if (kind === "soap") {
+      const xml = body["body"];
+      const version = body["version"] ?? "1.1";
+      const action = body["action"];
+      if (
+        typeof xml !== "string" ||
+        (version !== "1.1" && version !== "1.2") ||
+        (action !== undefined && typeof action !== "string")
+      )
+        throw invalid();
+      const envelope = soapEnvelope(xml, version);
+      const contentType =
+        version === "1.1"
+          ? "text/xml; charset=utf-8"
+          : `application/soap+xml; charset=utf-8${action === undefined ? "" : `; action="${action}"`}`;
+      return {
+        payload: { kind: "bytes", data: new TextEncoder().encode(envelope), type: contentType },
+        evidence: {
+          soap: { version, ...(action === undefined ? {} : { action }), envelope: masker.maskText(envelope) },
+        },
+        curl: [`--data-binary ${shellQuote(masker.maskText(envelope))}`],
+        contentType,
+        ...(version === "1.1" ? { headers: { soapaction: `"${action ?? ""}"` } } : {}),
+        soap: { version, ...(action === undefined ? {} : { action }) },
+      };
+    }
     if (kind === "text") {
       const text = body["text"];
       const type = body["type"] ?? "text/plain";
@@ -815,9 +983,24 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     return { name, type: type || mimeOf(name), data: response.bytes };
   };
 
+  const limits = options.traffic ?? {
+    throttle: () => Promise.resolve(),
+    retryBudgetMs: 30_000,
+    idempotencyHeader: "Idempotency-Key",
+  };
+  /** How long this attempt has waited out `Retry-After` so far (REQ-EXEC-54/AC3). */
+  let retrySpentMs = 0;
+  /** Idempotency keys handed out per step (REQ-EXEC-54/AC4). */
+  const keysPerStep = new Map<string, number>();
+
   const call: CaseRuntime["call"] = async (alias, method, path, body, opts) => {
     if (currentStep === undefined) throw new Error("API calls must run inside step()");
     const stepId = currentStep;
+    const planStep = planCase.steps.find((s) => s.id === stepId);
+    // REQ-EXEC-54/AC4: a mutating request of a step that asks for it carries a key of its own, the same on retries.
+    const keyed = method !== "GET" && planStep?.idempotency_key === true;
+    const key = keyed ? (keysPerStep.get(stepId) ?? 0) + 1 : 0;
+    if (keyed) keysPerStep.set(stepId, key);
     lastAction.set(stepId, "api");
     const url = new URL(path, options.baseUrl);
     for (const [k, v] of Object.entries(opts.query ?? {})) url.searchParams.set(k, String(v));
@@ -825,6 +1008,28 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       throw new Error(`URL ${url.origin} is not in the environment allowlist`);
     const accountHeaders = alias === undefined ? {} : options.accounts[alias];
     if (accountHeaders === undefined) throw new Error(`Unknown account alias '${alias ?? ""}'`);
+    // REQ-EXEC-48/AC2: a GraphQL call is a JSON body of its query and variables, marked so the verifier checks it.
+    const graphql =
+      typeof body === "object" &&
+      body !== null &&
+      !Array.isArray(body) &&
+      (body as { __qjBody?: unknown }).__qjBody === "graphql"
+        ? (body as { query?: unknown; variables?: unknown })
+        : undefined;
+    if (
+      graphql !== undefined &&
+      (typeof graphql.query !== "string" ||
+        (graphql.variables !== undefined &&
+          (typeof graphql.variables !== "object" ||
+            graphql.variables === null ||
+            Array.isArray(graphql.variables))))
+    )
+      throw new Error("api.graphql: the query must be a string and the variables an object");
+    if (graphql !== undefined)
+      body = {
+        query: graphql.query,
+        ...(graphql.variables === undefined ? {} : { variables: graphql.variables }),
+      };
     const special =
       typeof body === "object" && body !== null && !Array.isArray(body) && "__qjBody" in body
         ? await requestBody(stepId, body)
@@ -839,16 +1044,53 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
           : { "content-type": special.contentType }),
       // REQ-EXEC-14: a locale run asks the API for that locale; a spec may still set its own header.
       ...(options.locale ? { "accept-language": options.locale } : {}),
+      ...special?.headers,
       ...opts.headers,
+      ...(keyed
+        ? { [limits.idempotencyHeader]: `qj-${caseId}-${stepId}-a${String(options.attempt)}-${String(key)}` }
+        : {}),
       ...accountHeaders,
     };
     const started = options.now();
-    const response = await options.transport({
-      method,
-      url: url.toString(),
-      headers,
-      ...(special ? { payload: special.payload } : body === undefined ? {} : { body }),
-    });
+    const sent = (): Promise<ApiTransportResponse> =>
+      limits.throttle(url.toString()).then(() =>
+        options.transport({
+          method,
+          url: url.toString(),
+          headers,
+          ...(special ? { payload: special.payload } : body === undefined ? {} : { body }),
+        }),
+      );
+    // REQ-EXEC-54/AC2: only a request that is safe to repeat is sent again: a GET, or one with an idempotency key.
+    const safe = method === "GET" || keyed;
+    const retries: Record<string, unknown>[] = [];
+    let response: ApiTransportResponse;
+    for (;;) {
+      try {
+        response = await sent();
+      } catch (error) {
+        if (!safe || retries.filter((r) => "error" in r).length >= 2) throw error;
+        retries.push({ error: describeError(error), waitedMs: 0 });
+        continue;
+      }
+      const limit =
+        response.status === 429 || response.status === 503
+          ? retryAfterMs(response.headers, options.now())
+          : undefined;
+      // A step that tests the limit itself gets the answer as it came.
+      if (limit === undefined || planStep?.expect.status === response.status) break;
+      if (!safe)
+        throw new Error(
+          `rate limited: ${method} ${url.pathname} answered ${String(response.status)}; the request is not safe to repeat (no idempotency key)`,
+        );
+      if (retrySpentMs + limit > limits.retryBudgetMs)
+        throw new Error(
+          `rate limited: ${method} ${url.pathname} answered ${String(response.status)} (Retry-After ${String(limit / 1000)} s) after ${String(retrySpentMs / 1000)} s of the ${String(limits.retryBudgetMs / 1000)} s budget`,
+        );
+      await sleep(limit);
+      retrySpentMs += limit;
+      retries.push({ status: response.status, waitedMs: limit });
+    }
     const durationMs = options.now() - started;
     const file = responseFile(url.pathname, response);
     const parsed = file === undefined ? parseJson(response.text) : undefined;
@@ -885,6 +1127,9 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       record: {
         method,
         url: masker.maskText(url.toString()),
+        ...(graphql !== undefined ? { graphql: true } : {}),
+        // REQ-EXEC-50/AC2: marked so the verifier checks its fault and its body against the WSDL.
+        ...(special?.soap ? { soap: special.soap } : {}),
         request: { headers: maskedHeaders, body: special ? special.evidence : maskValue(body) },
         response: {
           status: response.status,
@@ -892,6 +1137,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
           body: responseBody,
         },
         durationMs,
+        ...(retries.length > 0 ? { retries } : {}),
         curl,
       },
     });
@@ -1589,6 +1835,34 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       );
       return;
     }
+    if (kind === "messages") {
+      // REQ-EXEC-47/AC1+AC2+AC5: the check waits for the planned message itself, so a spec cannot look too early; a
+      // message that never comes fails the step, with the close code and reason when the stream ended first.
+      const stream = streams.last(stepId);
+      if (!stream)
+        throw new Error(
+          `verify('${stepId}', '${field}') needs a stream opened in the step: api.websocket() or api.events()`,
+        );
+      const timeoutMs = (planCase.steps.find((x) => x.id === stepId)?.stream?.timeout_s ?? 10) * 1000;
+      const ended = (): string =>
+        stream.closed && stream.closed.code !== 1000
+          ? ` (the stream closed with ${String(stream.closed.code)}${stream.closed.reason ? ` ${stream.closed.reason}` : ""})`
+          : "";
+      if (rest[0] === "count") {
+        await streams.waitFor(stream, () => false, timeoutMs);
+        record(expected, stream.messages.length);
+        return;
+      }
+      const n = Number(rest[0]);
+      const came = await streams.waitFor(stream, () => stream.messages.length > n, timeoutMs);
+      record(
+        expected,
+        came
+          ? at(stream.messages[n], rest.slice(1).join("."))
+          : `(no message ${String(n)} within ${String(timeoutMs / 1000)} s${ended()})`,
+      );
+      return;
+    }
     const last = calls.filter((c) => c.stepId === stepId).at(-1);
     if (!last) throw new Error(`verify('${stepId}', '${field}') needs a response recorded in the step`);
     const action = ACTION.exec(planCase.steps.find((x) => x.id === stepId)?.action ?? "");
@@ -1604,7 +1878,19 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     let actual: unknown;
     if (kind === "status") actual = last.status;
     else if (kind === "fields") actual = at(last.body, rest.join("."));
-    else if (kind === "texts")
+    else if (kind === "xml") {
+      // REQ-EXEC-50/AC3: text from XML is read as the plan's type when it is that type written as text.
+      const raw = xmlValue(last.text, rest.join("."));
+      actual =
+        typeof expected === "number" &&
+        typeof raw === "string" &&
+        raw.trim() !== "" &&
+        !Number.isNaN(Number(raw))
+          ? Number(raw)
+          : typeof expected === "boolean" && (raw === "true" || raw === "false")
+            ? raw === "true"
+            : raw;
+    } else if (kind === "texts")
       actual =
         typeof expected === "string" && last.text.includes(expected)
           ? expected
@@ -1636,7 +1922,13 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     ): Promise<ApiResponse> => {
       const r = await call(alias, method, path, body, opts);
       const parsed = parseJson(r.text);
-      return { status: r.status, headers: r.headers, text: r.text, json: (p) => at(parsed, p) };
+      return {
+        status: r.status,
+        headers: r.headers,
+        text: r.text,
+        json: (p) => at(parsed, p),
+        xml: (x) => Promise.resolve(xmlValue(r.text, x)),
+      };
     };
     return {
       get: (path, o) => send("GET", path, undefined, o),
@@ -1644,7 +1936,33 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       put: (path, body, o) => send("PUT", path, body, o),
       patch: (path, body, o) => send("PATCH", path, body, o),
       delete: (path, o) => send("DELETE", path, undefined, o),
+      soap: (path, body, o) =>
+        send(
+          "POST",
+          path,
+          {
+            __qjBody: "soap",
+            body,
+            ...(o?.action === undefined ? {} : { action: o.action }),
+            ...(o?.version === undefined ? {} : { version: o.version }),
+          },
+          o,
+        ),
+      graphql: (query, variables, o) =>
+        send(
+          "POST",
+          o?.path ?? "/graphql",
+          { __qjBody: "graphql", query, ...(variables ? { variables } : {}) },
+          o,
+        ),
       as: (a) => client(a),
+      websocket: (path, o) => openStream(alias, "websocket", path, o?.protocols),
+      events: (path) => openStream(alias, "sse", path),
+      subscribe: (query, variables, o) =>
+        openStream(alias, "websocket", o?.path ?? "/graphql", ["graphql-transport-ws"], {
+          query,
+          ...(variables === undefined ? {} : { variables }),
+        }),
       ...bodies,
     };
   };
@@ -1751,6 +2069,41 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     pollRound,
     endStep,
     call,
+    networkAnalysis: (har) => {
+      if (stepTraffic.length === 0) return undefined;
+      const all = stepTraffic.flatMap((s) => s.requests);
+      const bodies = options.network?.bodies;
+      const analysis = analyzeTraffic(stepTraffic, {
+        appSecure: new URL(options.baseUrl).protocol === "https:",
+        // A case's own budget wins over the project's.
+        budget: planCase.network_budget ?? options.network?.budget,
+        ...(bodies
+          ? {
+              bodies: {
+                maxBytes: bodies.maxBytes,
+                mask: maskValue,
+                looksSecret: (text: string) => masker.containsSecret(text) || LOOKS_LIKE_TOKEN.test(text),
+              },
+            }
+          : {}),
+        har: linkHar(all, harRequests(har ?? ""), new URL(options.baseUrl).origin),
+      });
+      return {
+        stepId: "case",
+        kind: "log",
+        name: NETWORK_ANALYSIS_FILE,
+        content: masker.maskText(`${JSON.stringify(analysis, null, 2)}\n`),
+      };
+    },
+    openStream: async (alias, kind, path, protocols, graphql) => {
+      streamHandles.push(await openStream(alias, kind, path, protocols, graphql));
+      return streamHandles.length - 1;
+    },
+    streamOp: (handle, op, data) => {
+      const stream = streamHandles[handle];
+      if (!stream) return Promise.reject(new Error(`no stream ${String(handle)}`));
+      return op === "send" ? stream.send(data) : op === "messages" ? stream.messages() : stream.close();
+    },
     uiOp,
     verify,
     inboxAddress,
@@ -1760,7 +2113,8 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       // REQ-EXEC-11/AC5: a manual step the spec never ran cannot be skipped into a pass.
       for (const id of manualSteps.keys())
         if (!steps.some((s) => s.id === id)) failure ??= `manual step ${id} was not performed`;
-      const evidence: EvidenceItem[] = [...media];
+      // REQ-EXEC-47/AC4: every frame of every stream, masked.
+      const evidence: EvidenceItem[] = [...media, ...streams.finish()];
       // REQ-EXEC-39/AC2: which page each action went to, when the case used more than one or new web actions.
       if (
         actions.some((a) => a["page"] !== undefined && a["page"] !== 0) ||

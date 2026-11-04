@@ -18,9 +18,41 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
+    "webdriverio": "9.32.0"
+  },
+  "peerDependencies": {
+    "@qajitsu/adapter-runner-api": "workspace:^",
+    "@qajitsu/core": "workspace:^",
+    "@qajitsu/steps": "workspace:^",
+    "@qajitsu/toolchain": "workspace:^"
+  },
+  "devDependencies": {
     "@qajitsu/adapter-runner-api": "workspace:*",
     "@qajitsu/core": "workspace:*",
     "@qajitsu/steps": "workspace:*",
-    "webdriverio": "^9.32.0"
+    "@qajitsu/toolchain": "workspace:*"
+  },
+  "qajitsu": {
+    "plugin": {
+      "types": [
+        "runner",
+        "device provider"
+      ],
+      "core_api": "^1.0.0",
+      "secrets": [
+        "account credentials",
+        "device farm access key"
+      ],
+      "hosts": [
+        "localhost",
+        "config"
+      ],
+      "permissions": [
+        "network",
+        "exec",
+        "filesystem",
+        "environment"
+      ]
+    }
   }
 }

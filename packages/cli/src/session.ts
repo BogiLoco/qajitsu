@@ -1,4 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
+import type { PluginLoader } from "./plugins/load.js";
+import { pluginLoader } from "./commands/plugin.js";
 import { join } from "node:path";
 import {
   ConfigError,
@@ -36,6 +38,8 @@ export interface RunSession {
   readonly models: ModelRegistry;
   /** Resolves `secret://` references and registers values with the masker. */
   readonly resolveSecret: (reference: string) => Promise<string>;
+  /** Loads the plugins of the run (REQ-GEN-11/AC2); sessions built by hand in tests use the bundled ones. */
+  readonly plugins?: PluginLoader;
   /** The command's clock (ports), for timestamps and the day a price applies to. */
   readonly now?: () => Date;
 }
@@ -152,7 +156,17 @@ export async function openSession(
     ...(ports.extraModels ? { extra: ports.extraModels } : {}),
     ...(ports.contextPolicy ? { contextPolicy: ports.contextPolicy } : {}),
   });
-  return { project, ws, masker, logger, events, models, resolveSecret, now: ports.now };
+  return {
+    project,
+    ws,
+    masker,
+    logger,
+    events,
+    models,
+    resolveSecret,
+    now: ports.now,
+    plugins: pluginLoader(ports),
+  };
 }
 
 /**

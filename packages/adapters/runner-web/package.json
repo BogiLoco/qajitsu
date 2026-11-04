@@ -18,17 +18,44 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@qajitsu/adapter-runner-api": "workspace:*",
-    "@qajitsu/steps": "workspace:*",
     "axe-core": "catalog:",
     "pixelmatch": "8.0.0",
-    "playwright-core": "^1.63.0",
+    "playwright-core": "1.63.0",
     "pngjs": "7.0.0"
+  },
+  "peerDependencies": {
+    "@qajitsu/adapter-runner-api": "workspace:^",
+    "@qajitsu/core": "workspace:^",
+    "@qajitsu/steps": "workspace:^",
+    "@qajitsu/toolchain": "workspace:^"
   },
   "devDependencies": {
     "@qajitsu/adapter-evidence-local": "workspace:*",
+    "@qajitsu/adapter-runner-api": "workspace:*",
     "@qajitsu/core": "workspace:*",
+    "@qajitsu/steps": "workspace:*",
+    "@qajitsu/toolchain": "workspace:*",
     "@qajitsu/verifier": "workspace:*",
     "@types/pngjs": "^6.0.5"
+  },
+  "qajitsu": {
+    "plugin": {
+      "types": [
+        "runner"
+      ],
+      "core_api": "^1.0.0",
+      "secrets": [
+        "account credentials",
+        "TOTP seeds"
+      ],
+      "hosts": [
+        "config"
+      ],
+      "permissions": [
+        "network",
+        "exec",
+        "filesystem"
+      ]
+    }
   }
 }

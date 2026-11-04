@@ -1,7 +1,7 @@
-import { readFile, readdir } from "node:fs/promises";
-import { join } from "node:path";
 import {
   AdapterError,
+  bugMarkdown,
+  componentTag,
   createHttpClient,
   type AdapterDeps,
   type DocumentSource,
@@ -46,42 +46,8 @@ const BugSchema = z.object({
 });
 
 /** Component tags: `component-<slug>` (REQ-KNOW-12/AC2), so `search_docs` can narrow to one area. */
-export const componentTag = (name: string): string =>
-  `component-${
-    name
-      .toLowerCase()
-      .replace(/[^a-z0-9.-]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 30) || "none"
-  }`;
 
 const quoteJql = (value: string): string => `"${value.replace(/[\\"]/g, (c) => `\\${c}`)}"`;
-
-/** Markdown of a resolved bug for the knowledge base: what broke, where, how it was resolved, the last comments. */
-function bugMarkdown(
-  key: string,
-  summary: string,
-  details: {
-    components: readonly string[];
-    resolution?: string | undefined;
-    resolvedAt?: string | undefined;
-    fixVersions: readonly string[];
-    description: string;
-    comments: readonly string[];
-  },
-): string {
-  return [
-    `# ${key} ${summary}`,
-    "",
-    `Components: ${details.components.join(", ") || "none"}`,
-    `Resolution: ${details.resolution ?? "unknown"}${details.resolvedAt ? ` (${details.resolvedAt.slice(0, 10)})` : ""}`,
-    ...(details.fixVersions.length > 0 ? [`Fix versions: ${details.fixVersions.join(", ")}`] : []),
-    "",
-    "## Description",
-    details.description || "(none)",
-    ...(details.comments.length > 0 ? ["", "## Comments", ...details.comments.map((c) => `- ${c}`)] : []),
-  ].join("\n");
-}
 
 /**
  * Resolved bugs of a Jira project as a knowledge source for regression ideas (REQ-KNOW-12/AC2): issues of type Bug
@@ -185,69 +151,6 @@ export function createJiraBugSource(
               (c) =>
                 `${c.author?.displayName ?? "someone"}: ${toText(c.body).replace(/\s+/g, " ").slice(0, 500)}`,
             ),
-        }),
-      };
-    },
-  };
-}
-
-const FileBugSchema = z.object({
-  key: z.string(),
-  type: z.string().default("Story"),
-  status: z.string().default("Unknown"),
-  summary: z.string(),
-  description: z.string().default(""),
-  components: z.array(z.string()).default([]),
-  updated: z.string().optional(),
-  resolution: z.string().optional(),
-  comments: z.array(z.object({ author: z.string(), body: z.string() })).default([]),
-});
-
-const DONE = /^(done|closed|resolved|fixed)$/i;
-
-/**
- * Resolved bugs from ticket files (`jira.type: file`): the same source for offline demos and tests
- * (REQ-KNOW-12/AC2).
- *
- * @param dir - Directory of `<KEY>.json` tickets.
- */
-export function createFileBugSource(
-  dir: string,
-  options: { readonly component?: string | undefined } = {},
-): DocumentSource {
-  const read = async (): Promise<z.infer<typeof FileBugSchema>[]> => {
-    const out: z.infer<typeof FileBugSchema>[] = [];
-    for (const name of (await readdir(dir)).filter((n) => n.endsWith(".json")).sort()) {
-      const parsed = FileBugSchema.safeParse(JSON.parse(await readFile(join(dir, name), "utf8")));
-      if (!parsed.success) continue;
-      const t = parsed.data;
-      if (t.type.toLowerCase() !== "bug" || !DONE.test(t.status)) continue;
-      if (options.component !== undefined && !t.components.includes(options.component)) continue;
-      out.push(t);
-    }
-    return out;
-  };
-  return {
-    async list() {
-      return (await read()).map((t) => ({
-        id: t.key,
-        title: t.summary,
-        version: t.updated ?? `${t.status}:${String(t.description.length)}`,
-        modifiedAt: t.updated ?? new Date(0).toISOString(),
-        tags: t.components.map(componentTag),
-      }));
-    },
-    async load(document) {
-      const t = (await read()).find((x) => x.key === document.id);
-      if (!t) throw new AdapterError("JIRA_ISSUE_NOT_FOUND", `${document.id} is not a resolved bug.`, {});
-      return {
-        format: "markdown",
-        text: bugMarkdown(t.key, t.summary, {
-          components: t.components,
-          resolution: t.resolution ?? t.status,
-          fixVersions: [],
-          description: t.description,
-          comments: t.comments.slice(-5).map((c) => `${c.author}: ${c.body}`),
         }),
       };
     },

@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { channelExecutables } from "@qajitsu/toolchain";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
@@ -136,6 +137,14 @@ async function pageElements(page: Page, testIdAttribute: string): Promise<UiElem
     ...accessible,
   ];
 }
+
+/** The response headers of an application page the traffic analysis reads (REQ-EVD-09/AC6). */
+const SECURITY_HEADERS = [
+  "content-security-policy",
+  "x-content-type-options",
+  "x-frame-options",
+  "strict-transport-security",
+] as const;
 
 /**
  * Turns a spec selector into a Playwright locator: test ids and accessible roles first, CSS last
@@ -538,6 +547,23 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
             }
           })(),
         };
+        // REQ-EVD-09/AC6: the query of every URL, masked, also for other hosts; an http: request of an https: page.
+        try {
+          const u = new URL(url);
+          const query: Record<string, string> = {};
+          for (const [k, v] of u.searchParams) query[k.slice(0, 100)] = masker.maskText(v.slice(0, 200));
+          if (Object.keys(query).length > 0) entry.query = query;
+          const pageUrl = (() => {
+            try {
+              return rq.frame().url();
+            } catch {
+              return "";
+            }
+          })();
+          if (u.protocol === "http:" && pageUrl.startsWith("https:")) entry.mixed = true;
+        } catch {
+          // Not a URL the analysis can read.
+        }
         traffic.push(entry);
         entries.set(rq, entry);
         rawUrls.set(entry, url);
@@ -547,6 +573,29 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
         const entry = entries.get(res.request());
         if (!entry) return;
         entry.status = res.status();
+        const headers = res.headers();
+        if (headers["content-type"] !== undefined) entry.contentType = headers["content-type"].slice(0, 100);
+        // REQ-EVD-09/AC6: the security headers of the application's pages and the flags of the cookies set.
+        if (entry.sameOrigin && entry.resourceType === "document")
+          entry.securityHeaders = Object.fromEntries(
+            SECURITY_HEADERS.flatMap((h) =>
+              headers[h] === undefined ? [] : [[h, headers[h].slice(0, 500)]],
+            ),
+          );
+        void res
+          .headersArray()
+          .then((all) => {
+            const cookies = all
+              .filter((h) => h.name.toLowerCase() === "set-cookie")
+              .flatMap((h) => h.value.split("\n"))
+              .map((line) => ({
+                name: (line.split("=")[0] ?? "").trim().slice(0, 100),
+                secure: /;\s*secure\b/i.test(line),
+                httpOnly: /;\s*httponly\b/i.test(line),
+              }));
+            if (cookies.length > 0) entry.cookies = cookies;
+          })
+          .catch(() => undefined);
         const location = res.headers()["location"];
         if (location !== undefined)
           try {
@@ -554,6 +603,29 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
           } catch {
             entry.location = masker.maskText(location.slice(0, 300));
           }
+      });
+      // REQ-EVD-09/AC3+AC4: how long the request took, its size, and the JSON body when the project keeps bodies.
+      const bodies = input.network?.bodies;
+      context.on("requestfinished", (rq) => {
+        const entry = entries.get(rq);
+        if (!entry) return;
+        const timing = rq.timing();
+        if (timing.responseEnd >= 0) entry.durationMs = timing.responseEnd;
+        void rq
+          .sizes()
+          .then(async (sizes) => {
+            entry.bytes = sizes.responseBodySize + sizes.responseHeadersSize;
+            if (
+              bodies &&
+              entry.sameOrigin &&
+              /json/i.test(entry.contentType ?? "") &&
+              sizes.responseBodySize <= bodies.maxBytes
+            ) {
+              const res = await rq.response();
+              if (res) entry.bodyText = (await res.body()).toString("utf8");
+            }
+          })
+          .catch(() => undefined);
       });
       context.on("requestfailed", (rq) => {
         const entry = entries.get(rq);
@@ -1119,52 +1191,6 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
       },
     };
   };
-}
-
-const CHANNEL_DIRS: Readonly<Record<string, { mac: string; linux: string; win: string }>> = {
-  chrome: {
-    mac: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    linux: "/opt/google/chrome/chrome",
-    win: "Google\\Chrome\\Application\\chrome.exe",
-  },
-  "chrome-beta": {
-    mac: "/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta",
-    linux: "/opt/google/chrome-beta/chrome",
-    win: "Google\\Chrome Beta\\Application\\chrome.exe",
-  },
-  msedge: {
-    mac: "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-    linux: "/opt/microsoft/msedge/msedge",
-    win: "Microsoft\\Edge\\Application\\msedge.exe",
-  },
-  "msedge-beta": {
-    mac: "/Applications/Microsoft Edge Beta.app/Contents/MacOS/Microsoft Edge Beta",
-    linux: "/opt/microsoft/msedge-beta/msedge",
-    win: "Microsoft\\Edge Beta\\Application\\msedge.exe",
-  },
-};
-
-/**
- * Where Playwright looks for an installed branded browser (REQ-EXEC-66/AC2): the vendor's standard install paths.
- *
- * @param channel - `chrome`, `chrome-beta`, `msedge` or `msedge-beta`.
- * @param os - Platform, `process.platform` by default.
- * @param env - Environment with `LOCALAPPDATA` and `PROGRAMFILES` on Windows.
- */
-export function channelExecutables(
-  channel: string,
-  os: NodeJS.Platform = process.platform,
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): string[] {
-  const dirs = CHANNEL_DIRS[channel];
-  if (!dirs) return [];
-  if (os === "darwin") return [dirs.mac];
-  if (os === "linux") return [dirs.linux];
-  if (os === "win32")
-    return [env["LOCALAPPDATA"], env["PROGRAMFILES"], env["PROGRAMFILES(X86)"]]
-      .filter((d): d is string => d !== undefined && d !== "")
-      .map((d) => `${d}\\${dirs.win}`);
-  return [];
 }
 
 /**

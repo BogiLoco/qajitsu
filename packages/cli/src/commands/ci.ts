@@ -447,7 +447,7 @@ export async function runCiComment(
   const masker = createMasker();
   try {
     const session = await openSession(rawKey, options.run, io.cwd, ports, masker);
-    const { codeHosts } = buildAdapters(
+    const { codeHosts } = await buildAdapters(
       session.project,
       {
         fetch: ports.fetch,

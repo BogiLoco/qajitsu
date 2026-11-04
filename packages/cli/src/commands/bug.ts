@@ -1,5 +1,8 @@
 import { resolve } from "node:path";
-import { createFileBugTracker, createJiraBugTracker } from "@qajitsu/adapter-publish-jira";
+import { createFileBugTracker } from "@qajitsu/adapter-files";
+import type * as JiraPublishPlugin from "@qajitsu/adapter-publish-jira";
+import { lazyBugTracker } from "../plugins/lazy.js";
+import { jiraMediaHosts, pluginFetch, sessionPlugins } from "./plugin.js";
 import {
   ConfigError,
   GateFailedError,
@@ -39,17 +42,26 @@ export function bugTrackerFor(session: RunSession, ports: RuntimePorts): BugTrac
       resolve(project.qaDir, jira.tickets_dir ?? "tickets"),
       ws.path("report", "bugs"),
     );
-  return createJiraBugTracker(
-    { flavor: jira.type, baseUrl: jira.base_url ?? "", email: jira.email, token: jira.token ?? "" },
-    {
-      fetch: ports.fetch,
-      logger,
-      now: ports.now,
-      resolveSecret: session.resolveSecret,
-      registerSecret: (v) => {
-        masker.register(v);
+  const flavor = jira.type;
+  return lazyBugTracker(async () =>
+    (await sessionPlugins(session).load<typeof JiraPublishPlugin>("publish-jira")).createJiraBugTracker(
+      { flavor, baseUrl: jira.base_url ?? "", email: jira.email, token: jira.token ?? "" },
+      {
+        fetch: pluginFetch(
+          sessionPlugins(session),
+          ports.fetch,
+          "publish-jira",
+          [project.config.jira.base_url],
+          jiraMediaHosts(project.config),
+        ),
+        logger,
+        now: ports.now,
+        resolveSecret: session.resolveSecret,
+        registerSecret: (v) => {
+          masker.register(v);
+        },
       },
-    },
+    ),
   );
 }
 

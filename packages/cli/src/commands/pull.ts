@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { createJiraAttachmentReader } from "@qajitsu/adapter-publish-jira";
+import type * as JiraPublishPlugin from "@qajitsu/adapter-publish-jira";
 import { ConfigError, QajitsuError, RunIdSchema, TicketKeySchema, resolveWorkspaceRoot } from "@qajitsu/core";
 import { unzip } from "@qajitsu/report";
 import { createMasker } from "@qajitsu/steps";
@@ -12,6 +12,7 @@ import { createCliSecretResolver } from "../adapters.js";
 import { createCliLogger } from "../logger.js";
 import { loadProject } from "../project.js";
 import type { CommandIO } from "./fetch.js";
+import { jiraMediaHosts, pluginFetch, pluginLoader } from "./plugin.js";
 
 /**
  * `qajitsu pull <TICKET> --run <id>`: downloads the evidence zip a (CI) run attached to the ticket and
@@ -40,6 +41,8 @@ export async function runPull(
     });
     const target = join(root, key, `${id}-pulled`);
     await mkdir(target, { recursive: true });
+    const { createJiraAttachmentReader } =
+      await pluginLoader(ports).load<typeof JiraPublishPlugin>("publish-jira");
     const reader = createJiraAttachmentReader(
       {
         flavor: jira.type,
@@ -49,7 +52,13 @@ export async function runPull(
         mediaHosts: project.config.publish.media_hosts,
       },
       {
-        fetch: ports.fetch,
+        fetch: pluginFetch(
+          pluginLoader(ports),
+          ports.fetch,
+          "publish-jira",
+          [project.config.jira.base_url],
+          jiraMediaHosts(project.config),
+        ),
         logger: createCliLogger({ file: join(target, "pull.log"), mask: (v) => masker.maskJson(v) }),
         now: ports.now,
         resolveSecret: createCliSecretResolver(project, ports, masker),

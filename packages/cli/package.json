@@ -16,18 +16,36 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "plugins.json"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@qajitsu/adapter-codehost-github": "workspace:*",
-    "@qajitsu/adapter-codehost-gitlab": "workspace:*",
     "@qajitsu/adapter-codehost-local": "workspace:*",
-    "@qajitsu/adapter-env-compose": "workspace:*",
     "@qajitsu/adapter-env-remote": "workspace:*",
     "@qajitsu/adapter-evidence-local": "workspace:*",
+    "@qajitsu/adapter-files": "workspace:*",
+    "@qajitsu/adapter-secrets-env": "workspace:*",
+    "@qajitsu/agents": "workspace:*",
+    "@qajitsu/core": "workspace:*",
+    "@qajitsu/models": "workspace:*",
+    "@qajitsu/report": "workspace:*",
+    "@qajitsu/steps": "workspace:*",
+    "@qajitsu/toolchain": "workspace:*",
+    "@qajitsu/verifier": "workspace:*",
+    "commander": "catalog:",
+    "pino": "^10.4.0",
+    "playwright-core": "1.63.0",
+    "unpdf": "1.8.1",
+    "yaml": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@qajitsu/adapter-codehost-github": "workspace:*",
+    "@qajitsu/adapter-codehost-gitlab": "workspace:*",
+    "@qajitsu/adapter-env-compose": "workspace:*",
     "@qajitsu/adapter-evidence-s3": "workspace:*",
     "@qajitsu/adapter-knowledge-chroma": "workspace:*",
     "@qajitsu/adapter-knowledge-confluence": "workspace:*",
@@ -39,25 +57,9 @@
     "@qajitsu/adapter-runner-web": "workspace:*",
     "@qajitsu/adapter-secrets-cli": "workspace:*",
     "@qajitsu/adapter-secrets-doppler": "workspace:*",
-    "@qajitsu/adapter-secrets-env": "workspace:*",
     "@qajitsu/adapter-secrets-vault": "workspace:*",
     "@qajitsu/adapter-testcases": "workspace:*",
     "@qajitsu/adapter-ticket-jira": "workspace:*",
-    "@qajitsu/agents": "workspace:*",
-    "@qajitsu/core": "workspace:*",
-    "@qajitsu/models": "workspace:*",
-    "@qajitsu/report": "workspace:*",
-    "@qajitsu/steps": "workspace:*",
-    "@qajitsu/toolchain": "workspace:*",
-    "@qajitsu/verifier": "workspace:*",
-    "commander": "catalog:",
-    "pino": "^10.4.0",
-    "playwright-core": "^1.63.0",
-    "unpdf": "1.8.1",
-    "yaml": "catalog:",
-    "zod": "catalog:"
-  },
-  "devDependencies": {
     "@types/pngjs": "^6.0.5",
     "pngjs": "7.0.0"
   }

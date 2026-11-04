@@ -6,6 +6,8 @@
  */
 export * from "./masking.js";
 export * from "./runtime.js";
+export * from "./streams.js";
+export * from "./xml.js";
 export * from "./ui.js";
 export * from "./network.js";
 export * from "./gestures.js";

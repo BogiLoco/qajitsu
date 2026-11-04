@@ -221,6 +221,55 @@ describe("demo-shop seeded bugs (REQ-NFR-04, BUGS.md)", () => {
     expect((await call(shop, "GET", "/me")).status).toBe(401);
   });
 
+  it("BUG-24 and BUG-25: GraphQL answers prices as numbers and lists without errors, unless a flag says otherwise", async () => {
+    const gql = async (flag: string | undefined, query: string) => {
+      const shop = await start(flag);
+      return (await call(shop, "POST", "/graphql", { query })).body;
+    };
+    expect(await gql(undefined, '{ product(id: "P-2") { price } }')).toEqual({
+      data: { product: { price: 24.99 } },
+    });
+    expect(await gql("BUG_GRAPHQL_PRICE_AS_TEXT", '{ product(id: "P-2") { price } }')).toEqual({
+      data: { product: { price: "24.99" } },
+    });
+    expect((await gql("BUG_GRAPHQL_ERROR_WITH_DATA", "{ products { id } }"))["errors"]).toEqual([
+      { message: "Price cache unavailable", path: ["products"] },
+    ]);
+    expect((await gql(undefined, "{ order { id } }"))["errors"]).toEqual([
+      { message: 'Cannot query field "order" on type "Query".' },
+    ]);
+    expect((await gql(undefined, "{ product("))["errors"]).toHaveLength(1);
+    expect((await gql(undefined, "mutation { x }"))["errors"]).toHaveLength(1);
+  });
+
+  it("BUG-26 and BUG-27: SOAP answers prices with their currency and faults with HTTP 500, unless a flag says otherwise", async () => {
+    const soap = async (flag: string | undefined, body: string) => {
+      const shop = await start(flag);
+      const res = await fetch(`${shop.url}/soap/prices`, {
+        method: "POST",
+        headers: { "content-type": "text/xml; charset=utf-8", soapaction: '"urn:demo-shop:prices#GetPrice"' },
+        body: `<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>${body}</s:Body></s:Envelope>`,
+      });
+      return { status: res.status, text: await res.text() };
+    };
+    const price = (sku: string) => `<GetPrice xmlns="urn:demo-shop:prices"><sku>${sku}</sku></GetPrice>`;
+    const mug = await soap(undefined, price("P-2"));
+    expect(mug.status).toBe(200);
+    expect(mug.text).toContain(
+      ' currency="EUR"><p:sku>P-2</p:sku><p:name>Mug</p:name><p:amount>24.99</p:amount>',
+    );
+    expect((await soap("BUG_SOAP_CURRENCY_MISSING", price("P-2"))).text).not.toContain("currency");
+    const unknown = await soap(undefined, price("P-9"));
+    expect(unknown.status).toBe(500);
+    expect(unknown.text).toContain("<faultstring>Unknown product P-9</faultstring>");
+    expect((await soap(undefined, price("P-1"))).text).toContain("<p:amount>0.335</p:amount>");
+    const cheap = await soap("BUG_SOAP_FAULT_WITH_200", price("P-1"));
+    expect(cheap.status).toBe(200);
+    expect(cheap.text).toContain("Price below the minimum");
+    expect((await soap(undefined, "<SetPrice/>")).text).toContain("Unknown operation SetPrice");
+    expect((await soap(undefined, "")).text).toContain("Not a SOAP envelope");
+  });
+
   it("REQ-NFR-04/AC1: every seeded bug can be switched on in a --build run (dogfood 2026-10-25)", () => {
     const config = parse(readFileSync(new URL("../.qa/qa.project.yaml", import.meta.url), "utf8")) as {
       services: { api: { env: Record<string, { overridable?: boolean }> } };

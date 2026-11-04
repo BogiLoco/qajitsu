@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { NetworkBudgetSchema } from "../observations.js";
 import { CONTEXT_KINDS, type ContextKind } from "../context/fragments.js";
+import { RateLimitConfigSchema } from "../env/rate-limit.js";
 import { ReadinessConfigSchema } from "../env/readiness.js";
 import { ConfigError } from "../errors.js";
 import { TEST_STATUSES } from "../status.js";
@@ -154,6 +156,27 @@ const RepoSchema = z.strictObject({
   openapi: z
     .string()
     .regex(/^(?!\/)(?!.*\.\.)[\w./-]+\.(ya?ml|json)$/, "Relative path to a .yaml or .json file")
+    .optional(),
+  /**
+   * The GraphQL schema (REQ-EXEC-48/AC1): an SDL file inside the repository (`.graphql`, `.gql`), or the path of the
+   * endpoint on the test environment to introspect (`/graphql`); responses are checked against it.
+   */
+  /** The WSDL of a SOAP service inside the repository (REQ-EXEC-50/AC1); responses are validated against its types. */
+  wsdl: z
+    .string()
+    .regex(/^(?!\/)(?!.*\.\.)[\w./-]+\.wsdl$/, "Relative path to a .wsdl file")
+    .optional(),
+  /** XML Schemas inside the repository (REQ-EXEC-50/AC2): XML responses and SOAP bodies are validated against them. */
+  xsd: z
+    .array(z.string().regex(/^(?!\/)(?!.*\.\.)[\w./-]+\.xsd$/, "Relative path to a .xsd file"))
+    .max(20)
+    .optional(),
+  graphql: z
+    .string()
+    .regex(
+      /^((?!\/)(?!.*\.\.)[\w./-]+\.(graphqls?|gql)|\/[\w/-]*)$/,
+      "A relative path to a .graphql or .gql file, or an endpoint path like /graphql",
+    )
     .optional(),
   /**
    * Tests repository only: folder that `qj promote` writes regression packs to (REQ-PUB-08); default: `qajitsu/`
@@ -590,8 +613,31 @@ export const ProjectConfigSchema = z.strictObject({
       http_errors: z.boolean().default(true),
       accessibility: z.boolean().default(true),
       ignore: z.array(z.string().min(1)).default([]),
+      /** Analysis of the page's traffic (REQ-EVD-09/AC3+AC4). */
+      network: z
+        .strictObject({
+          /**
+           * AC3: keep the JSON bodies of the application's responses, masked and at most `max_kb` each, and check
+           * them against the API description of the analysed commit. Off by default.
+           */
+          response_bodies: z
+            .strictObject({
+              enabled: z.boolean().default(false),
+              max_kb: z.number().int().min(1).max(1024).default(64),
+            })
+            .default({ enabled: false, max_kb: 64 }),
+          /** AC4: limits per step; a plan case may set its own `network_budget`. */
+          budget: NetworkBudgetSchema.optional(),
+        })
+        .default({ response_bodies: { enabled: false, max_kb: 64 } }),
     })
-    .default({ console: true, http_errors: true, accessibility: true, ignore: [] }),
+    .default({
+      console: true,
+      http_errors: true,
+      accessibility: true,
+      ignore: [],
+      network: { response_bodies: { enabled: false, max_kb: 64 } },
+    }),
   /**
    * Secret managers besides `env` (REQ-CFG-03/AC3). Their own tokens are bootstrap secrets and always come from the
    * `env` provider. References: `secret://vault/<path>#<field>`, `secret://doppler/<NAME>`,
@@ -968,6 +1014,8 @@ export const ProjectConfigSchema = z.strictObject({
       web_combinations: z.number().int().min(1).max(8).default(1),
       /** How long a case waits for a free pool account before it is BLOCKED. */
       account_wait_s: z.number().int().min(0).max(3600).default(300),
+      /** A shared environment's limits (REQ-EXEC-54): request rate per host, cases at once, waiting out 429/503. */
+      rate_limit: RateLimitConfigSchema.optional(),
     })
     .default({ sequential: false, workers: {}, web_combinations: 1, account_wait_s: 300 }),
   test_types: z

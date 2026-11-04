@@ -320,6 +320,27 @@
               "pattern": "^[a-z]{2,3}(-[A-Z][A-Za-z]{1,3})?$"
             }
           },
+          "network_budget": {
+            "type": "object",
+            "properties": {
+              "request_ms": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 600000
+              },
+              "step_requests": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10000
+              },
+              "step_kb": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              }
+            },
+            "additionalProperties": false
+          },
           "browser": {
             "type": "object",
             "properties": {
@@ -459,6 +480,37 @@
                       "type": "array",
                       "items": {
                         "type": "string"
+                      }
+                    },
+                    "xml": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      },
+                      "additionalProperties": {
+                        "type": [
+                          "string",
+                          "number",
+                          "boolean",
+                          "null"
+                        ]
+                      }
+                    },
+                    "messages": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "pattern": "^(count|\\d{1,3}(\\.[^.\\s]{1,100}){0,10})$"
+                      },
+                      "additionalProperties": {
+                        "type": [
+                          "string",
+                          "number",
+                          "boolean",
+                          "null"
+                        ]
                       }
                     },
                     "elements": {
@@ -816,6 +868,49 @@
                   },
                   "required": [
                     "timeout_s"
+                  ],
+                  "additionalProperties": false
+                },
+                "idempotency_key": {
+                  "type": "boolean"
+                },
+                "stream": {
+                  "type": "object",
+                  "properties": {
+                    "timeout_s": {
+                      "type": "number",
+                      "minimum": 0.1,
+                      "maximum": 300
+                    }
+                  },
+                  "required": [
+                    "timeout_s"
+                  ],
+                  "additionalProperties": false
+                },
+                "soap": {
+                  "type": "object",
+                  "properties": {
+                    "operation": {
+                      "type": "string",
+                      "pattern": "^[_A-Za-z][\\w.-]{0,99}$"
+                    }
+                  },
+                  "required": [
+                    "operation"
+                  ],
+                  "additionalProperties": false
+                },
+                "graphql": {
+                  "type": "object",
+                  "properties": {
+                    "operation": {
+                      "type": "string",
+                      "pattern": "^(Query|Mutation|Subscription)\\.[_A-Za-z][_0-9A-Za-z]*$"
+                    }
+                  },
+                  "required": [
+                    "operation"
                   ],
                   "additionalProperties": false
                 }

@@ -1,0 +1,15 @@
+{
+  "key": "DEMO-20",
+  "type": "Story",
+  "status": "Ready for QA",
+  "summary": "Live prices and order progress for the partner portal",
+  "description": "Signed-in partners follow a product's price on the WebSocket /ws/prices (send {\"subscribe\": \"<sku>\"}) and an order's progress on the server-sent events stream GET /events/orders.",
+  "acceptanceCriteria": [
+    "A subscription to P-2 on /ws/prices answers its price 24.99 first, then its availability, and nothing else.",
+    "The order stream sends created, paid and shipped, in that order, then ends."
+  ],
+  "labels": ["realtime", "api"],
+  "components": ["shop-api"],
+  "attachments": [],
+  "comments": []
+}

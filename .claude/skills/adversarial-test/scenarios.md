@@ -127,3 +127,18 @@ Status: `todo` (no test yet) · `covered` (test exists, file name in brackets). 
 - done · An unreachable, malformed or look-alike version (a prefix, another path, a number) → not ready (`tests/adversarial/env-readiness.test.ts`).
 - done · A check answering a truthy string, a redirect or a failing script → not ready.
 - done · The configuration tries to override → refused; only `qj run --env-not-confirmed "<reason>"` by a person runs anyway, and its results are never verified for a release (`packages/cli/src/commands/env-readiness.test.ts`).
+
+## Plugins (REQ-GEN-11, ADR-0015)
+
+- done · A plugin whose manifest declares less than its code does (starts processes, reads the environment) → refused at install, nothing installed (`tests/adversarial/plugin-guard.test.ts`).
+- done · A plugin changed on disk after its install → refused at load, before any of its code runs.
+- done · A plugin refers to the frozen plan → refused whatever its permissions.
+- done · A plugin calls a host its manifest does not name, or a look-alike of a configured host → refused before the request leaves.
+- done · A tarball that does not match its published checksum, comes from another host than the registry, or holds another package → never installed (`packages/cli/src/plugins/plugins.test.ts`).
+- done · A plugin brings its own copy of the core, guard or verifier → removed; it runs against the installation's.
+
+## Shared environments (REQ-EXEC-54)
+
+- done · An environment that answers 429 forever → the case is BLOCKED "rate limited" after its budget, never FAILED (`tests/adversarial/rate-limit-cannot-launder.test.ts`).
+- done · A spec swallows the rate-limit error and claims the planned status → not PASSED; the order went out once.
+- done · A mutating request without an idempotency key is never repeated (`packages/steps/src/traffic.test.ts`).

@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { moveTicket, type AdapterDeps, type TicketKey } from "@qajitsu/core";
 import { afterEach, describe, expect, it } from "vitest";
-import { createFileWorkflow, createJiraWorkflow } from "./workflow.js";
+import { createFileWorkflow } from "@qajitsu/adapter-files";
+import { createJiraWorkflow } from "./workflow.js";
 
 const KEY = "DEMO-1" as TicketKey;
 const dirs: string[] = [];

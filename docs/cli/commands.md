@@ -128,6 +128,10 @@ and of the latest run (an unreadable mirror is an error with the fix); with `--o
 and, for each environment profile with a `version_path`, the deployed version compared with the latest run; and where
 the mobile app binary comes from.
 
+A **plugins** check names every plugin the project's settings need and lack (REQ-GEN-11/AC2), each with the setting
+and the command that installs it: `knowledge-lancedb missing (knowledge.store: lancedb): qj plugin add knowledge-lancedb`.
+A command that needs a missing plugin stops with the same message and exit code `3`, never with a module error.
+
 A third section, **Toolchain (qj setup)**, shows what `qj setup` would do for every tool the project needs (REQ-GEN-06/AC2):
 use yours, use QAJitsu's, install (with version, size and source), start Docker, or what you have to do. A tool of
 yours that is not compatible is information (`!`), with the compatible range and the fix; it is never changed.
@@ -138,7 +142,8 @@ yours that is not compatible is information (`!`), with the compatible range and
   cannot be combined with `--online` or `--fix`
 - `--online`: check access to Jira, every code host and every toolchain source (npm registry, Playwright host, Java and
   Android mirrors, Homebrew; makes real requests)
-- `--fix`: run `qj setup --only <the tools found missing>` (REQ-GEN-06/AC9)
+- `--fix`: run `qj setup --only <the tools found missing>` (REQ-GEN-06/AC9) and install the plugins found missing
+  (REQ-GEN-11/AC3)
 - `--yes`: with `--fix`, no questions; licences are accepted on your behalf and listed
 
 A missing tool is reported once: when a check already reports it (the Android SDK for its emulator, Appium for its
@@ -174,6 +179,10 @@ tar and unzip. A failed check stops setup with the reason; `--skip` the tool to 
 a partial file, are verified against the publisher's checksum (Adoptium SHA-256, Google SHA-1) before use and are moved
 into place only when complete. A lock (`~/.qajitsu/toolchain/.setup.lock`) keeps two setups apart.
 
+In a project, setup also installs the plugins the project's settings need and lack, the way `qj plugin add` does
+(REQ-GEN-11/AC3); `--check` names them (`plugin knowledge-lancedb: would install (knowledge.store: lancedb)`). A plugin
+that fails to install makes the exit code `1`.
+
 After installing, every tool is smoke-tested; nothing that failed is reported ready.
 
 - `--check`: print the plan (what, which version, from where, how big) and the prechecks; change nothing
@@ -190,9 +199,11 @@ After installing, every tool is smoke-tested; nothing that failed is reported re
   published checksum), `appium=3.7.0`, `uiautomator2=8.6.0`, `xcuitest=…`, `xcode=16.4`. Browser versions are those of
   QAJitsu's Playwright.
 - `--download <dir>`: install every managed tool the project needs into `<dir>` (also when this machine has them) and
-  write `bundle.json` with a digest of every folder
+  write `bundle.json` with a digest of every folder; the plugins the project needs go into `<dir>/plugins/`, installed
+  with their dependencies and checked against their published checksums (REQ-GEN-11/AC6)
 - `--from <dir>`: install from such a bundle without network: same system and processor only, every folder checked
-  against its digest, AVDs created on this machine, smoke-tested
+  against its digest, AVDs created on this machine, smoke-tested; its plugins are copied into `~/.qajitsu/plugins/`
+  after their manifests and core API range are checked again
 - `--smoke`: also boot the emulator once
 - `--ignore-check <check>`: do not stop on this precheck (`virtualisation`, `memory`, `disk`, `system image`;
   repeatable). It is still printed, marked as ignored. Meant for building an image on a machine without KVM for hosts
@@ -208,6 +219,46 @@ Exit codes: `0` everything wanted is ready, `1` a tool failed or needs a manual 
 `2` setup stopped before changing anything (a precheck, a declined licence, a wrong flag).
 
 ## The flow
+
+### `qajitsu plugin list`
+
+Lists every official plugin (REQ-GEN-11): its version and where it is. A plugin is either part of this installation, or
+installed into `~/.qajitsu/plugins/` from the registry or a tarball, or not installed. It also shows which settings of the
+current project need it: ✔ available, ✘ needed and missing, · not needed. The plugins and their pinned versions are
+those of this QAJitsu release (`plugins.json` of the CLI).
+
+Exit codes: `0` listed, `3` the catalogue or the plugins folder cannot be read.
+
+### `qajitsu plugin add <plugins...>`
+
+Installs official plugins by id (`knowledge-lancedb`, `testcases`...) into `~/.qajitsu/plugins/<id>/<version>/` (REQ-GEN-11/AC3):
+
+1. The pinned version is downloaded from the npm registry of the toolchain (`sources.npm_registry` in `toolchain.yaml`,
+   else the public registry, with the proxy and CA of `qj setup`). The tarball must come from the registry's own host.
+2. The tarball is checked against its published sha512 checksum.
+3. npm installs the plugin's dependencies with `--ignore-scripts`, so no install script runs.
+4. The plugin's manifest (`qajitsu.plugin` in its `package.json`) and the core API range it works with are checked.
+5. Only then does it replace an installed version.
+
+QAJitsu's own packages (`@qajitsu/core`, `steps`, `guard`, `verifier`...) are removed from the plugin's folder, so a
+plugin always runs against this installation's copies. Every install is recorded in `~/.qajitsu/plugins/installed.json`
+and `history.jsonl`. A plugin that is still part of this installation needs nothing.
+
+- `--file <tarball>`: install one plugin from a tarball (a build of this repository, an offline copy), recorded with
+  its own checksum
+
+Exit codes: `0` installed, `3` unknown plugin, checksum mismatch, a tarball from another host, an npm failure, an
+invalid manifest or an incompatible core API range (nothing is changed then).
+
+### `qajitsu plugin remove <plugin>`
+
+Removes an installed plugin (REQ-GEN-11/AC10). The removal is refused while the settings of any registered project
+still use the plugin, and the message names each project and setting (`shop: knowledge.store: lancedb`). Otherwise the
+plugin's files are deleted and the removal is recorded in `history.jsonl`.
+
+A plugin that comes with this installation cannot be removed.
+
+Exit codes: `0` removed, `3` still in use, part of this installation, not installed, or an unknown plugin.
 
 ### `qajitsu test <ticket>`
 
@@ -693,6 +744,9 @@ Documentation that fits `knowledge.full_context_tokens` is used without embeddin
 certificates are never indexed.
 
 ### `qajitsu knowledge add [paths...]`
+
+The store is a plugin: LanceDB (`qj plugin add knowledge-lancedb`) or Chroma. Without it the command stops with exit
+code `3` and the install command (REQ-GEN-11/AC2).
 
 Registers files and folders (recursive) as sources and indexes them: Markdown, text, HTML, DOCX, PDF (with a text layer) and OpenAPI (one chunk
 group per operation); other files are skipped and listed. Adding a registered path again only processes new or

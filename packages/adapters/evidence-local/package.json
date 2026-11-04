@@ -20,5 +20,18 @@
   "dependencies": {
     "@qajitsu/core": "workspace:*",
     "zod": "catalog:"
+  },
+  "qajitsu": {
+    "plugin": {
+      "types": [
+        "evidence store"
+      ],
+      "core_api": "^1.0.0",
+      "secrets": [],
+      "hosts": [],
+      "permissions": [
+        "filesystem"
+      ]
+    }
   }
 }

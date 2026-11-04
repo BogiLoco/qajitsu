@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRemoteEnvProvider } from "@qajitsu/adapter-env-remote";
 import type { BrowserFactory } from "@qajitsu/adapter-runner-api";
-import { createPlaywrightBrowserFactory } from "@qajitsu/adapter-runner-web";
+import type * as RunnerWebPlugin from "@qajitsu/adapter-runner-web";
+import { lazyBrowserFactory } from "../plugins/lazy.js";
+import { sessionPlugins } from "./plugin.js";
 import {
   createAccountLeases,
   resolveEnvironment,
@@ -59,16 +61,20 @@ export function snapshotBrowser(
   const web = session.project.config.web;
   return (
     ports.snapshotBrowser ??
-    createPlaywrightBrowserFactory({
-      browser: web.browser,
-      video: "off",
-      headless: true,
-      actionTimeoutMs: web.action_timeout_ms,
-      testIdAttribute: web.test_id_attribute,
-      webSession: env.profile.web_session,
-      ...(httpCredentials ? { httpCredentials } : {}),
-      observations: { console: false, httpErrors: false, accessibility: false },
-    })
+    lazyBrowserFactory(async () =>
+      (
+        await sessionPlugins(session).load<typeof RunnerWebPlugin>("runner-web")
+      ).createPlaywrightBrowserFactory({
+        browser: web.browser,
+        video: "off",
+        headless: true,
+        actionTimeoutMs: web.action_timeout_ms,
+        testIdAttribute: web.test_id_attribute,
+        webSession: env.profile.web_session,
+        ...(httpCredentials ? { httpCredentials } : {}),
+        observations: { console: false, httpErrors: false, accessibility: false },
+      }),
+    )
   );
 }
 
@@ -94,6 +100,8 @@ export function snapshotLogin(
         masker.register(v);
       },
     },
+    undefined,
+    session.plugins,
   );
   return async (aliases) => {
     const file = join(scratch, `${aliases.join("-").replace(/[^\w-]/g, "_")}.txt`);
@@ -180,19 +188,24 @@ export async function planSnapshot(
 }
 
 /** The code hosts of the project, for an app built by CI (REQ-ENV-06/AC1). */
-const codeHostsOf = (session: RunSession, ports: RuntimePorts): Readonly<Record<string, CodeHost>> =>
-  buildAdapters(
-    session.project,
-    {
-      fetch: ports.fetch,
-      logger: session.logger,
-      now: ports.now,
-      resolveSecret: (r) => session.resolveSecret(r),
-      registerSecret: (v) => {
-        session.masker.register(v);
+const codeHostsOf = async (
+  session: RunSession,
+  ports: RuntimePorts,
+): Promise<Readonly<Record<string, CodeHost>>> =>
+  (
+    await buildAdapters(
+      session.project,
+      {
+        fetch: ports.fetch,
+        logger: session.logger,
+        now: ports.now,
+        resolveSecret: (r) => session.resolveSecret(r),
+        registerSecret: (v) => {
+          session.masker.register(v);
+        },
       },
-    },
-    ports,
+      ports,
+    )
   ).codeHosts;
 
 /** Records the environment's pages and the app's first screen into `ui/snapshot.json` (REQ-EXEC-22/AC7+AC9). */
@@ -257,7 +270,7 @@ async function recordForPlanner(
         : mobile?.ios?.farm !== undefined;
     if (mobile && (appWithoutCode || options.force)) {
       const device = await (ports.mobileDevice?.() ??
-        prepareMobile(session, env.baseUrl, codeHostsOf(session, ports), ports.env["APPIUM_HOME"], {
+        prepareMobile(session, env.baseUrl, await codeHostsOf(session, ports), ports.env["APPIUM_HOME"], {
           // AC9: with qj plan --build the app may be built from the worktree too.
           allowBuild: options.buildBaseUrl !== undefined,
           fetch: ports.fetch,

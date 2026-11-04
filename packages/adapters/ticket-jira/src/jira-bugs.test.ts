@@ -3,7 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createFakeFetch, jsonReply, testDeps } from "../../../../tests/support/fake-fetch.js";
-import { componentTag, createFileBugSource, createJiraBugSource } from "./jira-bugs.js";
+import { componentTag } from "@qajitsu/core";
+import { createFileBugSource } from "@qajitsu/adapter-files";
+import { createJiraBugSource } from "./jira-bugs.js";
 
 const SECRETS = {
   "secret://env/JIRA_EMAIL": "qa@example.com",

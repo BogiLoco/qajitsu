@@ -5,13 +5,10 @@ import { TicketKeySchema, xlsxRows } from "@qajitsu/core";
 import { zip } from "@qajitsu/report";
 import { afterEach, describe, expect, it } from "vitest";
 import { createFakeFetch, jsonReply, testDeps } from "../../../../tests/support/fake-fetch.js";
-import {
-  createFileCaseSource,
-  createTestRailCaseSource,
-  createXrayCaseSource,
-  createZephyrCaseSource,
-  parseCsv,
-} from "./index.js";
+import { testCaseSourceContract } from "../../../../tests/contract/test-case-source.contract.js";
+import { xrayConfig, xrayFixture } from "../../../../tests/support/xray-fixture.js";
+import { createFileCaseSource, parseCsv } from "@qajitsu/adapter-files";
+import { createTestRailCaseSource, createXrayCaseSource, createZephyrCaseSource } from "./index.js";
 
 const ticket = TicketKeySchema.parse("SHOP-482");
 const secrets = {
@@ -20,6 +17,10 @@ const secrets = {
   "secret://env/ZEPHYR": "zephyr-token-123",
   "secret://env/TESTRAIL": "testrail-key-123",
 };
+
+testCaseSourceContract("xray", xrayFixture, (deps) =>
+  Promise.resolve(createXrayCaseSource(xrayConfig, deps)),
+);
 
 describe("Xray Cloud test cases (REQ-CTX-08/AC1)", () => {
   it("REQ-CTX-08/AC1: authenticates, queries tests linked to the ticket and maps steps, Gherkin and preconditions", async () => {

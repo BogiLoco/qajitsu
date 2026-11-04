@@ -17,7 +17,23 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json"
   },
-  "dependencies": {
+  "peerDependencies": {
+    "@qajitsu/core": "workspace:^"
+  },
+  "devDependencies": {
     "@qajitsu/core": "workspace:*"
+  },
+  "qajitsu": {
+    "plugin": {
+      "types": [
+        "secret provider"
+      ],
+      "core_api": "^1.0.0",
+      "secrets": [],
+      "hosts": [],
+      "permissions": [
+        "exec"
+      ]
+    }
   }
 }

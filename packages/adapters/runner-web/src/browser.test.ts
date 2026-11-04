@@ -14,13 +14,8 @@ import {
 import { PlanSchema, createEventLog, unzip, zip } from "@qajitsu/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { startShop } from "../../../../examples/demo-shop/api/server.mjs";
-import {
-  browserUnavailable,
-  channelExecutables,
-  createPlaywrightBrowserFactory,
-  maskHar,
-  maskTrace,
-} from "./browser.js";
+import { channelExecutables } from "@qajitsu/toolchain";
+import { browserUnavailable, createPlaywrightBrowserFactory, maskHar, maskTrace } from "./browser.js";
 
 const PASSWORD = "fictional-demo-password";
 const plan = (ticket: string) =>
@@ -165,7 +160,14 @@ describe("web runner (REQ-EXEC-05, REQ-EXEC-07, REQ-EVD-02)", () => {
       ["elements.testid:place-order.enabled", false],
       ["elements.testid:place-order.enabled", true],
     ]);
-    expect(record.evidence.map((e) => e.name)).toEqual(["S1.png", "S2.png", "network.har", "console.log"]);
+    expect(record.evidence.map((e) => e.name)).toEqual([
+      "S1.png",
+      "S2.png",
+      "network.har",
+      "console.log",
+      // REQ-EVD-09/AC3..AC7: code's analysis of the page's traffic.
+      "network-analysis.json",
+    ]);
     const har = String(record.evidence.find((e) => e.name === "network.har")?.content);
     expect(har).not.toContain(token);
   });
@@ -187,6 +189,7 @@ describe("web runner (REQ-EXEC-05, REQ-EXEC-07, REQ-EVD-02)", () => {
       "video.webm",
       "network.har",
       "console.log",
+      "network-analysis.json",
     ]);
     // REQ-EXEC-22/AC4: what the page showed at the failure, for the healer.
     const elements = String(record.evidence.find((e) => e.name === "failure-elements.json")?.content);

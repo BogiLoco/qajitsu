@@ -1,24 +1,16 @@
 import type { CommandExec } from "@qajitsu/adapter-env-compose";
 import { join } from "node:path";
-import { createGitHubCodeHost } from "@qajitsu/adapter-codehost-github";
-import { createGitLabCodeHost } from "@qajitsu/adapter-codehost-gitlab";
+import type * as GitHubPlugin from "@qajitsu/adapter-codehost-github";
+import type * as GitLabPlugin from "@qajitsu/adapter-codehost-gitlab";
 import { createLocalCodeHost } from "@qajitsu/adapter-codehost-local";
-import {
-  createAwsSecretProvider,
-  createGcpSecretProvider,
-  createOnePasswordSecretProvider,
-  type SecretCliExec,
-} from "@qajitsu/adapter-secrets-cli";
-import { createDopplerSecretProvider } from "@qajitsu/adapter-secrets-doppler";
+import type * as SecretsCliPlugin from "@qajitsu/adapter-secrets-cli";
+import type { SecretCliExec } from "@qajitsu/adapter-secrets-cli";
+import type * as DopplerPlugin from "@qajitsu/adapter-secrets-doppler";
 import { createEnvSecretProvider } from "@qajitsu/adapter-secrets-env";
-import { createVaultSecretProvider } from "@qajitsu/adapter-secrets-vault";
-import {
-  createFileCaseSource,
-  createTestRailCaseSource,
-  createXrayCaseSource,
-  createZephyrCaseSource,
-} from "@qajitsu/adapter-testcases";
-import { createFileTicketSource, createJiraCloudTicketSource } from "@qajitsu/adapter-ticket-jira";
+import type * as VaultPlugin from "@qajitsu/adapter-secrets-vault";
+import { createFileCaseSource, createFileTicketSource } from "@qajitsu/adapter-files";
+import type * as TestCasesPlugin from "@qajitsu/adapter-testcases";
+import type * as JiraPlugin from "@qajitsu/adapter-ticket-jira";
 import {
   ConfigError,
   createSecretResolver,
@@ -26,14 +18,18 @@ import {
   type CodeHost,
   type GitExec,
   type ResolvedProject,
+  type SecretProvider,
   type TestCaseSource,
   type TicketSource,
 } from "@qajitsu/core";
 import type { Masker } from "@qajitsu/steps";
 import type { LoadedProject } from "./project.js";
 import type { SetupPorts } from "@qajitsu/toolchain";
+import type { PluginCatalogue } from "./plugins/catalogue.js";
+import type { PluginLoader } from "./plugins/load.js";
 import type { PlaywrightInfo, VersionExec } from "./versions.js";
 import { resolveConfigPath } from "./project.js";
+import { pluginFetch, pluginLoader } from "./commands/plugin.js";
 
 /** Process-level ports the CLI injects into adapters. */
 export interface RuntimePorts {
@@ -55,6 +51,10 @@ export interface RuntimePorts {
   readonly playwright?: () => PlaywrightInfo;
   /** Parts of `qj setup` replaced in tests: commands, host, prechecks, smoke tests (REQ-GEN-06). */
   readonly toolchain?: Partial<SetupPorts>;
+  /** The plugin loader (replaced in tests; REQ-GEN-11). */
+  readonly plugins?: PluginLoader;
+  /** The plugin catalogue (replaced in tests; REQ-GEN-11/AC3). */
+  readonly pluginCatalogue?: PluginCatalogue;
 }
 
 /** Adapters for one project. */
@@ -63,6 +63,18 @@ export interface ProjectAdapters {
   readonly codeHosts: Readonly<Record<string, CodeHost>>;
   /** Sources of manual test cases (REQ-CTX-08), in configuration order. */
   readonly testCaseSources: readonly TestCaseSource[];
+}
+
+/**
+ * A secret manager whose plugin is loaded on first use (REQ-GEN-11/AC2): its scheme is known before, so references to
+ * other providers never load it, and a missing plugin fails the first lookup with the command that installs it.
+ */
+function lazySecretProvider(scheme: string, make: () => Promise<SecretProvider>): SecretProvider {
+  let provider: Promise<SecretProvider> | undefined;
+  return {
+    scheme,
+    resolve: async (reference, signal) => (await (provider ??= make())).resolve(reference, signal),
+  };
 }
 
 /**
@@ -79,41 +91,60 @@ export function createCliSecretResolver(project: LoadedProject, ports: RuntimePo
   };
   const { vault, doppler, op, aws, gcp } = project.config.secrets;
   const cli = { env: ports.env, ...(ports.secretCliExec ? { exec: ports.secretCliExec } : {}) };
+  const secretsCli = () => pluginLoader(ports).load<typeof SecretsCliPlugin>("secrets-cli");
   return createSecretResolver(
     [
       env,
       ...(vault
         ? [
-            createVaultSecretProvider({
-              address: vault.address,
-              mount: vault.mount,
-              ...(vault.namespace ? { namespace: vault.namespace } : {}),
-              token: bootstrap(vault.token),
-              fetch: ports.fetch,
-            }),
+            lazySecretProvider("vault", async () =>
+              (await pluginLoader(ports).load<typeof VaultPlugin>("secrets-vault")).createVaultSecretProvider(
+                {
+                  address: vault.address,
+                  mount: vault.mount,
+                  ...(vault.namespace ? { namespace: vault.namespace } : {}),
+                  token: bootstrap(vault.token),
+                  fetch: pluginFetch(pluginLoader(ports), ports.fetch, "secrets-vault", [vault.address]),
+                },
+              ),
+            ),
           ]
         : []),
       ...(doppler
         ? [
-            createDopplerSecretProvider({
-              project: doppler.project,
-              config: doppler.config,
-              token: bootstrap(doppler.token),
-              fetch: ports.fetch,
-            }),
+            lazySecretProvider("doppler", async () =>
+              (
+                await pluginLoader(ports).load<typeof DopplerPlugin>("secrets-doppler")
+              ).createDopplerSecretProvider({
+                project: doppler.project,
+                config: doppler.config,
+                token: bootstrap(doppler.token),
+                fetch: pluginFetch(pluginLoader(ports), ports.fetch, "secrets-doppler", []),
+              }),
+            ),
           ]
         : []),
-      ...(op ? [createOnePasswordSecretProvider(cli)] : []),
+      ...(op
+        ? [lazySecretProvider("op", async () => (await secretsCli()).createOnePasswordSecretProvider(cli))]
+        : []),
       ...(aws
         ? [
-            createAwsSecretProvider({
-              ...cli,
-              region: aws.region,
-              ...(aws.profile ? { profile: aws.profile } : {}),
-            }),
+            lazySecretProvider("aws", async () =>
+              (await secretsCli()).createAwsSecretProvider({
+                ...cli,
+                region: aws.region,
+                ...(aws.profile ? { profile: aws.profile } : {}),
+              }),
+            ),
           ]
         : []),
-      ...(gcp ? [createGcpSecretProvider({ ...cli, project: gcp.project })] : []),
+      ...(gcp
+        ? [
+            lazySecretProvider("gcp", async () =>
+              (await secretsCli()).createGcpSecretProvider({ ...cli, project: gcp.project }),
+            ),
+          ]
+        : []),
     ],
     (value) => {
       masker.register(value);
@@ -129,17 +160,19 @@ export function createCliSecretResolver(project: LoadedProject, ports: RuntimePo
  * @param deps - Adapter dependencies (fetch, logger, clock, secret resolver).
  * @param ports - Runtime ports.
  */
-export function buildAdapters(
+export async function buildAdapters(
   project: LoadedProject,
   deps: AdapterDeps,
   ports: RuntimePorts,
-): ProjectAdapters {
+): Promise<ProjectAdapters> {
   const { config, qaDir } = project;
   const jira = config.jira;
+  // REQ-GEN-11/AC2: each integration comes from its plugin; a missing one stops here with the install command.
+  const plugins = pluginLoader(ports);
   const ticketSource =
     jira.type === "file"
       ? createFileTicketSource(resolveConfigPath(jira.tickets_dir ?? ".", qaDir, ports.home))
-      : createJiraCloudTicketSource(
+      : (await plugins.load<typeof JiraPlugin>("ticket-jira")).createJiraCloudTicketSource(
           {
             baseUrl: jira.base_url ?? "",
             flavor: jira.type === "datacenter" ? "datacenter" : "cloud",
@@ -148,13 +181,13 @@ export function buildAdapters(
             acceptanceCriteriaField: jira.acceptance_criteria_field,
             projectKey: jira.project_key,
           },
-          deps,
+          { ...deps, fetch: pluginFetch(plugins, deps.fetch, "ticket-jira", [jira.base_url]) },
         );
   const codeHosts: Record<string, CodeHost> = {};
   for (const [alias, host] of Object.entries(config.code_hosts)) {
     switch (host.type) {
       case "github":
-        codeHosts[alias] = createGitHubCodeHost(
+        codeHosts[alias] = (await plugins.load<typeof GitHubPlugin>("codehost-github")).createGitHubCodeHost(
           {
             alias,
             baseUrl: host.base_url,
@@ -167,13 +200,13 @@ export function buildAdapters(
                 }
               : undefined,
           },
-          deps,
+          { ...deps, fetch: pluginFetch(plugins, deps.fetch, "codehost-github", [host.base_url]) },
         );
         break;
       case "gitlab":
-        codeHosts[alias] = createGitLabCodeHost(
+        codeHosts[alias] = (await plugins.load<typeof GitLabPlugin>("codehost-gitlab")).createGitLabCodeHost(
           { alias, baseUrl: host.base_url, token: host.token ?? "" },
-          deps,
+          { ...deps, fetch: pluginFetch(plugins, deps.fetch, "codehost-gitlab", [host.base_url]) },
         );
         break;
       case "local":
@@ -186,23 +219,41 @@ export function buildAdapters(
         break;
     }
   }
-  const testCaseSources = config.test_cases.map((t): TestCaseSource => {
+  const testCaseSources: TestCaseSource[] = [];
+  for (const t of config.test_cases) {
+    if (t.type === "file") {
+      testCaseSources.push(createFileCaseSource(resolveConfigPath(t.path, qaDir, ports.home)));
+      continue;
+    }
+    const cases = await plugins.load<typeof TestCasesPlugin>("testcases");
+    const caseDeps = { ...deps, fetch: pluginFetch(plugins, deps.fetch, "testcases", [t.base_url]) };
     switch (t.type) {
       case "xray":
-        return createXrayCaseSource(
-          { baseUrl: t.base_url, clientId: t.client_id, clientSecret: t.client_secret, jql: t.jql },
-          deps,
+        testCaseSources.push(
+          cases.createXrayCaseSource(
+            { baseUrl: t.base_url, clientId: t.client_id, clientSecret: t.client_secret, jql: t.jql },
+            caseDeps,
+          ),
         );
+        break;
       case "zephyr":
-        return createZephyrCaseSource({ baseUrl: t.base_url, token: t.token }, deps);
+        testCaseSources.push(cases.createZephyrCaseSource({ baseUrl: t.base_url, token: t.token }, caseDeps));
+        break;
       case "testrail":
-        return createTestRailCaseSource(
-          { baseUrl: t.base_url, user: t.user, token: t.token, projectId: t.project_id, suiteId: t.suite_id },
-          deps,
+        testCaseSources.push(
+          cases.createTestRailCaseSource(
+            {
+              baseUrl: t.base_url,
+              user: t.user,
+              token: t.token,
+              projectId: t.project_id,
+              suiteId: t.suite_id,
+            },
+            deps,
+          ),
         );
-      case "file":
-        return createFileCaseSource(resolveConfigPath(t.path, qaDir, ports.home));
+        break;
     }
-  });
+  }
   return { ticketSource, codeHosts, testCaseSources };
 }
