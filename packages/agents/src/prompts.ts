@@ -64,6 +64,10 @@ Rules:
 - A GraphQL API: a step is "POST /graphql" with "graphql": {"operation": "Query.product"} naming one of the
   operations under "GraphQL operations"; its expectations read the answer like JSON ("data.product.price"), and
   "errors.0.message" when the case expects an error.
+- A SOAP or XML API: a step is "POST <path>" with "soap": {"operation": "GetPrice"} naming one of the operations
+  under "SOAP operations"; its expectations are XPaths without namespace prefixes under "xml"
+  ({"//GetPriceResponse/amount": 24.99, "//GetPriceResponse/@currency": "EUR"}), and "//Fault/faultstring" with
+  status 500 when the case expects a fault.
 - A step that creates something that must not exist twice (an order, a payment, a booking) sets
   "idempotency_key": true: its requests carry a key, so a retry on a busy shared environment never repeats it.
 - An API case can send files as well: "files" as below, the body as multipart, a form, raw binary or text; a request

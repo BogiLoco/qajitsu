@@ -14,6 +14,7 @@ import {
   type CaseRuntime,
   type EvidenceItem,
   type UiDriver,
+  xmlValue,
 } from "@qajitsu/steps";
 import { z } from "zod";
 import type { AttemptInput } from "./attempt.js";
@@ -185,6 +186,13 @@ const OpSchema = z.discriminatedUnion("op", [
     path: z.string().max(4096),
     body: z.unknown().optional(),
     options: Options,
+  }),
+  z.strictObject({
+    type: z.literal("op"),
+    id: z.number().int(),
+    op: z.literal("xpath"),
+    text: z.string(),
+    xpath: z.string().max(4096),
   }),
 ]);
 const DoneSchema = z.strictObject({ type: z.literal("done"), error: z.string().max(10_000).optional() });
@@ -383,7 +391,8 @@ export function createSandboxExecutor(
                   deadline.resume();
                 }
                 value = next.again;
-              } else {
+              } else if (op.op === "xpath") value = xmlValue(op.text, op.xpath) ?? null;
+              else {
                 const r = await runtime.call(op.alias, op.method, op.path, op.body, {
                   ...(op.options.headers ? { headers: op.options.headers } : {}),
                   ...(op.options.query ? { query: op.options.query } : {}),

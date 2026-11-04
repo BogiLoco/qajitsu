@@ -20,7 +20,9 @@
   "dependencies": {
     "@qajitsu/core": "workspace:*",
     "@qajitsu/steps": "workspace:*",
+    "@xmldom/xmldom": "0.9.12",
     "graphql": "16.11.0",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "xmllint-wasm": "5.3.0"
   }
 }

@@ -110,7 +110,7 @@ export interface RunCasesOptions {
    * Checks an attempt after it ran, like the OpenAPI contract: it may add failed assertions or make the attempt an error
    * (the GraphQL schema, REQ-EXEC-48), never a passing assertion (invariant 1).
    */
-  readonly checkAttempt?: ((record: AttemptRecord) => AttemptRecord) | undefined;
+  readonly checkAttempt?: ((record: AttemptRecord) => AttemptRecord | Promise<AttemptRecord>) | undefined;
 }
 
 /**
@@ -367,7 +367,7 @@ export async function runCases(options: RunCasesOptions): Promise<Map<string, Ca
       options.contract,
     );
     // REQ-EXEC-48: further checks of the attempt by trusted code (the GraphQL schema), before its status is computed.
-    const record = options.checkAttempt ? options.checkAttempt(contracted) : contracted;
+    const record = options.checkAttempt ? await options.checkAttempt(contracted) : contracted;
     const evidencePaths: string[] = [];
     for (const item of record.evidence) {
       const stored = await options.evidence.put(

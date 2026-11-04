@@ -88,6 +88,21 @@ const BUGS = [
     caseId: "TC-02",
     specs: ["TC-01", "TC-02", "TC-03"],
   },
+  // SOAP (REQ-EXEC-50): an answer outside its WSDL, and a fault with HTTP 200, fail the case.
+  {
+    bug: "BUG-26",
+    flag: "BUG_SOAP_CURRENCY_MISSING",
+    ticket: "DEMO-19",
+    caseId: "TC-01",
+    specs: ["TC-01", "TC-02", "TC-03"],
+  },
+  {
+    bug: "BUG-27",
+    flag: "BUG_SOAP_FAULT_WITH_200",
+    ticket: "DEMO-19",
+    caseId: "TC-03",
+    specs: ["TC-01", "TC-02", "TC-03"],
+  },
   // An outcome that never comes: the planned wait ends at its timeout with FAILED (REQ-EXEC-46).
   {
     bug: "BUG-22",
@@ -106,7 +121,9 @@ async function pipeline(
   const shop = await startShop({
     env: { DEMO_USER_PASSWORD: PASSWORD, ...(flag ? { [flag]: "1" } : {}) },
   });
-  const { home, project } = await createCliProject(["models: { roles: { default: mock/scripted } }"]);
+  const { home, project } = await createCliProject(["models: { roles: { default: mock/scripted } }"], {
+    withShopApi: true,
+  });
   try {
     await copyFile(
       new URL(`../../examples/demo-shop/tickets/${ticket}.json`, import.meta.url),
@@ -115,10 +132,16 @@ async function pipeline(
     const yaml = join(project, ".qa", "qa.project.yaml");
     await writeFile(
       yaml,
-      (await readFile(yaml, "utf8")).replace(
-        "environments: { allowlist: ['http://localhost:3000'] }",
-        `environments: { default: local, allowlist: ['${shop.url}'] }`,
-      ) +
+      (await readFile(yaml, "utf8"))
+        .replace(
+          "environments: { allowlist: ['http://localhost:3000'] }",
+          `environments: { default: local, allowlist: ['${shop.url}'] }`,
+        )
+        // REQ-EXEC-48/AC3 + REQ-EXEC-50/AC2: answers are checked against the schemas in the analysed commit.
+        .replace(
+          "repos: { shop: { host: local, path: demo-org/demo-shop } }",
+          "repos: { shop: { host: local, path: demo-org/demo-shop, graphql: api/schema.graphql, wsdl: api/prices.wsdl } }",
+        ) +
         // REQ-EXEC-53: the demo's products for tests, as in examples/demo-shop/.qa/qa.project.yaml.
         [
           "",
@@ -214,6 +237,7 @@ describe("demo-shop self-test (REQ-NFR-04/AC1)", () => {
     ["DEMO-16", ["TC-01", "TC-02", "TC-03"]],
     ["DEMO-17", ["TC-01", "TC-02"]],
     ["DEMO-18", ["TC-01", "TC-02", "TC-03"]],
+    ["DEMO-19", ["TC-01", "TC-02", "TC-03"]],
   ] as const)("%s: every case is PASSED with all bugs off", async (ticket, specs) => {
     const { exitCode, statuses, out } = await pipeline(ticket, specs);
     expect(

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The SOAP price service of the demo shop (DEMO-19, REQ-EXEC-50 demo). -->
+<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+  xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+  xmlns:xs="http://www.w3.org/2001/XMLSchema"
+  xmlns:tns="urn:demo-shop:prices"
+  targetNamespace="urn:demo-shop:prices">
+  <wsdl:types>
+    <xs:schema targetNamespace="urn:demo-shop:prices" elementFormDefault="qualified">
+      <xs:element name="GetPrice">
+        <xs:complexType>
+          <xs:sequence><xs:element name="sku" type="xs:string"/></xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="GetPriceResponse">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="sku" type="xs:string"/>
+            <xs:element name="name" type="xs:string"/>
+            <xs:element name="amount" type="xs:decimal"/>
+          </xs:sequence>
+          <xs:attribute name="currency" type="tns:Currency" use="required"/>
+        </xs:complexType>
+      </xs:element>
+      <xs:simpleType name="Currency">
+        <xs:restriction base="xs:string"><xs:pattern value="[A-Z]{3}"/></xs:restriction>
+      </xs:simpleType>
+    </xs:schema>
+  </wsdl:types>
+  <wsdl:message name="GetPriceInput"><wsdl:part name="parameters" element="tns:GetPrice"/></wsdl:message>
+  <wsdl:message name="GetPriceOutput"><wsdl:part name="parameters" element="tns:GetPriceResponse"/></wsdl:message>
+  <wsdl:portType name="Prices">
+    <wsdl:operation name="GetPrice">
+      <wsdl:input message="tns:GetPriceInput"/>
+      <wsdl:output message="tns:GetPriceOutput"/>
+    </wsdl:operation>
+  </wsdl:portType>
+  <wsdl:binding name="PricesSoap" type="tns:Prices">
+    <soap:binding transport="http://schemas.xmlsoap.org/soap/http" style="document"/>
+    <wsdl:operation name="GetPrice">
+      <soap:operation soapAction="urn:demo-shop:prices#GetPrice"/>
+      <wsdl:input><soap:body use="literal"/></wsdl:input>
+      <wsdl:output><soap:body use="literal"/></wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:service name="PriceService">
+    <wsdl:port name="PricesPort" binding="tns:PricesSoap"><soap:address location="http://localhost:3000/soap/prices"/></wsdl:port>
+  </wsdl:service>
+</wsdl:definitions>

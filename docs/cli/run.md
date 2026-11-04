@@ -56,6 +56,19 @@ qajitsu run <TICKET> [--run <id>] [--env <profile|url>] [--keep] [--env-not-conf
    - An `errors` array where the plan expects data fails the step, even with HTTP 200.
    - Data that does not fit the schema's types fails it too.
    - Expectations read the answer by path, like JSON: `fields.data.product.price`, `fields.errors.0.message`.
+
+     SOAP and XML (REQ-EXEC-50): a spec calls `api.soap(path, bodyXml, { action, version })`. The body element is
+     wrapped in a SOAP 1.1 envelope (`text/xml`, `SOAPAction`) or a 1.2 one (`application/soap+xml; action=...`). A
+     plain XML request is `api.text(xml, "application/xml")`. `await res.xml("//GetPriceResponse/amount")` reads an
+     XPath over local names, and `verify(step, "xml.<xpath>", ...)` reads that value from the response itself, as the
+     plan's type. After the attempt, code checks every call against `repos.<alias>.wsdl` (the schemas in its `types`)
+     and `repos.<alias>.xsd` of the analysed commit:
+
+   - A fault where the plan expects an answer fails the step, even with HTTP 200. A step expects a fault when it plans
+     status 500 or an XPath on `Fault`.
+   - An answer, SOAP body or plain XML, that does not fit the schemas fails it too (`soap.schema`).
+   - A request that sends neither the plan step's `soap.operation` nor names it in its action, or a SOAP step that
+     makes no `api.soap()` call, is the spec's error: BLOCKED.
 7. Verdict: `computeStatus` per case, evidence manifest re-hashed, publish gates (every approved case has one status,
    plan unchanged, PASSED is proven, FAILED is explained, manifest intact, no secrets in outgoing artifacts).
 8. Reports in `report/`: `matrix.md`, `matrix.csv`, `matrix.xlsx`, `report.html` (self-contained), `gates.json`.

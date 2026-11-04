@@ -18,6 +18,8 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@qajitsu/core": "workspace:*"
+    "@qajitsu/core": "workspace:*",
+    "@xmldom/xmldom": "0.9.12",
+    "xpath": "0.0.36"
   }
 }

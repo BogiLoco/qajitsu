@@ -1,5 +1,6 @@
 import { modelForRole } from "@qajitsu/agents";
 import { graphqlSchemaOf } from "../graphql-schema.js";
+import { soapContractOf } from "../soap-contract.js";
 import { warnStageBudgets } from "../timing.js";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -432,6 +433,16 @@ export async function runPlan(
       context = {
         ...context,
         graphql: { operations: graphqlOperations(graphql.schema), source: graphql.source },
+      };
+    // REQ-EXEC-50/AC1: the SOAP operations of the analysed commit's WSDL.
+    const soap = await soapContractOf(session).catch((error: unknown) => {
+      io.writeError(`WSDL not read: ${error instanceof Error ? error.message : String(error)}\n`);
+      return undefined;
+    });
+    if (soap)
+      context = {
+        ...context,
+        soap: { operations: soap.operations, elements: soap.elements, source: soap.source },
       };
     // REQ-EXEC-53: the kinds of test data this project can create for a case.
     const testData = session.project.config.test_data;

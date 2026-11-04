@@ -179,6 +179,13 @@ export const ExpectationSchema = z
     /** Texts that must be visible (web/mobile). */
     texts: z.array(z.string()).optional(),
     /**
+     * Values of an XML or SOAP response by XPath over local names (REQ-EXEC-50/AC3), e.g.
+     * `{"//GetPriceResponse/amount": 24.99}`; namespace prefixes are not written.
+     */
+    xml: z
+      .record(z.string().min(1).max(500), z.union([z.string(), z.number(), z.boolean(), z.null()]))
+      .optional(),
+    /**
      * Expected state of UI elements by selector (`testid:place-order`, `role:button:Pay`, `label:Email`,
      * `text:Total`), e.g. `{ "testid:place-order": { "enabled": true } }` (REQ-EXEC-05).
      */
@@ -435,6 +442,10 @@ export const TestCaseSchema = z.strictObject({
            * a retry after a timeout or a `429` does not create a second order or payment.
            */
           idempotency_key: z.boolean().optional(),
+          /** REQ-EXEC-50/AC1: the SOAP operation of the WSDL the step calls, checked against the WSDL of the analysed commit. */
+          soap: z
+            .strictObject({ operation: z.string().regex(/^[_A-Za-z][\w.-]{0,99}$/, "A WSDL operation name") })
+            .optional(),
           /** REQ-EXEC-48/AC1: the GraphQL operation the step covers, checked against the schema of the analysed commit. */
           graphql: z
             .strictObject({

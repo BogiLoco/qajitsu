@@ -768,16 +768,16 @@ Jobs, queues and eventual consistency: "the status changes within 30 seconds".
 
 ### REQ-EXEC-50 · SOAP and XML APIs
 
-- Status: accepted
+- Status: implemented
 - Priority: could
 - Stage: later
 - Related: REQ-EXEC-04, REQ-EXEC-45
 
 **Acceptance criteria**
 
-- [ ] AC1: Steps send SOAP 1.1/1.2 and plain XML requests; the planner reads WSDL and XSD files from the repository.
-- [ ] AC2: Responses are validated against the WSDL/XSD of the analysed commit; SOAP faults are part of every result.
-- [ ] AC3: Expectations address XML values by path (XPath) as JSON fields are addressed for REST.
+- [x] AC1: Steps send SOAP 1.1/1.2 and plain XML requests; the planner reads WSDL and XSD files from the repository.
+- [x] AC2: Responses are validated against the WSDL/XSD of the analysed commit; SOAP faults are part of every result.
+- [x] AC3: Expectations address XML values by path (XPath) as JSON fields are addressed for REST.
 
 ### REQ-EXEC-51 · Event-driven APIs (message brokers)
 

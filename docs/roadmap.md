@@ -353,7 +353,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-EXEC-47](requirements/execution.md#req-exec-47--websocket-and-server-sent-events-testing) WebSocket and server-sent events testing (should, in-progress, AC 1/5)
 - [REQ-EXEC-48](requirements/execution.md#req-exec-48--graphql-testing) GraphQL testing (should, in-progress, AC 3/4)
 - [REQ-EXEC-49](requirements/execution.md#req-exec-49--grpc-testing) gRPC testing (should, accepted, AC 0/4)
-- [REQ-EXEC-50](requirements/execution.md#req-exec-50--soap-and-xml-apis) SOAP and XML APIs (could, accepted, AC 0/3)
+- [REQ-EXEC-50](requirements/execution.md#req-exec-50--soap-and-xml-apis) SOAP and XML APIs (could, implemented, AC 3/3)
 - [REQ-EXEC-51](requirements/execution.md#req-exec-51--event-driven-apis-message-brokers) Event-driven APIs (message brokers) (could, accepted, AC 0/3)
 - [REQ-EXEC-52](requirements/execution.md#req-exec-52--maestro-runner-adapter) Maestro runner adapter (should, accepted, AC 0/6)
 - [REQ-EXEC-53](requirements/execution.md#req-exec-53--test-data-per-case) Test data per case (must, implemented, AC 4/4)

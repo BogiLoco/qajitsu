@@ -133,7 +133,13 @@ const message = (e: unknown): string => (e instanceof Error ? e.message : String
 async function start(m: StartMessage): Promise<void> {
   const client = (alias: string | undefined): Record<string, unknown> => {
     const send = async (method: string, path: string, body: unknown, options: unknown): Promise<unknown> => {
-      const r = (await rpc({ op: "call", alias, method, path, body, options: options ?? {} })) as {
+      // Only the request options go to the parent; method options such as a SOAP action travel in the body.
+      const o = (options ?? {}) as { headers?: unknown; query?: unknown };
+      const callOptions = {
+        ...(o.headers === undefined ? {} : { headers: o.headers }),
+        ...(o.query === undefined ? {} : { query: o.query }),
+      };
+      const r = (await rpc({ op: "call", alias, method, path, body, options: callOptions })) as {
         status: number;
         headers: Record<string, string>;
         text: string;
@@ -144,7 +150,14 @@ async function start(m: StartMessage): Promise<void> {
       } catch {
         parsed = undefined;
       }
-      return { status: r.status, headers: r.headers, text: r.text, json: (p?: string) => at(parsed, p) };
+      return {
+        status: r.status,
+        headers: r.headers,
+        text: r.text,
+        json: (p?: string) => at(parsed, p),
+        // REQ-EXEC-50/AC3: XPath is evaluated by the parent; the child has no XML parser.
+        xml: (xpath: unknown) => rpc({ op: "xpath", text: r.text, xpath }),
+      };
     };
     return {
       get: (path: string, o?: unknown) => send("GET", path, undefined, o),
@@ -158,6 +171,19 @@ async function start(m: StartMessage): Promise<void> {
           "POST",
           typeof o?.path === "string" ? o.path : "/graphql",
           { __qjBody: "graphql", query, ...(variables === undefined ? {} : { variables }) },
+          o,
+        ),
+      // REQ-EXEC-50/AC1: plain data; the parent builds the envelope and marks the call as SOAP.
+      soap: (path: string, body: unknown, o?: { action?: unknown; version?: unknown }) =>
+        send(
+          "POST",
+          path,
+          {
+            __qjBody: "soap",
+            body,
+            ...(o?.action === undefined ? {} : { action: o.action }),
+            ...(o?.version === undefined ? {} : { version: o.version }),
+          },
           o,
         ),
       as: (a: string) => client(a),

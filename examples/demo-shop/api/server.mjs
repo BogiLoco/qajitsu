@@ -3,6 +3,7 @@
 // Seeded bugs are off by default and switched on with environment flags (see ../BUGS.md).
 // Usage: DEMO_USER_PASSWORD=... node api/server.mjs [--port 3000]
 import { answerGraphql } from "./graphql.mjs";
+import { answerSoap } from "./soap.mjs";
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
@@ -36,6 +37,8 @@ export const BUG_FLAGS = [
   "BUG_LOW_STOCK_OFF_BY_ONE",
   "BUG_GRAPHQL_PRICE_AS_TEXT",
   "BUG_GRAPHQL_ERROR_WITH_DATA",
+  "BUG_SOAP_CURRENCY_MISSING",
+  "BUG_SOAP_FAULT_WITH_200",
 ];
 
 const PRODUCTS = [
@@ -157,6 +160,17 @@ export function createShop(options) {
     if (route === "GET /products") return json(res, 200, PRODUCTS);
     // GraphQL over the same products (DEMO-18): errors are answered with HTTP 200, as GraphQL servers do.
     if (route === "POST /graphql") return json(res, 200, answerGraphql(await body(req), PRODUCTS, bugs));
+    // SOAP 1.1 over the same products (DEMO-19): faults are answered with HTTP 500, as SOAP 1.1 says.
+    if (route === "POST /soap/prices") {
+      const text = await new Promise((resolve) => {
+        let data = "";
+        req.on("data", (c) => (data += c));
+        req.on("end", () => resolve(data));
+      });
+      const answer = answerSoap(text, PRODUCTS, bugs);
+      res.writeHead(answer.status, { "content-type": "text/xml; charset=utf-8" });
+      return res.end(answer.xml);
+    }
     // The board's history, newest first, ten per page (REQ-EXEC-40 demo): H-50 is the oldest event.
     if (route === "GET /board/history") {
       const page = Math.max(0, Math.min(4, Number(url.searchParams.get("page") ?? "0") || 0));

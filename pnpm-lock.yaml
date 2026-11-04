@@ -632,6 +632,12 @@ importers:
       '@qajitsu/core':
         specifier: workspace:*
         version: link:../core
+      '@xmldom/xmldom':
+        specifier: 0.9.12
+        version: 0.9.12
+      xpath:
+        specifier: 0.0.36
+        version: 0.0.36
 
   packages/toolchain:
     dependencies:
@@ -653,12 +659,18 @@ importers:
       '@qajitsu/steps':
         specifier: workspace:*
         version: link:../steps
+      '@xmldom/xmldom':
+        specifier: 0.9.12
+        version: 0.9.12
       graphql:
         specifier: 16.11.0
         version: 16.11.0
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
+      xmllint-wasm:
+        specifier: 5.3.0
+        version: 5.3.0(@types/node@22.20.5)
 
 packages:
 
@@ -3635,6 +3647,16 @@ packages:
   xmlbuilder@15.1.1:
     resolution: {integrity: sha512-yMqGBqtXyeN1e3TGYvgNgDVZ3j84W4cwkOXQswghol6APgZWaff9lnbvN7MHYJOiXsvGPXtjTYJEiC9J2wv9Eg==}
     engines: {node: '>=8.0'}
+
+  xmllint-wasm@5.3.0:
+    resolution: {integrity: sha512-sEgRXdf2t13eYCFCURmCE6h2hwleEOIS9VL/jOh9JJJnez2YXIooi2Ghm05/JZEPXyPawN8sMASPVZlmh8Sd6A==}
+    engines: {node: '>=16'}
+    peerDependencies:
+      '@types/node': '>=16'
+
+  xpath@0.0.36:
+    resolution: {integrity: sha512-HuqAnJx5YJoDeLub7hhcNoiRvnqqrgoSsI4kLrOtv6XkaUI0zY9ylL4+ULozB35JT1SVMfdexsMqRbTp7bkFGQ==}
+    engines: {node: '>=0.6.0'}
 
   y18n@5.0.8:
     resolution: {integrity: sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==}
@@ -6836,6 +6858,12 @@ snapshots:
   ws@8.22.0: {}
 
   xmlbuilder@15.1.1: {}
+
+  xmllint-wasm@5.3.0(@types/node@22.20.5):
+    dependencies:
+      '@types/node': 22.20.5
+
+  xpath@0.0.36: {}
 
   y18n@5.0.8: {}
 

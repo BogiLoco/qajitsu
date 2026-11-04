@@ -775,6 +775,21 @@ function graphqlProblems(plan: Plan, context: ChangeContext): string[] {
   );
 }
 
+/** Steps of a draft citing a SOAP operation the WSDL does not have (REQ-EXEC-50/AC1). */
+function soapProblems(plan: Plan, context: ChangeContext): string[] {
+  if (!context.soap) return [];
+  const known = context.soap.operations;
+  return plan.cases.flatMap((c) =>
+    c.steps.flatMap((s) =>
+      s.soap !== undefined && !known.includes(s.soap.operation)
+        ? [
+            `${c.id}.${s.id}: ${s.soap.operation} is not an operation of the WSDL; use one of ${known.join(", ")}`,
+          ]
+        : [],
+    ),
+  );
+}
+
 /** A revision request for an existing plan version (REQ-PLAN-04). */
 export interface PlanRevision {
   readonly previous: Plan;
@@ -880,6 +895,7 @@ export async function runPlanner(
       const errors = [
         ...testDataProblems(plan.data, context),
         ...graphqlProblems(plan.data, context),
+        ...soapProblems(plan.data, context),
         ...issuesAsErrors(checkPlanSources(plan.data, sources)),
         ...checkExistingCoverage(plan.data, sources),
       ];

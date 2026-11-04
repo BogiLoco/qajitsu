@@ -28,3 +28,4 @@ export * from "./spec-quality.js";
 export * from "./readiness.js";
 export * from "./timestamp.js";
 export * from "./graphql.js";
+export * from "./soap.js";

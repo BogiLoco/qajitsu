@@ -387,7 +387,9 @@ and `qj review-spec` shows and decides.
    specs that do not verify every planned expectation or use forbidden code. A case without a valid spec is BLOCKED.
 3. Each spec runs in a **sandbox** (no network, no files, no secrets). The trusted parent process performs every API
    call, drives the browser (Playwright) or the mobile app (Appium), records evidence and compares actual values with
-   the approved plan.
+   the approved plan. API calls can be REST with JSON, files or forms, **GraphQL** (`api.graphql()`, checked against
+   the repository's schema) or **SOAP and XML** (`api.soap()`, checked against its WSDL and XSD): an unplanned
+   GraphQL error or SOAP fault fails the step even with HTTP 200, and so does an answer outside the schema.
    API, web and mobile cases run **at the same time in their own lanes**: `execution.workers.api` and
    `execution.workers.web` cases at once, every mobile device running one case at a time, and with
    `execution.web_combinations` several browsers of the matrix next to each other. `--sequential` (or

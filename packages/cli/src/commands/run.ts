@@ -47,7 +47,12 @@ import {
   type WebCombination,
 } from "@qajitsu/core";
 import { createMasker } from "@qajitsu/steps";
-import { checkApprovalRecords, checkGraphqlAttempt, formatSpecProblems } from "@qajitsu/verifier";
+import {
+  checkApprovalRecords,
+  checkGraphqlAttempt,
+  checkSoapAttempt,
+  formatSpecProblems,
+} from "@qajitsu/verifier";
 import { buildAdapters, type RuntimePorts } from "../adapters.js";
 import { codeIndexCache, openSession, type ModelPorts, type RunSession } from "../session.js";
 import { runningBuild } from "./env-up-reuse.js";
@@ -85,6 +90,7 @@ import { runVersions } from "../versions.js";
 import { lazyBrowserFactory } from "../plugins/lazy.js";
 import { pluginVersions, sessionPlugins } from "./plugin.js";
 import { graphqlSchemaOf } from "../graphql-schema.js";
+import { soapContractOf } from "../soap-contract.js";
 import { createProgressPrinter, liveScreenshots, teeEvents } from "./progress.js";
 import { checkRunReadiness, commentEnvReadiness, formatEnvReadiness } from "../env-readiness.js";
 import { publisherFor } from "./publish.js";
@@ -1201,6 +1207,9 @@ async function executeCases(
   // REQ-EXEC-48/AC3: GraphQL answers are checked against the schema of exactly the analysed version of the code.
   const graphql = await graphqlSchemaOf(session, { env, fetch: ports.fetch });
   if (graphql) events.emit("run", SYSTEM, "graphql.schema", { source: graphql.source });
+  // REQ-EXEC-50/AC2: SOAP and XML answers are validated against the WSDL and XSD of the analysed commit.
+  const soap = await soapContractOf(session);
+  if (soap) events.emit("run", SYSTEM, "soap.contract", { source: soap.source });
   const leases = createAccountLeases(env.profile, { waitMs: project.config.execution.account_wait_s * 1000 });
   const loginDeps = {
     fetch: ports.fetch,
@@ -1212,7 +1221,9 @@ async function executeCases(
   };
   const base = {
     // REQ-EXEC-48/AC3: errors where data is expected, and data that does not fit the schema, fail the step.
-    checkAttempt: (record: AttemptRecord) => checkGraphqlAttempt(record, plan, graphql?.schema),
+    // REQ-EXEC-50/AC2: an unplanned fault, and an answer outside the WSDL or XSD, fail the step.
+    checkAttempt: (record: AttemptRecord) =>
+      checkSoapAttempt(checkGraphqlAttempt(record, plan, graphql?.schema), plan, soap?.validator),
     // REQ-EXEC-54: one traffic policy for every lane, so the shared environment sees the run's rate as a whole.
     traffic: createTrafficPolicy(project.config.execution.rate_limit ?? RateLimitConfigSchema.parse({}), {
       now: () => ports.now().getTime(),

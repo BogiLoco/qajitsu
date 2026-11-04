@@ -461,6 +461,22 @@
                         "type": "string"
                       }
                     },
+                    "xml": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                      },
+                      "additionalProperties": {
+                        "type": [
+                          "string",
+                          "number",
+                          "boolean",
+                          "null"
+                        ]
+                      }
+                    },
                     "elements": {
                       "type": "object",
                       "propertyNames": {
@@ -821,6 +837,19 @@
                 },
                 "idempotency_key": {
                   "type": "boolean"
+                },
+                "soap": {
+                  "type": "object",
+                  "properties": {
+                    "operation": {
+                      "type": "string",
+                      "pattern": "^[_A-Za-z][\\w.-]{0,99}$"
+                    }
+                  },
+                  "required": [
+                    "operation"
+                  ],
+                  "additionalProperties": false
                 },
                 "graphql": {
                   "type": "object",

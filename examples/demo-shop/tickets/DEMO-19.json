@@ -1,0 +1,16 @@
+{
+  "key": "DEMO-19",
+  "type": "Story",
+  "status": "Ready for QA",
+  "summary": "Product prices over SOAP for the partner portal",
+  "description": "The partner portal reads prices from the shop's SOAP 1.1 service (POST /soap/prices, WSDL in api/prices.wsdl, operation GetPrice with SOAPAction urn:demo-shop:prices#GetPrice). Prices are in EUR.",
+  "acceptanceCriteria": [
+    "GetPrice for P-2 answers the Mug with its amount 24.99, as the WSDL describes.",
+    "GetPrice for an unknown product answers a SOAP fault \"Unknown product P-9\" with HTTP 500.",
+    "GetPrice for P-1 answers the sticker's amount 0.335, without a fault."
+  ],
+  "labels": ["soap", "api"],
+  "components": ["shop-api"],
+  "attachments": [],
+  "comments": []
+}

@@ -166,6 +166,15 @@ export interface ChangeContext {
   readonly testData?: { readonly kinds: readonly string[]; readonly hook: boolean } | undefined;
   /** The GraphQL operations of the analysed commit (REQ-EXEC-48/AC1), e.g. `Query.product(id: ID!): Product`. */
   readonly graphql?: { readonly operations: readonly string[]; readonly source: string } | undefined;
+  /** The SOAP operations of the WSDL of the analysed commit (REQ-EXEC-50/AC1), for the planner. */
+  readonly soap?:
+    | {
+        readonly operations: readonly string[];
+        /** The global elements of the repository's XSD files. */
+        readonly elements?: readonly string[];
+        readonly source: string;
+      }
+    | undefined;
   /** Lessons of earlier runs of the project (REQ-CTX-20/AC5): untrusted, offered to the analyst and planner only. */
   readonly lessons?: readonly Lesson[] | undefined;
 }
@@ -679,6 +688,23 @@ export function changeContextFragments(
         "untrusted",
         64,
         `## GraphQL operations (${context.graphql.source})\n${context.graphql.operations.join("\n")}`,
+      ),
+    );
+  // REQ-EXEC-50/AC1: the SOAP operations a case may cite, read by code from the WSDL of the analysed commit.
+  if (context.soap && (context.soap.operations.length > 0 || (context.soap.elements ?? []).length > 0))
+    out.push(
+      part(
+        "repository",
+        "soap-operations",
+        "untrusted",
+        64,
+        [
+          `## SOAP operations (${context.soap.source})`,
+          ...context.soap.operations,
+          ...((context.soap.elements ?? []).length > 0
+            ? ["XML elements of the schemas:", ...(context.soap.elements ?? [])]
+            : []),
+        ].join("\n"),
       ),
     );
   // REQ-CTX-20/AC5: what people taught earlier runs; low priority, so it is the first to wait behind a handle.

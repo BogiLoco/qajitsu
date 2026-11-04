@@ -30,6 +30,8 @@ assert that the targeting case ends FAILED with the flag on and PASSED with it o
 | BUG-23 | `BUG_LOW_STOCK_OFF_BY_ONE`       | products  | api    | A product with exactly three left is not shown as low stock                 | DEMO-17        | later |
 | BUG-24 | `BUG_GRAPHQL_PRICE_AS_TEXT`      | graphql   | api    | GraphQL answers a product's price as text instead of a number               | DEMO-18        | later |
 | BUG-25 | `BUG_GRAPHQL_ERROR_WITH_DATA`    | graphql   | api    | The product list comes with an error in `errors`, still with HTTP 200       | DEMO-18        | later |
+| BUG-26 | `BUG_SOAP_CURRENCY_MISSING`      | soap      | api    | The SOAP price answer leaves out the currency its WSDL requires             | DEMO-19        | later |
+| BUG-27 | `BUG_SOAP_FAULT_WITH_200`        | soap      | api    | A price below 1 is answered with a SOAP fault, still with HTTP 200          | DEMO-19        | later |
 
 Rules:
 

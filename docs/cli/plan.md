@@ -23,8 +23,11 @@ qajitsu doctor --models
    (REQ-EXEC-46), and per step `idempotency_key: true` for a request that must not happen twice, such as an order or
    a payment (REQ-EXEC-54/AC4), and per step `graphql: { operation: "Query.product" }` for a GraphQL call. The
    operation is one the planner sees under "GraphQL operations": code reads them from the schema of the analysed
-   commit, and a draft that names another one goes back to the planner (REQ-EXEC-48/AC1). The review shows all of
-   them.
+   commit, and a draft that names another one goes back to the planner (REQ-EXEC-48/AC1). A SOAP call has
+   `soap: { operation: "GetPrice" }`, one of the "SOAP operations" read from `repos.<alias>.wsdl`, and its
+   expectations are XPaths without namespace prefixes under `xml`: `{ "//GetPriceResponse/amount": 24.99 }`, or
+   `"//Fault/faultstring"` with status 500 for a planned fault. The planner also sees the global elements of the
+   `repos.<alias>.xsd` files (REQ-EXEC-50/AC1+AC3). The review shows all of them.
 5. In a terminal: `[a]ccept`, `[r]evise` (free text, creates the next version and shows `+ added`, `- removed`,
    `~ changed` cases), `[e]dit` (opens `$EDITOR`; the edit is schema- and source-checked before it becomes a version)
    or `[q]uit`. Accepting a plan with open questions needs an explicit `yes` (REQ-PLAN-05).

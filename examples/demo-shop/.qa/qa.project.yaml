@@ -21,6 +21,8 @@ repos:
     # API responses are validated against this contract from the analysed version (REQ-EXEC-04/AC2).
     openapi: api/openapi.yaml
     graphql: api/schema.graphql
+    # SOAP answers are validated against the WSDL's types (REQ-EXEC-50/AC2).
+    wsdl: api/prices.wsdl
 
 environments:
   default: local
@@ -88,6 +90,8 @@ services:
       BUG_LOW_STOCK_OFF_BY_ONE: { value: "0", overridable: true }
       BUG_GRAPHQL_PRICE_AS_TEXT: { value: "0", overridable: true }
       BUG_GRAPHQL_ERROR_WITH_DATA: { value: "0", overridable: true }
+      BUG_SOAP_CURRENCY_MISSING: { value: "0", overridable: true }
+      BUG_SOAP_FAULT_WITH_200: { value: "0", overridable: true }
     health: { http: /health, timeout_s: 180 }
 
 build:

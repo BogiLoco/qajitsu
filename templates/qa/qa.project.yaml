@@ -32,6 +32,11 @@ repos:
     host: gitlab
     path: shop/platform/backend
     default_ref: main
+    # Contracts of the analysed commit; answers that do not fit them fail the step (REQ-EXEC-04/48/50).
+    # openapi: api/openapi.yaml
+    # graphql: api/schema.graphql        # or an endpoint to introspect: /graphql
+    # wsdl: api/prices.wsdl
+    # xsd: [api/orders.xsd]
   web:
     host: github
     path: example-org/shop-web

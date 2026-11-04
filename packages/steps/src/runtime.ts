@@ -14,6 +14,7 @@ import type {
   TestCase,
 } from "@qajitsu/core";
 import { plannedFields, retryAfterMs, type TrafficPolicy } from "@qajitsu/core";
+import { soapEnvelope, xmlValue } from "./xml.js";
 import { checkGesture } from "./gestures.js";
 import type { Masker } from "./masking.js";
 import {
@@ -50,7 +51,13 @@ export type ApiBody =
     }
   | { readonly __qjBody: "form"; readonly fields: Readonly<Record<string, string>> }
   | { readonly __qjBody: "binary"; readonly file: string }
-  | { readonly __qjBody: "text"; readonly text: string; readonly type?: string };
+  | { readonly __qjBody: "text"; readonly text: string; readonly type?: string }
+  | {
+      readonly __qjBody: "soap";
+      readonly body: string;
+      readonly action?: string;
+      readonly version?: "1.1" | "1.2";
+    };
 
 /** A non-JSON body as the transport sends it: files resolved from the plan by the runtime. */
 export type ApiPayload =
@@ -92,6 +99,8 @@ export interface ApiResponse {
   readonly text: string;
   /** Parsed JSON body, or the value at a dotted path (`lines.0.total`); `undefined` when absent. */
   readonly json: (path?: string) => unknown;
+  /** The value of an XPath over the local names of an XML or SOAP body (REQ-EXEC-50/AC3); `undefined` when absent. */
+  readonly xml: (xpath: string) => Promise<unknown>;
 }
 
 /** Options of one API call. */
@@ -124,6 +133,15 @@ export interface ApiClient {
    * A GraphQL query or mutation (REQ-EXEC-48/AC2), sent as `POST /graphql` (or `options.path`) with its variables;
    * expectations read `data.<field>` and `errors` like JSON fields.
    */
+  /**
+   * A SOAP request (REQ-EXEC-50/AC1): the body element is wrapped in the envelope of SOAP 1.1 (default) or 1.2 with
+   * its content type and `SOAPAction`, and sent as `POST <path>`.
+   */
+  readonly soap: (
+    path: string,
+    body: string,
+    options?: ApiCallOptions & { readonly action?: string; readonly version?: "1.1" | "1.2" },
+  ) => Promise<ApiResponse>;
   readonly graphql: (
     query: string,
     variables?: Readonly<Record<string, unknown>>,
@@ -318,6 +336,10 @@ function expectationOf(planCase: TestCase, stepId: string, field: string, path: 
     if (!e.fields || !(key in e.fields))
       throw new Error(`plan.expect('${path}'): no expected field '${key}'`);
     value = e.fields[key];
+  } else if (kind === "xml" && rest.length > 0) {
+    const key = rest.join(".");
+    if (!e.xml || !(key in e.xml)) throw new Error(`plan.expect('${path}'): no expected XPath '${key}'`);
+    value = e.xml[key];
   } else if (kind === "texts" && rest.length === 1) value = e.texts?.[Number(rest[0])];
   else if (kind === "elements" && rest.length >= 2) {
     const property = rest.at(-1) as UiProperty;
@@ -733,7 +755,14 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   const requestBody = async (
     stepId: string,
     body: Record<string, unknown>,
-  ): Promise<{ payload: ApiPayload; evidence: unknown; curl: string[]; contentType?: string }> => {
+  ): Promise<{
+    payload: ApiPayload;
+    evidence: unknown;
+    curl: string[];
+    contentType?: string;
+    headers?: Record<string, string>;
+    soap?: { version: string; action?: string };
+  }> => {
     const invalid = (): Error =>
       new Error("api: invalid request body; use api.multipart, form, binary or text");
     const strings = (v: unknown): Record<string, string> => {
@@ -795,6 +824,32 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         evidence: { file: describe(f) },
         curl: [`--data-binary ${shellQuote(`@${f.name}`)}`],
         contentType: f.type,
+      };
+    }
+    if (kind === "soap") {
+      const xml = body["body"];
+      const version = body["version"] ?? "1.1";
+      const action = body["action"];
+      if (
+        typeof xml !== "string" ||
+        (version !== "1.1" && version !== "1.2") ||
+        (action !== undefined && typeof action !== "string")
+      )
+        throw invalid();
+      const envelope = soapEnvelope(xml, version);
+      const contentType =
+        version === "1.1"
+          ? "text/xml; charset=utf-8"
+          : `application/soap+xml; charset=utf-8${action === undefined ? "" : `; action="${action}"`}`;
+      return {
+        payload: { kind: "bytes", data: new TextEncoder().encode(envelope), type: contentType },
+        evidence: {
+          soap: { version, ...(action === undefined ? {} : { action }), envelope: masker.maskText(envelope) },
+        },
+        curl: [`--data-binary ${shellQuote(masker.maskText(envelope))}`],
+        contentType,
+        ...(version === "1.1" ? { headers: { soapaction: `"${action ?? ""}"` } } : {}),
+        soap: { version, ...(action === undefined ? {} : { action }) },
       };
     }
     if (kind === "text") {
@@ -890,6 +945,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
           : { "content-type": special.contentType }),
       // REQ-EXEC-14: a locale run asks the API for that locale; a spec may still set its own header.
       ...(options.locale ? { "accept-language": options.locale } : {}),
+      ...special?.headers,
       ...opts.headers,
       ...(keyed
         ? { [limits.idempotencyHeader]: `qj-${caseId}-${stepId}-a${String(options.attempt)}-${String(key)}` }
@@ -973,6 +1029,8 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
         method,
         url: masker.maskText(url.toString()),
         ...(graphql !== undefined ? { graphql: true } : {}),
+        // REQ-EXEC-50/AC2: marked so the verifier checks its fault and its body against the WSDL.
+        ...(special?.soap ? { soap: special.soap } : {}),
         request: { headers: maskedHeaders, body: special ? special.evidence : maskValue(body) },
         response: {
           status: response.status,
@@ -1693,7 +1751,19 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     let actual: unknown;
     if (kind === "status") actual = last.status;
     else if (kind === "fields") actual = at(last.body, rest.join("."));
-    else if (kind === "texts")
+    else if (kind === "xml") {
+      // REQ-EXEC-50/AC3: text from XML is read as the plan's type when it is that type written as text.
+      const raw = xmlValue(last.text, rest.join("."));
+      actual =
+        typeof expected === "number" &&
+        typeof raw === "string" &&
+        raw.trim() !== "" &&
+        !Number.isNaN(Number(raw))
+          ? Number(raw)
+          : typeof expected === "boolean" && (raw === "true" || raw === "false")
+            ? raw === "true"
+            : raw;
+    } else if (kind === "texts")
       actual =
         typeof expected === "string" && last.text.includes(expected)
           ? expected
@@ -1725,7 +1795,13 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     ): Promise<ApiResponse> => {
       const r = await call(alias, method, path, body, opts);
       const parsed = parseJson(r.text);
-      return { status: r.status, headers: r.headers, text: r.text, json: (p) => at(parsed, p) };
+      return {
+        status: r.status,
+        headers: r.headers,
+        text: r.text,
+        json: (p) => at(parsed, p),
+        xml: (x) => Promise.resolve(xmlValue(r.text, x)),
+      };
     };
     return {
       get: (path, o) => send("GET", path, undefined, o),
@@ -1733,6 +1809,18 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       put: (path, body, o) => send("PUT", path, body, o),
       patch: (path, body, o) => send("PATCH", path, body, o),
       delete: (path, o) => send("DELETE", path, undefined, o),
+      soap: (path, body, o) =>
+        send(
+          "POST",
+          path,
+          {
+            __qjBody: "soap",
+            body,
+            ...(o?.action === undefined ? {} : { action: o.action }),
+            ...(o?.version === undefined ? {} : { version: o.version }),
+          },
+          o,
+        ),
       graphql: (query, variables, o) =>
         send(
           "POST",

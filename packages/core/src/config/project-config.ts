@@ -160,6 +160,16 @@ const RepoSchema = z.strictObject({
    * The GraphQL schema (REQ-EXEC-48/AC1): an SDL file inside the repository (`.graphql`, `.gql`), or the path of the
    * endpoint on the test environment to introspect (`/graphql`); responses are checked against it.
    */
+  /** The WSDL of a SOAP service inside the repository (REQ-EXEC-50/AC1); responses are validated against its types. */
+  wsdl: z
+    .string()
+    .regex(/^(?!\/)(?!.*\.\.)[\w./-]+\.wsdl$/, "Relative path to a .wsdl file")
+    .optional(),
+  /** XML Schemas inside the repository (REQ-EXEC-50/AC2): XML responses and SOAP bodies are validated against them. */
+  xsd: z
+    .array(z.string().regex(/^(?!\/)(?!.*\.\.)[\w./-]+\.xsd$/, "Relative path to a .xsd file"))
+    .max(20)
+    .optional(),
   graphql: z
     .string()
     .regex(

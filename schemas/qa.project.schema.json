@@ -1554,6 +1554,18 @@
             "type": "string",
             "pattern": "^(?!\\/)(?!.*\\.\\.)[\\w./-]+\\.(ya?ml|json)$"
           },
+          "wsdl": {
+            "type": "string",
+            "pattern": "^(?!\\/)(?!.*\\.\\.)[\\w./-]+\\.wsdl$"
+          },
+          "xsd": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(?!\\/)(?!.*\\.\\.)[\\w./-]+\\.xsd$"
+            }
+          },
           "graphql": {
             "type": "string",
             "pattern": "^((?!\\/)(?!.*\\.\\.)[\\w./-]+\\.(graphqls?|gql)|\\/[\\w/-]*)$"
