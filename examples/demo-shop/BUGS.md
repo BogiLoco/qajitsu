@@ -32,6 +32,8 @@ assert that the targeting case ends FAILED with the flag on and PASSED with it o
 | BUG-25 | `BUG_GRAPHQL_ERROR_WITH_DATA`    | graphql   | api    | The product list comes with an error in `errors`, still with HTTP 200       | DEMO-18        | later |
 | BUG-26 | `BUG_SOAP_CURRENCY_MISSING`      | soap      | api    | The SOAP price answer leaves out the currency its WSDL requires             | DEMO-19        | later |
 | BUG-27 | `BUG_SOAP_FAULT_WITH_200`        | soap      | api    | A price below 1 is answered with a SOAP fault, still with HTTP 200          | DEMO-19        | later |
+| BUG-28 | `BUG_WS_FEED_CLOSES_EARLY`       | realtime  | api    | The live price feed closes with 1011 after the price, before availability   | DEMO-20        | later |
+| BUG-29 | `BUG_SSE_EVENTS_OUT_OF_ORDER`    | realtime  | api    | The order event stream sends "paid" before "created"                        | DEMO-20        | later |
 
 Rules:
 

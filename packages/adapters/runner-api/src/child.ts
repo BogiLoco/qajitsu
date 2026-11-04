@@ -132,6 +132,22 @@ const message = (e: unknown): string => (e instanceof Error ? e.message : String
 
 async function start(m: StartMessage): Promise<void> {
   const client = (alias: string | undefined): Record<string, unknown> => {
+    const stream = async (kind: string, path: unknown, protocols: unknown): Promise<unknown> => {
+      const handle = await rpc({
+        op: "streamOpen",
+        alias,
+        kind,
+        path,
+        ...(protocols === undefined ? {} : { protocols }),
+      });
+      const op = (name: string, data?: unknown) =>
+        rpc({ op: "streamOp", handle, name, ...(data === undefined ? {} : { data }) });
+      return {
+        send: (data: unknown) => op("send", typeof data === "string" ? data : JSON.stringify(data)),
+        messages: () => op("messages"),
+        close: () => op("close"),
+      };
+    };
     const send = async (method: string, path: string, body: unknown, options: unknown): Promise<unknown> => {
       // Only the request options go to the parent; method options such as a SOAP action travel in the body.
       const o = (options ?? {}) as { headers?: unknown; query?: unknown };
@@ -187,6 +203,9 @@ async function start(m: StartMessage): Promise<void> {
           o,
         ),
       as: (a: string) => client(a),
+      // REQ-EXEC-47: the parent opens the stream with the account's authentication and records every frame.
+      websocket: (path: unknown, o?: { protocols?: unknown }) => stream("websocket", path, o?.protocols),
+      events: (path: unknown) => stream("sse", path, undefined),
       // REQ-EXEC-45/AC1: body descriptors are plain data; the parent resolves files from the plan and checks them.
       multipart: (parts: { fields?: unknown; files?: unknown } = {}) => ({
         __qjBody: "multipart",

@@ -74,6 +74,15 @@ describe("planning SOAP cases (REQ-EXEC-50/AC1)", () => {
     );
   });
 
+  it("REQ-EXEC-47/AC1+AC2: the planner and the author are told how WebSocket and event stream steps work", () => {
+    expect(PLANNER_SYSTEM).toContain('"stream": {"timeout_s": 5}');
+    expect(PLANNER_SYSTEM).toContain('{"0.event": "created", "0.data.status": "created"}');
+    expect(AUTHOR_SYSTEM).toContain('client.websocket("<path>")');
+    expect(AUTHOR_SYSTEM).toContain(
+      'verify("<step id>", "messages.<n>.<path>" | "messages.count", undefined',
+    );
+  });
+
   it("REQ-EXEC-50/AC1+AC3: the planner and the author are told how SOAP steps and XPath checks work", () => {
     expect(PLANNER_SYSTEM).toContain('"soap": {"operation": "GetPrice"}');
     expect(PLANNER_SYSTEM).toContain('"//GetPriceResponse/amount": 24.99');

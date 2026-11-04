@@ -14,6 +14,7 @@ export function plannedFields(expect: Expectation): string[] {
     ...Object.keys(expect.fields ?? {}).map((path) => `fields.${path}`),
     ...(expect.texts ?? []).map((_, i) => `texts.${String(i)}`),
     ...Object.keys(expect.xml ?? {}).map((path) => `xml.${path}`),
+    ...Object.keys(expect.messages ?? {}).map((key) => `messages.${key}`),
     ...Object.entries(expect.elements ?? {}).flatMap(([selector, state]) =>
       Object.keys(state).map((prop) => `elements.${selector}.${prop}`),
     ),

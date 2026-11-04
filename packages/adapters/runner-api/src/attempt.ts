@@ -1,3 +1,4 @@
+import { createStreamTransport } from "./streams.js";
 import { pathToFileURL } from "node:url";
 import type { AttemptRequest } from "@qajitsu/core";
 import { annotateImage } from "./annotate.js";
@@ -70,6 +71,8 @@ export async function executeAttempt(
     attempt: input.attempt,
     baseUrl: input.baseUrl,
     transport,
+    // REQ-EXEC-47: WebSockets and event streams are opened here, in the trusted process.
+    streams: createStreamTransport(),
     masker,
     allowedOrigins: input.allowedOrigins,
     accounts: input.accounts,

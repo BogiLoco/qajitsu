@@ -390,6 +390,8 @@ and `qj review-spec` shows and decides.
    the approved plan. API calls can be REST with JSON, files or forms, **GraphQL** (`api.graphql()`, checked against
    the repository's schema) or **SOAP and XML** (`api.soap()`, checked against its WSDL and XSD): an unplanned
    GraphQL error or SOAP fault fails the step even with HTTP 200, and so does an answer outside the schema.
+   **WebSockets and server-sent events** (`api.websocket()`, `api.events()`) are checked message by message, in
+   order and by count; a stream that closes early fails the step with its close code.
    API, web and mobile cases run **at the same time in their own lanes**: `execution.workers.api` and
    `execution.workers.web` cases at once, every mobile device running one case at a time, and with
    `execution.web_combinations` several browsers of the matrix next to each other. `--sequential` (or

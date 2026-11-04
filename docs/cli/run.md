@@ -57,6 +57,17 @@ qajitsu run <TICKET> [--run <id>] [--env <profile|url>] [--keep] [--env-not-conf
    - Data that does not fit the schema's types fails it too.
    - Expectations read the answer by path, like JSON: `fields.data.product.price`, `fields.errors.0.message`.
 
+     WebSocket and server-sent events (REQ-EXEC-47): a spec opens `api.websocket(path)` (then `send()`) or
+     `api.events(path)`. The trusted process opens the stream with the account's headers, only to an origin of the
+     allowlist (`ws:`/`wss:` count as `http:`/`https:`), and keeps every frame sent and received, masked, as
+     `S1-websocket-01.json` or `S1-events-01.json`. `verify(step, "messages.<n>.<path>")` waits for message `n` up to
+     the step's `stream.timeout_s` (10 s by default), and `messages.count` counts the messages until the stream ends or
+     the time is up.
+
+   - A planned message that does not come fails the step, with the close code and reason when the stream ended first
+     (`(no message 1 within 3 s (the stream closed with 1011 price feed down))`).
+   - A stream that cannot be opened, or one to another host, is the step's error: BLOCKED with the reason.
+
      SOAP and XML (REQ-EXEC-50): a spec calls `api.soap(path, bodyXml, { action, version })`. The body element is
      wrapped in a SOAP 1.1 envelope (`text/xml`, `SOAPAction`) or a 1.2 one (`application/soap+xml; action=...`). A
      plain XML request is `api.text(xml, "application/xml")`. `await res.xml("//GetPriceResponse/amount")` reads an

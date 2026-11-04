@@ -39,6 +39,8 @@ export const BUG_FLAGS = [
   "BUG_GRAPHQL_ERROR_WITH_DATA",
   "BUG_SOAP_CURRENCY_MISSING",
   "BUG_SOAP_FAULT_WITH_200",
+  "BUG_WS_FEED_CLOSES_EARLY",
+  "BUG_SSE_EVENTS_OUT_OF_ORDER",
 ];
 
 const PRODUCTS = [
@@ -151,7 +153,7 @@ export function createShop(options) {
       });
     });
 
-  return async (req, res) => {
+  const handle = async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const route = `${req.method} ${url.pathname}`;
     if (req.method === "GET" && serveWeb(url.pathname, bugs, res)) return;
@@ -160,6 +162,27 @@ export function createShop(options) {
     if (route === "GET /products") return json(res, 200, PRODUCTS);
     // GraphQL over the same products (DEMO-18): errors are answered with HTTP 200, as GraphQL servers do.
     if (route === "POST /graphql") return json(res, 200, answerGraphql(await body(req), PRODUCTS, bugs));
+    // An order's progress as server-sent events (DEMO-20, REQ-EXEC-47/AC2 demo), for signed-in clients: created,
+    // paid, shipped, then the stream ends. BUG-29 (BUG_SSE_EVENTS_OUT_OF_ORDER) sends paid before created.
+    if (route === "GET /events/orders") {
+      if (!session(req)) return json(res, 401, { error: "unauthorized" });
+      res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
+      const statuses = bugs.BUG_SSE_EVENTS_OUT_OF_ORDER
+        ? ["paid", "created", "shipped"]
+        : ["created", "paid", "shipped"];
+      statuses.forEach((status, i) =>
+        setTimeout(
+          () => {
+            res.write(
+              `id: ${String(i + 1)}\nevent: ${status}\ndata: ${JSON.stringify({ order: "O-1", status })}\n\n`,
+            );
+            if (i === statuses.length - 1) res.end();
+          },
+          20 * (i + 1),
+        ),
+      );
+      return;
+    }
     // SOAP 1.1 over the same products (DEMO-19): faults are answered with HTTP 500, as SOAP 1.1 says.
     if (route === "POST /soap/prices") {
       const text = await new Promise((resolve) => {
@@ -427,6 +450,8 @@ export function createShop(options) {
     }
     return json(res, 404, { error: "NOT_FOUND" });
   };
+  // The WebSocket upgrade asks whether a request has a session (REQ-EXEC-47 demo).
+  return Object.assign(handle, { signedIn: (req) => session(req) !== undefined });
 }
 
 /**
@@ -450,7 +475,9 @@ export function startShop(options = {}) {
     void handler(req, res);
   });
   // The support chat's WebSocket (REQ-EXEC-47 demo).
-  server.on("upgrade", (req, socket) => upgradeChat(req, socket, bugs));
+  server.on("upgrade", (req, socket) =>
+    upgradeChat(req, socket, bugs, { signedIn: handler.signedIn, products: PRODUCTS }),
+  );
   return new Promise((resolve) => {
     server.listen(options.port ?? 0, options.host ?? "127.0.0.1", () => {
       const address = server.address();

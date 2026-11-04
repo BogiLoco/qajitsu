@@ -14,6 +14,7 @@ import type {
   TestCase,
 } from "@qajitsu/core";
 import { plannedFields, retryAfterMs, type TrafficPolicy } from "@qajitsu/core";
+import { createStreams, type ApiStream, type StreamKind, type StreamTransport } from "./streams.js";
 import { soapEnvelope, xmlValue } from "./xml.js";
 import { checkGesture } from "./gestures.js";
 import type { Masker } from "./masking.js";
@@ -118,6 +119,16 @@ export interface ApiClient {
   readonly delete: (path: string, options?: ApiCallOptions) => Promise<ApiResponse>;
   /** The same client, authenticated as an account alias such as `user:standard`. */
   readonly as: (alias: string) => ApiClient;
+  /**
+   * Opens a WebSocket to a path of the environment with this client's account (REQ-EXEC-47/AC1). Check its messages
+   * with `verify(step, "messages.<n>.<path>" | "messages.count", ...)`: the check waits for them itself.
+   */
+  readonly websocket: (
+    path: string,
+    options?: { readonly protocols?: readonly string[] },
+  ) => Promise<ApiStream>;
+  /** Subscribes to a server-sent events stream of the environment with this client's account (REQ-EXEC-47/AC2). */
+  readonly events: (path: string) => Promise<ApiStream>;
   /** A `multipart/form-data` body: text fields and files of the plan by key, `{ field: "<file key>" }`. */
   readonly multipart: (parts: {
     readonly fields?: Readonly<Record<string, string>>;
@@ -264,6 +275,8 @@ export interface CaseRuntimeOptions {
    * wait out `429` and `503`, and the idempotency header. Without it: no rate, a 30 s budget, `Idempotency-Key`.
    */
   readonly traffic?: Pick<TrafficPolicy, "throttle" | "retryBudgetMs" | "idempotencyHeader"> | undefined;
+  /** Opens WebSockets and event streams (REQ-EXEC-47); without it a spec that opens one errors. */
+  readonly streams?: StreamTransport | undefined;
 }
 
 /** The recorder of one attempt. Runs in the trusted process; specs only reach it through these operations. */
@@ -284,6 +297,15 @@ export interface CaseRuntime {
     body: unknown,
     options: ApiCallOptions,
   ) => Promise<ApiTransportResponse>;
+  /** Opens a stream of the current step for the sandbox (REQ-EXEC-47); returns its handle number. */
+  readonly openStream: (
+    alias: string | undefined,
+    kind: StreamKind,
+    path: string,
+    protocols?: readonly string[],
+  ) => Promise<number>;
+  /** Sends on, reads or closes a stream opened with `openStream`. */
+  readonly streamOp: (handle: number, op: "send" | "messages" | "close", data?: unknown) => Promise<unknown>;
   /** Performs one browser action (REQ-EXEC-05, REQ-EXEC-07). */
   readonly uiOp: (operation: UiOperation) => Promise<void>;
   /** Computes and records an assertion from the step's last response or the live page and the approved plan. */
@@ -336,6 +358,11 @@ function expectationOf(planCase: TestCase, stepId: string, field: string, path: 
     if (!e.fields || !(key in e.fields))
       throw new Error(`plan.expect('${path}'): no expected field '${key}'`);
     value = e.fields[key];
+  } else if (kind === "messages" && rest.length > 0) {
+    const key = rest.join(".");
+    if (!e.messages || !(key in e.messages))
+      throw new Error(`plan.expect('${path}'): no expected message '${key}'`);
+    value = e.messages[key];
   } else if (kind === "xml" && rest.length > 0) {
     const key = rest.join(".");
     if (!e.xml || !(key in e.xml)) throw new Error(`plan.expect('${path}'): no expected XPath '${key}'`);
@@ -457,6 +484,28 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       new Promise((resolve) => {
         setTimeout(resolve, ms);
       }));
+  const streams = createStreams({
+    transport: options.streams,
+    baseUrl: options.baseUrl,
+    allowedOrigins: options.allowedOrigins,
+    masker,
+    now: options.now,
+    sleep,
+  });
+  const streamHandles: ApiStream[] = [];
+  /** REQ-EXEC-47/AC1+AC2: a stream of the current step, opened by this process with the account's authentication. */
+  const openStream = async (
+    alias: string | undefined,
+    kind: StreamKind,
+    path: string,
+    protocols?: readonly string[],
+  ): Promise<ApiStream> => {
+    if (currentStep === undefined) throw new Error("streams must be opened inside step()");
+    const accountHeaders = alias === undefined ? {} : options.accounts[alias];
+    if (accountHeaders === undefined) throw new Error(`Unknown account alias '${alias ?? ""}'`);
+    lastAction.set(currentStep, "api");
+    return streams.open(currentStep, kind, path, accountHeaders, protocols);
+  };
 
   /** Browser sessions by name (REQ-EXEC-62); `main` is the case's first one. `driver` is the active session's. */
   const sessions = new Map<string, UiDriver>();
@@ -1736,6 +1785,34 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       );
       return;
     }
+    if (kind === "messages") {
+      // REQ-EXEC-47/AC1+AC2+AC5: the check waits for the planned message itself, so a spec cannot look too early; a
+      // message that never comes fails the step, with the close code and reason when the stream ended first.
+      const stream = streams.last(stepId);
+      if (!stream)
+        throw new Error(
+          `verify('${stepId}', '${field}') needs a stream opened in the step: api.websocket() or api.events()`,
+        );
+      const timeoutMs = (planCase.steps.find((x) => x.id === stepId)?.stream?.timeout_s ?? 10) * 1000;
+      const ended = (): string =>
+        stream.closed && stream.closed.code !== 1000
+          ? ` (the stream closed with ${String(stream.closed.code)}${stream.closed.reason ? ` ${stream.closed.reason}` : ""})`
+          : "";
+      if (rest[0] === "count") {
+        await streams.waitFor(stream, () => false, timeoutMs);
+        record(expected, stream.messages.length);
+        return;
+      }
+      const n = Number(rest[0]);
+      const came = await streams.waitFor(stream, () => stream.messages.length > n, timeoutMs);
+      record(
+        expected,
+        came
+          ? at(stream.messages[n], rest.slice(1).join("."))
+          : `(no message ${String(n)} within ${String(timeoutMs / 1000)} s${ended()})`,
+      );
+      return;
+    }
     const last = calls.filter((c) => c.stepId === stepId).at(-1);
     if (!last) throw new Error(`verify('${stepId}', '${field}') needs a response recorded in the step`);
     const action = ACTION.exec(planCase.steps.find((x) => x.id === stepId)?.action ?? "");
@@ -1829,6 +1906,8 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
           o,
         ),
       as: (a) => client(a),
+      websocket: (path, o) => openStream(alias, "websocket", path, o?.protocols),
+      events: (path) => openStream(alias, "sse", path),
       ...bodies,
     };
   };
@@ -1935,6 +2014,15 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     pollRound,
     endStep,
     call,
+    openStream: async (alias, kind, path, protocols) => {
+      streamHandles.push(await openStream(alias, kind, path, protocols));
+      return streamHandles.length - 1;
+    },
+    streamOp: (handle, op, data) => {
+      const stream = streamHandles[handle];
+      if (!stream) return Promise.reject(new Error(`no stream ${String(handle)}`));
+      return op === "send" ? stream.send(data) : op === "messages" ? stream.messages() : stream.close();
+    },
     uiOp,
     verify,
     inboxAddress,
@@ -1944,7 +2032,8 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
       // REQ-EXEC-11/AC5: a manual step the spec never ran cannot be skipped into a pass.
       for (const id of manualSteps.keys())
         if (!steps.some((s) => s.id === id)) failure ??= `manual step ${id} was not performed`;
-      const evidence: EvidenceItem[] = [...media];
+      // REQ-EXEC-47/AC4: every frame of every stream, masked.
+      const evidence: EvidenceItem[] = [...media, ...streams.finish()];
       // REQ-EXEC-39/AC2: which page each action went to, when the case used more than one or new web actions.
       if (
         actions.some((a) => a["page"] !== undefined && a["page"] !== 0) ||

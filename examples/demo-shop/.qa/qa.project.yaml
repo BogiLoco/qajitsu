@@ -92,6 +92,8 @@ services:
       BUG_GRAPHQL_ERROR_WITH_DATA: { value: "0", overridable: true }
       BUG_SOAP_CURRENCY_MISSING: { value: "0", overridable: true }
       BUG_SOAP_FAULT_WITH_200: { value: "0", overridable: true }
+      BUG_WS_FEED_CLOSES_EARLY: { value: "0", overridable: true }
+      BUG_SSE_EVENTS_OUT_OF_ORDER: { value: "0", overridable: true }
     health: { http: /health, timeout_s: 180 }
 
 build:

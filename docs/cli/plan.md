@@ -27,7 +27,10 @@ qajitsu doctor --models
    `soap: { operation: "GetPrice" }`, one of the "SOAP operations" read from `repos.<alias>.wsdl`, and its
    expectations are XPaths without namespace prefixes under `xml`: `{ "//GetPriceResponse/amount": 24.99 }`, or
    `"//Fault/faultstring"` with status 500 for a planned fault. The planner also sees the global elements of the
-   `repos.<alias>.xsd` files (REQ-EXEC-50/AC1+AC3). The review shows all of them.
+   `repos.<alias>.xsd` files (REQ-EXEC-50/AC1+AC3). A WebSocket or server-sent events step has
+   `stream: { timeout_s }` and `messages` in its `expect`, by position: `{ "0.type": "price", "1.type":
+"availability", "count": 2 }`; an event is `{ event, id, data }` (REQ-EXEC-47/AC1+AC2). The review shows all of
+   them.
 5. In a terminal: `[a]ccept`, `[r]evise` (free text, creates the next version and shows `+ added`, `- removed`,
    `~ changed` cases), `[e]dit` (opens `$EDITOR`; the edit is schema- and source-checked before it becomes a version)
    or `[q]uit`. Accepting a plan with open questions needs an explicit `yes` (REQ-PLAN-05).

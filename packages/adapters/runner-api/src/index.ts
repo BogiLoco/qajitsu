@@ -15,6 +15,7 @@ export {
 export { applyContract, runCases, type LoginContext, type RunCasesOptions } from "./run-cases.js";
 export { createContractValidator, loadContractValidator, type ContractValidator } from "./openapi.js";
 export { createPlaywrightTransport } from "./transport.js";
+export { createStreamTransport, parseEventStream } from "./streams.js";
 
 /** Adapter metadata used by `qajitsu doctor` and the adapter table in the docs. */
 export const ADAPTER = {

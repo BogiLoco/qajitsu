@@ -109,6 +109,10 @@ Rules (checked by code; a violating spec is rejected):
 - A step with "soap" in the plan calls client.soap("<path>", "<body element of the plan's operation with its
   namespace>", { action: "<SOAPAction>" }) (version: "1.2" for SOAP 1.2); check every XPath of its "xml" with
   verify("<step id>", "xml.<xpath>", await res.xml("<xpath>"), plan.expect("<case>.<step>.xml.<xpath>")).
+- A step with "messages" in its plan opens the stream with client.websocket("<path>") (then await ws.send({ ... })
+  with what the ticket says to send) or client.events("<path>"), and checks every planned message with
+  verify("<step id>", "messages.<n>.<path>" | "messages.count", undefined, plan.expect("<case>.<step>.messages.<...>")):
+  the check waits for the message itself; never wait or read the messages yourself.
 - Every verify("<step id>", ...) is written inside the function of that same step, never after it or in another step.
 - Every step has at least one verify("<step id>", "<field>", <actual value>, plan.expect("<case>.<step>.<field>")).
   Fields are "status", "fields.<key>" (read with res.json("<key>")) or "texts.<n>". The expected value is ALWAYS plan.expect(...) with exactly the same step and field; never a literal.

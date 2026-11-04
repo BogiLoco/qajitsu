@@ -103,6 +103,21 @@ const BUGS = [
     caseId: "TC-03",
     specs: ["TC-01", "TC-02", "TC-03"],
   },
+  // WebSocket and server-sent events (REQ-EXEC-47): a feed that closes early, events out of order.
+  {
+    bug: "BUG-28",
+    flag: "BUG_WS_FEED_CLOSES_EARLY",
+    ticket: "DEMO-20",
+    caseId: "TC-01",
+    specs: ["TC-01", "TC-02"],
+  },
+  {
+    bug: "BUG-29",
+    flag: "BUG_SSE_EVENTS_OUT_OF_ORDER",
+    ticket: "DEMO-20",
+    caseId: "TC-02",
+    specs: ["TC-01", "TC-02"],
+  },
   // An outcome that never comes: the planned wait ends at its timeout with FAILED (REQ-EXEC-46).
   {
     bug: "BUG-22",
@@ -238,6 +253,7 @@ describe("demo-shop self-test (REQ-NFR-04/AC1)", () => {
     ["DEMO-17", ["TC-01", "TC-02"]],
     ["DEMO-18", ["TC-01", "TC-02", "TC-03"]],
     ["DEMO-19", ["TC-01", "TC-02", "TC-03"]],
+    ["DEMO-20", ["TC-01", "TC-02"]],
   ] as const)("%s: every case is PASSED with all bugs off", async (ticket, specs) => {
     const { exitCode, statuses, out } = await pipeline(ticket, specs);
     expect(
