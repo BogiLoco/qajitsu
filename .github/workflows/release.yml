@@ -4,15 +4,21 @@ name: Release
 # pull request publishes every package from a fresh checkout with npm provenance, tags it and creates the GitHub
 # release. Nothing is released from a person's machine (scripts/publish-guard.mjs).
 #
-# Two jobs: `test` runs everything that executes dependency code (install, tests, the networked plugin suite, the
-# release check) with read rights and no secrets; `release` runs only after it, with the write rights and the npm
-# token, and executes nothing but this repository's build and publish steps. Actions are pinned to commits.
+# `test` runs the tests, the networked plugin suite and the release check with read rights and no secrets. `version`
+# (the version pull request) has no npm or OIDC token; `release` alone has them, and only once
+# scripts/unpublished-check.mjs has found that none of the new versions is in the registry yet. The image jobs follow.
+# Actions are pinned to commits.
 on:
   push:
     branches: [main]
 
 permissions:
   contents: read
+
+# `shell: bash` runs every step with -e and pipefail: a failure inside a pipeline fails the step.
+defaults:
+  run:
+    shell: bash
 
 # One release at a time, never cancelled half-way through publishing.
 concurrency:
@@ -48,15 +54,53 @@ jobs:
       # REQ-GEN-15/AC3+AC4: pack, inspect, install the CLI with npm and run it.
       - run: node scripts/release-check.mjs
 
-  release:
+  # With pending changesets: open or update the version pull request, made by code. This job has no npm token and no
+  # OIDC token: it can push the version branch, nothing else. A pull request opened with the workflow's own token gets
+  # no CI checks; RELEASE_PR_TOKEN (a GitHub App installation token or a fine-grained token limited to this repository,
+  # contents and pull requests) gives it them (docs/releasing.md).
+  version:
     needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # the version branch
+      pull-requests: write # the version pull request
+    outputs:
+      has-changesets: ${{ steps.changesets.outputs.hasChangesets }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - id: changesets
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
+        with:
+          version: pnpm version-packages
+          title: "chore(release): version packages"
+          commit: "chore(release): version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || secrets.GITHUB_TOKEN }}
+
+  # Without pending changesets, the version pull request was merged (or nothing is to be released): publish the
+  # versions that are not in the registry yet, all of them or none (scripts/unpublished-check.mjs).
+  release:
+    needs: version
+    if: needs.version.outputs.has-changesets == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # The npm token lives in this environment only; it can be limited to main and to reviewers in the settings.
     environment: npm-publish
+    # The version this run released, for the image jobs; empty when there was nothing to publish.
+    outputs:
+      version: ${{ steps.github-release.outputs.version }}
+      tag: ${{ steps.github-release.outputs.tag }}
     permissions:
-      contents: write # the version branch and the tags
-      pull-requests: write # the version pull request
+      contents: write # the tags and the GitHub release
       id-token: write # npm provenance
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -68,27 +112,192 @@ jobs:
         with:
           node-version-file: .nvmrc
           registry-url: https://registry.npmjs.org
+      # Before anything is installed: a version already in the registry is never skipped silently.
+      - name: nothing of the release published yet
+        id: decide
+        run: node scripts/unpublished-check.mjs
       # pnpm runs no dependency install scripts.
-      - run: pnpm install --frozen-lockfile
-      # With pending changesets: open or update the version pull request, made by code. A pull request opened with
-      # the workflow's own token gets no CI checks; RELEASE_PR_TOKEN (an app or fine-grained token) gives it them.
-      - id: changesets
-        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
-        with:
-          version: pnpm version-packages
-          title: "chore(release): version packages"
-          commit: "chore(release): version packages"
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PR_TOKEN || secrets.GITHUB_TOKEN }}
-      # Without pending changesets, the version pull request was merged: publish what is not in the registry yet.
+      - if: steps.decide.outputs.publish == 'true'
+        run: pnpm install --frozen-lockfile --ignore-scripts
       - name: publish
-        if: steps.changesets.outputs.hasChangesets == 'false'
+        if: steps.decide.outputs.publish == 'true'
         run: pnpm release
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
+      # What the registry now serves must be this run's: a version someone published after the decision above, which
+      # pnpm skipped, is refused before anything is tagged.
+      - name: provenance of what was published
+        if: steps.decide.outputs.publish == 'true'
+        run: node scripts/provenance-check.mjs "$GITHUB_RUN_ID"
       - name: tags and GitHub release
-        if: steps.changesets.outputs.hasChangesets == 'false'
+        id: github-release
+        if: steps.decide.outputs.publish == 'true'
         run: node scripts/github-release.mjs
         env:
           GH_TOKEN: ${{ github.token }}
+
+  # REQ-GEN-09: the official image of the version just released, in four jobs, so no dependency code ever runs with
+  # the rights to push, sign or attest:
+  # - image-build (read-only): the published tarballs and the pinned lockfile, a build for amd64 and arm64 with an
+  #   SBOM and full provenance into an OCI archive, the image check on the amd64 image in that archive and the layer
+  #   scan on the arm64 one;
+  # - image-publish (.github/workflows/image-publish.yml, environment image-publish): pushes that archive with its
+  #   digests unchanged, signs and attests it, verifies it the way a user does, and only then moves the minor-line and
+  #   `latest` tags. A reusable workflow, so the signature names it, not this file, as the signer;
+  # - image-verify (read-only): pulls the published image by digest and runs it, on amd64 and arm64;
+  # - image-notes: names the image by digest in the release notes.
+  image-build:
+    needs: release
+    if: needs.release.outputs.version != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      archive-sha256: ${{ steps.archive.outputs.sha256 }}
+      index-digest: ${{ steps.archive.outputs.index }}
+    env:
+      VERSION: ${{ needs.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+      # Only to read the tested versions (`pnpm list`); nothing of this checkout is built or goes into the image.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      # Only versions this run published go into the image; a published version never changes afterwards.
+      - name: provenance of the tarballs
+        run: node scripts/provenance-check.mjs "$GITHUB_RUN_ID"
+      # The bytes that were published, from the registry, and a lockfile pinned to what the repository tests.
+      - name: image context
+        run: node scripts/image-context.mjs "$RUNNER_TEMP/image" --from-registry
+      # The emulator and the builder by digest: they make every byte of the image.
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+        with:
+          image: tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+        with:
+          driver-opts: image=moby/buildkit:v0.34.2@sha256:c5f8862f52499773af85bc07695b2379ef08e8002352b0df2c4864c91d78dabe
+      - name: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: ${{ runner.temp }}/image
+          file: ci/docker/Dockerfile.release
+          platforms: linux/amd64,linux/arm64
+          push: false
+          outputs: type=oci,dest=${{ runner.temp }}/image.tar,name=ghcr.io/bogiloco/qajitsu:${{ env.VERSION }}
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            REVISION=${{ github.sha }}
+          provenance: mode=max
+          sbom: true
+      # Both images from the same build, loaded to be checked; their configs must be the archive's.
+      - name: load amd64
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: ${{ runner.temp }}/image
+          file: ci/docker/Dockerfile.release
+          platforms: linux/amd64
+          load: true
+          tags: qajitsu-image-check:amd64
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            REVISION=${{ github.sha }}
+      - name: load arm64
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: ${{ runner.temp }}/image
+          file: ci/docker/Dockerfile.release
+          platforms: linux/arm64
+          load: true
+          tags: qajitsu-image-check:arm64
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            REVISION=${{ github.sha }}
+      - name: check the images in the archive
+        run: |
+          node scripts/oci-archive.mjs "$RUNNER_TEMP/image.tar" linux/amd64 "$(docker image inspect qajitsu-image-check:amd64 --format '{{.Id}}')"
+          node scripts/oci-archive.mjs "$RUNNER_TEMP/image.tar" linux/arm64 "$(docker image inspect qajitsu-image-check:arm64 --format '{{.Id}}')"
+          node scripts/image-check.mjs qajitsu-image-check:amd64 "$VERSION"
+          node scripts/image-check.mjs --layers-only qajitsu-image-check:arm64
+      # What the publish job must receive: these bytes, this image index.
+      - name: archive digests
+        id: archive
+        run: |
+          echo "sha256=$(sha256sum "$RUNNER_TEMP/image.tar" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "index=$(node scripts/oci-archive.mjs "$RUNNER_TEMP/image.tar" --index)" >> "$GITHUB_OUTPUT"
+      - id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-image
+          path: ${{ runner.temp }}/image.tar
+          retention-days: 1
+          if-no-files-found: error
+
+  image-publish:
+    needs: [release, image-build]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/image-publish.yml
+    with:
+      version: ${{ needs.release.outputs.version }}
+      artifact-id: ${{ needs.image-build.outputs.artifact-id }}
+      archive-sha256: ${{ needs.image-build.outputs.archive-sha256 }}
+      index-digest: ${{ needs.image-build.outputs.index-digest }}
+
+  image-verify:
+    needs: [release, image-publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: read # a new container package is private until it is made public
+    env:
+      IMAGE: ghcr.io/bogiloco/qajitsu
+      VERSION: ${{ needs.release.outputs.version }}
+      DIGEST: ${{ needs.image-publish.outputs.digest }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+        with:
+          image: tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+      - name: run the published image
+        env:
+          TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::$DIGEST is not an image digest"; exit 1; }
+          echo "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+          docker pull "$IMAGE@$DIGEST"
+          node scripts/image-check.mjs "$IMAGE@$DIGEST" "$VERSION"
+          docker run --rm --network none --platform linux/arm64 "$IMAGE@$DIGEST" --version | grep -qx "$VERSION"
+
+  image-notes:
+    needs: [release, image-publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # the release notes
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - name: release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release.outputs.tag }}
+          DIGEST: ${{ needs.image-publish.outputs.digest }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: >-
+          node scripts/github-release.mjs --image-notes "$TAG" ghcr.io/bogiloco/qajitsu "$DIGEST"
+          "$(node scripts/image-tags.mjs ghcr.io/bogiloco/qajitsu "$VERSION" --bare)"

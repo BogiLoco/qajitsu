@@ -181,6 +181,40 @@ describe("tool versions (REQ-GEN-03/AC4)", () => {
     expect(record["firefox"]).toBeUndefined();
   });
 
+  it("REQ-GEN-09/AC4: a run in the QAJitsu image records the image by digest, never by its tag alone", async () => {
+    const tools = (env: Record<string, string | undefined>) =>
+      toolVersions({ qajitsu: "0.1.0", node: "v22.12.0", exec: fakeExec(), playwright, env });
+    const ref = "ghcr.io/bogiloco/qajitsu:0.1.0";
+    const digest = `sha256:${"a".repeat(64)}`;
+    const image = async (env: Record<string, string | undefined>) =>
+      (await tools(env)).find((t) => t.name === "qajitsu image");
+    expect(await image({ QAJITSU_IMAGE: ref, QAJITSU_IMAGE_DIGEST: digest })).toEqual({
+      name: "qajitsu image",
+      version: `ghcr.io/bogiloco/qajitsu@${digest} (declared when the container was started, not verified)`,
+      needed: true,
+    });
+    // Without the digest the record says so; a tag alone could point at another image tomorrow.
+    expect(await image({ QAJITSU_IMAGE: ref })).toEqual({
+      name: "qajitsu image",
+      version: `${ref} (digest not given: run with -e QAJITSU_IMAGE_DIGEST)`,
+      needed: true,
+    });
+    // A digest that is not a digest is not recorded as one.
+    expect((await image({ QAJITSU_IMAGE: ref, QAJITSU_IMAGE_DIGEST: "latest" }))?.version).toContain(
+      "digest not given",
+    );
+    // Outside the image there is no image line.
+    expect(await image({})).toBeUndefined();
+    const record = await runVersions(project({}), {
+      exec: fakeExec(),
+      playwright,
+      env: { QAJITSU_IMAGE: ref, QAJITSU_IMAGE_DIGEST: digest },
+    });
+    expect(record["qajitsu image"]).toBe(
+      `ghcr.io/bogiloco/qajitsu@${digest} (declared when the container was started, not verified)`,
+    );
+  });
+
   it("reads Playwright and the QAJitsu version of this installation", () => {
     expect(qajitsuVersion()).toMatch(/^\d+\.\d+\.\d+/);
     const pw = playwrightInfo();

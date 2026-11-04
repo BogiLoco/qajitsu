@@ -115,6 +115,8 @@ export async function toolVersions(input: {
   readonly exists?: (path: string) => boolean;
   /** Ask only the tools the project needs (a run); `qj doctor` asks every tool. */
   readonly neededOnly?: boolean;
+  /** The environment, for the QAJitsu image this runs in (replaced in tests). */
+  readonly env?: Readonly<Record<string, string | undefined>>;
 }): Promise<ToolVersion[]> {
   const run = input.exec ?? execVersion;
   const exec = (needed: boolean): VersionExec =>
@@ -129,6 +131,7 @@ export async function toolVersions(input: {
   const ios = config?.mobile?.ios !== undefined && config.mobile.ios.farm === undefined;
   const out: ToolVersion[] = [
     { name: "qajitsu", version: input.qajitsu, needed: true },
+    ...imageVersion(input.env ?? process.env),
     {
       name: "os",
       version: `${
@@ -286,6 +289,32 @@ export function formatToolVersions(
   ].join("\n");
 }
 
+/**
+ * The QAJitsu image this runs in (REQ-GEN-09/AC4), from `QAJITSU_IMAGE` (set by the image) and
+ * `QAJITSU_IMAGE_DIGEST` (given by whoever starts the container): by digest, marked as declared, or a line saying the
+ * digest was not given. Nothing inside a container can check its own digest, so the record says who stated it; a tag
+ * alone is never recorded as the image, since it can point at another image tomorrow. An image built `FROM` this one
+ * inherits `QAJITSU_IMAGE` and should set its own.
+ *
+ * @param env - The environment.
+ * @returns The `qajitsu image` line, or none outside the image.
+ */
+export function imageVersion(env: Readonly<Record<string, string | undefined>>): ToolVersion[] {
+  const ref = env["QAJITSU_IMAGE"];
+  if (ref === undefined || ref === "") return [];
+  const digest = env["QAJITSU_IMAGE_DIGEST"] ?? "";
+  const repository = ref.replace(/[:@][^/]*$/, "");
+  return [
+    {
+      name: "qajitsu image",
+      version: /^sha256:[0-9a-f]{64}$/.test(digest)
+        ? `${repository}@${digest} (declared when the container was started, not verified)`
+        : `${ref} (digest not given: run with -e QAJITSU_IMAGE_DIGEST)`,
+      needed: true,
+    },
+  ];
+}
+
 /** `{ name: version }` of the tools, `unknown` for one that did not report a version (REQ-OBS-10/AC4). */
 export function versionRecord(tools: readonly ToolVersion[]): Record<string, string> {
   return Object.fromEntries(tools.map((t) => [t.name, t.version ?? "unknown"]));
@@ -314,9 +343,11 @@ export async function runVersions(
   options: {
     readonly exec?: VersionExec | undefined;
     readonly playwright?: (() => PlaywrightInfo) | undefined;
+    readonly env?: Readonly<Record<string, string | undefined>> | undefined;
   },
 ): Promise<Record<string, string>> {
   const tools = await toolVersions({
+    ...(options.env ? { env: options.env } : {}),
     qajitsu: qajitsuVersion(),
     node: process.version,
     project,

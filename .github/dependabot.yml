@@ -1,0 +1,15 @@
+# Keeps what the release pins fresh (REQ-GEN-09, REQ-NFR-05): the actions pinned to commits in the workflows and the
+# base image pinned by digest in ci/docker. npm dependencies are updated by hand with the lockfile.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: docker
+    directory: /ci/docker
+    schedule:
+      interval: weekly

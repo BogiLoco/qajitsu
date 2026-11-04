@@ -3,7 +3,7 @@
 // the CLI's changelog for it and every package published with it. Runs in the Release workflow after publishing.
 
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,6 +24,71 @@ export function changelogSection(changelog, version) {
     .slice(start + 1, end < 0 ? undefined : end)
     .join("\n")
     .trim();
+}
+
+/** The release tags the image notes may edit: the CLI's, for a release version. */
+const RELEASE_TAG = /^@qajitsu\/cli@\d+\.\d+\.\d+(-[\w.]+)?$/;
+/** The only image the notes may name. */
+export const RELEASE_IMAGE = "ghcr.io/bogiloco/qajitsu";
+/** The one identity that signs release images: the reusable Image publish workflow, called from main. */
+export const SIGNER =
+  "https://github.com/BogiLoco/qajitsu/.github/workflows/image-publish.yml@refs/heads/main";
+
+/**
+ * The release notes with the image section set (REQ-GEN-09): added once, replaced when the image job runs again.
+ *
+ * @param {string} current - The notes as they are.
+ * @param {string} section - The section from {@link imageNotes}, starting with a blank line and `### Image`.
+ */
+export function withImageNotes(current, section) {
+  const at = current.indexOf("\n### Image\n");
+  const before = (at < 0 ? current : current.slice(0, at)).trimEnd();
+  return `${before}\n${section}`;
+}
+
+/**
+ * Why the image notes may not be written for these arguments, or undefined (L1: no value reaches `gh` unchecked).
+ *
+ * @param {string} tag
+ * @param {string} image
+ */
+export function imageNotesRefusal(tag, image) {
+  if (!RELEASE_TAG.test(tag)) return `${tag} is not a release tag of the CLI`;
+  if (image !== RELEASE_IMAGE) return `${image} is not ${RELEASE_IMAGE}`;
+  return undefined;
+}
+
+/**
+ * The section the image job adds to the release notes (REQ-GEN-09/AC3+AC4): the image by digest and how to check it.
+ *
+ * @param {string} image - e.g. `ghcr.io/bogiloco/qajitsu`.
+ * @param {string} digest - `sha256:...`.
+ * @param {string[]} tags - The tags it was pushed with.
+ */
+export function imageNotes(image, digest, tags) {
+  if (!/^sha256:[0-9a-f]{64}$/.test(digest)) throw new Error(`${digest} is not an image digest`);
+  const ref = `${image}@${digest}`;
+  return [
+    "",
+    "### Image",
+    "",
+    `\`${ref}\` (tags ${tags.map((t) => `\`${t}\``).join(", ")}; amd64 and arm64)`,
+    "",
+    "```sh",
+    `docker run --rm ${ref} demo`,
+    `cosign verify ${ref} \\`,
+    `  --certificate-identity ${SIGNER} \\`,
+    "  --certificate-oidc-issuer https://token.actions.githubusercontent.com \\",
+    "  --certificate-github-workflow-repository BogiLoco/qajitsu --certificate-github-workflow-ref refs/heads/main \\",
+    "  --certificate-github-workflow-trigger push",
+    `gh attestation verify oci://${ref} --repo BogiLoco/qajitsu \\`,
+    "  --signer-workflow BogiLoco/qajitsu/.github/workflows/image-publish.yml --source-ref refs/heads/main --deny-self-hosted-runners",
+    "```",
+    "",
+    "Run it by digest and pass the digest in, so the run records the image it ran in:",
+    `\`docker run --rm -v "$PWD:/work" -e QAJITSU_IMAGE_DIGEST=${digest} ${ref} run <TICKET>\``,
+    "",
+  ].join("\n");
 }
 
 /**
@@ -73,7 +138,21 @@ const run = (cmd, args, env = {}) => {
   if (r.status !== 0) throw new Error(`${cmd} ${args.join(" ")} failed (${String(r.status)})`);
 };
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+const isMain = process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isMain && process.argv[2] === "--image-notes") {
+  // node scripts/github-release.mjs --image-notes <release tag> <image> <digest> <tag,tag,...>
+  const [tag, image, digest, tags] = process.argv.slice(3).map(String);
+  const refusal = imageNotesRefusal(tag, image);
+  if (refusal) throw new Error(refusal);
+  const current = spawnSync("gh", ["release", "view", tag, "--json", "body", "--jq", ".body"], {
+    encoding: "utf8",
+  });
+  if (current.status !== 0) throw new Error(`gh release view ${tag} failed`);
+  const notes = join(mkdtempSync(join(process.env.RUNNER_TEMP ?? tmpdir(), "qajitsu-notes-")), "notes.md");
+  writeFileSync(notes, withImageNotes(current.stdout, imageNotes(image, digest, tags.split(","))));
+  run("gh", ["release", "edit", tag, "--notes-file", notes]);
+} else if (isMain) {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
   const readTags = () => {
     try {
@@ -91,7 +170,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       changelogSection(readFileSync(join(root, "packages", "cli", "CHANGELOG.md"), "utf8"), version),
     );
     if (release) {
-      const notes = join(tmpdir(), "qajitsu-release-notes.md");
+      const notes = join(
+        mkdtempSync(join(process.env.RUNNER_TEMP ?? tmpdir(), "qajitsu-notes-")),
+        "notes.md",
+      );
       writeFileSync(notes, release.notes);
       run("gh", [
         "release",
@@ -103,6 +185,12 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         "--notes-file",
         notes,
       ]);
+      // The image job builds this version and adds its digest to these notes (REQ-GEN-09).
+      if (process.env.GITHUB_OUTPUT)
+        appendFileSync(
+          process.env.GITHUB_OUTPUT,
+          `version=${release.tag.slice(release.tag.lastIndexOf("@") + 1)}\ntag=${release.tag}\n`,
+        );
     }
   }
 }
