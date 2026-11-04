@@ -2201,7 +2201,13 @@
         "console": true,
         "http_errors": true,
         "accessibility": true,
-        "ignore": []
+        "ignore": [],
+        "network": {
+          "response_bodies": {
+            "enabled": false,
+            "max_kb": 64
+          }
+        }
       },
       "type": "object",
       "properties": {
@@ -2224,6 +2230,59 @@
             "type": "string",
             "minLength": 1
           }
+        },
+        "network": {
+          "default": {
+            "response_bodies": {
+              "enabled": false,
+              "max_kb": 64
+            }
+          },
+          "type": "object",
+          "properties": {
+            "response_bodies": {
+              "default": {
+                "enabled": false,
+                "max_kb": 64
+              },
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "max_kb": {
+                  "default": 64,
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1024
+                }
+              },
+              "additionalProperties": false
+            },
+            "budget": {
+              "type": "object",
+              "properties": {
+                "request_ms": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 600000
+                },
+                "step_requests": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10000
+                },
+                "step_kb": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000000
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

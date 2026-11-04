@@ -17,6 +17,8 @@ import {
   sha256,
   checkJournal,
   journalAnchor,
+  NETWORK_ANALYSIS_FILE,
+  NetworkAnalysisSchema,
   OBSERVATIONS_FILE,
   planForLocale,
   mobileDevices,
@@ -65,6 +67,8 @@ import {
 import { parse } from "yaml";
 import { z } from "zod";
 import type { RunSession } from "../session.js";
+import { comparePerformance, diffNetwork } from "@qajitsu/steps";
+import { earlierNetwork } from "../network-history.js";
 
 /** Environment facts recorded in `run.json` by `qj run`. */
 export interface RunEnvironment {
@@ -599,20 +603,45 @@ export async function computeVerdict(
     }));
   }
   // REQ-EVD-07: observations from the last attempt of every case, computed by code, filtered by the config.
-  const observations = collectObservations(
-    [...results.values()].map((r) => {
-      const last = r.attempts.at(-1);
-      const file = manifest.find(
-        (m) => last?.evidence.includes(m.path) === true && m.path.endsWith(`/${OBSERVATIONS_FILE}`),
-      );
-      return {
+  const fileOf = (r: { attempts: readonly { evidence: readonly string[] }[] }, name: string) => {
+    const last = r.attempts.at(-1);
+    const file = manifest.find(
+      (m) => last?.evidence.includes(m.path) === true && m.path.endsWith(`/${name}`),
+    );
+    return file ? evidenceText.get(file.path) : undefined;
+  };
+  // REQ-EVD-09/AC4+AC5: what changed in the traffic since the last run of the same approved plan.
+  const earlier = await earlierNetwork(ws);
+  const networkChanges: RunObservation[] = [];
+  for (const r of results.values()) {
+    const before = earlier?.byCase.get(r.caseId);
+    const text = fileOf(r, NETWORK_ANALYSIS_FILE);
+    if (!before || text === undefined) continue;
+    const now = NetworkAnalysisSchema.safeParse(JSON.parse(text));
+    if (!now.success) continue;
+    for (const c of diffNetwork(before.endpoints, now.data.endpoints))
+      networkChanges.push({
         caseId: r.caseId,
-        assertions: last?.assertions ?? [],
-        observationsFile: file ? evidenceText.get(file.path) : undefined,
-      };
-    }),
-    session.project.config.observations.ignore,
-  ).map((o) => ({ ...o, text: masker.maskText(o.text) }));
+        kind: "network-change",
+        text: `${c.method} ${c.path} ${c.change}${c.before !== undefined || c.after !== undefined ? ` (${c.before ?? "-"} → ${c.after ?? "-"})` : ""} since run ${earlier?.runId ?? ""}`,
+      });
+    for (const line of comparePerformance(before.steps, now.data.steps))
+      networkChanges.push({ caseId: r.caseId, kind: "performance", text: line });
+  }
+  const observations = [
+    ...collectObservations(
+      [...results.values()].map((r) => ({
+        caseId: r.caseId,
+        assertions: r.attempts.at(-1)?.assertions ?? [],
+        observationsFile: fileOf(r, OBSERVATIONS_FILE),
+        networkFile: fileOf(r, NETWORK_ANALYSIS_FILE),
+      })),
+      session.project.config.observations.ignore,
+    ),
+    ...networkChanges.filter(
+      (o) => !session.project.config.observations.ignore.some((i) => o.text.includes(i)),
+    ),
+  ].map((o) => ({ ...o, text: masker.maskText(o.text) }));
   const fixCheckData = FixCheckDataSchema.safeParse(ws.record.data["fixCheck"]);
   const fixCheck = fixCheckData.success ? fixCheckData.data : undefined;
   const fixCheckLines = fixCheck

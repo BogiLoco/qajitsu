@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { NetworkBudgetSchema } from "../observations.js";
 
 /**
  * Where a claim or test case comes from (REQ-PLAN-03/AC1, REQ-PLAN-01/AC2): an acceptance criterion id
@@ -366,6 +367,8 @@ export const TestCaseSchema = z.strictObject({
     .optional(),
   /** Locales of the project this case also runs in (REQ-EXEC-14/AC1); expectations per locale in `by_locale`. */
   locales: z.array(LocaleNameSchema).optional(),
+  /** Limits of this web case's traffic per step (REQ-EVD-09/AC4): over them is a warning, never a status. */
+  network_budget: NetworkBudgetSchema.optional(),
   /**
    * The browser of a web case (REQ-EXEC-61/AC2+AC3): the time it starts at (frozen until a step moves it), the
    * permissions it grants (everything else stays denied) and its location.

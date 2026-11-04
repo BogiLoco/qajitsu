@@ -1224,6 +1224,15 @@ async function executeCases(
     // REQ-EXEC-50/AC2: an unplanned fault, and an answer outside the WSDL or XSD, fail the step.
     checkAttempt: (record: AttemptRecord) =>
       checkSoapAttempt(checkGraphqlAttempt(record, plan, graphql?.schema), plan, soap?.validator),
+    // REQ-EVD-09/AC3+AC4: the page's JSON bodies only when the project keeps them; the traffic budget per step.
+    network: {
+      ...(project.config.observations.network.response_bodies.enabled
+        ? { bodies: { maxBytes: project.config.observations.network.response_bodies.max_kb * 1024 } }
+        : {}),
+      ...(project.config.observations.network.budget
+        ? { budget: project.config.observations.network.budget }
+        : {}),
+    },
     // REQ-EXEC-54: one traffic policy for every lane, so the shared environment sees the run's rate as a whole.
     traffic: createTrafficPolicy(project.config.execution.rate_limit ?? RateLimitConfigSchema.parse({}), {
       now: () => ports.now().getTime(),

@@ -10,6 +10,7 @@ import {
   type ApiTransport,
   type AttemptRecord,
   type CaseContext,
+  type EvidenceItem,
 } from "@qajitsu/steps";
 import { extraSessions } from "./extra-sessions.js";
 
@@ -66,6 +67,7 @@ export async function executeAttempt(
     ...(input.testStateHook ? { testStateHook: input.testStateHook } : {}),
     ...(input.testData ? { testData: input.testData } : {}),
     ...(input.traffic ? { traffic: input.traffic } : {}),
+    ...(input.network ? { network: input.network } : {}),
     ...(input.credential ? { credential: input.credential } : {}),
     caseId: input.caseId,
     attempt: input.attempt,
@@ -129,5 +131,17 @@ export async function executeAttempt(
     ...(await extra.close(record.outcome !== "passed")),
   ];
   const ran = session?.browser?.();
-  return { ...record, evidence: [...record.evidence, ...media], ...(ran ? { browser: ran } : {}) };
+  // REQ-EVD-09/AC3..AC7: the traffic analysis, linked to the HAR the browser has just written.
+  const analysis = runtime.networkAnalysis(harOf(media));
+  return {
+    ...record,
+    evidence: [...record.evidence, ...media, ...(analysis ? [analysis] : [])],
+    ...(ran ? { browser: ran } : {}),
+  };
+}
+
+/** The text of the attempt's `network.har`, when the browser wrote one. */
+export function harOf(media: readonly EvidenceItem[]): string | undefined {
+  const har = media.find((m) => m.name === "network.har")?.content;
+  return typeof har === "string" ? har : undefined;
 }

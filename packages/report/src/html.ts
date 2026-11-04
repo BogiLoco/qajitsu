@@ -283,7 +283,7 @@ ${
 ${
   input.observations && input.observations.length > 0
     ? `<h2>Observations (${String(input.observations.length)}, not test results)</h2>
-<p class="muted">Found by code while the planned steps ran: contract mismatches, console errors, 4xx/5xx responses and accessibility violations. They do not change any status or count.</p>
+<p class="muted">Found by code while the planned steps ran: contract mismatches, console errors, 4xx/5xx responses, accessibility violations and what the traffic of the page showed (security, performance, changes since the last run). They do not change any status or count.</p>
 <table><tr><th>TC</th><th>Kind</th><th>Observation</th></tr>${input.observations.map((o) => `<tr><td>${esc(o.caseId)}</td><td>${esc(o.kind)}</td><td>${esc(o.text)}</td></tr>`).join("")}</table>`
     : ""
 }

@@ -13,13 +13,22 @@ import type {
   VisualCheck,
   TestCase,
 } from "@qajitsu/core";
-import { plannedFields, retryAfterMs, type TrafficPolicy } from "@qajitsu/core";
+import {
+  NETWORK_ANALYSIS_FILE,
+  plannedFields,
+  retryAfterMs,
+  type NetworkBudget,
+  type TrafficPolicy,
+} from "@qajitsu/core";
 import { createStreams, type ApiStream, type StreamKind, type StreamTransport } from "./streams.js";
 import { soapEnvelope, xmlValue } from "./xml.js";
 import { checkGesture } from "./gestures.js";
 import type { Masker } from "./masking.js";
 import {
+  analyzeTraffic,
   diagnoseNetwork,
+  harRequests,
+  linkHar,
   reachedEndpoints,
   type NetworkProblem,
   type ReachedEndpoint,
@@ -233,6 +242,17 @@ export interface InboxClient {
 // Defined in @qajitsu/core (ADR-0005) and re-exported here for spec authors and runners.
 export type { AttemptRecord, EvidenceItem } from "@qajitsu/core";
 
+/** REQ-EVD-09: what an attempt keeps and checks of the page's traffic. */
+export interface AttemptNetworkOptions {
+  /** AC3: keep the JSON bodies of the application's responses up to this size, masked. */
+  readonly bodies?: { readonly maxBytes: number } | undefined;
+  /** AC4: the project's limits per step; a case's `network_budget` wins. */
+  readonly budget?: NetworkBudget | undefined;
+}
+
+/** A JSON web token or a bearer value: a kept body that holds one is dropped (REQ-EVD-09/AC3). */
+const LOOKS_LIKE_TOKEN = /eyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]{8,}|Bearer\s+[\w.~+/-]{16,}/;
+
 /** Settings of one case attempt. */
 export interface CaseRuntimeOptions {
   /** Account secrets for `ui.fillSecret` (REQ-EXEC-67/AC3), held by the parent only. */
@@ -286,6 +306,8 @@ export interface CaseRuntimeOptions {
   readonly traffic?: Pick<TrafficPolicy, "throttle" | "retryBudgetMs" | "idempotencyHeader"> | undefined;
   /** Opens WebSockets and event streams (REQ-EXEC-47); without it a spec that opens one errors. */
   readonly streams?: StreamTransport | undefined;
+  /** REQ-EVD-09/AC3+AC4: the project's traffic budget, and whether the page's JSON bodies are kept (masked). */
+  readonly network?: AttemptNetworkOptions | undefined;
 }
 
 /** The recorder of one attempt. Runs in the trusted process; specs only reach it through these operations. */
@@ -314,6 +336,11 @@ export interface CaseRuntime {
     protocols?: readonly string[],
     graphql?: { readonly query: string; readonly variables?: Readonly<Record<string, unknown>> },
   ) => Promise<number>;
+  /**
+   * REQ-EVD-09/AC3..AC7: the analysis of the page's traffic as `network-analysis.json`, each finding linked to its
+   * entry of the attempt's HAR; called by the runner after the browser closed. Undefined without web traffic.
+   */
+  readonly networkAnalysis: (har: string | undefined) => EvidenceItem | undefined;
   /** Sends on, reads or closes a stream opened with `openStream`. */
   readonly streamOp: (handle: number, op: "send" | "messages" | "close", data?: unknown) => Promise<unknown>;
   /** Performs one browser action (REQ-EXEC-05, REQ-EXEC-07). */
@@ -471,6 +498,8 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
   const secretFields = new Set<string>();
   /** Every request the page sent (REQ-EVD-09), as the parent saw it, masked by the driver. */
   const traffic: UiRequest[] = [];
+  /** REQ-EVD-09/AC3..AC6: the requests of every step, in order, for the traffic analysis. */
+  const stepTraffic: { stepId: string; requests: UiRequest[] }[] = [];
   const assertions: AssertionRecord[] = [];
   const media: EvidenceItem[] = [];
   const calls: {
@@ -733,6 +762,7 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     // REQ-EVD-09/AC1: the requests the step sent; what went wrong is shown next to a failed or blocked step.
     const sent = openSessions().flatMap(([, d]) => d.takeNetwork?.() ?? []);
     traffic.push(...sent);
+    if (sent.length > 0) stepTraffic.push({ stepId, requests: sent });
     const failedHere = error !== undefined || assertions.some((a) => a.stepId === stepId && !a.pass);
     const problems = failedHere ? (maskValue(diagnoseNetwork(sent)) as NetworkProblem[]) : [];
     if (problems.length > 0)
@@ -2039,6 +2069,32 @@ export function createCaseRuntime(options: CaseRuntimeOptions): CaseRuntime {
     pollRound,
     endStep,
     call,
+    networkAnalysis: (har) => {
+      if (stepTraffic.length === 0) return undefined;
+      const all = stepTraffic.flatMap((s) => s.requests);
+      const bodies = options.network?.bodies;
+      const analysis = analyzeTraffic(stepTraffic, {
+        appSecure: new URL(options.baseUrl).protocol === "https:",
+        // A case's own budget wins over the project's.
+        budget: planCase.network_budget ?? options.network?.budget,
+        ...(bodies
+          ? {
+              bodies: {
+                maxBytes: bodies.maxBytes,
+                mask: maskValue,
+                looksSecret: (text: string) => masker.containsSecret(text) || LOOKS_LIKE_TOKEN.test(text),
+              },
+            }
+          : {}),
+        har: linkHar(all, harRequests(har ?? ""), new URL(options.baseUrl).origin),
+      });
+      return {
+        stepId: "case",
+        kind: "log",
+        name: NETWORK_ANALYSIS_FILE,
+        content: masker.maskText(`${JSON.stringify(analysis, null, 2)}\n`),
+      };
+    },
     openStream: async (alias, kind, path, protocols, graphql) => {
       streamHandles.push(await openStream(alias, kind, path, protocols, graphql));
       return streamHandles.length - 1;

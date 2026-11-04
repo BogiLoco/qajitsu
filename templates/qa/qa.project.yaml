@@ -93,7 +93,15 @@ test_types: [api, web]
 # build: { repo: backend, compose_file: docker-compose.yml, base_service: api, profile: local, seed: hooks/seed.mjs }
 #
 # Passive observations while planned cases run (REQ-EVD-07): listed in the report and the Jira comment, never statuses.
-# observations: { console: true, http_errors: true, accessibility: true, ignore: [favicon.ico, color-contrast] }
+# observations:
+#   console: true
+#   http_errors: true
+#   accessibility: true
+#   ignore: [favicon.ico, color-contrast]
+#   # Analysis of the page's traffic (REQ-EVD-09): findings are observations, never results.
+#   network:
+#     response_bodies: { enabled: true, max_kb: 64 }   # keep masked JSON bodies, checked against the OpenAPI
+#     budget: { request_ms: 2000, step_requests: 50, step_kb: 2048 }
 
 # Browser and viewport matrix (REQ-EXEC-13): web cases run in every combination, the first is the primary run.
 # web:

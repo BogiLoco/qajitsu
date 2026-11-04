@@ -18,7 +18,7 @@ import {
   xmlValue,
 } from "@qajitsu/steps";
 import { z } from "zod";
-import type { AttemptInput } from "./attempt.js";
+import { harOf, type AttemptInput } from "./attempt.js";
 import { createStreamTransport } from "./streams.js";
 import { createPlaywrightTransport } from "./transport.js";
 import { extraSessions } from "./extra-sessions.js";
@@ -306,6 +306,7 @@ export function createSandboxExecutor(
       ...(input.testStateHook ? { testStateHook: input.testStateHook } : {}),
       ...(input.testData ? { testData: input.testData } : {}),
       ...(input.traffic ? { traffic: input.traffic } : {}),
+      ...(input.network ? { network: input.network } : {}),
       ...(input.credential ? { credential: input.credential } : {}),
       // REQ-EXEC-47: WebSockets and event streams are opened here, never in the sandbox.
       streams: options.streams ?? createStreamTransport(),
@@ -367,9 +368,10 @@ export function createSandboxExecutor(
               ...(await extra.close(record.outcome !== "passed")),
             ];
             const ran = session?.browser?.();
+            const analysis = runtime.networkAnalysis(harOf(media));
             resolve({
               ...record,
-              evidence: [...record.evidence, ...media],
+              evidence: [...record.evidence, ...media, ...(analysis ? [analysis] : [])],
               ...(ran ? { browser: ran } : {}),
             });
           });

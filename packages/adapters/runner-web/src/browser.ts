@@ -138,6 +138,14 @@ async function pageElements(page: Page, testIdAttribute: string): Promise<UiElem
   ];
 }
 
+/** The response headers of an application page the traffic analysis reads (REQ-EVD-09/AC6). */
+const SECURITY_HEADERS = [
+  "content-security-policy",
+  "x-content-type-options",
+  "x-frame-options",
+  "strict-transport-security",
+] as const;
+
 /**
  * Turns a spec selector into a Playwright locator: test ids and accessible roles first, CSS last
  * (REQ-EXEC-05/AC2).
@@ -539,6 +547,23 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
             }
           })(),
         };
+        // REQ-EVD-09/AC6: the query of every URL, masked, also for other hosts; an http: request of an https: page.
+        try {
+          const u = new URL(url);
+          const query: Record<string, string> = {};
+          for (const [k, v] of u.searchParams) query[k.slice(0, 100)] = masker.maskText(v.slice(0, 200));
+          if (Object.keys(query).length > 0) entry.query = query;
+          const pageUrl = (() => {
+            try {
+              return rq.frame().url();
+            } catch {
+              return "";
+            }
+          })();
+          if (u.protocol === "http:" && pageUrl.startsWith("https:")) entry.mixed = true;
+        } catch {
+          // Not a URL the analysis can read.
+        }
         traffic.push(entry);
         entries.set(rq, entry);
         rawUrls.set(entry, url);
@@ -548,6 +573,29 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
         const entry = entries.get(res.request());
         if (!entry) return;
         entry.status = res.status();
+        const headers = res.headers();
+        if (headers["content-type"] !== undefined) entry.contentType = headers["content-type"].slice(0, 100);
+        // REQ-EVD-09/AC6: the security headers of the application's pages and the flags of the cookies set.
+        if (entry.sameOrigin && entry.resourceType === "document")
+          entry.securityHeaders = Object.fromEntries(
+            SECURITY_HEADERS.flatMap((h) =>
+              headers[h] === undefined ? [] : [[h, headers[h].slice(0, 500)]],
+            ),
+          );
+        void res
+          .headersArray()
+          .then((all) => {
+            const cookies = all
+              .filter((h) => h.name.toLowerCase() === "set-cookie")
+              .flatMap((h) => h.value.split("\n"))
+              .map((line) => ({
+                name: (line.split("=")[0] ?? "").trim().slice(0, 100),
+                secure: /;\s*secure\b/i.test(line),
+                httpOnly: /;\s*httponly\b/i.test(line),
+              }));
+            if (cookies.length > 0) entry.cookies = cookies;
+          })
+          .catch(() => undefined);
         const location = res.headers()["location"];
         if (location !== undefined)
           try {
@@ -555,6 +603,29 @@ export function createPlaywrightBrowserFactory(options: WebRunnerOptions = {}): 
           } catch {
             entry.location = masker.maskText(location.slice(0, 300));
           }
+      });
+      // REQ-EVD-09/AC3+AC4: how long the request took, its size, and the JSON body when the project keeps bodies.
+      const bodies = input.network?.bodies;
+      context.on("requestfinished", (rq) => {
+        const entry = entries.get(rq);
+        if (!entry) return;
+        const timing = rq.timing();
+        if (timing.responseEnd >= 0) entry.durationMs = timing.responseEnd;
+        void rq
+          .sizes()
+          .then(async (sizes) => {
+            entry.bytes = sizes.responseBodySize + sizes.responseHeadersSize;
+            if (
+              bodies &&
+              entry.sameOrigin &&
+              /json/i.test(entry.contentType ?? "") &&
+              sizes.responseBodySize <= bodies.maxBytes
+            ) {
+              const res = await rq.response();
+              if (res) entry.bodyText = (await res.body()).toString("utf8");
+            }
+          })
+          .catch(() => undefined);
       });
       context.on("requestfailed", (rq) => {
         const entry = entries.get(rq);

@@ -320,6 +320,27 @@
               "pattern": "^[a-z]{2,3}(-[A-Z][A-Za-z]{1,3})?$"
             }
           },
+          "network_budget": {
+            "type": "object",
+            "properties": {
+              "request_ms": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 600000
+              },
+              "step_requests": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10000
+              },
+              "step_kb": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              }
+            },
+            "additionalProperties": false
+          },
           "browser": {
             "type": "object",
             "properties": {

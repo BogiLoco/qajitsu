@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { NetworkBudgetSchema } from "../observations.js";
 import { CONTEXT_KINDS, type ContextKind } from "../context/fragments.js";
 import { RateLimitConfigSchema } from "../env/rate-limit.js";
 import { ReadinessConfigSchema } from "../env/readiness.js";
@@ -612,8 +613,31 @@ export const ProjectConfigSchema = z.strictObject({
       http_errors: z.boolean().default(true),
       accessibility: z.boolean().default(true),
       ignore: z.array(z.string().min(1)).default([]),
+      /** Analysis of the page's traffic (REQ-EVD-09/AC3+AC4). */
+      network: z
+        .strictObject({
+          /**
+           * AC3: keep the JSON bodies of the application's responses, masked and at most `max_kb` each, and check
+           * them against the API description of the analysed commit. Off by default.
+           */
+          response_bodies: z
+            .strictObject({
+              enabled: z.boolean().default(false),
+              max_kb: z.number().int().min(1).max(1024).default(64),
+            })
+            .default({ enabled: false, max_kb: 64 }),
+          /** AC4: limits per step; a plan case may set its own `network_budget`. */
+          budget: NetworkBudgetSchema.optional(),
+        })
+        .default({ response_bodies: { enabled: false, max_kb: 64 } }),
     })
-    .default({ console: true, http_errors: true, accessibility: true, ignore: [] }),
+    .default({
+      console: true,
+      http_errors: true,
+      accessibility: true,
+      ignore: [],
+      network: { response_bodies: { enabled: false, max_kb: 64 } },
+    }),
   /**
    * Secret managers besides `env` (REQ-CFG-03/AC3). Their own tokens are bootstrap secrets and always come from the
    * `env` provider. References: `secret://vault/<path>#<field>`, `secret://doppler/<NAME>`,

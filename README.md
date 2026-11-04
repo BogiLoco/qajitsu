@@ -392,6 +392,9 @@ and `qj review-spec` shows and decides.
    GraphQL error or SOAP fault fails the step even with HTTP 200, and so does an answer outside the schema.
    **WebSockets and server-sent events** (`api.websocket()`, `api.events()`) are checked message by message, in
    order and by count; a stream that closes early fails the step with its close code.
+   Web attempts also get `network-analysis.json`: slow steps against a budget, tokens or personal data in URLs,
+   missing security headers and cookie flags, optional contract checks of the page's JSON answers, and what changed
+   since the last run of the same plan. All of it is listed as observations, never as results.
    API, web and mobile cases run **at the same time in their own lanes**: `execution.workers.api` and
    `execution.workers.web` cases at once, every mobile device running one case at a time, and with
    `execution.web_combinations` several browsers of the matrix next to each other. `--sequential` (or
