@@ -1,5 +1,5 @@
 import type { StreamHandlers } from "@qajitsu/steps";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { startShop } from "../../../../examples/demo-shop/api/server.mjs";
 import { createStreamTransport, parseEventStream } from "./streams.js";
 
@@ -103,5 +103,53 @@ describe("streams of the API runner against the demo shop (REQ-EXEC-47)", () => 
       events: [{ event: "a", id: "7", data: "x\ny" }, { data: "" }],
       rest: "data: half",
     });
+  });
+});
+
+describe("a WebSocket the server refuses (REQ-EXEC-47/AC5)", () => {
+  /** A client that, like Node 22's, reports a refused handshake with `error` only, or also with `close` (Node 24+). */
+  const refusingClient = (events: readonly ("error" | "close")[]) =>
+    class {
+      binaryType = "blob";
+      readonly closed: number[] = [];
+      private readonly listeners = new Map<string, ((e: unknown) => void)[]>();
+      constructor() {
+        setTimeout(() => {
+          for (const name of events)
+            for (const l of this.listeners.get(name) ?? [])
+              l(name === "close" ? { code: 1006, reason: "" } : {});
+        }, 5);
+      }
+      addEventListener(name: string, l: (e: unknown) => void) {
+        this.listeners.set(name, [...(this.listeners.get(name) ?? []), l]);
+      }
+      close() {
+        this.closed.push(1);
+      }
+      send() {
+        return undefined;
+      }
+    };
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("REQ-EXEC-47/AC5: a refused handshake reports that the socket never opened, at once, on every Node.js version", async () => {
+    for (const events of [["error"], ["error", "close"], ["close"]] as const) {
+      vi.stubGlobal("WebSocket", refusingClient(events));
+      const c = collect();
+      let closedCalled = false;
+      const started = Date.now();
+      await expect(
+        createStreamTransport({ openTimeoutMs: 2000 })(
+          { kind: "websocket", url: "ws://127.0.0.1:9/ws/prices", headers: {} },
+          { ...c.handlers, close: () => (closedCalled = true) },
+        ),
+        events.join("+"),
+      ).rejects.toThrow(/before it opened/);
+      // Not the open timeout: the refusal itself is the answer.
+      expect(Date.now() - started, events.join("+")).toBeLessThan(1000);
+      expect(closedCalled, events.join("+")).toBe(false);
+    }
   });
 });

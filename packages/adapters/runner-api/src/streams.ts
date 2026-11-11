@@ -62,6 +62,13 @@ const websocket = (request: StreamOpenRequest, handlers: StreamHandlers, timeout
         typeof event.data === "string" ? event.data : new TextDecoder().decode(event.data as ArrayBuffer),
       );
     });
+    // A refused handshake (e.g. HTTP 401) is reported with `error` alone by Node.js 22's client, with `error` and then
+    // `close` by later ones: either way it is the answer, not a reason to wait for the open timeout.
+    socket.addEventListener("error", () => {
+      if (opened) return;
+      clearTimeout(timer);
+      reject(new Error("the server refused the connection before it opened"));
+    });
     socket.addEventListener("close", (event: { readonly code: number; readonly reason: string }) => {
       clearTimeout(timer);
       // REQ-EXEC-47/AC5: a socket that never opened reports why; one that did reports how it ended.
