@@ -41,7 +41,9 @@ jobs:
       # pnpm-workspace.yaml).
       - run: pnpm audit --audit-level high
       # The web runner's unit tests drive a real Chromium.
-      - run: pnpm --filter @qajitsu/cli exec playwright-core install --with-deps chromium
+      # The browser only: GitHub's runner images carry Chromium's system libraries, and apt on them depends on the
+      # Ubuntu mirrors resolving, which failed for hours on 2026-11-11. A missing library fails the tests loudly.
+      - run: pnpm --filter @qajitsu/cli exec playwright-core install chromium
       - run: pnpm verify
       - run: pnpm build
       # REQ-NFR-03/AC2: API reference (TypeDoc); every export needs TSDoc.
@@ -76,7 +78,9 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @qajitsu/cli exec playwright-core install --with-deps chromium
+      # The browser only: GitHub's runner images carry Chromium's system libraries, and apt on them depends on the
+      # Ubuntu mirrors resolving, which failed for hours on 2026-11-11. A missing library fails the tests loudly.
+      - run: pnpm --filter @qajitsu/cli exec playwright-core install chromium
       # Docker Compose and Android emulator suites skip themselves where Docker or the SDK is missing.
       # Builds the packages, then runs every seeded bug (FAILED) and every clean ticket (PASSED). REQ-NFR-02/AC3, REQ-NFR-04/AC1.
       - run: pnpm test:e2e
