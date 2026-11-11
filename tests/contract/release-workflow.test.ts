@@ -77,7 +77,7 @@ describe("the release workflow (REQ-GEN-15/AC1+AC2)", () => {
     const run = (test?.steps ?? []).map((s) => s.name ?? s.run ?? s.uses ?? "");
     const at = [
       "pnpm install --frozen-lockfile",
-      "pnpm verify",
+      "pnpm verify:full",
       "pnpm build",
       "plugins as installed",
       "node scripts/release-check.mjs",

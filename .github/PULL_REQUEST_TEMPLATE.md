@@ -14,7 +14,7 @@
 
 <!-- Commands run and their result. New tests are titled with the requirement id (REQ-X-NN/ACk). -->
 
-- [ ] `pnpm verify` green locally
+- [ ] `pnpm verify:full` green locally
 
 ## Invariants
 

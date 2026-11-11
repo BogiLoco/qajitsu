@@ -16,7 +16,9 @@ Node.js 22 LTS and pnpm 10 (`corepack enable`). Then `pnpm install && pnpm verif
    Code in `packages/guard`, `packages/verifier` and `packages/steps` needs 95% coverage; anything that decides or
    publishes a status needs an adversarial test in `tests/adversarial`.
 4. **Tick criteria** you implemented and tested, set the status, run `pnpm req:index`.
-5. **Verify**: `pnpm verify` must be green, on the Node.js major of `.nvmrc` (CI's; verify warns on another one).
+5. **Verify**: `pnpm verify` while you work (a few minutes: the unit tests); before you open the PR, `pnpm verify:full`
+   (also the integration tests, which drive the CLI end to end and a real browser, and the coverage thresholds) must be
+   green, on the Node.js major of `.nvmrc` (CI's; verify warns on another one). CI runs `verify:full`.
    Never weaken a test or lower a threshold to get there.
 6. **Commit** with [Conventional Commits](https://www.conventionalcommits.org/) and a package scope, and reference requirements in the footer:
 

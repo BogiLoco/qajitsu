@@ -1,14 +1,14 @@
 ---
 name: verify
-description: Run QAJitsu's full local verification before claiming work is done or committing - typecheck, lint, format, all tests with coverage, hook tests and the requirements check, plus a self-check of requirement traceability, docs, changeset and invariants. Use before every commit and at the end of every task.
-allowed-tools: Bash(pnpm verify) Bash(pnpm verify *) Bash(pnpm test:adversarial) Bash(pnpm req:check) Bash(pnpm req:index) Bash(git status *) Bash(git diff *)
+description: Run QAJitsu's full local verification (pnpm verify:full) before claiming work is done or committing - typecheck, lint, format, all unit and integration tests with coverage, hook tests and the requirements check, plus a self-check of requirement traceability, docs, changeset and invariants. Use before every commit and at the end of every task.
+allowed-tools: Bash(pnpm verify) Bash(pnpm verify *) Bash(pnpm verify:full) Bash(pnpm test:integration) Bash(pnpm test:adversarial) Bash(pnpm req:check) Bash(pnpm req:index) Bash(git status *) Bash(git diff *)
 ---
 
 # /verify
 
 ## 1. Run the checks
 
-Run `pnpm verify` from the repo root. It runs, in order: `typecheck`, `lint`, `format:check`, `test:coverage` (unit, contract, adversarial, golden and script tests with coverage thresholds), `test:hooks` (Claude Code hook scripts) and `req:check` (requirements catalogue, index and roadmap lists).
+Run `pnpm verify:full` from the repo root. It runs, in order: `typecheck`, `lint`, `format:check`, `test:coverage` (every unit and integration test, with the coverage thresholds), `test:hooks` (Claude Code hook scripts) and `req:check` (requirements catalogue, index and roadmap lists). `pnpm verify` is the fast loop: the same checks with the unit tests only and no coverage thresholds; it is not enough before a commit.
 
 If only `req:check` fails because the index is stale, run `pnpm req:index` and re-run. Formatting failures: `pnpm format`.
 

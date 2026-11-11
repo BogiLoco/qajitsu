@@ -19,7 +19,7 @@ Releases come from CI only (REQ-GEN-15). Nobody publishes from a laptop: `pnpm r
 
 The workflow has three jobs before the image:
 
-- **test**, with read rights and no secrets, runs the install, `pnpm verify`, the contract tests of every plugin as
+- **test**, with read rights and no secrets, runs the install, `pnpm verify:full`, the contract tests of every plugin as
   installed from its tarball (`tests/e2e/plugins-installed.e2e.test.ts`) and the full release check below.
 - **version**, with the rights to push a branch and open a pull request and nothing else (no npm token, no OIDC
   token), opens or updates the version pull request when changesets are pending.

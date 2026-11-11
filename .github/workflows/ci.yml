@@ -26,7 +26,8 @@ jobs:
       matrix:
         os: [ubuntu-24.04, macos-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    # verify:full takes about 10 minutes on a Linux runner and 13 on macOS (2026-11); 25 leaves room for a slow day.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -44,7 +45,8 @@ jobs:
       # The browser only: GitHub's runner images carry Chromium's system libraries, and apt on them depends on the
       # Ubuntu mirrors resolving, which failed for hours on 2026-11-11. A missing library fails the tests loudly.
       - run: pnpm --filter @qajitsu/cli exec playwright-core install chromium
-      - run: pnpm verify
+      # Everything: the unit and integration tests with the coverage thresholds (REQ-NFR-02), on Linux and macOS.
+      - run: pnpm verify:full
       - run: pnpm build
       # REQ-NFR-03/AC2: API reference (TypeDoc); every export needs TSDoc.
       # `pnpm docs` would run npm's built-in `docs` (open the package page in a browser), not the script.
@@ -129,6 +131,7 @@ jobs:
 
   # REQ-NFR-06/AC2: a new contributor gets `pnpm install && pnpm verify` green in under five minutes: no caches, a
   # fresh runner, the commands from CONTRIBUTING.md. Only the Linux system libraries for Chromium are installed first.
+  # `pnpm verify` runs the unit tests; the integration tests and the coverage thresholds run in the verify job.
   contributor-setup:
     runs-on: ubuntu-24.04
     steps:
