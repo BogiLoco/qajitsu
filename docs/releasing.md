@@ -40,8 +40,7 @@ The workflow has three jobs before the image:
   1. the publish guard;
   2. `pnpm clean` and `pnpm build`, so no stale file reaches a package;
   3. the release check without installs (`--no-install`): the tarballs that are published are inspected again;
-  4. `pnpm -r publish` with npm provenance, one package at a time: pnpm, not npm, because only pnpm turns `workspace:`
-     ranges into versions;
+  4. `pnpm -r publish` with npm provenance: pnpm, not npm, because only pnpm turns `workspace:` ranges into versions;
   5. `scripts/release-tags.mjs` tags each published version (`changeset git-tag`).
 
   Then `scripts/provenance-check.mjs` reads every package back from the registry: its npm provenance must name this
