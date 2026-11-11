@@ -42,7 +42,9 @@ jobs:
         with:
           node-version-file: .nvmrc
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @qajitsu/cli exec playwright-core install --with-deps chromium
+      # The browser only: GitHub's runner images carry Chromium's system libraries, and apt on them depends on the
+      # Ubuntu mirrors resolving, which failed for hours on 2026-11-11. A missing library fails the tests loudly.
+      - run: pnpm --filter @qajitsu/cli exec playwright-core install chromium
       - run: pnpm verify
       - run: pnpm build
       # REQ-GEN-11/AC11: every plugin, packed as published and installed the way `qj plugin add` does, passes its
