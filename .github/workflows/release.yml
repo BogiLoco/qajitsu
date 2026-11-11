@@ -99,6 +99,8 @@ jobs:
     outputs:
       version: ${{ steps.github-release.outputs.version }}
       tag: ${{ steps.github-release.outputs.tag }}
+      # The runs that published part of a release this run finished (scripts/unpublished-check.mjs); usually none.
+      earlier-runs: ${{ steps.decide.outputs.earlier-runs }}
     permissions:
       contents: write # the tags and the GitHub release
       id-token: write # npm provenance
@@ -129,7 +131,9 @@ jobs:
       # pnpm skipped, is refused before anything is tagged.
       - name: provenance of what was published
         if: steps.decide.outputs.publish == 'true'
-        run: node scripts/provenance-check.mjs "$GITHUB_RUN_ID"
+        env:
+          EARLIER_RUNS: ${{ steps.decide.outputs.earlier-runs }}
+        run: node scripts/provenance-check.mjs "$GITHUB_RUN_ID" $EARLIER_RUNS
       - name: tags and GitHub release
         id: github-release
         if: steps.decide.outputs.publish == 'true'
@@ -172,7 +176,9 @@ jobs:
       - run: pnpm install --frozen-lockfile --ignore-scripts
       # Only versions this run published go into the image; a published version never changes afterwards.
       - name: provenance of the tarballs
-        run: node scripts/provenance-check.mjs "$GITHUB_RUN_ID"
+        env:
+          EARLIER_RUNS: ${{ needs.release.outputs.earlier-runs }}
+        run: node scripts/provenance-check.mjs "$GITHUB_RUN_ID" $EARLIER_RUNS
       # The bytes that were published, from the registry, and a lockfile pinned to what the repository tests.
       - name: image context
         run: node scripts/image-context.mjs "$RUNNER_TEMP/image" --from-registry

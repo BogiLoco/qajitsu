@@ -3,16 +3,20 @@
 // silently skips a version that is already in the registry; the release (and its image, built from the registry) would
 // then carry a tarball someone else published, e.g. with a leaked token. So:
 // - no package of the release is in the registry at its version: publish;
+// - some are, each with the provenance of a run of this repository's Release workflow on main (a release the registry
+//   stopped half-way, e.g. with its limit on new packages): publish the rest, finishing that release;
 // - all of them are, and the CLI's release tag exists: this release is done, nothing to publish;
-// - anything else (some published, all published without the tag, the registry not answering): refuse. A release that
-//   stopped half-way is finished by hand after checking the provenance of what is there (docs/releasing.md).
+// - anything else (a version without that provenance, all published without the tag, the registry not answering):
+//   refuse, and look at what is there by hand (docs/releasing.md).
 //
-//   node scripts/unpublished-check.mjs    prints the decision; writes publish=true|false to GITHUB_OUTPUT; fails on refuse
+//   node scripts/unpublished-check.mjs    prints the decision; writes publish=true|false and earlier-runs=<run ids>
+//                                         to GITHUB_OUTPUT; fails on refuse
 
 import { spawnSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { provenanceProblems, publishedRun, readPublished } from "./provenance-check.mjs";
 import { publishablePackages } from "./release-check.mjs";
 
 /**
@@ -21,18 +25,22 @@ import { publishablePackages } from "./release-check.mjs";
  * @param {{ name: string, version: string }[]} packages - The release's packages at their new versions.
  * @param {(spec: string) => "published" | "absent" | "unknown"} lookup - Asks the registry about `name@version`.
  * @param {(tag: string) => boolean} tagExists - Whether the git tag exists.
- * @returns {{ action: "publish" | "done" | "refuse", reason: string }}
+ * @param {(pkg: { name: string, version: string }) => Promise<{ run?: string, problems: string[] }> | { run?: string, problems: string[] }} [earlier]
+ *   - Which run of the Release workflow published a version that is already there, and what is wrong with its
+ *   provenance. Without it, a release that stopped half-way is refused.
+ * @returns {Promise<{ action: "publish" | "done" | "refuse", reason: string, earlierRuns?: string[] }>}
  */
-export function releaseDecision(packages, lookup, tagExists) {
+export async function releaseDecision(packages, lookup, tagExists, earlier) {
   if (packages.length === 0) return { action: "refuse", reason: "the release has no packages" };
   const published = [];
   const unknown = [];
   for (const p of packages) {
     const spec = `${p.name}@${p.version}`;
     const answer = lookup(spec);
-    if (answer === "published") published.push(spec);
+    if (answer === "published") published.push(p);
     else if (answer !== "absent") unknown.push(spec);
   }
+  const specs = (list) => list.map((p) => `${p.name}@${p.version}`).join(", ");
   if (unknown.length > 0)
     return { action: "refuse", reason: `the registry did not answer for ${unknown.join(", ")}` };
   if (published.length === 0)
@@ -40,11 +48,30 @@ export function releaseDecision(packages, lookup, tagExists) {
       action: "publish",
       reason: `${String(packages.length)} packages, none of them in the registry yet`,
     };
-  if (published.length < packages.length)
+  if (published.length < packages.length) {
+    if (earlier === undefined)
+      return {
+        action: "refuse",
+        reason: `already in the registry, though the rest of the release is not: ${specs(published)}`,
+      };
+    const runs = new Set();
+    const problems = [];
+    for (const p of published) {
+      const found = await earlier(p);
+      problems.push(...found.problems);
+      if (found.run !== undefined && found.problems.length === 0) runs.add(found.run);
+    }
+    if (problems.length > 0)
+      return {
+        action: "refuse",
+        reason: `part of the release is in the registry without the Release workflow's provenance: ${problems.join("; ")}`,
+      };
     return {
-      action: "refuse",
-      reason: `already in the registry, though the rest of the release is not: ${published.join(", ")}`,
+      action: "publish",
+      reason: `finishing a release: ${String(published.length)} of ${String(packages.length)} packages were published by run ${[...runs].join(", ")}`,
+      earlierRuns: [...runs].sort(),
     };
+  }
   const cli = packages.find((p) => p.name === "@qajitsu/cli");
   const tag = cli ? `${cli.name}@${cli.version}` : undefined;
   if (tag && tagExists(tag))
@@ -52,6 +79,23 @@ export function releaseDecision(packages, lookup, tagExists) {
   return {
     action: "refuse",
     reason: `every package is in the registry, but ${tag ?? "the CLI"} was never tagged by a release run`,
+  };
+}
+
+/**
+ * The run that published a version already in the registry, checked like scripts/provenance-check.mjs checks this
+ * run's: this repository, the Release workflow, main, a push, the tarball the registry serves.
+ *
+ * @param {{ name: string, version: string }} pkg
+ */
+export async function earlierRelease(pkg) {
+  const published = await readPublished(pkg);
+  if (published === undefined)
+    return { problems: [`${pkg.name}@${pkg.version} is no longer in the registry`] };
+  const run = publishedRun(published.attestations);
+  return {
+    ...(run !== undefined ? { run } : {}),
+    problems: provenanceProblems(pkg, published.attestations, published.integrity, run ?? "(none)"),
   };
 }
 
@@ -70,7 +114,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   }));
   const tagExists = (tag) =>
     spawnSync("git", ["rev-parse", "--quiet", "--verify", `refs/tags/${tag}`], { cwd: root }).status === 0;
-  const decision = releaseDecision(packages, npmLookup, tagExists);
+  const decision = await releaseDecision(packages, npmLookup, tagExists, earlierRelease).catch((error) => ({
+    action: "refuse",
+    reason: error instanceof Error ? error.message : String(error),
+  }));
   if (decision.action === "refuse") {
     process.stderr.write(`Publishing refused: ${decision.reason}\n`);
     process.exitCode = 1;
@@ -79,6 +126,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       `${decision.action === "publish" ? "Publishing" : "Nothing to publish"}: ${decision.reason}\n`,
     );
     if (process.env.GITHUB_OUTPUT)
-      appendFileSync(process.env.GITHUB_OUTPUT, `publish=${String(decision.action === "publish")}\n`);
+      appendFileSync(
+        process.env.GITHUB_OUTPUT,
+        `publish=${String(decision.action === "publish")}\nearlier-runs=${(decision.earlierRuns ?? []).join(" ")}\n`,
+      );
   }
 }

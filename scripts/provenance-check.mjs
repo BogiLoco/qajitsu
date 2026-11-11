@@ -5,7 +5,8 @@
 // the minutes between scripts/unpublished-check.mjs and the publish would otherwise be tagged and baked into the image.
 // A published version is immutable, so what this checks is what `npm pack name@version` gets later.
 //
-//   node scripts/provenance-check.mjs <run id>    fails unless every package has this run's provenance
+//   node scripts/provenance-check.mjs <run id> [<earlier run id> ...]
+//     fails unless every package has the provenance of this run, or of a run that published part of this release
 
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,10 +39,12 @@ export function integrityHex(integrity) {
  * @param {{ attestations?: { predicateType?: string, bundle?: { dsseEnvelope?: { payload?: string } } }[] } | undefined} attestations
  *   - The registry's answer for the version's attestations.
  * @param {string | undefined} integrity - `dist.integrity` of the version.
- * @param {string} runId - The run that must have published it.
+ * @param {string | readonly string[]} runIds - The run that must have published it, or the runs that may have: this
+ *   run and those that published part of a release this run finishes.
  * @returns {string[]}
  */
-export function provenanceProblems(pkg, attestations, integrity, runId) {
+export function provenanceProblems(pkg, attestations, integrity, runIds) {
+  const runs = typeof runIds === "string" ? [runIds] : [...runIds];
   const spec = `${pkg.name}@${pkg.version}`;
   const slsa = (attestations?.attestations ?? []).filter((a) => a.predicateType === SLSA);
   if (slsa.length !== 1) return [`${spec} has ${String(slsa.length)} SLSA provenance attestations, not one`];
@@ -72,9 +75,32 @@ export function provenanceProblems(pkg, attestations, integrity, runId) {
   if (event !== EXPECTED.event)
     out.push(`${spec} was built for a ${String(event)} event, not ${EXPECTED.event}`);
   const invocation = String(statement?.predicate?.runDetails?.metadata?.invocationId ?? "");
-  if (!invocation.startsWith(`${EXPECTED.repository}/actions/runs/${runId}/attempts/`))
-    out.push(`${spec} was published by ${invocation || "an unknown run"}, not by run ${runId}`);
+  if (!runs.some((run) => invocation.startsWith(`${EXPECTED.repository}/actions/runs/${run}/attempts/`)))
+    out.push(`${spec} was published by ${invocation || "an unknown run"}, not by run ${runs.join(" or ")}`);
   return out;
+}
+
+/**
+ * The run of this repository's workflows that published a version, from its provenance; undefined when there is not
+ * exactly one readable SLSA provenance or it names no such run.
+ *
+ * @param {Parameters<typeof provenanceProblems>[1]} attestations
+ * @returns {string | undefined}
+ */
+export function publishedRun(attestations) {
+  const slsa = (attestations?.attestations ?? []).filter((a) => a.predicateType === SLSA);
+  if (slsa.length !== 1) return undefined;
+  try {
+    const statement = JSON.parse(
+      Buffer.from(slsa[0]?.bundle?.dsseEnvelope?.payload ?? "", "base64").toString("utf8"),
+    );
+    const invocation = String(statement?.predicate?.runDetails?.metadata?.invocationId ?? "");
+    const prefix = `${EXPECTED.repository}/actions/runs/`;
+    if (!invocation.startsWith(prefix)) return undefined;
+    return /^(\d+)\/attempts\/\d+$/.exec(invocation.slice(prefix.length))?.[1];
+  } catch {
+    return undefined;
+  }
 }
 
 /** Fetches JSON from the registry; undefined on 404, throws on any other failure. */
@@ -85,10 +111,31 @@ async function registry(path) {
   return res.json();
 }
 
+/**
+ * A version's registry entry and attestations; undefined when the version is not in the registry. Throws when the
+ * registry does not answer.
+ *
+ * @param {{ name: string, version: string }} pkg
+ * @returns {Promise<{ integrity: string | undefined, attestations: Parameters<typeof provenanceProblems>[1] } | undefined>}
+ */
+export async function readPublished(pkg) {
+  const name = pkg.name.replace("/", "%2f");
+  const meta = await registry(`${name}/${pkg.version}`);
+  if (meta === undefined) return undefined;
+  return {
+    integrity: meta.dist?.integrity,
+    attestations: await registry(`-/npm/v1/attestations/${name}@${pkg.version}`),
+  };
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const runId = process.argv[2] ?? "";
-  if (!/^\d+$/.test(runId)) {
-    process.stderr.write("usage: node scripts/provenance-check.mjs <run id>\n");
+  // This run, then the runs that published the part of the release it finishes (scripts/unpublished-check.mjs).
+  const runIds = process.argv
+    .slice(2)
+    .flatMap((a) => a.split(/\s+/))
+    .filter((a) => a !== "");
+  if (runIds.length === 0 || !runIds.every((r) => /^\d+$/.test(r))) {
+    process.stderr.write("usage: node scripts/provenance-check.mjs <run id> [<earlier run id> ...]\n");
     process.exitCode = 1;
   } else {
     const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -99,20 +146,12 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     const problems = [];
     try {
       for (const p of packages) {
-        const spec = `${p.name.replace("/", "%2f")}@${p.version}`;
-        const meta = await registry(`${p.name.replace("/", "%2f")}/${p.version}`);
-        if (meta === undefined) {
+        const published = await readPublished(p);
+        if (published === undefined) {
           problems.push(`${p.name}@${p.version} is not in the registry`);
           continue;
         }
-        problems.push(
-          ...provenanceProblems(
-            p,
-            await registry(`-/npm/v1/attestations/${spec}`),
-            meta.dist?.integrity,
-            runId,
-          ),
-        );
+        problems.push(...provenanceProblems(p, published.attestations, published.integrity, runIds));
       }
     } catch (error) {
       problems.push(error instanceof Error ? error.message : String(error));
@@ -122,7 +161,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       process.exitCode = 1;
     } else
       process.stdout.write(
-        `${String(packages.length)} packages published by run ${runId} of ${EXPECTED.path} on ${EXPECTED.ref}.\n`,
+        `${String(packages.length)} packages published by run ${runIds.join(" or ")} of ${EXPECTED.path} on ${EXPECTED.ref}.\n`,
       );
   }
 }
