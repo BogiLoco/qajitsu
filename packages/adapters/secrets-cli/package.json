@@ -1,6 +1,6 @@
 {
   "name": "@qajitsu/adapter-secrets-cli",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "QAJitsu SecretProviders through official CLIs: 1Password (op), AWS Secrets Manager (aws), GCP Secret Manager (gcloud).",
   "license": "Apache-2.0",
   "repository": {

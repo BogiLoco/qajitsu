@@ -1,6 +1,6 @@
 {
   "name": "@qajitsu/verifier",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "QAJitsu verifier: status computation, publish gates, assertion lock and plan coverage checks.",
   "license": "Apache-2.0",
   "repository": {

@@ -1,6 +1,6 @@
 {
   "name": "@qajitsu/adapter-messages-webhooksite",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "QAJitsu MessageCapture on webhook.site (hosted or self-hosted): an e-mail address and a URL per run and case.",
   "license": "Apache-2.0",
   "repository": {

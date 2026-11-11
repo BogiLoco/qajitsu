@@ -1,6 +1,6 @@
 {
   "name": "@qajitsu/adapter-codehost-gitlab",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "QAJitsu CodeHost for GitLab.com and GitLab self-managed.",
   "license": "Apache-2.0",
   "repository": {

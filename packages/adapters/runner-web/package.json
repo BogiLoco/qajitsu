@@ -1,6 +1,6 @@
 {
   "name": "@qajitsu/adapter-runner-web",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "QAJitsu web UI runner: the trusted parent drives Playwright with screenshots, video, trace, HAR and console log.",
   "license": "Apache-2.0",
   "repository": {

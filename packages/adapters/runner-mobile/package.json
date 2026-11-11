@@ -1,6 +1,6 @@
 {
   "name": "@qajitsu/adapter-runner-mobile",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "QAJitsu mobile Runner on WebdriverIO and Appium (Android UiAutomator2, iOS XCUITest).",
   "license": "Apache-2.0",
   "repository": {
