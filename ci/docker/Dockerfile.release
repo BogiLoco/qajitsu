@@ -9,7 +9,7 @@
 #   docker run --rm ghcr.io/bogiloco/qajitsu demo                       the demo-shop flow, offline (AC5)
 #   docker run --rm -v "$PWD:/work" -e QAJITSU_IMAGE_DIGEST=sha256:... ghcr.io/bogiloco/qajitsu@sha256:... run SHOP-1
 #
-# The base is pinned by digest (node:22-bookworm-slim); Dependabot moves it. The SBOM, not this file, is the inventory.
+# The base is pinned by digest (node:22-bookworm-slim) and moved by hand. The SBOM, not this file, is the inventory.
 FROM node:22-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da
 
 ARG VERSION
