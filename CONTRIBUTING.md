@@ -35,8 +35,8 @@ Node.js 22 LTS and pnpm 10 (`corepack enable`). Then `pnpm install && pnpm verif
 Protect `main` in the repository settings (Settings → Branches → branch protection rule for `main`, or a ruleset):
 require a pull request and require these status checks to pass before merging:
 
-- `verify (ubuntu-latest)`, `verify (macos-latest)`
-- `e2e (ubuntu-latest, demo-shop self-test, sandboxed runner)`, `e2e (macos-latest, demo-shop self-test, sandboxed runner)`
+- `verify (ubuntu-24.04)`, `verify (macos-latest)`
+- `e2e (ubuntu-24.04, demo-shop self-test, sandboxed runner)`, `e2e (macos-latest, demo-shop self-test, sandboxed runner)`
 - `contributor-setup`, `dependency-review`
 
 The same workflow runs every night on main (and on demand from the Actions tab); a red nightly run is fixed before the
