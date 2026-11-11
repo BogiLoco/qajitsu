@@ -1,0 +1,58 @@
+# The official QAJitsu image (REQ-GEN-09), built in CI for every release from its published tarballs:
+#   node scripts/image-context.mjs <ctx> [--from-registry] && docker build -f ci/docker/Dockerfile.release <ctx>
+# Node.js 22, git, Chromium for web tests, the CLI with its core plugins and the API and web runner plugins (installed
+# from one lockfile that pins every dependency to what the repository tests), and the offline demo. Runs as the
+# unprivileged user `qa`; no secret is in the image: configuration and secrets come from a mounted project
+# (`-v "$PWD:/work"`) and its secret provider (`-e JIRA_TOKEN ...`). Never pass a secret as a build argument: the
+# provenance publishes every build argument.
+#
+#   docker run --rm ghcr.io/bogiloco/qajitsu demo                       the demo-shop flow, offline (AC5)
+#   docker run --rm -v "$PWD:/work" -e QAJITSU_IMAGE_DIGEST=sha256:... ghcr.io/bogiloco/qajitsu@sha256:... run SHOP-1
+#
+# The base is pinned by digest (node:22-bookworm-slim); Dependabot moves it. The SBOM, not this file, is the inventory.
+FROM node:22-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da
+
+ARG VERSION
+ARG REVISION=unknown
+
+LABEL org.opencontainers.image.title="QAJitsu" \
+      org.opencontainers.image.description="Agentic QA: ticket in, approved test plan, API, web and mobile tests, verified result back on the ticket." \
+      org.opencontainers.image.source="https://github.com/BogiLoco/qajitsu" \
+      org.opencontainers.image.url="https://github.com/BogiLoco/qajitsu" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}"
+
+# The base image's security updates are applied at every release build, so a release is not older than its build day.
+RUN apt-get update \
+  && apt-get upgrade -y \
+  && apt-get install -y --no-install-recommends git ca-certificates tini \
+  && rm -rf /var/lib/apt/lists/*
+
+# Everything QAJitsu runs, from the context's lockfile, without any install script. The tarballs are only mounted for
+# the install: they never become a layer of the image.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    NPM_CONFIG_UPDATE_NOTIFIER=false \
+    NPM_CONFIG_FUND=false \
+    NPM_CONFIG_AUDIT=false
+WORKDIR /opt/qajitsu
+COPY package.json package-lock.json image.json ./
+RUN --mount=type=bind,source=tarballs,target=/opt/qajitsu/tarballs \
+  npm ci --ignore-scripts --omit=dev \
+  && node_modules/.bin/playwright-core install --with-deps chromium \
+  && rm -rf /root/.npm /tmp/node-compile-cache \
+  && chmod 0444 image.json
+
+COPY demo /opt/qajitsu/demo
+COPY entrypoint.sh /usr/local/bin/qajitsu-entrypoint
+RUN ln -s /opt/qajitsu/node_modules/.bin/qajitsu /usr/local/bin/qajitsu \
+  && ln -s /opt/qajitsu/node_modules/.bin/qj /usr/local/bin/qj \
+  && chmod 0755 /usr/local/bin/qajitsu-entrypoint \
+  && useradd --uid 10001 --create-home --shell /usr/sbin/nologin qa
+
+USER qa
+ENV QAJITSU_HOME=/home/qa/.qajitsu \
+    QAJITSU_IMAGE=ghcr.io/bogiloco/qajitsu:${VERSION}
+WORKDIR /work
+ENTRYPOINT ["tini", "--", "qajitsu-entrypoint"]
+CMD ["--help"]

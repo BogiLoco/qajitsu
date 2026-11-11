@@ -122,6 +122,22 @@ with ([Install the tools](#install-the-tools-qj-setup)); tools you already have 
 
 Linux and macOS are supported (CI runs on both). Windows: use WSL 2.
 
+### Try it in one command
+
+```sh
+docker run --rm ghcr.io/bogiloco/qajitsu demo
+```
+
+The official image (from the first release on) runs the whole flow on the demo shop offline, with recorded model
+answers: the clean app PASSES, the seeded bug fails TC-01. It is built for amd64 and arm64 from each release, signed,
+and ships with an SBOM and build provenance; [docs/releasing.md](docs/releasing.md#the-release-image) shows how to
+check it. Use it for your project by digest:
+
+```sh
+docker run --rm -v "$PWD:/work" -e JIRA_TOKEN -e QAJITSU_IMAGE_DIGEST=sha256:<digest> \
+  ghcr.io/bogiloco/qajitsu@sha256:<digest> run SHOP-482 --env staging
+```
+
 ### Install `qj`
 
 ```sh

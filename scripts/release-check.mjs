@@ -142,6 +142,25 @@ export function inspectPackage({
   return problems;
 }
 
+/**
+ * The sources of a package changed after its build (REQ-GEN-15/AC3): a `src/**\/*.ts` (not a test) whose `dist/` file
+ * is missing or older. A tarball packed from such a build would not be what the repository says.
+ *
+ * @param {string} dir - The package folder.
+ * @returns {string[]} The stale sources, relative to the package.
+ */
+export function staleSources(dir) {
+  const src = join(dir, "src");
+  if (!existsSync(src)) return [];
+  return filesOf(src)
+    .filter((f) => /\.m?ts$/.test(f) && !/\.d\.ts$/.test(f) && !/\.test\.m?ts$/.test(f))
+    .filter((f) => {
+      const built = join(dir, "dist", f.replace(/\.mts$/, ".mjs").replace(/\.ts$/, ".js"));
+      return !existsSync(built) || statSync(built).mtimeMs < statSync(join(src, f)).mtimeMs;
+    })
+    .map((f) => `src/${f}`);
+}
+
 /** The published packages of the repository with their folders and manifests. */
 export function publishablePackages(root) {
   const dirs = [
@@ -174,6 +193,25 @@ const run = (cmd, args, options = {}) => {
   const r = spawnSync(cmd, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, ...options });
   return { code: r.status ?? (r.error ? 127 : 1), out: `${r.stdout ?? ""}${r.stderr ?? ""}`, error: r.error };
 };
+
+/**
+ * Packs one package the way the release does (`pnpm pack`, which turns `workspace:` ranges into versions).
+ *
+ * @param {string} dir - The package folder.
+ * @param {string} dest - Where the tarball goes.
+ * @returns {{ tgz: string } | { error: string }}
+ */
+export function packPackage(dir, dest) {
+  const r = run("pnpm", ["pack", "--pack-destination", dest], { cwd: dir });
+  if (r.code !== 0) return { error: `pnpm pack failed\n${r.out}` };
+  const file = r.out
+    .trim()
+    .split("\n")
+    .filter((l) => l.endsWith(".tgz"))
+    .at(-1);
+  if (!file) return { error: "pnpm pack named no tarball" };
+  return { tgz: file.startsWith("/") ? file : join(dest, file.split("/").at(-1)) };
+}
 
 /** Size of a folder in bytes. */
 export function folderBytes(dir) {
@@ -280,30 +318,27 @@ async function main() {
     const packages = publishablePackages(root);
     const version = packages.find((p) => p.manifest.name === "@qajitsu/cli")?.manifest.version;
     if (!version) throw new Error("no @qajitsu/cli package");
-    for (const p of packages)
+    for (const p of packages) {
       if (!existsSync(join(p.dir, "dist")))
         throw new Error(`${p.manifest.name} is not built: run pnpm build first`);
+      const stale = staleSources(p.dir);
+      if (stale.length > 0)
+        throw new Error(
+          `${p.manifest.name} changed after its build (${stale.slice(0, 3).join(", ")}): run pnpm build first`,
+        );
+    }
 
     // AC3: pack every package the way the release does, and inspect what would be published.
     const packs = join(work, "tarballs");
     mkdirSync(packs);
     const tarballs = new Map();
     for (const p of packages) {
-      const r = run("pnpm", ["pack", "--pack-destination", packs], { cwd: p.dir });
-      if (r.code !== 0) {
-        problems.push(`${p.manifest.name}: pnpm pack failed\n${r.out}`);
+      const packed = packPackage(p.dir, packs);
+      if ("error" in packed) {
+        problems.push(`${p.manifest.name}: ${packed.error}`);
         continue;
       }
-      const file = r.out
-        .trim()
-        .split("\n")
-        .filter((l) => l.endsWith(".tgz"))
-        .at(-1);
-      if (!file) {
-        problems.push(`${p.manifest.name}: pnpm pack named no tarball`);
-        continue;
-      }
-      const tgz = file.startsWith("/") ? file : join(packs, file.split("/").at(-1));
+      const tgz = packed.tgz;
       const unpacked = join(work, "unpacked", p.manifest.name.replace("/", "__"));
       mkdirSync(unpacked, { recursive: true });
       const x = run("tar", ["-xzf", tgz, "-C", unpacked]);

@@ -5,11 +5,11 @@
 // It runs DEMO-1 twice: on the clean app (every case PASSED) and with seeded bug BUG-01 switched on (TC-01 FAILED).
 // Runs go to a temporary workspace; the local demo git repository is (re)created in ~/.qa-demo/git.
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const shopDir = join(root, "examples", "demo-shop");
@@ -21,11 +21,26 @@ const liveModel = arg("--model");
 const keep = process.argv.includes("--keep");
 const PASSWORD = process.env.DEMO_USER_PASSWORD ?? "demo-password";
 
-const { createProgram } = await import(join(root, "packages", "cli", "dist", "program.js"));
-const { createGitExec } = await import(join(root, "packages", "core", "dist", "index.js"));
-const { startShop } = await import(join(shopDir, "api", "server.mjs"));
-const require = createRequire(join(root, "packages", "agents", "package.json"));
-const { MockLanguageModelV4 } = await import(require.resolve("ai/test"));
+// In this repository the packages come from their builds; in an installed QAJitsu (the release image, REQ-GEN-09/AC5)
+// from node_modules, where the runner plugins are part of the installation.
+const fromRepo = existsSync(join(root, "packages", "cli", "package.json"));
+if (fromRepo && !existsSync(join(root, "packages", "cli", "dist", "program.js"))) {
+  process.stderr.write("The packages are not built: run pnpm build first.\n");
+  process.exit(1);
+}
+const { createProgram } = await import(
+  fromRepo ? pathToFileURL(join(root, "packages", "cli", "dist", "program.js")).toString() : "@qajitsu/cli"
+);
+const { createGitExec } = await import(
+  fromRepo ? pathToFileURL(join(root, "packages", "core", "dist", "index.js")).toString() : "@qajitsu/core"
+);
+const { startShop } = await import(pathToFileURL(join(shopDir, "api", "server.mjs")).toString());
+const require = createRequire(
+  fromRepo
+    ? join(root, "packages", "agents", "package.json")
+    : fileURLToPath(import.meta.resolve("@qajitsu/agents")),
+);
+const { MockLanguageModelV4 } = await import(pathToFileURL(require.resolve("ai/test")).toString());
 
 const fixture = (path) => readFileSync(join(root, "fixtures", path), "utf8");
 const ANALYSIS = JSON.stringify({

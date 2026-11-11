@@ -1,0 +1,136 @@
+name: Image publish
+
+# REQ-GEN-09/AC2+AC3: pushes, signs and attests the release image that the Release workflow built and checked. It is a
+# reusable workflow on purpose: the keyless signature and the attestation then name this file as the signer
+# (`.github/workflows/image-publish.yml@refs/heads/main`), not the Release workflow, whose other jobs run dependency
+# code. Only pinned actions, skopeo, cosign, gh, jq and this repository's dependency-free scripts run here.
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: The released version, e.g. 0.2.0.
+        required: true
+        type: string
+      artifact-id:
+        description: The id of the artifact holding the checked OCI archive.
+        required: true
+        type: string
+      archive-sha256:
+        description: The SHA-256 of image.tar as the build job uploaded it.
+        required: true
+        type: string
+      index-digest:
+        description: The digest of the archive's image index, which the registry must end up with.
+        required: true
+        type: string
+    outputs:
+      digest:
+        description: The digest of the published image index.
+        value: ${{ jobs.publish.outputs.digest }}
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  publish:
+    # Called by the Release workflow for a push to main only; anything else would sign with this identity.
+    if: github.repository == 'BogiLoco/qajitsu' && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: image-publish
+    permissions:
+      contents: read
+      packages: write # ghcr.io
+      id-token: write # keyless signing and the attestation
+      attestations: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    env:
+      IMAGE: ghcr.io/bogiloco/qajitsu
+      VERSION: ${{ inputs.version }}
+      ARCHIVE_SHA256: ${{ inputs.archive-sha256 }}
+      INDEX_DIGEST: ${{ inputs.index-digest }}
+      ACTOR: ${{ github.actor }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      # The artifact of this run by its id, not by a name another job could have reused.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ inputs.artifact-id }}
+          path: ${{ runner.temp }}/artifact
+      # The archive is the one the build job checked: the same bytes, the same image index.
+      - name: the checked archive
+        run: |
+          fail() { echo "::error::$1"; exit 1; }
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z_.]+)?$ ]] || fail "$VERSION is not a release version"
+          [[ "$INDEX_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "$INDEX_DIGEST is not an image digest"
+          archives="$(find "$RUNNER_TEMP/artifact" -name image.tar -type f)"
+          [ -n "$archives" ] && [ "$(printf '%s\n' "$archives" | wc -l)" -eq 1 ] || fail "not exactly one image.tar: $archives"
+          archive="$archives"
+          [ "$(sha256sum "$archive" | cut -d' ' -f1)" = "$ARCHIVE_SHA256" ] || fail "image.tar is not the archive the build job checked"
+          [ "$(node scripts/oci-archive.mjs "$archive" --index)" = "$INDEX_DIGEST" ] || fail "the archive's image index is not $INDEX_DIGEST"
+          echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
+      # The checked archive as it is: every manifest (the platforms, the SBOM and provenance), digests unchanged. A
+      # version tag that already holds another image is never overwritten.
+      - name: push
+        id: push
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          # Into Docker's config, which the attestation push and `docker buildx imagetools` below read too.
+          echo "$TOKEN" | skopeo login --authfile "$HOME/.docker/config.json" ghcr.io --username "$ACTOR" --password-stdin
+          if skopeo inspect --raw "docker://$IMAGE:$VERSION" > "$RUNNER_TEMP/existing.json" 2> "$RUNNER_TEMP/existing.err"; then
+            existing="sha256:$(sha256sum "$RUNNER_TEMP/existing.json" | cut -d' ' -f1)"
+            if [ "$existing" != "$INDEX_DIGEST" ]; then
+              echo "::error::$IMAGE:$VERSION already holds $existing, not this build's $INDEX_DIGEST"
+              exit 1
+            fi
+          elif ! grep -qiE "manifest unknown|name unknown" "$RUNNER_TEMP/existing.err"; then
+            cat "$RUNNER_TEMP/existing.err" >&2
+            exit 1
+          fi
+          skopeo copy --all --preserve-digests "oci-archive:$ARCHIVE" "docker://$IMAGE:$VERSION"
+          test "sha256:$(skopeo inspect --raw "docker://$IMAGE:$VERSION" | sha256sum | cut -d' ' -f1)" = "$INDEX_DIGEST"
+          echo "digest=$INDEX_DIGEST" >> "$GITHUB_OUTPUT"
+      - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+      - name: sign
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: cosign sign --yes --recursive "$IMAGE@$DIGEST"
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+      # Checked the way a user checks it: only this workflow, called for a push to main, is a valid signer; the
+      # attestation was made by it; there is an SBOM for each of the two platforms.
+      - name: verify the published image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          cosign verify "$IMAGE@$DIGEST" \
+            --certificate-identity "https://github.com/BogiLoco/qajitsu/.github/workflows/image-publish.yml@refs/heads/main" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-github-workflow-repository BogiLoco/qajitsu \
+            --certificate-github-workflow-ref refs/heads/main \
+            --certificate-github-workflow-trigger push > /dev/null
+          gh attestation verify "oci://$IMAGE@$DIGEST" --repo BogiLoco/qajitsu \
+            --signer-workflow BogiLoco/qajitsu/.github/workflows/image-publish.yml --source-ref refs/heads/main \
+            --deny-self-hosted-runners
+          docker buildx imagetools inspect "$IMAGE@$DIGEST" --format '{{ json .SBOM }}' \
+            | jq -e '[.[] | select(.SPDX.spdxVersion != null)] | length == 2' > /dev/null
+      # Only a verified image becomes the minor line's and `latest`; the digest does not change.
+      - name: move the tags
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          node scripts/image-tags.mjs "$IMAGE" "$VERSION" --later | while read -r ref; do
+            skopeo copy --all --preserve-digests "docker://$IMAGE@$DIGEST" "docker://$ref"
+            test "sha256:$(skopeo inspect --raw "docker://$ref" | sha256sum | cut -d' ' -f1)" = "$DIGEST"
+          done

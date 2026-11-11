@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -12,6 +12,7 @@ import {
   looksLikeCrash,
   releaseClosure,
   smokeSteps,
+  staleSources,
 } from "./release-check.mjs";
 
 const dirs = [];
@@ -188,6 +189,28 @@ describe("release check: what a tarball may carry (REQ-GEN-15/AC3)", () => {
       "@qajitsu/sample: dist/moved.d.ts has no source in the repository: stale build output",
       "@qajitsu/sample: dist/moved.js has no source in the repository: stale build output",
     ]);
+  });
+});
+
+describe("release check: a build older than its sources (REQ-GEN-15/AC3)", () => {
+  it("REQ-GEN-15/AC3: a source changed after the build, or never built, is named; tests and declarations are not", () => {
+    const root = mkdtempSync(join(tmpdir(), "qj-stale-"));
+    dirs.push(root);
+    write(root, {
+      "src/a.ts": "",
+      "src/sub/b.ts": "",
+      "src/c.ts": "",
+      "src/c.test.ts": "",
+      "src/types.d.ts": "",
+      "src/m.mts": "",
+      "dist/a.js": "",
+      "dist/sub/b.js": "",
+      "dist/m.mjs": "",
+    });
+    const old = new Date(Date.now() - 60_000);
+    utimesSync(join(root, "dist", "a.js"), old, old);
+    expect(staleSources(root)).toEqual(["src/a.ts", "src/c.ts"]);
+    expect(staleSources(join(root, "none"))).toEqual([]);
   });
 });
 

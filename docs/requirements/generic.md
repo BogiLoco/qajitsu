@@ -134,12 +134,23 @@ file other users of the machine could read.
 
 ### REQ-GEN-09 · Signed release images
 
-- Status: proposed
+- Status: in-progress
 - Priority: should
 - Stage: 3
-- Related: REQ-CI-01, REQ-NFR-05
+- Related: REQ-CI-01, REQ-NFR-05, REQ-GEN-15, REQ-OBS-10, INV-8
 
 REQ-CI-01 already ships a Docker image for other CI systems; this makes the release images verifiable.
+
+- Note: built and rehearsed; ticked after the first release ran in GitHub Actions.
+  - AC1..AC3: the image jobs of `.github/workflows/release.yml` and the reusable `.github/workflows/image-publish.yml`
+    (the signer identity), checked by `tests/contract/release-workflow.test.ts`; rehearsed locally with an arm64 OCI
+    archive pushed with skopeo to a local registry with its digest unchanged, signed recursively and verified with
+    cosign (a key instead of the workflow's identity), a wrong key refused, the image pulled by digest and checked.
+  - AC4: the run record is implemented and tested; the tags follow releases only once a release has moved them.
+  - AC5: the demo runs offline in the image (the image check runs it on every pull request); the documented command
+    works once the image is published.
+  - AC6: proven on every pull request by the image check, and by refused mutants (root, a baked token, a token file,
+    a token added and deleted in a later layer, missing plugins).
 
 **Acceptance criteria**
 
@@ -148,7 +159,7 @@ REQ-CI-01 already ships a Docker image for other CI systems; this makes the rele
 - [ ] AC3: Every image is signed and ships with an SBOM and build provenance that a user can check.
 - [ ] AC4: Tags follow releases (exact version, minor and `latest`); runs record the image digest, never only a tag.
 - [ ] AC5: The quick start in the documentation runs the demo-shop flow with one container command and no other installation.
-- [ ] AC6: Images run as a non-root user and contain no secrets; configuration and secrets come only from mounted config or the secret provider.
+- [x] AC6: Images run as a non-root user and contain no secrets; configuration and secrets come only from mounted config or the secret provider.
 
 ### REQ-GEN-10 · Ready-to-run images and a Compose stack
 
