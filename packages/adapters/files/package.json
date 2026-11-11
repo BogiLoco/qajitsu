@@ -1,6 +1,6 @@
 {
   "name": "@qajitsu/adapter-files",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "QAJitsu local-file adapters of the core installation: tickets, workflow, publisher, bug tracker, resolved bugs and manual cases from files (demo, offline runs, tests).",
   "license": "Apache-2.0",
   "repository": {

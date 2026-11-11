@@ -1,6 +1,6 @@
 {
   "name": "@qajitsu/adapter-knowledge-confluence",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "QAJitsu DocumentSource for Confluence spaces and pages (Cloud and Data Center), synced by page version.",
   "license": "Apache-2.0",
   "repository": {

@@ -1,6 +1,6 @@
 {
   "name": "@qajitsu/toolchain",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "QAJitsu toolchain setup: pinned versions, compatibility checks, installs into ~/.qajitsu/toolchain and the environment for the tools QAJitsu starts.",
   "license": "Apache-2.0",
   "repository": {

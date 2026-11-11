@@ -1,6 +1,6 @@
 {
   "name": "@qajitsu/adapter-codehost-github",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "QAJitsu CodeHost for GitHub and GitHub Enterprise Server.",
   "license": "Apache-2.0",
   "repository": {

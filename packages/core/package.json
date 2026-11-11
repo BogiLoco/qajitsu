@@ -1,6 +1,6 @@
 {
   "name": "@qajitsu/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "QAJitsu core: orchestrator, run workspace, statuses, errors, config schema and adapter interfaces.",
   "license": "Apache-2.0",
   "repository": {

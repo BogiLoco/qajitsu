@@ -1,6 +1,6 @@
 {
   "name": "@qajitsu/adapter-evidence-local",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "QAJitsu EvidenceStore on the local disk with a SHA-256 manifest.",
   "license": "Apache-2.0",
   "repository": {

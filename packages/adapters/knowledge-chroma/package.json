@@ -1,6 +1,6 @@
 {
   "name": "@qajitsu/adapter-knowledge-chroma",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "QAJitsu VectorStore on a shared Chroma server over its HTTP API, one collection per project.",
   "license": "Apache-2.0",
   "repository": {

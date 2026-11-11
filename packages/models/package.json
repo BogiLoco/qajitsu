@@ -1,6 +1,6 @@
 {
   "name": "@qajitsu/models",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "QAJitsu model layer: provider-agnostic access to LLMs (cloud, LiteLLM, Ollama) with a model per agent role.",
   "license": "Apache-2.0",
   "repository": {
