@@ -145,18 +145,27 @@ describe("the release workflow (REQ-GEN-15/AC1+AC2)", () => {
     );
     for (const step of steps.slice(index(steps, (s) => s === decide) + 1))
       expect(step.if, JSON.stringify(step)).toBe("steps.decide.outputs.publish == 'true'");
-    // The decision imports nothing but node and this repository's dependency-free release check.
-    for (const file of ["unpublished-check.mjs", "release-check.mjs"]) {
+    // The decision imports nothing but node and this repository's dependency-free release and provenance checks.
+    for (const file of ["unpublished-check.mjs", "release-check.mjs", "provenance-check.mjs"]) {
       const imports = [
         ...readFileSync(join(root, "scripts", file), "utf8").matchAll(/^import .* from "([^"]+)";$/gm),
       ];
-      for (const m of imports) expect(m[1], file).toMatch(/^(node:|\.\/release-check\.mjs$)/);
+      for (const m of imports)
+        expect(m[1], file).toMatch(/^(node:|\.\/release-check\.mjs$|\.\/provenance-check\.mjs$)/);
     }
+    // A release finished by this run accepts, in both provenance checks, exactly the runs the decision named.
+    expect(steps.find((s) => s.name === "provenance of what was published")?.env).toEqual({
+      EARLIER_RUNS: "${{ steps.decide.outputs.earlier-runs }}",
+    });
+    const imageBuild = release.jobs["image-build"]?.steps ?? [];
+    expect(imageBuild.find((s) => s.name === "provenance of the tarballs")?.env).toEqual({
+      EARLIER_RUNS: "${{ needs.release.outputs.earlier-runs }}",
+    });
   });
 
   it("REQ-GEN-15/AC2: before anything is tagged, every package must carry this run's provenance", () => {
     const check = steps.find((s) => s.name === "provenance of what was published");
-    expect(check?.run).toBe('node scripts/provenance-check.mjs "$GITHUB_RUN_ID"');
+    expect(check?.run).toBe('node scripts/provenance-check.mjs "$GITHUB_RUN_ID" $EARLIER_RUNS');
     expect(index(steps, (s) => s === check)).toBeGreaterThan(index(steps, (s) => s === publish));
     expect(index(steps, (s) => s === check)).toBeLessThan(index(steps, (s) => s === githubRelease));
     const imports = [
@@ -215,7 +224,8 @@ describe("the release workflow (REQ-GEN-15/AC1+AC2)", () => {
       // The full check, installs included, ran in the test job; here the published build is inspected again.
       "node scripts/release-check.mjs --no-install",
       // pnpm, not npm: only pnpm turns `workspace:` ranges into the released versions.
-      'pnpm -r --filter "./packages/**" publish --access public --no-git-checks',
+      // One package at a time: npm limits how many new packages may be created in a row (E429).
+      'pnpm -r --workspace-concurrency=1 --filter "./packages/**" publish --access public --no-git-checks',
       "node scripts/release-tags.mjs",
     ]);
   });
@@ -258,6 +268,7 @@ describe("the release image (REQ-GEN-09)", () => {
     expect(job("release")?.outputs).toEqual({
       version: "${{ steps.github-release.outputs.version }}",
       tag: "${{ steps.github-release.outputs.tag }}",
+      "earlier-runs": "${{ steps.decide.outputs.earlier-runs }}",
     });
     expect(named("image-build", "image context")?.run).toBe(
       'node scripts/image-context.mjs "$RUNNER_TEMP/image" --from-registry',
@@ -273,7 +284,7 @@ describe("the release image (REQ-GEN-09)", () => {
   it("REQ-GEN-09/AC1: only tarballs this run published go into the image", () => {
     const order = steps("image-build").map((s) => s.name ?? "");
     expect(named("image-build", "provenance of the tarballs")?.run).toBe(
-      'node scripts/provenance-check.mjs "$GITHUB_RUN_ID"',
+      'node scripts/provenance-check.mjs "$GITHUB_RUN_ID" $EARLIER_RUNS',
     );
     expect(order.indexOf("provenance of the tarballs")).toBeGreaterThan(-1);
     expect(order.indexOf("provenance of the tarballs")).toBeLessThan(order.indexOf("image context"));

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { EXPECTED, integrityHex, provenanceProblems, purl } from "./provenance-check.mjs";
+import { EXPECTED, integrityHex, provenanceProblems, publishedRun, purl } from "./provenance-check.mjs";
 
 const pkg = { name: "@qajitsu/core", version: "0.2.0" };
 const tarball = Buffer.from("the published tarball");
@@ -120,5 +120,29 @@ describe("provenance of what was published (REQ-GEN-15/AC2, REQ-GEN-09)", () => 
     expect(provenanceProblems(pkg, doubled, integrity, "4242")).toEqual([
       "@qajitsu/core@0.2.0 has 2 SLSA provenance attestations, not one",
     ]);
+  });
+
+  it("REQ-GEN-15/AC2: a release finished by a later run accepts the runs that published its start, and only those", () => {
+    expect(provenanceProblems(pkg, attestations(), integrity, ["4250", "4242"])).toEqual([]);
+    expect(provenanceProblems(pkg, attestations(), integrity, ["4250", "4243"])).toEqual([
+      `@qajitsu/core@0.2.0 was published by ${EXPECTED.repository}/actions/runs/4242/attempts/1, not by run 4250 or 4243`,
+    ]);
+    expect(provenanceProblems(pkg, attestations(), integrity, [])).toHaveLength(1);
+  });
+
+  it("REQ-GEN-15/AC2: the run that published a version is read from its provenance, never guessed", () => {
+    expect(publishedRun(attestations())).toBe("4242");
+    expect(publishedRun(undefined)).toBeUndefined();
+    expect(publishedRun({ attestations: [] })).toBeUndefined();
+    const elsewhere = withPredicate((p) => {
+      p.runDetails.metadata.invocationId = "https://github.com/someone/qajitsu/actions/runs/4242/attempts/1";
+      return p;
+    });
+    expect(publishedRun(elsewhere)).toBeUndefined();
+    const odd = withPredicate((p) => {
+      p.runDetails.metadata.invocationId = `${EXPECTED.repository}/actions/runs/4242x/attempts/1`;
+      return p;
+    });
+    expect(publishedRun(odd)).toBeUndefined();
   });
 });

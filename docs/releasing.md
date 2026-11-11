@@ -27,21 +27,26 @@ The workflow has three jobs before the image:
   provenance. Before it installs anything, `scripts/unpublished-check.mjs` asks the registry about every package at its
   version:
   - none of them is there: this run publishes;
+  - some are, each with the provenance of a run of this workflow on `main` (a release the registry stopped half-way,
+    e.g. with npm's limit on how many new packages may be created in a row, `E429`): this run publishes the rest and
+    finishes that release. Re-run the failed job, or wait for the next push to `main`;
   - all of them are and the CLI's release tag exists: the release is done, the job does nothing;
-  - anything else (some are there, all are there but no release run tagged them, the registry does not answer): the
-    job fails. `pnpm -r publish` would skip a version that is already there, and the release and its image would then
-    carry a tarball someone else published. Finish such a release by hand, after checking with `npm view
-<package>@<version> --json` that what is there has this workflow's provenance.
+  - anything else (a version without that provenance, all of them there but no release run tagged them, the registry
+    does not answer): the job fails. `pnpm -r publish` would skip a version that is already there, and the release
+    and its image would then carry a tarball someone else published. Look at what is there with `npm view
+<package>@<version> --json` before doing anything by hand.
 
   `pnpm release` then publishes:
   1. the publish guard;
   2. `pnpm clean` and `pnpm build`, so no stale file reaches a package;
   3. the release check without installs (`--no-install`): the tarballs that are published are inspected again;
-  4. `pnpm -r publish` with npm provenance: pnpm, not npm, because only pnpm turns `workspace:` ranges into versions;
+  4. `pnpm -r publish` with npm provenance, one package at a time: pnpm, not npm, because only pnpm turns `workspace:`
+     ranges into versions;
   5. `scripts/release-tags.mjs` tags each published version (`changeset git-tag`).
 
   Then `scripts/provenance-check.mjs` reads every package back from the registry: its npm provenance must name this
-  repository, `.github/workflows/release.yml`, `refs/heads/main`, a push and this very run, and must be about the
+  repository, `.github/workflows/release.yml`, `refs/heads/main`, a push and this very run (or, when it finishes a
+  release, the run that published its start), and must be about the
   tarball the registry serves. A version someone published in the minutes between the decision and the publish, which
   pnpm skipped, fails the job here, before `scripts/github-release.mjs` pushes the tags and creates the GitHub release
   with the CLI's changelog.
