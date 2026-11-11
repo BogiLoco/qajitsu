@@ -82,7 +82,12 @@ export async function projectChecks(
 
   const services = Object.values(project.config.services);
   if (services.some((s) => s.kind !== "process")) {
-    const version = await run("docker", ["version", "--format", "{{.Server.Version}}"]);
+    // Through the same port as every other tool's version (replaced in tests), so doctor and init see one machine.
+    const version = await (ports.versionExec ?? run)("docker", [
+      "version",
+      "--format",
+      "{{.Server.Version}}",
+    ]);
     checks.push({
       name: "docker",
       ok: version !== undefined,

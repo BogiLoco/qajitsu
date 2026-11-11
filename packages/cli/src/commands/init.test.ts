@@ -88,6 +88,22 @@ describe("qajitsu init (REQ-GEN-03/AC3)", () => {
     expect(doctor.out).toContain("✘ compose: not found (needed for --build with compose services)");
   });
 
+  it("REQ-GEN-08/AC1: whether Docker is there is asked through the same port as every other tool", async () => {
+    // Without Docker at all, init and doctor say so, whether or not the machine running the test has Docker.
+    const repo = await otherProject();
+    const noDocker = (cmd: string) => Promise.resolve(cmd === "docker" ? undefined : "1.0.0");
+    const r = await run(
+      repo,
+      ["init", "pet-clinic", "--yes", "--env-url", "http://localhost:8080"],
+      undefined,
+      {},
+      noDocker,
+    );
+    expect(r.out).toMatch(/NOT READY:[\s\S]*✘ docker: docker is not available \(needed by --build\)/);
+    const doctor = await run(repo, ["doctor"], undefined, {}, noDocker);
+    expect(doctor.out).toContain("docker is not available (needed by --build)");
+  });
+
   it("REQ-GEN-03/AC3 + REQ-PRJ-02/AC2+AC3+AC5: onboards an unrelated project interactively, detecting host, compose, OpenAPI and test types", async () => {
     const repo = await otherProject();
     const r = await run(
