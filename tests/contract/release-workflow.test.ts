@@ -1,4 +1,5 @@
 // The release pipeline of the repository (REQ-GEN-15): what it runs, in which order, with which rights.
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -224,10 +225,33 @@ describe("the release workflow (REQ-GEN-15/AC1+AC2)", () => {
       // The full check, installs included, ran in the test job; here the published build is inspected again.
       "node scripts/release-check.mjs --no-install",
       // pnpm, not npm: only pnpm turns `workspace:` ranges into the released versions.
-      // One package at a time: npm limits how many new packages may be created in a row (E429).
-      'pnpm -r --workspace-concurrency=1 --filter "./packages/**" publish --access public --no-git-checks',
+      'pnpm -r --filter "./packages/**" publish --access public --no-git-checks',
       "node scripts/release-tags.mjs",
     ]);
+  });
+
+  it("REQ-GEN-15/AC2: pnpm accepts the publish command as the release runs it", () => {
+    // Run for real against no package at all, so only the options are checked: an option pnpm does not know fails
+    // the release after its build, as `--workspace-concurrency` once did.
+    const publish = (scripts["release"] ?? "")
+      .split("&&")
+      .map((s) => s.trim())
+      .find((s) => s.includes(" publish "));
+    expect(publish).toBeDefined();
+    const args = (publish ?? "")
+      .replace('--filter "./packages/**"', "--filter ./does-not-exist/**")
+      .split(/\s+/)
+      .slice(1);
+    expect(args).toContain("./does-not-exist/**");
+    const r = spawnSync("pnpm", [...args, "--dry-run"], { cwd: root, encoding: "utf8" });
+    expect(`${r.stdout}${r.stderr}`).not.toMatch(/Unknown option/);
+    expect(r.status, `${r.stdout}${r.stderr}`).toBe(0);
+    // The probe itself is not vacuous: an unknown option does fail.
+    const bad = spawnSync("pnpm", [...args, "--dry-run", "--no-such-option"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    expect(bad.status).not.toBe(0);
   });
 
   it("REQ-GEN-15/AC2: a package published by hand is refused before it is packed", () => {
