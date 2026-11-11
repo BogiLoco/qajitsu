@@ -47,6 +47,6 @@ describe("platforms (REQ-NFR-07)", () => {
       jobs: Record<string, { strategy?: { matrix?: { os?: string[] } } }>;
     };
     for (const job of ["verify", "e2e"])
-      expect(ci.jobs[job]?.strategy?.matrix?.os).toEqual(["ubuntu-latest", "macos-latest"]);
+      expect(ci.jobs[job]?.strategy?.matrix?.os).toEqual(["ubuntu-24.04", "macos-latest"]);
   });
 });

@@ -186,6 +186,19 @@ describe("the release workflow (REQ-GEN-15/AC1+AC2)", () => {
       }
   });
 
+  it("REQ-GEN-15/AC2: every Linux job runs on a pinned runner image, never on one that moves under the release", () => {
+    // ubuntu-latest moved to a new Ubuntu while a release ran, and its package mirrors did not resolve there.
+    for (const name of WORKFLOWS) {
+      const text = readFileSync(join(root, ".github", "workflows", name), "utf8");
+      expect(text, name).not.toContain("ubuntu-latest");
+      for (const [id, job] of Object.entries(workflow(name).jobs)) {
+        const runsOn = (job as { "runs-on"?: string })["runs-on"];
+        if (runsOn !== undefined && !runsOn.includes("matrix.") && !runsOn.startsWith("macos"))
+          expect(runsOn, `${name} ${id}`).toMatch(/^ubuntu-\d{2}\.\d{2}$/);
+      }
+    }
+  });
+
   it("REQ-GEN-15/AC1: the version pull request is made by code: versions, changelogs, plugin catalogue, lockfile", () => {
     expect(changesets?.id).toBe("changesets");
     // The action publishes nothing itself: publishing is another job, with its own token.

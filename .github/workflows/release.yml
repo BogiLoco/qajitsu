@@ -28,7 +28,7 @@ concurrency:
 jobs:
   test:
     if: github.repository == 'BogiLoco/qajitsu'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:
       contents: read
@@ -60,7 +60,7 @@ jobs:
   # contents and pull requests) gives it them (docs/releasing.md).
   version:
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: write # the version branch
@@ -91,7 +91,7 @@ jobs:
   release:
     needs: version
     if: needs.version.outputs.has-changesets == 'false'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     # The npm token lives in this environment only; it can be limited to main and to reviewers in the settings.
     environment: npm-publish
@@ -154,7 +154,7 @@ jobs:
   image-build:
     needs: release
     if: needs.release.outputs.version != ''
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     permissions:
       contents: read
@@ -261,7 +261,7 @@ jobs:
 
   image-verify:
     needs: [release, image-publish]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:
       contents: read
@@ -290,7 +290,7 @@ jobs:
 
   image-notes:
     needs: [release, image-publish]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write # the release notes
