@@ -30,7 +30,10 @@
     "changeset": "changeset",
     "req:list": "node scripts/requirements.mjs list",
     "demo": "pnpm build && node scripts/demo.mjs",
-    "plugins:catalogue": "node scripts/plugin-catalogue.mjs"
+    "plugins:catalogue": "node scripts/plugin-catalogue.mjs",
+    "release:check": "node scripts/release-check.mjs",
+    "version-packages": "changeset version && node scripts/plugin-catalogue.mjs && pnpm install --lockfile-only && prettier --write \"packages/**/CHANGELOG.md\" packages/cli/plugins.json",
+    "release": "node scripts/publish-guard.mjs && pnpm clean && pnpm build && node scripts/release-check.mjs --no-install && pnpm -r --filter \"./packages/**\" publish --access public --no-git-checks && node scripts/release-tags.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.3",

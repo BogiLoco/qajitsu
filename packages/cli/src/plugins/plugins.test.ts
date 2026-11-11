@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, readlink, rm, writeFile } from "node:fs/promises";
+import { existsSync, realpathSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
+import { Module } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { PLUGIN_API_VERSION, ProjectConfigSchema, type PluginError } from "@qajitsu/core";
 import type { RunExec } from "@qajitsu/toolchain";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -400,6 +402,110 @@ describe("plugins: install, load, remove (REQ-GEN-11)", () => {
     );
     expect(bundledPackageDir("@qajitsu/core")).toMatch(/packages\/core$/);
     expect(bundledPackageDir("@qajitsu/adapter-not-there")).toBeUndefined();
+  });
+
+  it("REQ-GEN-11/AC2 + REQ-GEN-15/AC5: a linked package is found by its folder, built or not (CI runs tests before the build)", async () => {
+    // A workspace like this one: the CLI's node_modules links to the package's own folder, which has no dist/ yet.
+    const work = await mkdtemp(join(tmpdir(), "qj-bundled-"));
+    const real = join(work, "packages", "adapters", "fake");
+    await mkdir(real, { recursive: true });
+    await writeFile(
+      join(real, "package.json"),
+      JSON.stringify({ name: "@qajitsu/adapter-fake", exports: { ".": { import: "./dist/index.js" } } }),
+    );
+    const cli = join(work, "packages", "cli");
+    await mkdir(join(cli, "node_modules", "@qajitsu"), { recursive: true });
+    await writeFile(join(cli, "package.json"), JSON.stringify({ name: "@qajitsu/cli" }));
+    await symlink(real, join(cli, "node_modules", "@qajitsu", "adapter-fake"));
+    // Another package of the same scope whose folder holds a different package is not taken for it.
+    await mkdir(join(cli, "node_modules", "@qajitsu", "adapter-other"), { recursive: true });
+    await writeFile(join(cli, "node_modules", "@qajitsu", "adapter-other", "package.json"), '{"name":"x"}');
+    // A folder without a readable manifest stops the lookup, as it stops Node; a copy further up is not taken.
+    await mkdir(join(cli, "node_modules", "@qajitsu", "adapter-broken"), { recursive: true });
+    await mkdir(join(work, "node_modules", "@qajitsu", "adapter-broken"), { recursive: true });
+    await writeFile(
+      join(work, "node_modules", "@qajitsu", "adapter-broken", "package.json"),
+      '{"name":"@qajitsu/adapter-broken"}',
+    );
+    const from = pathToFileURL(join(cli, "dist", "plugins", "load.js")).toString();
+    try {
+      expect(bundledPackageDir("@qajitsu/adapter-fake", from)).toBe(realpathSync(real));
+      expect(bundledPackageDir("@qajitsu/adapter-other", from)).toBeUndefined();
+      expect(bundledPackageDir("@qajitsu/adapter-broken", from)).toBeUndefined();
+      expect(bundledPackageDir("@qajitsu/adapter-none", from)).toBeUndefined();
+    } finally {
+      await rm(work, { recursive: true, force: true });
+    }
+  });
+
+  /** Makes Node read NODE_PATH again, as a process started with it would. */
+  const reinitPaths = (): void => {
+    (Module as unknown as { _initPaths?: () => void })._initPaths?.();
+  };
+
+  it("REQ-GEN-11/AC9 + ADR-0015: a package in NODE_PATH or a global folder is never taken for one of the installation", async () => {
+    const work = await mkdtemp(join(tmpdir(), "qj-planted-"));
+    const planted = join(work, "global", "@qajitsu", "adapter-runner-api");
+    await mkdir(planted, { recursive: true });
+    await writeFile(join(planted, "package.json"), JSON.stringify({ name: "@qajitsu/adapter-runner-api" }));
+    const cli = join(work, "app", "node_modules", "@qajitsu", "cli", "dist", "plugins");
+    await mkdir(cli, { recursive: true });
+    await writeFile(
+      join(work, "app", "node_modules", "@qajitsu", "cli", "package.json"),
+      '{"name":"@qajitsu/cli"}',
+    );
+    const before = process.env["NODE_PATH"];
+    process.env["NODE_PATH"] = join(work, "global");
+    // Node reads NODE_PATH when it starts; the lookup must not depend on it either way.
+    reinitPaths();
+    try {
+      expect(
+        bundledPackageDir("@qajitsu/adapter-runner-api", pathToFileURL(join(cli, "load.js")).toString()),
+      ).toBeUndefined();
+    } finally {
+      if (before === undefined) delete process.env["NODE_PATH"];
+      else process.env["NODE_PATH"] = before;
+      reinitPaths();
+      await rm(work, { recursive: true, force: true });
+    }
+  });
+
+  it("REQ-GEN-11/AC9 + ADR-0015: only the CLI's own installation counts as bundled, not a folder above it", async () => {
+    // A CLI installed into a project: its dependencies sit next to it in the project's node_modules.
+    const work = await mkdtemp(join(tmpdir(), "qj-tree-"));
+    const modules = join(work, "home", "project", "node_modules");
+    const cliRoot = join(modules, "@qajitsu", "cli");
+    await mkdir(join(cliRoot, "dist", "plugins"), { recursive: true });
+    await writeFile(join(cliRoot, "package.json"), '{"name":"@qajitsu/cli"}');
+    const pkg = async (dir: string, name: string) => {
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, "package.json"), JSON.stringify({ name }));
+    };
+    await pkg(join(modules, "@qajitsu", "adapter-files"), "@qajitsu/adapter-files");
+    await pkg(join(cliRoot, "node_modules", "@qajitsu", "core"), "@qajitsu/core");
+    // Planted above the installation: in the user's home and at the root of the work folder.
+    await pkg(
+      join(work, "home", "node_modules", "@qajitsu", "adapter-secrets-vault"),
+      "@qajitsu/adapter-secrets-vault",
+    );
+    await pkg(join(work, "node_modules", "@qajitsu", "adapter-runner-api"), "@qajitsu/adapter-runner-api");
+    const from = pathToFileURL(join(cliRoot, "dist", "plugins", "load.js")).toString();
+    try {
+      expect(bundledPackageDir("@qajitsu/adapter-files", from)).toBe(
+        realpathSync(join(modules, "@qajitsu", "adapter-files")),
+      );
+      expect(bundledPackageDir("@qajitsu/core", from)).toBe(
+        realpathSync(join(cliRoot, "node_modules", "@qajitsu", "core")),
+      );
+      expect(bundledPackageDir("@qajitsu/adapter-secrets-vault", from)).toBeUndefined();
+      expect(bundledPackageDir("@qajitsu/adapter-runner-api", from)).toBeUndefined();
+      // Without a CLI package above the module there is no installation to trust.
+      expect(
+        bundledPackageDir("@qajitsu/core", pathToFileURL(join(work, "loose", "load.js")).toString()),
+      ).toBeUndefined();
+    } finally {
+      await rm(work, { recursive: true, force: true });
+    }
   });
 
   it("REQ-GEN-11/AC7: the manifest is read from the tarball itself; anything else is refused", () => {

@@ -110,7 +110,7 @@ ticket unless you pass `--run <id>`. A new `qj fetch` starts a new run.
 
 | Needed for | What                                                                                                              |
 | ---------- | ----------------------------------------------------------------------------------------------------------------- |
-| everything | Node.js 22.12 or newer, git, pnpm (`corepack enable`)                                                             |
+| everything | Node.js 22.12 or newer and git; pnpm (`corepack enable`) only to build from source                                |
 | web tests  | the Playwright browsers of the web matrix                                                                         |
 | `--build`  | Docker with Compose v2 (for `kind: compose` services); not needed for `kind: process`                             |
 | Android    | Java 17+, the Android SDK (platform tools, emulator, a system image, an AVD), Appium with the UiAutomator2 driver |
@@ -122,7 +122,17 @@ with ([Install the tools](#install-the-tools-qj-setup)); tools you already have 
 
 Linux and macOS are supported (CI runs on both). Windows: use WSL 2.
 
-### Build and put `qj` on the PATH
+### Install `qj`
+
+```sh
+npm install -g @qajitsu/cli      # from the first release on; until then, build it from this repository below
+qj --version
+```
+
+It installs the CLI with the core adapters only. The plugins a project needs (runners, Jira, GitHub, GitLab, knowledge
+stores) are installed by `qj init` and `qj setup`, or by hand with `qj plugin add <id>`.
+
+### Or build it from this repository
 
 ```sh
 git clone <this repository> qajitsu && cd qajitsu

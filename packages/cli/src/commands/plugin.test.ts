@@ -22,10 +22,13 @@ import { optionalPlugin, pluginCheck, pluginVersions } from "./plugin.js";
 import { npmTarball } from "../../../../tests/support/npm-tarball.js";
 
 const LANCE = "@qajitsu/adapter-knowledge-lancedb";
+/** The version this release pins, as the catalogue says (0.0.0 before the first release, then each release's). */
+const V = readCatalogue().plugins["knowledge-lancedb"]?.version ?? "?";
+const V_RE = V.replace(/\./g, "\\.");
 const TARBALL = npmTarball({
   "package.json": {
     name: LANCE,
-    version: "0.0.0",
+    version: V,
     qajitsu: { plugin: { types: ["knowledge store"], core_api: "^1.0.0" } },
   },
 });
@@ -51,7 +54,20 @@ async function project(knowledge = true): Promise<void> {
   );
   await registerProject(qjHome, { slug: "shop", qaDir: qa });
   await setActiveProject(qjHome, "shop");
-  if (knowledge) await mkdir(projectPaths(qjHome, "shop").knowledge, { recursive: true });
+  // `qj init` always creates the knowledge folder; a knowledge base is a folder with sources in it.
+  await mkdir(projectPaths(qjHome, "shop").knowledge, { recursive: true });
+  if (knowledge)
+    await writeKnowledgeSources(projectPaths(qjHome, "shop").knowledge, [
+      {
+        name: "docs",
+        kind: "files",
+        path: "docs",
+        include: [],
+        exclude: [],
+        tags: [],
+        added_at: "2026-11-03T10:00:00.000Z",
+      },
+    ]);
 }
 
 /** This installation without LanceDB: every other official plugin is still part of it. */
@@ -72,7 +88,7 @@ const npm: RunExec = async (_cmd, args) => {
     join(dir, "package.json"),
     JSON.stringify({
       name: LANCE,
-      version: "0.0.0",
+      version: V,
       qajitsu: { plugin: { types: ["knowledge store"], core_api: "^1.0.0" } },
     }),
   );
@@ -82,7 +98,7 @@ const npm: RunExec = async (_cmd, args) => {
 
 const registry: typeof fetch = (input) => {
   const url = input instanceof Request ? input.url : input.toString();
-  if (url === "https://registry.npmjs.org/@qajitsu%2fadapter-knowledge-lancedb/0.0.0")
+  if (url === `https://registry.npmjs.org/@qajitsu%2fadapter-knowledge-lancedb/${V}`)
     return Promise.resolve(
       Response.json({ dist: { tarball: "https://registry.npmjs.org/lance.tgz", integrity } }),
     );
@@ -139,6 +155,18 @@ describe("qj plugin (REQ-GEN-11)", () => {
     expect((await pluginCheck(await loaded(), ports())).ok).toBe(true);
   });
 
+  it("REQ-GEN-11/AC2 + REQ-GEN-15/AC4: a new project's empty knowledge folder needs no knowledge store (release check finding)", async () => {
+    await project(false);
+    expect((await pluginCheck(await loaded(), ports())).ok).toBe(true);
+    // A knowledge base that was indexed once still needs its store, even with its sources removed.
+    await writeFile(join(projectPaths(qjHome, "shop").knowledge, "index.json"), "{}");
+    expect((await pluginCheck(await loaded(), ports())).detail).toContain("knowledge-lancedb missing");
+    // A sources file that cannot be read does not hide the store the knowledge base needs.
+    await rm(join(projectPaths(qjHome, "shop").knowledge, "index.json"));
+    await writeFile(join(projectPaths(qjHome, "shop").knowledge, "sources.yaml"), "schema: [broken");
+    expect((await pluginCheck(await loaded(), ports())).detail).toContain("knowledge-lancedb missing");
+  });
+
   it("REQ-GEN-11/AC2: an online knowledge source needs its plugin", async () => {
     await project();
     await writeKnowledgeSources(projectPaths(qjHome, "shop").knowledge, [
@@ -154,7 +182,9 @@ describe("qj plugin (REQ-GEN-11)", () => {
     ]);
     const r = await qj(["plugin", "list"]);
     expect(r.out).toMatch(
-      /knowledge-confluence\s+0\.0\.0 part of this installation; needed by knowledge source confluence:SHOP/,
+      new RegExp(
+        `knowledge-confluence\\s+${V_RE} part of this installation; needed by knowledge source confluence:SHOP`,
+      ),
     );
   });
 
@@ -163,8 +193,10 @@ describe("qj plugin (REQ-GEN-11)", () => {
     const r = await qj(["plugin", "list"]);
     expect(r.exitCode).toBe(0);
     expect(r.out).toMatch(/✘ knowledge-lancedb\s+not installed; needed by knowledge\.store: lancedb/);
-    expect(r.out).toMatch(/✔ runner-api\s+0\.0\.0 part of this installation; needed by test runs/);
-    expect(r.out).toMatch(/✔ secrets-vault\s+0\.0\.0 part of this installation$/m);
+    expect(r.out).toMatch(
+      new RegExp(`✔ runner-api\\s+${V_RE} part of this installation; needed by test runs`),
+    );
+    expect(r.out).toMatch(new RegExp(`✔ secrets-vault\\s+${V_RE} part of this installation$`, "m"));
   });
 
   it("REQ-GEN-11/AC3: plugin add installs the pinned version; a plugin of the installation needs nothing", async () => {
@@ -172,12 +204,12 @@ describe("qj plugin (REQ-GEN-11)", () => {
     const p = ports();
     const added = await qj(["plugin", "add", "knowledge-lancedb"], p);
     expect(added.exitCode).toBe(0);
-    expect(added.out).toContain("Installed knowledge-lancedb 0.0.0");
+    expect(added.out).toContain(`Installed knowledge-lancedb ${V}`);
     expect((await qj(["plugin", "list"], p)).out).toMatch(
-      /✔ knowledge-lancedb\s+0\.0\.0 installed from the registry/,
+      new RegExp(`✔ knowledge-lancedb\\s+${V_RE} installed from the registry`),
     );
     const bundled = await qj(["plugin", "add", "codehost-local"], p);
-    expect(bundled.out).toContain("codehost-local 0.0.0 is part of this installation; nothing to install.");
+    expect(bundled.out).toContain(`codehost-local ${V} is part of this installation; nothing to install.`);
     const unknown = await qj(["plugin", "add", "teleporter"], p);
     expect(unknown.exitCode).toBe(3);
     expect(unknown.err).toContain("[PLUGIN_UNKNOWN]");
@@ -188,10 +220,10 @@ describe("qj plugin (REQ-GEN-11)", () => {
     const p = ports();
     expect(await pluginVersions(await loaded(), p)).toMatchObject({
       "plugin knowledge-lancedb": "missing",
-      "plugin runner-api": "0.0.0 (bundled)",
+      "plugin runner-api": `${V} (bundled)`,
     });
     await qj(["plugin", "add", "knowledge-lancedb"], p);
-    expect((await pluginVersions(await loaded(), p))["plugin knowledge-lancedb"]).toBe("0.0.0 (installed)");
+    expect((await pluginVersions(await loaded(), p))["plugin knowledge-lancedb"]).toBe(`${V} (installed)`);
   });
 
   it("REQ-GEN-11/AC10: remove is refused while a project uses the plugin, then deletes it", async () => {
@@ -205,7 +237,7 @@ describe("qj plugin (REQ-GEN-11)", () => {
     await rm(projectPaths(qjHome, "shop").knowledge, { recursive: true });
     const removed = await qj(["plugin", "remove", "knowledge-lancedb"], p);
     expect(removed.exitCode).toBe(0);
-    expect(removed.out).toContain("Removed knowledge-lancedb 0.0.0.");
+    expect(removed.out).toContain(`Removed knowledge-lancedb ${V}.`);
     expect(existsSync(join(qjHome, "plugins", "knowledge-lancedb"))).toBe(false);
   });
 
@@ -225,7 +257,7 @@ describe("qj plugin (REQ-GEN-11)", () => {
     expect(existsSync(join(qjHome, "plugins", "knowledge-lancedb"))).toBe(false);
     const setup = await qj(["setup", "--yes"], p);
     expect(setup.out).toContain("✔ plugin knowledge-lancedb installed");
-    expect(existsSync(join(qjHome, "plugins", "knowledge-lancedb", "0.0.0"))).toBe(true);
+    expect(existsSync(join(qjHome, "plugins", "knowledge-lancedb", V))).toBe(true);
   });
 
   it("REQ-GEN-11/AC2: a knowledge command without its store plugin stops with the install command", async () => {
@@ -245,13 +277,13 @@ describe("qj plugin (REQ-GEN-11)", () => {
     await project(false);
     const web = {
       name: "@qajitsu/adapter-runner-web",
-      version: "0.0.0",
+      version: V,
       peerDependencies: { "@qajitsu/adapter-runner-api": "*" },
       qajitsu: { plugin: { types: ["runner"], core_api: "^1.0.0" } },
     };
     const api = {
       name: "@qajitsu/adapter-runner-api",
-      version: "0.0.0",
+      version: V,
       qajitsu: { plugin: { types: ["runner"], core_api: "^1.0.0" } },
     };
     const tarballs: Record<string, Uint8Array> = {
@@ -265,7 +297,7 @@ describe("qj plugin (REQ-GEN-11)", () => {
         ["web", web],
         ["api", api],
       ] as const) {
-        if (url === `https://registry.npmjs.org/${pkg.name.replace("/", "%2f")}/0.0.0`)
+        if (url === `https://registry.npmjs.org/${pkg.name.replace("/", "%2f")}/${V}`)
           return Promise.resolve(
             Response.json({
               dist: {
@@ -302,9 +334,9 @@ describe("qj plugin (REQ-GEN-11)", () => {
     };
     const r = await qj(["plugin", "add", "runner-web"], p);
     expect(r.exitCode).toBe(0);
-    expect(r.out).toContain("Installed runner-web 0.0.0");
+    expect(r.out).toContain(`Installed runner-web ${V}`);
     expect(r.out).toContain("Installed runner-api, which runner-web needs");
-    expect(existsSync(join(qjHome, "plugins", "runner-api", "0.0.0"))).toBe(true);
+    expect(existsSync(join(qjHome, "plugins", "runner-api", V))).toBe(true);
   });
 
   it("REQ-GEN-11/AC1: qj init installs the official plugins the chosen setup needs", async () => {
@@ -312,7 +344,7 @@ describe("qj plugin (REQ-GEN-11)", () => {
       id,
       pkg: {
         name: `@qajitsu/adapter-${id}`,
-        version: "0.0.0",
+        version: V,
         qajitsu: { plugin: { types: ["ticket source"], core_api: "^1.0.0" } },
       },
     }));
@@ -322,7 +354,7 @@ describe("qj plugin (REQ-GEN-11)", () => {
       const url = input instanceof Request ? input.url : input.toString();
       for (const { id, pkg } of pkgs) {
         const t = tarballs.get(id) ?? new Uint8Array();
-        if (url === `https://registry.npmjs.org/${pkg.name.replace("/", "%2f")}/0.0.0`)
+        if (url === `https://registry.npmjs.org/${pkg.name.replace("/", "%2f")}/${V}`)
           return Promise.resolve(
             Response.json({ dist: { tarball: `https://registry.npmjs.org/${id}.tgz`, integrity: sha(t) } }),
           );
@@ -366,10 +398,10 @@ describe("qj plugin (REQ-GEN-11)", () => {
         toolchain: { host: { os: "darwin", arch: "arm64" }, run: npmAny },
       },
     );
-    expect(r.out).toContain("plugin ticket-jira: installing @qajitsu/adapter-ticket-jira@0.0.0");
-    expect(r.out).toContain("plugin publish-jira: installing @qajitsu/adapter-publish-jira@0.0.0");
-    expect(existsSync(join(qjHome, "plugins", "ticket-jira", "0.0.0"))).toBe(true);
-    expect(existsSync(join(qjHome, "plugins", "publish-jira", "0.0.0"))).toBe(true);
+    expect(r.out).toContain(`plugin ticket-jira: installing @qajitsu/adapter-ticket-jira@${V}`);
+    expect(r.out).toContain(`plugin publish-jira: installing @qajitsu/adapter-publish-jira@${V}`);
+    expect(existsSync(join(qjHome, "plugins", "ticket-jira", V))).toBe(true);
+    expect(existsSync(join(qjHome, "plugins", "publish-jira", V))).toBe(true);
   });
 
   it("REQ-GEN-11/AC6: setup --download puts the plugins into the bundle; setup --from installs them offline", async () => {
@@ -377,13 +409,13 @@ describe("qj plugin (REQ-GEN-11)", () => {
     const bundle = join(home, "bundle");
     const download = await qj(["setup", "--download", bundle, "--yes"]);
     expect(download.out + download.err).toContain("plugin knowledge-lancedb: into the bundle");
-    expect(existsSync(join(bundle, "plugins", "knowledge-lancedb", "0.0.0"))).toBe(true);
+    expect(existsSync(join(bundle, "plugins", "knowledge-lancedb", V))).toBe(true);
     // The offline machine: no network, nothing installed yet.
     await rm(join(qjHome, "plugins"), { recursive: true, force: true });
     const offline: RuntimePorts = { ...ports(), fetch: () => Promise.reject(new Error("offline")) };
     const imported = await qj(["setup", "--from", bundle, "--yes"], offline);
     expect(imported.out + imported.err).toContain(
-      "✔ plugin knowledge-lancedb 0.0.0 installed from the bundle",
+      `✔ plugin knowledge-lancedb ${V} installed from the bundle`,
     );
     expect((await pluginCheck(await loaded(), offline)).ok).toBe(true);
     const history = await readFile(join(qjHome, "plugins", "history.jsonl"), "utf8");

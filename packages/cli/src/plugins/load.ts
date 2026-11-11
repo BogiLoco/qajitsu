@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { lstat, mkdir, readlink, rm, symlink } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { PLUGIN_API_VERSION, PluginError, parsePluginManifest, type PluginManifest } from "@qajitsu/core";
 import { satisfies } from "@qajitsu/toolchain";
@@ -49,20 +49,52 @@ export interface PluginLoader {
   manifest(id: string): Promise<PluginManifest>;
 }
 
-/** The folder of a package resolved by the CLI, or undefined when this installation does not carry it. */
-export function bundledPackageDir(name: string): string | undefined {
-  let file: string;
-  try {
-    file = fileURLToPath(import.meta.resolve(name));
-  } catch {
-    return undefined;
-  }
-  for (let dir = dirname(file); dirname(dir) !== dir; dir = dirname(dir)) {
-    const pj = join(dir, "package.json");
-    if (existsSync(pj) && (JSON.parse(readFileSync(pj, "utf8")) as { name?: unknown }).name === name)
-      return dir;
+/**
+ * The folder of a package this installation carries, or undefined when it does not (REQ-GEN-11, ADR-0015). Only the
+ * CLI's own tree counts: its own `node_modules`, then the `node_modules` folder the CLI sits in (npm and pnpm put its
+ * dependencies there). Folders above it (a project's, the home folder's, `NODE_PATH`, global folders) never do: anyone
+ * could put a package there, and a bundled plugin skips the checks an installed one gets. The first folder found is
+ * the package, as for Node; its own `package.json` decides, so a package is found whether or not it was built (CI
+ * tests before the build), and a linked package resolves to its real folder.
+ *
+ * @param name - The package name, e.g. `@qajitsu/adapter-knowledge-lancedb`.
+ * @param from - Where the lookup starts (this module; replaced in tests).
+ */
+export function bundledPackageDir(name: string, from: string = import.meta.url): string | undefined {
+  const root = cliRoot(dirname(fileURLToPath(from)));
+  if (root === undefined) return undefined;
+  const folders = [join(root, "node_modules")];
+  for (let dir = dirname(root); dirname(dir) !== dir; dir = dirname(dir))
+    if (basename(dir) === "node_modules") {
+      folders.push(dir);
+      break;
+    }
+  for (const folder of folders) {
+    const candidate = join(folder, ...name.split("/"));
+    if (!existsSync(candidate)) continue;
+    let manifest: { name?: unknown } | undefined;
+    try {
+      manifest = JSON.parse(readFileSync(join(candidate, "package.json"), "utf8")) as { name?: unknown };
+    } catch {
+      manifest = undefined;
+    }
+    // Node stops at this folder: one without the package's own manifest is not this package.
+    return manifest?.name === name ? realpathSync(candidate) : undefined;
   }
   return undefined;
+}
+
+/** The folder of the `@qajitsu/cli` package the module belongs to, or undefined outside one. */
+function cliRoot(start: string): string | undefined {
+  for (let dir = start; ; dir = dirname(dir)) {
+    try {
+      const manifest = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as { name?: unknown };
+      if (manifest.name === "@qajitsu/cli") return dir;
+    } catch {
+      // No manifest here; look further up.
+    }
+    if (dirname(dir) === dir) return undefined;
+  }
 }
 
 /** The ESM entry of an installed package (`exports["."].import`, `exports["."]` or `main`). */

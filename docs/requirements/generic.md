@@ -253,3 +253,24 @@ none needs a redesign later.
 - [x] AC3: For each plugin type the inventory names the interface it implements and the gaps: an interface that does not fit a listed plugin is changed in an ADR before implementation starts.
 - [x] AC4: The inventory decides what the core keeps and what becomes a plugin, and in which order integrations move out into plugins; it is reviewed and accepted before REQ-GEN-11 is implemented.
 - [x] AC5: A check keeps it current: an integration package or a requirement naming an integration that is missing from the inventory fails `pnpm req:check`.
+
+### REQ-GEN-15 · Releases of installable packages
+
+- Status: in-progress
+- Priority: must
+- Stage: 3
+- Related: REQ-GEN-09, REQ-GEN-11, REQ-NFR-05, INV-11
+
+A pilot starts with `npm install -g @qajitsu/cli`. The packages must install from the registry on a clean machine and do
+what the repository's tests say they do; nothing is released from a person's laptop.
+
+- Note: AC2 is built and its workflow is checked by `tests/contract/release-workflow.test.ts`; it is ticked after the
+  first release ran, which needs the `qajitsu` npm organisation and the `NPM_TOKEN` secret (docs/releasing.md).
+
+**Acceptance criteria**
+
+- [x] AC1: A merge to `main` with pending changesets opens or updates one version pull request: versions, changelogs, the plugin catalogue the CLI pins (REQ-GEN-11/AC3) and the lockfile, all from code.
+- [ ] AC2: Merging the version pull request publishes every package, all at one version, from a fresh CI checkout with npm provenance, tags each and creates the version's GitHub release; the job that holds the token runs no dependency code but the build, and a local publish is refused.
+- [x] AC3: Before anything is published, a release check packs every package as it would be published and refuses the release when a tarball lacks a file its `main`, `types`, `exports` or `bin` names, keeps a `workspace:` dependency, carries tests, source maps without source, build info, environment files or stale build output, misses its licence, readme, repository, Node.js engine or public access, or is over its size budget.
+- [x] AC4: The release check installs the CLI from those tarballs with npm into an empty folder and runs it without network access to QAJitsu services or models: version, help, `init` of a new project, `doctor`, and installing, listing and removing a plugin from a tarball; any failure refuses the release.
+- [x] AC5: The same check runs on every pull request, so a change that breaks the published packages fails before it merges.

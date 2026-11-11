@@ -3,7 +3,23 @@
   "version": "0.0.0",
   "description": "QAJitsu EvidenceStore on the local disk with a SHA-256 manifest.",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BogiLoco/qajitsu.git",
+    "directory": "packages/adapters/evidence-local"
+  },
+  "homepage": "https://github.com/BogiLoco/qajitsu/tree/main/packages/adapters/evidence-local#readme",
+  "bugs": {
+    "url": "https://github.com/BogiLoco/qajitsu/issues"
+  },
   "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "exports": {
     ".": {
       "qajitsu-source": "./src/index.ts",
@@ -12,10 +28,14 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "src",
+    "!src/**/*.test.ts",
+    "NOTICE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json"
+    "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "node ../../../scripts/publish-guard.mjs"
   },
   "dependencies": {
     "@qajitsu/core": "workspace:*",

@@ -26,7 +26,8 @@ Node.js 22 LTS and pnpm 10 (`corepack enable`). Then `pnpm install && pnpm verif
    Refs: REQ-VER-03
    ```
 
-7. **Changeset** for user-visible changes: `pnpm changeset`.
+7. **Changeset** for user-visible changes: `pnpm changeset`. Releases are made by CI from these (see
+   [docs/releasing.md](docs/releasing.md)); `pnpm release:check` packs, installs and runs what would be published.
 8. **PR** using the template. One logical change per PR. It merges only when CI is green (REQ-NFR-10).
 
 ### For maintainers: required checks

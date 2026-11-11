@@ -9,6 +9,7 @@ import {
   blockingProblems,
   checkSpecSource,
   formatSpecProblems,
+  moduleDir,
   stepsTypesEntry,
   stepsWithoutActions,
   typecheckSpecs,
@@ -204,6 +205,36 @@ describe("static checks of generated specs (REQ-EXEC-03)", () => {
     expect(stepsTypesEntry(() => true)).toMatch(/steps\/src\/index\.ts$/);
     expect(stepsTypesEntry(() => false)).toMatch(/steps\/dist\/index\.d\.ts$/);
     expect(formatSpecProblems([{ check: "lint", message: "m" }])).toBe("lint: m");
+  });
+
+  it("REQ-EXEC-03/AC1 + REQ-GEN-15/AC3: an installed QAJitsu checks specs against the built steps types, never the shipped sources", () => {
+    // Packages ship src/ for their source maps; under node_modules the declarations of the build are what users run.
+    const installed = "/home/u/.npm/lib/node_modules/@qajitsu/verifier/dist";
+    const entry = stepsTypesEntry(
+      () => true,
+      () => undefined,
+      installed,
+    );
+    expect(entry).toBe("/home/u/.npm/lib/node_modules/@qajitsu/steps/dist/index.d.ts");
+    expect(
+      stepsTypesEntry(
+        () => true,
+        () => undefined,
+        "C:\\x\\node_modules\\@qajitsu\\verifier\\dist",
+      ),
+    ).not.toMatch(/src.index\.ts$/);
+    // The verifier's folder is a real path: a space or a non-ASCII letter is not left percent-encoded.
+    expect(
+      moduleDir("file:///Users/Ana%20Lu%C3%ADsa/qj/node_modules/@qajitsu/verifier/dist/spec-checks.js"),
+    ).toBe("/Users/Ana Luísa/qj/node_modules/@qajitsu/verifier/dist");
+    // In this repository the sources still come first: they are always current.
+    expect(
+      stepsTypesEntry(
+        () => true,
+        () => undefined,
+        "/repo/packages/verifier/dist",
+      ),
+    ).toBe("/repo/packages/steps/src/index.ts");
   });
 
   it("REQ-EXEC-03/AC1: in an installed QAJitsu the steps types come from where Node resolves the steps package", () => {

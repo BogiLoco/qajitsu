@@ -77,6 +77,25 @@ jobs:
       # Builds the packages, then runs every seeded bug (FAILED) and every clean ticket (PASSED). REQ-NFR-02/AC3, REQ-NFR-04/AC1.
       - run: pnpm test:e2e
 
+  # REQ-GEN-15/AC5: every pull request packs the packages as the release would, inspects them, installs the CLI from
+  # the tarballs with npm into an empty folder and runs it; a change that breaks the published packages fails here.
+  release-check:
+    name: release check (packed packages install and run)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: node scripts/release-check.mjs
+
   # REQ-NFR-06/AC2: a new contributor gets `pnpm install && pnpm verify` green in under five minutes: no caches, a
   # fresh runner, the commands from CONTRIBUTING.md. Only the Linux system libraries for Chromium are installed first.
   contributor-setup:
