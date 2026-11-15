@@ -6,6 +6,7 @@ import { arch, platform, release, type } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { androidSdkRoot, channelExecutables } from "@qajitsu/toolchain";
 import { WEB_CHANNELS, webCombinations } from "@qajitsu/core";
+import { ollamaTags } from "@qajitsu/models";
 import type { LoadedProject } from "./project.js";
 
 /** Runs a command and returns its output (stdout and stderr), or undefined when it cannot run. */
@@ -132,6 +133,7 @@ export async function toolVersions(input: {
   const out: ToolVersion[] = [
     { name: "qajitsu", version: input.qajitsu, needed: true },
     ...imageVersion(input.env ?? process.env),
+    ...stackImagesVersion(input.env ?? process.env),
     {
       name: "os",
       version: `${
@@ -315,6 +317,28 @@ export function imageVersion(env: Readonly<Record<string, string | undefined>>):
   ];
 }
 
+/**
+ * The stack's other images (REQ-GEN-10/AC4), from `QAJITSU_STACK_IMAGES` that `qajitsu stack init` writes into the
+ * stack: by digest, marked as declared like the QAJitsu image, or marked as not pinned.
+ *
+ * @param env - The environment.
+ * @returns The `stack images` line, or none outside a stack.
+ */
+export function stackImagesVersion(env: Readonly<Record<string, string | undefined>>): ToolVersion[] {
+  const images = env["QAJITSU_STACK_IMAGES"];
+  if (images === undefined || images === "") return [];
+  const pinned = images.split(",").every((i) => /^[\w./:-]+@sha256:[0-9a-f]{64}$/.test(i));
+  return [
+    {
+      name: "stack images",
+      version: pinned
+        ? `${images} (declared when the stack was written, not verified)`
+        : "set, but not every image is pinned by digest (not recorded)",
+      needed: true,
+    },
+  ];
+}
+
 /** `{ name: version }` of the tools, `unknown` for one that did not report a version (REQ-OBS-10/AC4). */
 export function versionRecord(tools: readonly ToolVersion[]): Record<string, string> {
   return Object.fromEntries(tools.map((t) => [t.name, t.version ?? "unknown"]));
@@ -344,6 +368,8 @@ export async function runVersions(
     readonly exec?: VersionExec | undefined;
     readonly playwright?: (() => PlaywrightInfo) | undefined;
     readonly env?: Readonly<Record<string, string | undefined>> | undefined;
+    /** Asks each Ollama provider for the digests of its models (REQ-GEN-10/AC4); without it none are recorded. */
+    readonly fetch?: typeof globalThis.fetch | undefined;
   },
 ): Promise<Record<string, string>> {
   const tools = await toolVersions({
@@ -361,5 +387,38 @@ export async function runVersions(
     ...Object.fromEntries(
       Object.entries(project.config.models.roles).map(([role, model]) => [`model ${role}`, model]),
     ),
+    ...(options.fetch ? await modelDigests(project, options.fetch) : {}),
   };
+}
+
+/**
+ * `model <role> digest` for every role whose model an Ollama provider serves (REQ-GEN-10/AC4): the digest Ollama
+ * lists for it, or `unknown` when Ollama does not answer or does not hold it.
+ */
+async function modelDigests(
+  project: LoadedProject,
+  fetch: typeof globalThis.fetch,
+): Promise<Record<string, string>> {
+  const { providers, roles } = project.config.models;
+  const listed = new Map<string, Promise<readonly { name: string; digest: string }[] | undefined>>();
+  const out: Record<string, string> = {};
+  for (const [role, ref] of Object.entries(roles)) {
+    const slash = ref.indexOf("/");
+    const provider = providers[ref.slice(0, slash)];
+    if (provider?.type !== "ollama") continue;
+    const base = provider.base_url ?? "http://localhost:11434";
+    if (!listed.has(base))
+      listed.set(
+        base,
+        // The provider's own host, asked once and briefly: an Ollama that does not answer in 3 s is recorded as unknown.
+        ollamaTags(base, (url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(3000) })).catch(
+          () => undefined,
+        ),
+      );
+    const name = ref.slice(slash + 1);
+    const tagged = /:[\w.-]+$/.test(name) ? name : `${name}:latest`;
+    out[`model ${role} digest`] =
+      (await listed.get(base))?.find((m) => m.name === tagged)?.digest ?? "unknown";
+  }
+  return out;
 }

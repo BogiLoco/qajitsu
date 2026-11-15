@@ -163,23 +163,37 @@ REQ-CI-01 already ships a Docker image for other CI systems; this makes the rele
 
 ### REQ-GEN-10 · Ready-to-run images and a Compose stack
 
-- Status: proposed
+- Status: in-progress
 - Priority: should
 - Stage: 9
-- Related: REQ-GEN-06, REQ-GEN-09, REQ-CI-01, REQ-CI-06, REQ-LLM-05, REQ-KNOW-08
+- Related: REQ-GEN-06, REQ-GEN-09, REQ-CI-01, REQ-CI-06, REQ-LLM-03, REQ-LLM-05, REQ-KNOW-08, REQ-OBS-10, REQ-VER-06, INV-8, ADR-0016
 
 Pull and run instead of installing: images on a public registry and one Compose file that brings up QAJitsu with the
 chosen models. The images are built with `qj setup` (REQ-GEN-06), so the tool versions have one source; installing
 on the machine stays the other way.
 
+- Note: scope decided by the owner on 2026-11-11. Images go to GHCR only for now (Docker Hub later); the Android image
+  (AC1) is its own change, so AC1 stays open until it ships. `ci/docker/Dockerfile.release` installs the release
+  tarballs with `npm ci` and Playwright today, not with `qj setup`.
+- Note: a preset is a named set of Ollama models per role, chosen so that each model has what its roles need
+  (REQ-LLM-03), as `qj stack init` reads it from the Ollama registry: `small` (`qwen3:4b` for every text role; the
+  auditor, which needs vision, keeps the project's model or is off), `local` (`gpt-oss:20b`, `qwen3:4b` for summary and
+  triage, `mistral-small3.2:24b` as the auditor) and `hybrid` (`qwen3:4b` for analyst, summary and triage; the
+  configured cloud models keep the others). The auditor is never the author's model (REQ-VER-06). The knowledge base's
+  embedding model, when it is an Ollama model, is pulled with the role models. A knowledge base on an external Chroma
+  server stays where it is. ADR-0016 has the reasons.
+- Note: AC6 is implemented and started for real by `scripts/stack-smoke.mjs` (CI jobs `stack (docker)` on every pull
+  request, `stack (podman)` every night); it is ticked once both have run green in GitHub Actions. Rehearsed on Docker
+  Desktop: every check of the smoke test passed.
+
 **Acceptance criteria**
 
-- [ ] AC1: Every release publishes images from CI to Docker Hub and GHCR: `qajitsu` (API and web: Node.js, git, browsers) and `qajitsu-android` (plus Java, Android SDK, emulator and Appium), built with `qj setup` at QAJitsu's pinned versions; the Dockerfiles of `ci/docker` are their source.
-- [ ] AC2: `qj stack init` writes a `compose.yaml` for the project: QAJitsu, Ollama and, when the knowledge base uses it, Chroma; parameters (preset, models per role, GPU, ports, volumes) come from options or a short questionnaire.
-- [ ] AC3: The models named for the roles are pulled into Ollama once, at the first start, by a step of the stack; `models.roles` of the project is written to match, and the stack fails with the model name when a pull fails.
-- [ ] AC4: Images, model names and their digests are pinned in the generated file and recorded with every run (REQ-OBS-10).
-- [ ] AC5: No secret is baked into an image or written into `compose.yaml`; secrets come from `.env.local` or the secret provider at run time.
-- [ ] AC6: The stack runs with Docker Engine and Podman; GPU access for Ollama is optional and documented per platform; the Android image states that the emulator needs KVM.
+- [ ] AC1: Every release publishes images from CI to GHCR (`ghcr.io/bogiloco/qajitsu`): `qajitsu` (API and web: Node.js, git, browsers) and `qajitsu-android` (plus Java, Android SDK, emulator and Appium; it states that the emulator needs KVM), built with `qj setup` at QAJitsu's pinned versions; the Dockerfiles of `ci/docker` are their source. Docker Hub follows later.
+- [x] AC2: `qj stack init` writes a `compose.yaml` for the project: QAJitsu, Ollama and, when the knowledge base uses it, Chroma; parameters (preset, models per role, GPU, ports, volumes) come from options or a short questionnaire.
+- [x] AC3: The models named for the roles are pulled into Ollama once, at the first start, by a step of the stack; `models.roles` of the project is written to match, and the stack fails with the model name when a pull fails.
+- [x] AC4: Images, model names and their digests are pinned in the generated file and recorded with every run (REQ-OBS-10).
+- [x] AC5: No secret is baked into an image or written into `compose.yaml`; secrets come from `.env.local` or the secret provider at run time.
+- [ ] AC6: The stack runs with Docker Engine and Podman; GPU access for Ollama is optional and documented per platform.
 
 ### REQ-GEN-11 · Integrations as plugins, installed on demand
 

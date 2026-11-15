@@ -218,6 +218,37 @@ for curl and npm, to `NODE_EXTRA_CA_CERTS`, and to the trust store of QAJitsu's 
 Exit codes: `0` everything wanted is ready, `1` a tool failed or needs a manual step (the line names the next step),
 `2` setup stopped before changing anything (a precheck, a declined licence, a wrong flag).
 
+### `qajitsu stack init`
+
+Writes `compose.yaml` next to `.qa/`: QAJitsu from its signed release image, Ollama and, for a knowledge base on Chroma
+without a server of its own, Chroma (REQ-GEN-10). Every image and model is pinned by digest. A one-shot `models` step
+pulls the models at the first start and checks their digests. `models.roles` is set to the models it pulls, under a
+`stack` provider, with what each model can do, read from the Ollama registry. A role a model cannot serve (tools,
+vision, context, an auditor with the author's model) is refused before anything is written; a model that needs more
+memory than the engine has is warned about. No value of `.env.local` is written or sent anywhere; the file is created
+empty (0600) when missing. Guide: [docs/guides/stack.md](../guides/stack.md).
+
+- `--engine <engine>`: `docker` or `podman` (default: the one this machine has)
+- `--preset <preset>`: `small`, `local` or `hybrid` (default: `local`)
+- `--model <role=name>`: the Ollama model of a role, optionally `name@sha256:...` (repeatable)
+- `--gpu <gpu>`: `none`, `nvidia` or `amd` (default: `none`)
+- `--ollama-port <port>`, `--chroma-port <port>`: ports on 127.0.0.1 (default `11434`, `8000`)
+- `--volume <name=path>`: `ollama`, `chroma` or `home` as a volume name or a host path (repeatable)
+- `--image <ref@sha256:...>`: the QAJitsu image by digest (default: this version's release image, from GHCR)
+- `--yes`: do not ask; `--force`: replace an existing `compose.yaml`
+
+Exit codes: `0` written, `3` configuration errors, an unpublished image, a role the models cannot serve, or a refused
+write.
+
+### `qajitsu stack pull <models...>`
+
+The stack's `models` step: pulls every `name:tag@sha256:...` into Ollama and checks that Ollama then holds it at that
+digest. A model already there at its digest is not pulled again. Needs no project.
+
+- `--ollama <url>`: the Ollama server, e.g. `http://ollama:11434` (required)
+
+Exit codes: `0` every model is there at its digest, `3` a pull failed or a model has another digest (both named).
+
 ## The flow
 
 ### `qajitsu plugin list`

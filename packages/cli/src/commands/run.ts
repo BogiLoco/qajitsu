@@ -780,7 +780,11 @@ export async function runRun(
             data: {
               ...ws.record.data,
               versions: {
-                ...(await runVersions(project, { exec: ports.versionExec, playwright: ports.playwright })),
+                ...(await runVersions(project, {
+                  exec: ports.versionExec,
+                  playwright: ports.playwright,
+                  fetch: ports.fetch,
+                })),
                 // REQ-GEN-11/AC5: the plugins the run uses, with their versions and where they came from.
                 ...(await pluginVersions(project, ports)),
               },

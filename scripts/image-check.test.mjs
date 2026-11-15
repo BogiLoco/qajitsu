@@ -76,6 +76,7 @@ describe("image check: what runs in the image (REQ-GEN-09/AC4..AC6)", () => {
       "plugins",
       "no credential files",
       "no secrets in files",
+      "home on a fresh volume",
       "image digest recorded",
       "demo",
     ]);
@@ -89,6 +90,11 @@ describe("image check: what runs in the image (REQ-GEN-09/AC4..AC6)", () => {
     expect(
       stepProblems(step("plugins"), 0, "✔ runner-api   0.1.0\n· runner-web   not installed"),
     ).toHaveLength(1);
+    expect(step("home on a fresh volume")?.volume).toBe("/home/qa/.qajitsu");
+    expect(stepProblems(step("home on a fresh volume"), 0, "home-writable\n")).toEqual([]);
+    expect(
+      stepProblems(step("home on a fresh volume"), 1, "touch: cannot touch: Permission denied\n"),
+    ).not.toEqual([]);
     expect(stepProblems(step("no credential files"), 0, "end-of-search\n")).toEqual([]);
     expect(stepProblems(step("no credential files"), 0, "/home/qa/.npmrc\nend-of-search\n")).toHaveLength(1);
     expect(

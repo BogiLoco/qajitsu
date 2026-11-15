@@ -127,6 +127,74 @@ jobs:
           --build-arg REVISION="${{ github.sha }}" -t qajitsu-image-check "$RUNNER_TEMP/image"
       - run: node scripts/image-check.mjs qajitsu-image-check "$(node -p 'require("./packages/cli/package.json").version')"
 
+  # REQ-GEN-10/AC3..AC6: the Compose stack as a user starts it, on a real engine with a real Ollama: `qajitsu stack
+  # init` with this change's image (pushed to a local registry, so it has a digest) and the small preset, models
+  # pulled once and checked by digest, QAJitsu run inside. Docker on every pull request, Podman every night.
+  stack-docker:
+    name: stack (docker)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    services:
+      registry:
+        image: registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373
+        ports: ["5000:5000"]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: node scripts/image-context.mjs "$RUNNER_TEMP/image"
+      - name: image in the local registry
+        run: |
+          docker build -f ci/docker/Dockerfile.release --build-arg VERSION="$(node -p 'require("./packages/cli/package.json").version')" \
+            --build-arg REVISION="$GITHUB_SHA" -t localhost:5000/qajitsu:ci "$RUNNER_TEMP/image"
+          docker push localhost:5000/qajitsu:ci
+          echo "IMAGE=localhost:5000/qajitsu:ci@$(docker inspect --format '{{index .RepoDigests 0}}' localhost:5000/qajitsu:ci | cut -d@ -f2)" >> "$GITHUB_ENV"
+      - run: node scripts/stack-smoke.mjs docker "$IMAGE"
+
+  stack-podman:
+    name: stack (podman)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    services:
+      registry:
+        image: registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373
+        ports: ["5000:5000"]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: node scripts/image-context.mjs "$RUNNER_TEMP/image"
+      # Podman pulls the image over plain HTTP from the job's local registry; its API socket lets `podman compose`
+      # drive Podman through the docker-compose the runner image ships.
+      - name: podman with the local registry
+        run: |
+          printf '[[registry]]\nlocation = "localhost:5000"\ninsecure = true\n' | sudo tee /etc/containers/registries.conf.d/qajitsu-ci.conf
+          systemctl --user start podman.socket
+          echo "DOCKER_HOST=unix://$XDG_RUNTIME_DIR/podman/podman.sock" >> "$GITHUB_ENV"
+          podman --version
+      - name: image in the local registry
+        run: |
+          podman build -f ci/docker/Dockerfile.release --build-arg VERSION="$(node -p 'require("./packages/cli/package.json").version')" \
+            --build-arg REVISION="$GITHUB_SHA" -t localhost:5000/qajitsu:ci "$RUNNER_TEMP/image"
+          podman push --digestfile "$RUNNER_TEMP/digest" localhost:5000/qajitsu:ci
+          echo "IMAGE=localhost:5000/qajitsu:ci@$(cat "$RUNNER_TEMP/digest")" >> "$GITHUB_ENV"
+      - run: node scripts/stack-smoke.mjs podman "$IMAGE"
+
   # REQ-NFR-06/AC2: a new contributor gets `pnpm install && pnpm verify` green in under five minutes: no caches, a
   # fresh runner, the commands from CONTRIBUTING.md. Only the Linux system libraries for Chromium are installed first.
   contributor-setup:

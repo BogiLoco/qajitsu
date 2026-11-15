@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createFakeFetch, jsonReply } from "../../../tests/support/fake-fetch.js";
 import { parseProjectConfig } from "@qajitsu/core";
 import { channelExecutables } from "@qajitsu/adapter-runner-web";
 import type { LoadedProject } from "./project.js";
@@ -213,6 +214,60 @@ describe("tool versions (REQ-GEN-03/AC4)", () => {
     expect(record["qajitsu image"]).toBe(
       `ghcr.io/bogiloco/qajitsu@${digest} (declared when the container was started, not verified)`,
     );
+  });
+
+  it("REQ-GEN-10/AC4: a run records the Ollama digest of each role's model, and unknown when Ollama does not say", async () => {
+    const config = {
+      models: {
+        providers: {
+          stack: { type: "ollama" as const, base_url: "http://ollama:11434" },
+          claude: { type: "anthropic" as const, api_key: "secret://env/ANTHROPIC_API_KEY" },
+        },
+        roles: { default: "stack/qwen3:4b", auditor: "stack/gemma3:4b", planner: "claude/claude-sonnet-5" },
+      },
+    };
+    const tagsAt = (models: { name: string; digest: string }[]) =>
+      createFakeFetch([{ match: /^\/api\/tags$/, reply: jsonReply({ models }) }]).fetch;
+    const record = await runVersions(project(config), {
+      exec: fakeExec(),
+      playwright,
+      fetch: tagsAt([{ name: "qwen3:4b", digest: "a".repeat(64) }]),
+    });
+    // The model names stay as they were (qj regression compares them); the digests are their own lines.
+    expect(record["model default"]).toBe("stack/qwen3:4b");
+    expect(record["model default digest"]).toBe(`sha256:${"a".repeat(64)}`);
+    // Ollama does not list gemma3:4b: unknown, never a guess.
+    expect(record["model auditor digest"]).toBe("unknown");
+    // Only models served by Ollama have a digest line.
+    expect(record["model planner digest"]).toBeUndefined();
+    const down = (() => Promise.reject(new TypeError("fetch failed"))) as typeof globalThis.fetch;
+    const unreachable = await runVersions(project(config), { exec: fakeExec(), playwright, fetch: down });
+    expect(unreachable["model default digest"]).toBe("unknown");
+    // Without a fetch there is no digest line at all, rather than a made-up one.
+    expect(
+      (await runVersions(project(config), { exec: fakeExec(), playwright }))["model default digest"],
+    ).toBeUndefined();
+  });
+
+  it("REQ-GEN-10/AC4: a run in the stack records the stack's other images, as declared", async () => {
+    const images = `ollama/ollama:0.40.16@sha256:${"b".repeat(64)},chromadb/chroma:1.5.9@sha256:${"c".repeat(64)}`;
+    const record = await runVersions(project({}), {
+      exec: fakeExec(),
+      playwright,
+      env: { QAJITSU_STACK_IMAGES: images },
+    });
+    expect(record["stack images"]).toBe(`${images} (declared when the stack was written, not verified)`);
+    // A list holding anything but images by digest is not recorded as one.
+    const loose = await runVersions(project({}), {
+      exec: fakeExec(),
+      playwright,
+      env: { QAJITSU_STACK_IMAGES: "ollama/ollama:latest" },
+    });
+    // An arbitrary value is never copied into the record (and from there into reports).
+    expect(loose["stack images"]).toBe("set, but not every image is pinned by digest (not recorded)");
+    expect(
+      (await runVersions(project({}), { exec: fakeExec(), playwright, env: {} }))["stack images"],
+    ).toBeUndefined();
   });
 
   it("reads Playwright and the QAJitsu version of this installation", () => {

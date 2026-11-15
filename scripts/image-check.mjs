@@ -156,6 +156,15 @@ export function imageSteps(version) {
       expect: [/^end-of-search\s*$/],
     },
     {
+      // REQ-GEN-10: a fresh volume on QAJitsu's home (the stack mounts one) takes the image's owner, so qa writes there.
+      label: "home on a fresh volume",
+      entrypoint: "sh",
+      volume: "/home/qa/.qajitsu",
+      args: ["-c", "touch /home/qa/.qajitsu/probe && echo home-writable"],
+      codes: [0],
+      expect: [/^home-writable\s*$/],
+    },
+    {
       // A run in the image records it by digest (REQ-GEN-09/AC4): doctor lists what a run records.
       label: "image digest recorded",
       entrypoint: "sh",
@@ -293,6 +302,8 @@ function main(image, version) {
       ...(step.entrypoint ? ["--entrypoint", step.entrypoint] : []),
       ...(step.user ? ["--user", step.user] : []),
       ...Object.entries(step.env ?? {}).flatMap(([k, v]) => ["-e", `${k}=${v}`]),
+      // An anonymous volume: created empty for this container, removed with it (--rm).
+      ...(step.volume ? ["-v", step.volume] : []),
       image,
       ...step.args,
     ];
