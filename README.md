@@ -1496,7 +1496,8 @@ More: [docs/guides/getting-started.md](docs/guides/getting-started.md), [docs/ar
 
 ```sh
 pnpm install
-pnpm verify          # typecheck, lint, format, tests with coverage, hook tests, requirements and plugin inventory check
+pnpm verify          # fast: typecheck, lint, format, unit tests, hook tests, requirements and plugin inventory check
+pnpm verify:full     # everything CI checks: also the integration tests (CLI end to end, real browser) and coverage
 pnpm test:e2e        # demo-shop self-test (Docker and Android suites skip themselves when unavailable)
 pnpm run docs        # API reference and guides into docs-site/ (`pnpm docs` would open npm's page instead)
 ```

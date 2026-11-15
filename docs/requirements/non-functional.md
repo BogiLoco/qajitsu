@@ -73,7 +73,10 @@ Quality bars for the codebase and the project itself.
 - Status: implemented
 - Priority: must
 - Stage: 1
-- Related: REQ-NFR-03
+- Related: REQ-NFR-03, REQ-NFR-02
+- Note: since 2026-11-11 `pnpm verify` runs the unit tests and `pnpm verify:full` everything with the coverage
+  thresholds. The whole suite had grown to about ten minutes on a four-core CI runner; the integration tests (the CLI
+  end to end, a real browser) run on every pull request in the `verify` job, so nothing runs less often than before.
 
 **Acceptance criteria**
 

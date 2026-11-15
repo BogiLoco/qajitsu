@@ -24,20 +24,22 @@ The non-negotiable invariants live in `.claude/rules/architecture-invariants.md`
 
 ## Commands
 
-| Command                             | What it does                                                                                                                         |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `pnpm install`                      | Install workspace dependencies                                                                                                       |
-| `pnpm verify`                       | typecheck + lint + format check + all tests with coverage + hook tests + requirements check. Must be green before any task is "done" |
-| `pnpm test`                         | All Vitest suites except e2e: unit, contract, adversarial, golden, scripts (no network, no real LLM)                                 |
-| `pnpm test:adversarial`             | Lying-agent scenarios against guard, gates and verifier                                                                              |
-| `pnpm test:e2e`                     | Full flow on `examples/demo-shop` (from stage 3)                                                                                     |
-| `pnpm test:hooks`                   | node:test suite of `.claude/hooks`                                                                                                   |
-| `pnpm req:check` / `pnpm req:index` | Validate requirements and the plugin inventory / regenerate their index, roadmap lists and inventory table                           |
-| `pnpm req:list -- --stage N`        | Requirements of a stage (also `--status in-progress`)                                                                                |
-| `pnpm build` / `pnpm qajitsu <cmd>` | Build packages to `dist/` / run the built CLI                                                                                        |
-| `pnpm format`                       | Prettier write                                                                                                                       |
-| `pnpm bench -- --model <ref>`       | Benchmark a model on the demo-shop seeded bugs (real model calls; never in PR CI)                                                    |
-| `pnpm run docs`                     | API reference and guides with TypeDoc into `docs-site/` (every export needs TSDoc)                                                   |
+| Command                               | What it does                                                                                                            |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `pnpm install`                        | Install workspace dependencies                                                                                          |
+| `pnpm verify`                         | Fast loop (a few minutes): typecheck + lint + format check + unit tests + hook tests + requirements check               |
+| `pnpm verify:full`                    | `pnpm verify` with every unit and integration test and the coverage thresholds. Must be green before any task is "done" |
+| `pnpm test`                           | All Vitest suites except e2e: unit, contract, adversarial, golden, scripts (no network, no real LLM)                    |
+| `pnpm test:unit` / `test:integration` | The fast tests / the ones that drive the CLI end to end or a real browser (`vitest.config.ts` projects)                 |
+| `pnpm test:adversarial`               | Lying-agent scenarios against guard, gates and verifier                                                                 |
+| `pnpm test:e2e`                       | Full flow on `examples/demo-shop` (from stage 3)                                                                        |
+| `pnpm test:hooks`                     | node:test suite of `.claude/hooks`                                                                                      |
+| `pnpm req:check` / `pnpm req:index`   | Validate requirements and the plugin inventory / regenerate their index, roadmap lists and inventory table              |
+| `pnpm req:list -- --stage N`          | Requirements of a stage (also `--status in-progress`)                                                                   |
+| `pnpm build` / `pnpm qajitsu <cmd>`   | Build packages to `dist/` / run the built CLI                                                                           |
+| `pnpm format`                         | Prettier write                                                                                                          |
+| `pnpm bench -- --model <ref>`         | Benchmark a model on the demo-shop seeded bugs (real model calls; never in PR CI)                                       |
+| `pnpm run docs`                       | API reference and guides with TypeDoc into `docs-site/` (every export needs TSDoc)                                      |
 
 ## Repository map
 
@@ -61,7 +63,7 @@ The non-negotiable invariants live in `.claude/rules/architecture-invariants.md`
 2. Implement with `/tdd`: failing test first, then code. No exceptions for `packages/guard`, `packages/verifier`, `packages/steps`.
 3. Anything that decides, records or publishes a test status also needs `/adversarial-test`.
 4. New integration (Jira DC, Bitbucket, Vault, a model provider...): `/new-adapter`.
-5. Before saying "done" and before every commit: `/verify`. Then `/review-change` for anything touching more than one package.
+5. Before saying "done" and before every commit: `/verify` (`pnpm verify:full`). Then `/review-change` for anything touching more than one package.
 6. Public API changed: TSDoc updated in the same change, plus a changeset (`pnpm changeset`).
 7. Tick implemented and tested acceptance criteria, update status, `pnpm req:index`.
 
