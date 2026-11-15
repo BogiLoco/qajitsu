@@ -35,6 +35,10 @@ describe("the release image's Dockerfile (REQ-GEN-09)", () => {
     const users = instructions.filter((l) => l.startsWith("USER "));
     expect(users).toEqual(["USER qa"]);
     expect(instructions.some((l) => /useradd --uid 10001\b/.test(l))).toBe(true);
+    // QAJitsu's home exists and belongs to qa, so a volume mounted there (the stack's, REQ-GEN-10) is writable by it.
+    expect(instructions.some((l) => l.includes("install -d -o qa -g qa -m 0700 /home/qa/.qajitsu"))).toBe(
+      true,
+    );
     const env = instructions.filter((l) => /^(ENV|ARG) /.test(l)).join(" ");
     expect(env).not.toMatch(/TOKEN|SECRET|PASSWORD|API_KEY/i);
     expect(env).toContain("QAJITSU_IMAGE=ghcr.io/bogiloco/qajitsu:${VERSION}");

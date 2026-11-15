@@ -10,3 +10,4 @@ export * from "./registry.js";
 export * from "./embedder.js";
 export * from "./cost-features.js";
 export * from "./context-profile.js";
+export * from "./ollama-admin.js";

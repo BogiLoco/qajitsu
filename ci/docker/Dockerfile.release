@@ -48,7 +48,8 @@ COPY entrypoint.sh /usr/local/bin/qajitsu-entrypoint
 RUN ln -s /opt/qajitsu/node_modules/.bin/qajitsu /usr/local/bin/qajitsu \
   && ln -s /opt/qajitsu/node_modules/.bin/qj /usr/local/bin/qj \
   && chmod 0755 /usr/local/bin/qajitsu-entrypoint \
-  && useradd --uid 10001 --create-home --shell /usr/sbin/nologin qa
+  && useradd --uid 10001 --create-home --shell /usr/sbin/nologin qa \
+  && install -d -o qa -g qa -m 0700 /home/qa/.qajitsu
 
 USER qa
 ENV QAJITSU_HOME=/home/qa/.qajitsu \

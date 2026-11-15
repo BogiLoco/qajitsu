@@ -16,6 +16,7 @@ import { runTest } from "./commands/test-flow.js";
 import { runFixCheck } from "./commands/fix-check.js";
 import { runClean, runGc, runResume, runRuns, runWorkReset } from "./commands/runs.js";
 import { runEnvCheck, runEnvRender, runEnvUp } from "./commands/env.js";
+import { runStackInit, runStackPull, type StackInitOptions } from "./commands/stack.js";
 import {
   runProjectArchive,
   runProjectInit,
@@ -80,7 +81,7 @@ import {
   runPluginRemove,
 } from "./commands/plugin.js";
 import { appVersions, formatAppVersions } from "./app-versions.js";
-import { formatToolVersions, toolVersions } from "./versions.js";
+import { formatToolVersions, toolVersions, execVersion } from "./versions.js";
 import { readToolchainChoice, toolchainEnv, type ToolchainEnv } from "@qajitsu/toolchain";
 import {
   checkSources,
@@ -997,6 +998,59 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .action((ticket: string, options: { session: string; observation: string; run?: string }) =>
       withPorts((ports) => runExplorePromote(ticket, options, commandIO, ports))(),
     );
+
+  // REQ-GEN-10: QAJitsu, Ollama and Chroma as one Compose stack, every image and model pinned by digest.
+  const stack = program.command("stack").description("Run QAJitsu with local models as one Compose stack");
+  stack
+    .command("init")
+    .description(
+      "Write compose.yaml (QAJitsu, Ollama, Chroma when needed) and set models.roles to its models",
+    )
+    .option("--engine <engine>", "docker or podman (default: the one this machine has)")
+    .option("--preset <preset>", "models per role: small, local or hybrid (default: local)")
+    .option(
+      "--model <role=name>",
+      "the Ollama model of a role, optionally name@sha256:... (repeatable)",
+      collect,
+      [],
+    )
+    .option("--gpu <gpu>", "GPU for Ollama: none, nvidia or amd (default: none)")
+    .option("--ollama-port <port>", "Ollama's port on 127.0.0.1 (default: 11434)")
+    .option("--chroma-port <port>", "Chroma's port on 127.0.0.1 (default: 8000)")
+    .option(
+      "--volume <name=path>",
+      "ollama, chroma or home: a volume name or a host path (repeatable)",
+      collect,
+      [],
+    )
+    .option("--image <ref@sha256:...>", "the QAJitsu image by digest (default: this version's release image)")
+    .option("--yes", "do not ask; use the flags and defaults")
+    .option("--force", "replace an existing compose.yaml")
+    .action((options: StackInitOptions) =>
+      withPorts((ports) =>
+        runStackInit(options, commandIO, {
+          fetch: ports.fetch,
+          versionExec: ports.versionExec ?? execVersion,
+          project: ports.project,
+        }),
+      )(),
+    );
+  stack
+    .command("pull")
+    .description("Pull models into Ollama and check their digests (the stack's models step)")
+    .requiredOption("--ollama <url>", "the Ollama server, e.g. http://ollama:11434")
+    .argument("<models...>", "name:tag@sha256:<digest>")
+    .action(async (models: string[], options: { ollama: string }) => {
+      // Runs inside the stack's models container, where there is no project.
+      if (!io.ports) {
+        io.writeError("Runtime ports are not configured.\n");
+        io.setExitCode(3);
+        return;
+      }
+      io.setExitCode(
+        await runStackPull({ ollama: options.ollama, models }, commandIO, { fetch: io.ports.fetch }),
+      );
+    });
 
   const env = program.command("env").description("Check, render or start the environment");
   env
