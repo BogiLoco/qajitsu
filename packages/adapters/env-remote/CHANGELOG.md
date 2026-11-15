@@ -1,5 +1,11 @@
 # @qajitsu/adapter-env-remote
 
+## 0.2.0
+
+### Patch Changes
+
+- @qajitsu/core@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes

@@ -1,5 +1,16 @@
 # @qajitsu/agents
 
+## 0.2.0
+
+### Patch Changes
+
+- Updated dependencies [fdbb199]
+  - @qajitsu/models@0.2.0
+  - @qajitsu/core@0.2.0
+  - @qajitsu/guard@0.2.0
+  - @qajitsu/steps@0.2.0
+  - @qajitsu/verifier@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes
