@@ -3,11 +3,12 @@
 // silently skips a version that is already in the registry; the release (and its image, built from the registry) would
 // then carry a tarball someone else published, e.g. with a leaked token. So:
 // - no package of the release is in the registry at its version: publish;
-// - some are, each with the provenance of a run of this repository's Release workflow on main (a release the registry
-//   stopped half-way, e.g. with its limit on new packages): publish the rest, finishing that release;
 // - all of them are, and the CLI's release tag exists: this release is done, nothing to publish;
-// - anything else (a version without that provenance, all published without the tag, the registry not answering):
-//   refuse, and look at what is there by hand (docs/releasing.md).
+// - some or all are but the tag is missing, each with the provenance of a run of this repository's Release workflow on
+//   main (a release the registry stopped half-way, e.g. its limit on new packages, or versions npm staged and the
+//   owner approved later): publish the rest and tag it, finishing that release;
+// - anything else (a version without that provenance, the registry not answering): refuse, and look at what is there
+//   by hand (docs/releasing.md).
 //
 //   node scripts/unpublished-check.mjs    prints the decision; writes publish=true|false and earlier-runs=<run ids>
 //                                         to GITHUB_OUTPUT; fails on refuse
@@ -48,37 +49,38 @@ export async function releaseDecision(packages, lookup, tagExists, earlier) {
       action: "publish",
       reason: `${String(packages.length)} packages, none of them in the registry yet`,
     };
-  if (published.length < packages.length) {
-    if (earlier === undefined)
-      return {
-        action: "refuse",
-        reason: `already in the registry, though the rest of the release is not: ${specs(published)}`,
-      };
-    const runs = new Set();
-    const problems = [];
-    for (const p of published) {
-      const found = await earlier(p);
-      problems.push(...found.problems);
-      if (found.run !== undefined && found.problems.length === 0) runs.add(found.run);
-    }
-    if (problems.length > 0)
-      return {
-        action: "refuse",
-        reason: `part of the release is in the registry without the Release workflow's provenance: ${problems.join("; ")}`,
-      };
-    return {
-      action: "publish",
-      reason: `finishing a release: ${String(published.length)} of ${String(packages.length)} packages were published by run ${[...runs].join(", ")}`,
-      earlierRuns: [...runs].sort(),
-    };
-  }
   const cli = packages.find((p) => p.name === "@qajitsu/cli");
   const tag = cli ? `${cli.name}@${cli.version}` : undefined;
-  if (tag && tagExists(tag))
+  const all = published.length === packages.length;
+  if (all && tag && tagExists(tag))
     return { action: "done", reason: `${tag} is released and tagged; nothing to publish` };
+  // Part of the release, or all of it without its tag: a release run that stopped (npm's limit on new packages, a
+  // staged version approved later) is finished when every version there has the Release workflow's provenance.
+  if (earlier === undefined)
+    return {
+      action: "refuse",
+      reason: all
+        ? `every package is in the registry, but ${tag ?? "the CLI"} was never tagged by a release run`
+        : `already in the registry, though the rest of the release is not: ${specs(published)}`,
+    };
+  const runs = new Set();
+  const problems = [];
+  for (const p of published) {
+    const found = await earlier(p);
+    problems.push(...found.problems);
+    if (found.run !== undefined && found.problems.length === 0) runs.add(found.run);
+  }
+  if (problems.length > 0)
+    return {
+      action: "refuse",
+      reason: `part of the release is in the registry without the Release workflow's provenance: ${problems.join("; ")}`,
+    };
   return {
-    action: "refuse",
-    reason: `every package is in the registry, but ${tag ?? "the CLI"} was never tagged by a release run`,
+    action: "publish",
+    reason: all
+      ? `finishing a release: every package was published by run ${[...runs].join(", ")}, the tags are missing`
+      : `finishing a release: ${String(published.length)} of ${String(packages.length)} packages were published by run ${[...runs].join(", ")}`,
+    earlierRuns: [...runs].sort(),
   };
 }
 

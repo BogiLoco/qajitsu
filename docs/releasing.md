@@ -27,10 +27,13 @@ The workflow has three jobs before the image:
   provenance. Before it installs anything, `scripts/unpublished-check.mjs` asks the registry about every package at its
   version:
   - none of them is there: this run publishes;
-  - some are, each with the provenance of a run of this workflow on `main` (a release the registry stopped half-way,
-    e.g. with npm's limit on how many new packages may be created in a row, `E429`): this run publishes the rest and
-    finishes that release. Re-run the failed job, or wait for the next push to `main`;
   - all of them are and the CLI's release tag exists: the release is done, the job does nothing;
+  - some or all are, but the tag is missing, and each has the provenance of a run of this workflow on `main`: this run
+    publishes the rest, tags them and finishes that release. This happens when the registry stopped a release half-way
+    (npm limits how many new packages may be created in a row, `E429`) or when npm staged new packages: a token
+    allowed to "publish and stage" may have a first version of a package held for approval (npm shows a
+    `0.0.0-stage` placeholder). Approve the staged versions on npmjs.com (each package's page), then re-run the
+    failed job or wait for the next push to `main`;
   - anything else (a version without that provenance, all of them there but no release run tagged them, the registry
     does not answer): the job fails. `pnpm -r publish` would skip a version that is already there, and the release
     and its image would then carry a tarball someone else published. Look at what is there with `npm view

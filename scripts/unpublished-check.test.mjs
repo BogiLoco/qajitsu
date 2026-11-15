@@ -56,6 +56,31 @@ describe("whether a release run publishes (REQ-GEN-15/AC2, REQ-GEN-09)", () => {
     expect(twice.earlierRuns).toEqual(["4242", "4250"]);
   });
 
+  it("REQ-GEN-15/AC2: every package there but no tag (npm staged them, the owner approved later): the release is finished", async () => {
+    const byRun = Object.fromEntries(packages.map((p) => [p.name, { run: "4242", problems: [] }]));
+    expect(await releaseDecision(packages, registry(all), tagged([]), earlierFrom(byRun))).toEqual({
+      action: "publish",
+      reason: "finishing a release: every package was published by run 4242, the tags are missing",
+      earlierRuns: ["4242"],
+    });
+    // Tagged already: done, without asking the registry about provenance at all.
+    expect(
+      (
+        await releaseDecision(packages, registry(all), tagged(["@qajitsu/cli@0.2.0"]), () => {
+          throw new Error("not asked");
+        })
+      ).action,
+    ).toBe("done");
+    // One of them without the workflow's provenance: refused like a partial release.
+    const one = {
+      ...byRun,
+      "@qajitsu/steps": { problems: ["@qajitsu/steps@0.2.0 has 0 SLSA provenance attestations, not one"] },
+    };
+    expect((await releaseDecision(packages, registry(all), tagged([]), earlierFrom(one))).action).toBe(
+      "refuse",
+    );
+  });
+
   it("REQ-GEN-09: a version someone published outside the Release workflow is never skipped silently", async () => {
     const some = registry({ "@qajitsu/core@0.2.0": "published" });
     // Without a way to check what is there, part of a release in the registry is refused.
