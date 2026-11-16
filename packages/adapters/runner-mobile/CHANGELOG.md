@@ -1,5 +1,14 @@
 # @qajitsu/adapter-runner-mobile
 
+## 0.2.0
+
+### Patch Changes
+
+- @qajitsu/adapter-runner-api@0.2.0
+  - @qajitsu/core@0.2.0
+  - @qajitsu/steps@0.2.0
+  - @qajitsu/toolchain@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes
