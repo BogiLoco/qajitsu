@@ -27,7 +27,7 @@ only when the ticket text is unchanged (`qj approve --reuse-from latest`); other
 
 All of them call `ci/qajitsu-ci.sh plan|run <TICKET>`, configured through environment variables (see the header
 of the script). Build the image with `docker build -f ci/docker/Dockerfile -t qajitsu .`, or use the signed release image
-`ghcr.io/bogiloco/qajitsu@sha256:<digest>` (from the first release on; see docs/releasing.md).
+`ghcr.io/bogiloco/qajitsu@sha256:<digest>` (see docs/releasing.md for how to check its signature).
 
 ## Tools in pipelines (REQ-CI-06)
 
