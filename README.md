@@ -21,7 +21,9 @@
   <img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-1f2a5c">
   <img alt="Node.js 22+" src="https://img.shields.io/badge/node-22%2B-22c55e">
   <img alt="Tests: API, web, Android" src="https://img.shields.io/badge/tests-API%20%C2%B7%20web%20%C2%B7%20Android-1f2a5c">
-  <img alt="Models: Claude, GPT, Gemini, Ollama" src="https://img.shields.io/badge/models-Claude%20%C2%B7%20GPT%20%C2%B7%20Gemini%20%C2%B7%20Ollama-22c55e">
+  <img alt="Models: Claude, GPT, Gemini, LiteLLM, OpenRouter, Ollama" src="https://img.shields.io/badge/models-Claude%20%C2%B7%20GPT%20%C2%B7%20Gemini%20%C2%B7%20LiteLLM%20%C2%B7%20OpenRouter%20%C2%B7%20Ollama-22c55e">
+  <a href="https://www.npmjs.com/package/@qajitsu/cli"><img alt="npm: @qajitsu/cli" src="https://img.shields.io/npm/v/@qajitsu/cli?label=npm"></a>
+  <a href="https://github.com/BogiLoco/qajitsu/pkgs/container/qajitsu"><img alt="Image: ghcr.io/bogiloco/qajitsu" src="https://img.shields.io/badge/image-ghcr.io%2Fbogiloco%2Fqajitsu-1f2a5c"></a>
 </p>
 
 ---
@@ -44,7 +46,9 @@ qj run SHOP-482 --build    # tests run against the app built from that commit
 qj publish SHOP-482        # after your preview: the matrix and evidence go to the ticket
 ```
 
-> Status: all ten roadmap stages are implemented ([docs/STATUS.md](docs/STATUS.md)).
+> Status: all ten roadmap stages are implemented ([docs/STATUS.md](docs/STATUS.md)). Released on npm
+> (`@qajitsu/cli`) and as a signed image (`ghcr.io/bogiloco/qajitsu`), from CI with provenance
+> ([docs/releasing.md](docs/releasing.md)).
 
 The one idea behind everything: **agents plan and write tests; deterministic code executes and judges.** An AI model
 never decides whether a test passed. A FAILED test stays FAILED, missing evidence is never PASSED, and the extra
@@ -108,14 +112,14 @@ ticket unless you pass `--run <id>`. A new `qj fetch` starts a new run.
 
 ### Requirements
 
-| Needed for | What                                                                                                              |
-| ---------- | ----------------------------------------------------------------------------------------------------------------- |
-| everything | Node.js 22.12 or newer and git; pnpm (`corepack enable`) only to build from source                                |
-| web tests  | the Playwright browsers of the web matrix                                                                         |
-| `--build`  | Docker with Compose v2 (for `kind: compose` services); not needed for `kind: process`                             |
-| Android    | Java 17+, the Android SDK (platform tools, emulator, a system image, an AVD), Appium with the UiAutomator2 driver |
-| iOS        | a Mac with Xcode, or a device farm (`mobile.ios.farm`)                                                            |
-| models     | an API key of a provider (Anthropic, OpenAI, Google, any OpenAI-compatible gateway) or a local model via Ollama   |
+| Needed for | What                                                                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| everything | Node.js 22.12 or newer and git; pnpm (`corepack enable`) only to build from source                                                         |
+| web tests  | the Playwright browsers of the web matrix                                                                                                  |
+| `--build`  | Docker with Compose v2 (for `kind: compose` services); not needed for `kind: process`                                                      |
+| Android    | Java 17+, the Android SDK (platform tools, emulator, a system image, an AVD), Appium with the UiAutomator2 driver                          |
+| iOS        | a Mac with Xcode, or a device farm (`mobile.ios.farm`)                                                                                     |
+| models     | an API key of a provider (Anthropic, OpenAI, Google, OpenRouter, a LiteLLM or other OpenAI-compatible gateway) or a local model via Ollama |
 
 Everything except Node.js, git, pnpm and the model key is installed by **`qj setup`** at the versions QAJitsu is tested
 with ([Install the tools](#install-the-tools-qj-setup)); tools you already have at a compatible version are used as they are.
@@ -128,8 +132,8 @@ Linux and macOS are supported (CI runs on both). Windows: use WSL 2.
 docker run --rm ghcr.io/bogiloco/qajitsu demo
 ```
 
-The official image (from the first release on) runs the whole flow on the demo shop offline, with recorded model
-answers: the clean app PASSES, the seeded bug fails TC-01. It is built for amd64 and arm64 from each release, signed,
+The official image runs the whole flow on the demo shop offline, with recorded model answers: the clean app PASSES,
+the seeded bug fails TC-01. It is built for amd64 and arm64 from each release, signed,
 and ships with an SBOM and build provenance; [docs/releasing.md](docs/releasing.md#the-release-image) shows how to
 check it. Use it for your project by digest:
 
@@ -145,7 +149,7 @@ SHOP-482` ([docs/guides/stack.md](docs/guides/stack.md)).
 ### Install `qj`
 
 ```sh
-npm install -g @qajitsu/cli      # from the first release on; until then, build it from this repository below
+npm install -g @qajitsu/cli      # or try it without installing: npx @qajitsu/cli --version
 qj --version
 ```
 
@@ -162,8 +166,8 @@ alias qj="node $PWD/packages/cli/dist/bin.js"      # or: cd packages/cli && pnpm
 qj --version
 ```
 
-`qajitsu` and `qj` are the same command. Inside this repository `pnpm qajitsu <command>` works too. For CI there is
-a Docker image (`ci/docker/Dockerfile`) with Node.js, git, Chromium and `qajitsu` inside.
+`qajitsu` and `qj` are the same command. Inside this repository `pnpm qajitsu <command>` works too. For CI, use the
+release image above (`ghcr.io/bogiloco/qajitsu`, by digest); `ci/docker/Dockerfile` builds one from this repository.
 
 ### Onboard your project
 
@@ -189,8 +193,13 @@ the value), proposes a model for every role and a cheaper one with vision as the
 5.5, GPT-6.1 Sol and GPT-6 Luna, or Gemini 4 Argon and Gemini 3.8 Flash) and a spending limit of $5 per run
 (`budget.max_cost_usd`), and writes them after your yes. Context windows and prices of these providers' models are
 built in, so costs show in dollars; a model without a known price shows its cost as unknown, never $0, and reaching
-the limit stops the model stages (BLOCKED) and the remaining cases (NOT_RUN). An OpenRouter key is found too and named
-with what to set by hand.
+the limit stops the model stages (BLOCKED) and the remaining cases (NOT_RUN).
+
+**A gateway?** An `OPENROUTER_API_KEY` sets OpenRouter up the same way (Claude Sonnet for every role, GPT-4o mini as
+the auditor). `LITELLM_API_KEY` with `LITELLM_BASE_URL` adds your LiteLLM gateway; its model names go in
+`models.roles`. Either way QAJitsu reads each model's context window, tools, vision and prices from the gateway
+itself, and `qj doctor --models` shows where every value came from
+([guide](docs/guides/models-and-verification.md#gateways-litellm-and-openrouter)).
 
 Secrets are never written into `.qa/`: the configuration holds references like `secret://env/JIRA_TOKEN`, resolved
 from the environment or `.env.local` and masked everywhere (logs, evidence, reports, ticket comments). Teams with a secret
@@ -1283,7 +1292,7 @@ verification: { auditor: optional, canary: true, triage: on }
 - **Independent auditor and canary.** A second model reviews every PASSED against plan, results, evidence and
   screenshots; the canary re-runs one case with an inverted expectation that must fail. Both can only downgrade.
   [docs/guides/models-and-verification.md](docs/guides/models-and-verification.md)
-- **Any model, per role.** Anthropic, OpenAI, Google, OpenAI-compatible gateways (LiteLLM, vLLM), Ollama; capability
+- **Any model, per role.** Anthropic, OpenAI, Google, OpenAI-compatible gateways (LiteLLM, OpenRouter, vLLM), Ollama; a LiteLLM or OpenRouter gateway tells QAJitsu what each of its models can do and costs ([guide](docs/guides/models-and-verification.md#gateways-litellm-and-openrouter)); capability
   checks per role; token budget per run; cost estimates; `qj bench` to compare models.
 - **Context manager.** Every model call is built from typed fragments by code: each role sees only what it may see,
   untrusted text sits in data blocks with a per-run marker, and a call that fits its model's budget is sent whole.

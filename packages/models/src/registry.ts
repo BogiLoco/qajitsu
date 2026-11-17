@@ -6,7 +6,15 @@ import { ConfigError, type ModelProvider, type ProjectConfig } from "@qajitsu/co
 import type { JSONValue, LanguageModel } from "ai";
 import { createOllama } from "ai-sdk-ollama";
 import { patientFetch } from "./patient-fetch.js";
-import { modelProfile, type ModelProfile } from "./capabilities.js";
+import { hasBuiltInProfile, modelProfile, type ModelProfile } from "./capabilities.js";
+import {
+  memoryGatewayCache,
+  profileWithSources,
+  readGateway,
+  type GatewayCache,
+  type GatewayInfo,
+  type ProfileSources,
+} from "./gateway.js";
 import { cacheProviderOptions, inputLimit, type CacheTtl } from "./cost-features.js";
 import { contextProfile, type ContextProfile } from "./context-profile.js";
 import { parseModelRef, resolveRoleModel, type ModelRef, type ModelRole } from "./model-ref.js";
@@ -29,6 +37,10 @@ export interface ResolvedModel {
    * the budget, so most calls cost nothing extra.
    */
   readonly countTokens?: ((system: string, prompt: string) => Promise<number>) | undefined;
+  /** Where each capability of the profile came from (REQ-LLM-10/AC3); set for gateway providers. */
+  readonly sources?: ProfileSources | undefined;
+  /** When the gateway's answer behind the profile was read (REQ-LLM-10/AC3). */
+  readonly gatewayReadAt?: string | undefined;
 }
 
 /** Access to the configured models: the core ModelProvider with AI SDK types (ADR-0005). */
@@ -66,6 +78,11 @@ export function createModelRegistry(options: {
     readonly workingRange?: number | undefined;
     readonly style?: "full" | "compact" | undefined;
   };
+  /** Keeps gateway answers between commands (REQ-LLM-10/AC3); one process's memory by default. */
+  readonly gatewayCache?: GatewayCache;
+  /** Told when a gateway does not answer and the profiles fall back to the config (REQ-LLM-10/AC4). */
+  readonly onWarning?: (message: string) => void;
+  readonly now?: () => Date;
 }): ModelRegistry {
   const { config, resolveSecret } = options;
   /** REQ-LLM-12: the cache breakpoint and the input limit go with the model, so agents need not know the provider. */
@@ -157,6 +174,35 @@ export function createModelRegistry(options: {
     }
   };
 
+  const gatewayCache = options.gatewayCache ?? memoryGatewayCache();
+  const gateways = new Map<string, Promise<GatewayInfo | undefined>>();
+  /** REQ-LLM-10: a gateway's models, read once per provider; a gateway that does not answer is warned about. */
+  const gatewayOf = (alias: string, provider: ProviderConfig): Promise<GatewayInfo | undefined> => {
+    const kind = provider.gateway;
+    if (kind === undefined || provider.base_url === undefined) return Promise.resolve(undefined);
+    let found = gateways.get(alias);
+    if (!found) {
+      found = (async () => {
+        const apiKey = provider.api_key === undefined ? undefined : await resolveSecret(provider.api_key);
+        return readGateway(
+          { alias, kind, baseUrl: provider.base_url ?? "", apiKey },
+          {
+            fetch: options.fetch ?? globalThis.fetch,
+            cache: gatewayCache,
+            now: options.now ?? (() => new Date()),
+          },
+        );
+      })().catch((error: unknown) => {
+        options.onWarning?.(
+          `${error instanceof Error ? error.message : String(error)} Using the configured and built-in profiles.`,
+        );
+        return undefined;
+      });
+      gateways.set(alias, found);
+    }
+    return found;
+  };
+
   const resolveRef = async (ref: ModelRef): Promise<ResolvedModel> => {
     const id = `${ref.provider}/${ref.model}`;
     const extra = options.extra?.[ref.provider];
@@ -189,13 +235,28 @@ export function createModelRegistry(options: {
       });
     }
     const declared = provider.models[ref.model];
+    const gateway = await gatewayOf(ref.provider, provider);
+    const fromGateway =
+      provider.gateway === undefined
+        ? undefined
+        : profileWithSources(
+            modelProfile(provider.type, ref.model),
+            hasBuiltInProfile(provider.type, ref.model),
+            gateway?.models.get(ref.model),
+            declared,
+          );
     return withCostFeatures(
       provider.type,
       {
         ref,
         id,
         model: await build(ref.provider, provider, ref.model),
-        profile: modelProfile(provider.type, ref.model, declared),
+        profile: fromGateway
+          ? // Declared extras (prices by date, price tiers) still come from the config.
+            { ...modelProfile(provider.type, ref.model, declared), ...fromGateway.profile }
+          : modelProfile(provider.type, ref.model, declared),
+        ...(fromGateway ? { sources: fromGateway.sources } : {}),
+        ...(gateway ? { gatewayReadAt: gateway.readAt } : {}),
         ...(provider.type === "anthropic"
           ? { countTokens: await anthropicCounter(provider, ref.model) }
           : {}),

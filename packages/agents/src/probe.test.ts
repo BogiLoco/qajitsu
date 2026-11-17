@@ -34,6 +34,37 @@ describe("doctor --models (REQ-LLM-03/AC2)", () => {
     expect(text).toContain("✘ auditor: ? unreachable: connection refused");
   });
 
+  it("REQ-LLM-10/AC3: for a gateway's model it names where every capability came from and when it was read", async () => {
+    const model = {
+      ...scriptedModel([{ tools: [{ name: "ping", input: { value: "ok" } }] }, { text: "done" }]),
+      sources: {
+        tools: "gateway" as const,
+        structuredOutput: "unknown" as const,
+        vision: "config" as const,
+        contextWindow: "gateway" as const,
+        price: "gateway" as const,
+      },
+      gatewayReadAt: "2026-11-17T10:00:00.000Z",
+    };
+    const [probe] = await probeModels(
+      { forRole: () => Promise.resolve(model), resolve: () => Promise.reject(new Error("unused")) },
+      ["summary"],
+    );
+    expect(probe?.sources).toEqual(model.sources);
+    expect(formatProbes(probe ? [probe] : [])).toContain(
+      "from: tools gateway, structured output unknown, vision config, context gateway, price gateway (gateway read 2026-11-17T10:00:00.000Z)",
+    );
+    // A model without a gateway gets no such line.
+    const plain = await probeModels(
+      {
+        forRole: () => Promise.resolve(scriptedModel([{ text: "done" }])),
+        resolve: () => Promise.reject(new Error("unused")),
+      },
+      ["summary"],
+    );
+    expect(formatProbes(plain)).not.toContain("from:");
+  });
+
   it("expands default to every role", async () => {
     const good = scriptedModel([{ text: "done" }]);
     const probes = await probeModels(

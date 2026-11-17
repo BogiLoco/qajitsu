@@ -21,6 +21,40 @@ models:
     # auditor: unset → the first declared model that is not the author's (REQ-VER-06/AC3)
 ```
 
+### Gateways: LiteLLM and OpenRouter
+
+Behind a gateway a model name such as `company/strong` says nothing about what the model can do. Mark the provider as
+a gateway and QAJitsu asks it (REQ-LLM-10): LiteLLM's `/model/info` and OpenRouter's model list give each model's
+context window, tools, structured output, vision and prices.
+
+```yaml
+models:
+  providers:
+    company:
+      type: openai-compatible
+      base_url: https://litellm.example.com/v1
+      api_key: secret://env/LITELLM_KEY
+      gateway: litellm # or openrouter, with base_url https://openrouter.ai/api/v1
+      models:
+        inhouse: { structured_output: true } # a value you declare wins over the gateway's
+  roles:
+    default: company/strong
+    summary: company/inhouse
+```
+
+- What neither the config nor the gateway states stays unknown, and a role that needs it is refused with how to declare
+  it (REQ-LLM-03/AC3). A model LiteLLM knows only from its own `model_info` often has no price or structured output.
+- The answer is kept for a day in the project's home (`cache/gateways.json`) with the time it was read.
+  `qj doctor --models` shows for every role where each capability came from:
+  `from: tools gateway, structured output config, vision gateway, context gateway, price unknown (gateway read ...)`.
+- A gateway that does not answer is warned about once (`! The litellm gateway company did not answer: ...`) and the
+  configured and built-in profiles are used. The key goes to the gateway's own address only and is never logged.
+- What the gateway reports is trusted like the gateway itself: a capability it claims passes the role check, and a
+  price of 0 makes `budget.max_cost_usd` count nothing for that model. Declare the values you know when in doubt.
+- The gateway's address takes no credentials and no query (the key goes in `api_key`), and a redirect is no answer.
+- `qj init` sets the gateway up when it finds `OPENROUTER_API_KEY`, or `LITELLM_API_KEY` with `LITELLM_BASE_URL` (or
+  `LITELLM_API_BASE`).
+
 Thinking models in Ollama (Qwen3, DeepSeek-R1) behave differently with and without their thinking phase; Qwen3, for
 example, calls tools only when thinking is set explicitly. `think: true` (or `false`) on the model passes the setting to
 Ollama; without it Ollama's default applies:
