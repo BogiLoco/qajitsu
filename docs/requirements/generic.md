@@ -134,31 +134,32 @@ file other users of the machine could read.
 
 ### REQ-GEN-09 · Signed release images
 
-- Status: in-progress
+- Status: implemented
 - Priority: should
 - Stage: 3
 - Related: REQ-CI-01, REQ-NFR-05, REQ-GEN-15, REQ-OBS-10, INV-8
 
 REQ-CI-01 already ships a Docker image for other CI systems; this makes the release images verifiable.
 
-- Note: built and rehearsed; ticked after the first release ran in GitHub Actions.
-  - AC1..AC3: the image jobs of `.github/workflows/release.yml` and the reusable `.github/workflows/image-publish.yml`
-    (the signer identity), checked by `tests/contract/release-workflow.test.ts`; rehearsed locally with an arm64 OCI
-    archive pushed with skopeo to a local registry with its digest unchanged, signed recursively and verified with
-    cosign (a key instead of the workflow's identity), a wrong key refused, the image pulled by digest and checked.
-  - AC4: the run record is implemented and tested; the tags follow releases only once a release has moved them.
-  - AC5: the demo runs offline in the image (the image check runs it on every pull request); the documented command
-    works once the image is published.
+- Note: proven by the first release that ran in GitHub Actions, 0.2.0 (2026-11-17,
+  `ghcr.io/bogiloco/qajitsu@sha256:617470a19705f0d355d8b80e24f70c57cc38e9c549f460ba278beded2994f4ca`):
+  - AC1..AC3: built for amd64 and arm64 from the published tarballs, pushed with its digest unchanged, signed and
+    attested, and verified by the workflow the way a user verifies it (`image-publish`).
+  - AC4: the tags `0.2.0`, `0.2` and `latest` name that digest; a run records the image by digest (image check).
+  - AC5: `docker run --rm ghcr.io/bogiloco/qajitsu demo` passes the clean shop and fails BUG-01; the image check
+    passes on arm64 and the image runs on amd64. The release's own check of the published image (`image-verify`)
+    failed only because Docker refuses a second platform of an index digest it already pulled; it now runs arm64 by
+    its manifest digest.
   - AC6: proven on every pull request by the image check, and by refused mutants (root, a baked token, a token file,
     a token added and deleted in a later layer, missing plugins).
 
 **Acceptance criteria**
 
-- [ ] AC1: Official QAJitsu images are published from CI to a public registry for every release.
-- [ ] AC2: Images are built for amd64 and arm64.
-- [ ] AC3: Every image is signed and ships with an SBOM and build provenance that a user can check.
-- [ ] AC4: Tags follow releases (exact version, minor and `latest`); runs record the image digest, never only a tag.
-- [ ] AC5: The quick start in the documentation runs the demo-shop flow with one container command and no other installation.
+- [x] AC1: Official QAJitsu images are published from CI to a public registry for every release.
+- [x] AC2: Images are built for amd64 and arm64.
+- [x] AC3: Every image is signed and ships with an SBOM and build provenance that a user can check.
+- [x] AC4: Tags follow releases (exact version, minor and `latest`); runs record the image digest, never only a tag.
+- [x] AC5: The quick start in the documentation runs the demo-shop flow with one container command and no other installation.
 - [x] AC6: Images run as a non-root user and contain no secrets; configuration and secrets come only from mounted config or the secret provider.
 
 ### REQ-GEN-10 · Ready-to-run images and a Compose stack
@@ -281,7 +282,7 @@ none needs a redesign later.
 
 ### REQ-GEN-15 · Releases of installable packages
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 3
 - Related: REQ-GEN-09, REQ-GEN-11, REQ-NFR-05, INV-11
@@ -289,13 +290,15 @@ none needs a redesign later.
 A pilot starts with `npm install -g @qajitsu/cli`. The packages must install from the registry on a clean machine and do
 what the repository's tests say they do; nothing is released from a person's laptop.
 
-- Note: AC2 is built and its workflow is checked by `tests/contract/release-workflow.test.ts`; it is ticked after the
-  first release ran, which needs the `qajitsu` npm organisation and the `NPM_TOKEN` secret (docs/releasing.md).
+- Note: AC2 is proven by the releases that ran in GitHub Actions: 0.1.0 (all 31 packages on npm with this workflow's
+  provenance, finished over several runs: npm's limit on new packages and staged first versions) and 0.2.0 (every
+  package with provenance, the tags and the GitHub release `@qajitsu/cli@0.2.0`). The workflow is checked by
+  `tests/contract/release-workflow.test.ts`.
 
 **Acceptance criteria**
 
 - [x] AC1: A merge to `main` with pending changesets opens or updates one version pull request: versions, changelogs, the plugin catalogue the CLI pins (REQ-GEN-11/AC3) and the lockfile, all from code.
-- [ ] AC2: Merging the version pull request publishes every package, all at one version, from a fresh CI checkout with npm provenance, tags each and creates the version's GitHub release; the job that holds the token runs no dependency code but the build, and a local publish is refused.
+- [x] AC2: Merging the version pull request publishes every package, all at one version, from a fresh CI checkout with npm provenance, tags each and creates the version's GitHub release; the job that holds the token runs no dependency code but the build, and a local publish is refused.
 - [x] AC3: Before anything is published, a release check packs every package as it would be published and refuses the release when a tarball lacks a file its `main`, `types`, `exports` or `bin` names, keeps a `workspace:` dependency, carries tests, source maps without source, build info, environment files or stale build output, misses its licence, readme, repository, Node.js engine or public access, or is over its size budget.
 - [x] AC4: The release check installs the CLI from those tarballs with npm into an empty folder and runs it without network access to QAJitsu services or models: version, help, `init` of a new project, `doctor`, and installing, listing and removing a plugin from a tarball; any failure refuses the release.
 - [x] AC5: The same check runs on every pull request, so a change that breaks the published packages fails before it merges.

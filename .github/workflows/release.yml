@@ -288,7 +288,12 @@ jobs:
           echo "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
           docker pull "$IMAGE@$DIGEST"
           node scripts/image-check.mjs "$IMAGE@$DIGEST" "$VERSION"
-          docker run --rm --network none --platform linux/arm64 "$IMAGE@$DIGEST" --version | grep -qx "$VERSION"
+          # The other platform by its own manifest: Docker refuses a second platform of an index digest it already
+          # pulled ("cannot overwrite digest").
+          ARM64="$(docker buildx imagetools inspect --raw "$IMAGE@$DIGEST" \
+            | jq -er '.manifests[] | select(.platform.os == "linux" and .platform.architecture == "arm64") | .digest')"
+          [[ "$ARM64" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::no linux/arm64 image in $DIGEST"; exit 1; }
+          docker run --rm --network none --platform linux/arm64 "$IMAGE@$ARM64" --version | grep -qx "$VERSION"
 
   image-notes:
     needs: [release, image-publish]

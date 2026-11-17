@@ -521,6 +521,11 @@ describe("the release image (REQ-GEN-09)", () => {
     expect(run).toContain('docker pull "$IMAGE@$DIGEST"');
     expect(run).toContain('node scripts/image-check.mjs "$IMAGE@$DIGEST" "$VERSION"');
     expect(run).toContain("--platform linux/arm64");
+    // arm64 runs by its own manifest digest, read from the index: Docker refuses a second platform of an index digest
+    // it already pulled, which failed the 0.2.0 release's check of a good image.
+    expect(run).toContain('docker run --rm --network none --platform linux/arm64 "$IMAGE@$ARM64" --version');
+    expect(run).toContain('select(.platform.os == "linux" and .platform.architecture == "arm64")');
+    expect(run).not.toContain('--platform linux/arm64 "$IMAGE@$DIGEST"');
   });
 
   it("REQ-GEN-09: every step of the release workflows fails on a failure inside a pipeline", () => {
