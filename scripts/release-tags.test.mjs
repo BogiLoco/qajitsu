@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { changelogSection, pushAuth, releaseFor } from "./github-release.mjs";
-import { tagEvents } from "./release-tags.mjs";
+import { ensureTags, tagEvents } from "./release-tags.mjs";
 
 describe("tags and the GitHub release (REQ-GEN-15/AC2)", () => {
   it("REQ-GEN-15/AC2: the new tags are read from changesets' output events, nothing else", () => {
@@ -17,6 +17,24 @@ describe("tags and the GitHub release (REQ-GEN-15/AC2)", () => {
       { tag: "@qajitsu/cli@0.2.0", packageName: "@qajitsu/cli" },
     ]);
     expect(tagEvents("")).toEqual([]);
+  });
+
+  it("REQ-GEN-15/AC2: every reported tag exists before the release goes on: a missing one is made, or the release stops", () => {
+    const repo = new Set(["@qajitsu/core@0.2.0"]);
+    const tags = [{ tag: "@qajitsu/core@0.2.0" }, { tag: "@qajitsu/cli@0.2.0" }];
+    expect(
+      ensureTags(tags, {
+        exists: (t) => repo.has(t),
+        create: (t) => (repo.add(t), true),
+      }),
+    ).toEqual({ created: ["@qajitsu/cli@0.2.0"], missing: [] });
+    // A tag git cannot make, or that still does not exist after it said so, is missing: never pushed as if it were.
+    const none = new Set();
+    expect(ensureTags(tags, { exists: (t) => none.has(t), create: () => false })).toEqual({
+      created: [],
+      missing: ["@qajitsu/core@0.2.0", "@qajitsu/cli@0.2.0"],
+    });
+    expect(ensureTags(tags, { exists: () => false, create: () => true }).missing).toHaveLength(2);
   });
 
   it("REQ-GEN-15/AC2: the release notes are the CLI's changelog for the version and every package with it", () => {
