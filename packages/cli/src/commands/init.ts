@@ -143,9 +143,11 @@ export interface InitAnswers {
 
 /** A provider key found by its variable name (REQ-LLM-09/AC1); the value is never read into the result. */
 export interface FoundKey {
-  readonly provider: "anthropic" | "openai" | "google" | "openrouter";
+  readonly provider: "anthropic" | "openai" | "google" | "openrouter" | "litellm";
   readonly variable: string;
   readonly where: "environment" | ".env.local";
+  /** A LiteLLM gateway's address from `LITELLM_BASE_URL` or `LITELLM_API_BASE` in the environment (REQ-LLM-10). */
+  readonly baseUrl?: string;
 }
 
 /** The `models` section proposed for a found key. */
@@ -161,6 +163,7 @@ const KEY_VARIABLES: readonly [FoundKey["provider"], string][] = [
   ["google", "GOOGLE_GENERATIVE_AI_API_KEY"],
   ["google", "GEMINI_API_KEY"],
   ["openrouter", "OPENROUTER_API_KEY"],
+  ["litellm", "LITELLM_API_KEY"],
 ];
 
 /** Default spending limit per run proposed with a paid provider (REQ-LLM-09/AC4). */
@@ -182,11 +185,15 @@ export function findApiKeys(
       .split("\n")
       .flatMap((line) => /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(line)?.[1] ?? []),
   );
+  // A gateway's address is not a secret; it is read from the environment only, like the key's presence.
+  const base = env["LITELLM_BASE_URL"] ?? env["LITELLM_API_BASE"];
+  const gateway = (provider: FoundKey["provider"]) =>
+    provider === "litellm" && base !== undefined && /^https?:\/\/[^\s]+$/.test(base) ? { baseUrl: base } : {};
   return KEY_VARIABLES.flatMap(([provider, variable]): FoundKey[] =>
     env[variable] !== undefined && env[variable] !== ""
-      ? [{ provider, variable, where: "environment" }]
+      ? [{ provider, variable, where: "environment", ...gateway(provider) }]
       : inFile.has(variable)
-        ? [{ provider, variable, where: ".env.local" }]
+        ? [{ provider, variable, where: ".env.local", ...gateway(provider) }]
         : [],
   );
 }
@@ -203,6 +210,39 @@ export function proposeModels(key: FoundKey): ProposedModels | undefined {
     openai: { type: "openai", main: "gpt-6.1-sol", auditor: "gpt-6-luna" },
     google: { type: "google", main: "gemini-4-argon", auditor: "gemini-3.8-flash" },
   };
+  // REQ-LLM-10: gateways tell QAJitsu what their models can do and cost.
+  if (key.provider === "openrouter")
+    return {
+      providers: {
+        openrouter: {
+          type: "openai-compatible",
+          base_url: "https://openrouter.ai/api/v1",
+          api_key: `secret://env/${key.variable}`,
+          gateway: "openrouter",
+          models: {},
+        },
+      },
+      roles: { default: "openrouter/anthropic/claude-sonnet-4.5", auditor: "openrouter/openai/gpt-4o-mini" },
+      summary:
+        "openrouter/anthropic/claude-sonnet-4.5 for every role, openrouter/openai/gpt-4o-mini as the auditor",
+    };
+  if (key.provider === "litellm") {
+    if (key.baseUrl === undefined) return undefined;
+    const url = `${key.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "")}/v1`;
+    return {
+      providers: {
+        litellm: {
+          type: "openai-compatible",
+          base_url: url,
+          api_key: `secret://env/${key.variable}`,
+          gateway: "litellm",
+          models: {},
+        },
+      },
+      roles: {},
+      summary: `the LiteLLM gateway at ${url}; its model names go in models.roles (qj doctor --models shows what each can do)`,
+    };
+  }
   const pair = pairs[key.provider];
   if (!pair) return undefined;
   const alias = key.provider;
@@ -218,6 +258,7 @@ const PROVIDER_NAMES: Readonly<Record<FoundKey["provider"], string>> = {
   openai: "OpenAI",
   google: "Google",
   openrouter: "OpenRouter",
+  litellm: "LiteLLM",
 };
 
 /**
@@ -345,6 +386,12 @@ export async function runInit(
     let maxCostUsd: number | undefined;
     for (const key of keys) {
       const proposed = proposeModels(key);
+      if (!proposed && key.provider === "litellm") {
+        io.write(
+          `Found ${key.variable} (${key.where}): set LITELLM_BASE_URL to the gateway's address and run init again, or add it under models.providers with type: openai-compatible, gateway: litellm.\n`,
+        );
+        continue;
+      }
       if (!proposed) {
         io.write(
           `Found ${key.variable} (${key.where}): ${key.provider} is not set up automatically yet; add it under models.providers with api_key: secret://env/${key.variable}, choose models in models.roles and declare cost_per_mtok for a cost in dollars.\n`,
@@ -357,7 +404,20 @@ export async function runInit(
         );
         continue;
       }
-      io.write(`Found ${key.variable} (${key.where}): ${PROVIDER_NAMES[key.provider]} can run every role.\n`);
+      // The key travels in a header: over plain http to another machine anybody on the way can read it.
+      if (
+        key.baseUrl &&
+        key.baseUrl.startsWith("http://") &&
+        !/^http:\/\/(localhost|127\.\d+\.\d+\.\d+|\[::1\])(:|\/|$)/.test(key.baseUrl)
+      )
+        io.write(
+          `Warning: ${key.baseUrl} is plain http; the gateway's key would cross the network unencrypted. Prefer https.\n`,
+        );
+      io.write(
+        key.provider === "litellm"
+          ? `Found ${key.variable} (${key.where}): ${proposed.summary}.\n`
+          : `Found ${key.variable} (${key.where}): ${PROVIDER_NAMES[key.provider]} can run every role.\n`,
+      );
       const use = (await ask(`Use it for ${proposed.summary}? (y/n)`, "y")).toLowerCase();
       if (!use.startsWith("y")) continue;
       const limit = Number(await ask("Spending limit per run in US dollars", String(DEFAULT_MAX_COST_USD)));

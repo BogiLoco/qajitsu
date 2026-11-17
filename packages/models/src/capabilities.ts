@@ -217,6 +217,14 @@ const BUILT_IN: readonly {
 const UNKNOWN: ModelProfile = { tools: false, structuredOutput: false, vision: false, contextWindow: 8_192 };
 
 /**
+ * Whether QAJitsu has a built-in profile of a model (REQ-LLM-10/AC3): without one, every capability not declared or
+ * reported by a gateway is unknown.
+ */
+export function hasBuiltInProfile(providerType: string, model: string): boolean {
+  return BUILT_IN.some((b) => b.type === providerType && b.match.test(model));
+}
+
+/**
  * Returns the capability profile of a model: built-in profile, then config overrides.
  *
  * @param providerType - Provider type, e.g. `anthropic`, `ollama`.

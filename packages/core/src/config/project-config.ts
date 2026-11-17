@@ -86,8 +86,20 @@ const ModelProviderSchema = z
      * local models answer only when done, which can take longer than the HTTP client's usual 5 minutes.
      */
     timeout_s: z.number().int().min(1).max(7200).optional(),
+    /**
+     * An OpenAI-compatible gateway that knows its models (REQ-LLM-10): QAJitsu reads their context window, features
+     * and prices from it (LiteLLM's model info, OpenRouter's model list). Declared `models` values still win.
+     */
+    gateway: z.enum(["litellm", "openrouter"]).optional(),
   })
   .superRefine((p, ctx) => {
+    if (p.gateway !== undefined && p.type !== "openai-compatible") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["gateway"],
+        message: "Only an openai-compatible provider is a gateway",
+      });
+    }
     if (p.type === "openai-compatible" && p.base_url === undefined) {
       ctx.addIssue({
         code: "custom",

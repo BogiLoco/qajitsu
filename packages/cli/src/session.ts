@@ -26,6 +26,7 @@ import {
 import { createMasker, type Masker } from "@qajitsu/steps";
 import { createCliSecretResolver, type RuntimePorts } from "./adapters.js";
 import { createCliLogger } from "./logger.js";
+import { fileGatewayCache } from "./gateway-cache.js";
 import { loadProject, type LoadedProject } from "./project.js";
 
 /** Everything a command needs to work on an existing run. */
@@ -155,6 +156,13 @@ export async function openSession(
     cacheTtl,
     ...(ports.extraModels ? { extra: ports.extraModels } : {}),
     ...(ports.contextPolicy ? { contextPolicy: ports.contextPolicy } : {}),
+    // REQ-LLM-10: the gateway's answers kept with the project, a silent gateway in the run's log.
+    ...(ports.project
+      ? { gatewayCache: fileGatewayCache(join(ports.project.paths.home, "cache", "gateways.json")) }
+      : {}),
+    onWarning: (message) => {
+      logger.warn({ event: "gateway.unavailable" }, message);
+    },
   });
   return {
     project,

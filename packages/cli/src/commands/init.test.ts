@@ -302,8 +302,9 @@ describe("start with an API key only (REQ-LLM-09/AC1+AC4)", () => {
     expect(r.out).toContain(
       "Models: openai/gpt-6.1-sol for every role, openai/gpt-6-luna as the auditor; at most $5.00 per run",
     );
+    // REQ-LLM-10: OpenRouter is a gateway QAJitsu reads model profiles from, so it is proposed like the others.
     expect(r.out).toContain(
-      "Found OPENROUTER_API_KEY (environment): openrouter is not set up automatically yet",
+      "Found OPENROUTER_API_KEY (environment): OpenRouter can run every role too; the project uses openai now",
     );
     expect(r.out).toContain(
       "Found GEMINI_API_KEY (environment): Google can run every role too; the project uses openai now, switch models.roles to use it instead.",
@@ -319,5 +320,63 @@ describe("start with an API key only (REQ-LLM-09/AC1+AC4)", () => {
       providers: { google: { type: "google", api_key: "secret://env/GEMINI_API_KEY" } },
       roles: { default: "google/gemini-4-argon", auditor: "google/gemini-3.8-flash" },
     });
+  });
+
+  it("REQ-LLM-10/AC1: an OpenRouter key sets OpenRouter up as a gateway; its models' profiles come from it", async () => {
+    const repo = await otherProject();
+    const r = await run(repo, ["init", "pet-clinic", "--yes"], undefined, { OPENROUTER_API_KEY: "sk-or-x" });
+    expect(r.out).toContain("Found OPENROUTER_API_KEY (environment): OpenRouter can run every role.");
+    expect((await configOf(repo)).models).toMatchObject({
+      providers: {
+        openrouter: {
+          type: "openai-compatible",
+          base_url: "https://openrouter.ai/api/v1",
+          api_key: "secret://env/OPENROUTER_API_KEY",
+          gateway: "openrouter",
+        },
+      },
+      roles: { default: "openrouter/anthropic/claude-sonnet-4.5", auditor: "openrouter/openai/gpt-4o-mini" },
+    });
+  });
+
+  it("REQ-LLM-10/AC1: a LiteLLM key with its address sets the gateway up; its model names go in models.roles", async () => {
+    const repo = await otherProject();
+    const r = await run(repo, ["init", "pet-clinic", "--yes"], undefined, {
+      LITELLM_API_KEY: "sk-litellm-x",
+      LITELLM_BASE_URL: "https://litellm.example.test",
+    });
+    expect(r.out).toContain(
+      "Found LITELLM_API_KEY (environment): the LiteLLM gateway at https://litellm.example.test/v1",
+    );
+    expect(r.out).toContain("its model names go in models.roles");
+    const config = await configOf(repo);
+    expect(config.models.providers["litellm"]).toMatchObject({
+      type: "openai-compatible",
+      base_url: "https://litellm.example.test/v1",
+      api_key: "secret://env/LITELLM_API_KEY",
+      gateway: "litellm",
+    });
+    expect(r.out).not.toContain("plain http");
+    const plain = await otherProject();
+    const h = await run(plain, ["init", "pet-clinic", "--yes"], undefined, {
+      LITELLM_API_KEY: "sk-litellm-x",
+      LITELLM_API_BASE: "http://litellm.internal.example.test:4000",
+    });
+    expect(h.out).toContain("is plain http; the gateway's key would cross the network unencrypted");
+    const local = await otherProject();
+    const l = await run(local, ["init", "pet-clinic", "--yes"], undefined, {
+      LITELLM_API_KEY: "sk-litellm-x",
+      LITELLM_BASE_URL: "http://localhost:4000",
+    });
+    expect(l.out).not.toContain("plain http");
+    // Without its address the key is only named: where the gateway is cannot be guessed.
+    const bare = await otherProject();
+    const b = await run(bare, ["init", "pet-clinic", "--yes"], undefined, {
+      LITELLM_API_KEY: "sk-litellm-x",
+    });
+    expect(b.out).toContain(
+      "Found LITELLM_API_KEY (environment): set LITELLM_BASE_URL to the gateway's address",
+    );
+    expect((await configOf(bare)).models.providers["litellm"]).toBeUndefined();
   });
 });

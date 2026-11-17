@@ -501,11 +501,19 @@ export function createProgram(version: string, io: ProgramIO): Command {
           const { createMasker } = await import("@qajitsu/steps");
           const { createCliSecretResolver } = await import("./adapters.js");
           const masker = createMasker();
+          const { fileGatewayCache } = await import("./gateway-cache.js");
           const models = createModelRegistry({
             config: project.config.models,
             resolveSecret: createCliSecretResolver(project, io.ports, masker),
             fetch: io.ports.fetch,
             ...(io.ports.extraModels ? { extra: io.ports.extraModels } : {}),
+            // REQ-LLM-10: gateway answers are kept in the project's home with their time; a silent gateway is said.
+            ...(resolved
+              ? { gatewayCache: fileGatewayCache(join(resolved.paths.home, "cache", "gateways.json")) }
+              : {}),
+            onWarning: (message) => {
+              commandIO.writeError(`! ${message}\n`);
+            },
           });
           const approval = project.config.approval;
           const probes = await probeModels(

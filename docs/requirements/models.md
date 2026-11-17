@@ -140,20 +140,22 @@ windows or prices: put the key in `.env.local`, run `qj init`, and go, with a sp
 
 ### REQ-LLM-10 · Model profiles from gateways (LiteLLM, OpenRouter)
 
-- Status: proposed
+- Status: implemented
 - Priority: could
 - Stage: later
 - Related: REQ-LLM-01, REQ-LLM-03, REQ-LLM-09
+- Note: pulled forward from `later` by the owner on 2026-11-17, before the MVP's remaining points: LiteLLM and
+  OpenRouter both. The formats are taken from a real LiteLLM proxy (`/model/info`) and OpenRouter's public model list.
 
 Behind an OpenAI-compatible gateway the model name tells QAJitsu nothing about its capabilities and price. The
 gateways know them; QAJitsu should ask instead of making the user copy them into the config.
 
 **Acceptance criteria**
 
-- [ ] AC1: For an OpenAI-compatible provider marked as a gateway (`gateway: openrouter | litellm`), QAJitsu reads the gateway's model information (OpenRouter's model list, LiteLLM's model info) and uses the context window, supported features and prices it reports as the model's profile.
-- [ ] AC2: Values declared in the project config win; a capability the gateway does not report stays unknown, and a role that needs it is refused as in REQ-LLM-03/AC3 with how to declare it. Nothing is assumed.
-- [ ] AC3: The information is cached per provider with the time it was read; `qj doctor --models` shows for every capability where it came from (gateway, built-in profile, config).
-- [ ] AC4: A gateway that does not answer falls back to the config and built-in profiles with a warning; the key is sent only to that gateway and never logged.
+- [x] AC1: For an OpenAI-compatible provider marked as a gateway (`gateway: openrouter | litellm`), QAJitsu reads the gateway's model information (OpenRouter's model list, LiteLLM's model info) and uses the context window, supported features and prices it reports as the model's profile.
+- [x] AC2: Values declared in the project config win; a capability the gateway does not report stays unknown, and a role that needs it is refused as in REQ-LLM-03/AC3 with how to declare it. Nothing is assumed.
+- [x] AC3: The information is cached per provider with the time it was read; `qj doctor --models` shows for every capability where it came from (gateway, built-in profile, config).
+- [x] AC4: A gateway that does not answer falls back to the config and built-in profiles with a warning; the key is sent only to that gateway and never logged.
 
 ### REQ-LLM-11 · Cost per verified ticket
 

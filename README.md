@@ -1283,7 +1283,7 @@ verification: { auditor: optional, canary: true, triage: on }
 - **Independent auditor and canary.** A second model reviews every PASSED against plan, results, evidence and
   screenshots; the canary re-runs one case with an inverted expectation that must fail. Both can only downgrade.
   [docs/guides/models-and-verification.md](docs/guides/models-and-verification.md)
-- **Any model, per role.** Anthropic, OpenAI, Google, OpenAI-compatible gateways (LiteLLM, vLLM), Ollama; capability
+- **Any model, per role.** Anthropic, OpenAI, Google, OpenAI-compatible gateways (LiteLLM, OpenRouter, vLLM), Ollama; a LiteLLM or OpenRouter gateway tells QAJitsu what each of its models can do and costs ([guide](docs/guides/models-and-verification.md#gateways-litellm-and-openrouter)); capability
   checks per role; token budget per run; cost estimates; `qj bench` to compare models.
 - **Context manager.** Every model call is built from typed fragments by code: each role sees only what it may see,
   untrusted text sits in data blocks with a per-run marker, and a call that fits its model's budget is sent whole.

@@ -1,4 +1,4 @@
-import type { ModelRegistry, ModelRole } from "@qajitsu/models";
+import type { ModelRegistry, ModelRole, ProfileSources } from "@qajitsu/models";
 import { MODEL_ROLES } from "@qajitsu/models";
 import { generateText, stepCountIs, tool } from "ai";
 import { z } from "zod";
@@ -15,6 +15,10 @@ export interface ModelProbe {
   /** Capabilities the role needs that the model's profile lacks. */
   readonly missing: readonly string[];
   readonly error?: string;
+  /** Where each capability came from, for a gateway's model (REQ-LLM-10/AC3). */
+  readonly sources?: ProfileSources;
+  /** When that gateway was read. */
+  readonly gatewayReadAt?: string;
 }
 
 /**
@@ -78,6 +82,8 @@ export async function probeModels(
         reachable: true,
         toolCalls: called,
         missing: [...missing, ...toolMissing],
+        ...(resolved.sources ? { sources: resolved.sources } : {}),
+        ...(resolved.gatewayReadAt ? { gatewayReadAt: resolved.gatewayReadAt } : {}),
       });
     } catch (error) {
       results.push({
@@ -102,7 +108,11 @@ export function formatProbes(probes: readonly ModelProbe[]): string {
         : p.missing.length > 0
           ? `missing ${p.missing.join(", ")}`
           : `ok${p.toolCalls ? ", tool calls work" : ""}`;
-      return `${ok ? "✔" : "✘"} ${p.role}: ${p.model} ${detail}`;
+      // REQ-LLM-10/AC3: for a gateway's model, where every capability came from.
+      const from = p.sources
+        ? `\n    from: tools ${p.sources.tools}, structured output ${p.sources.structuredOutput}, vision ${p.sources.vision}, context ${p.sources.contextWindow}, price ${p.sources.price}${p.gatewayReadAt ? ` (gateway read ${p.gatewayReadAt})` : ""}`
+        : "";
+      return `${ok ? "✔" : "✘"} ${p.role}: ${p.model} ${detail}${from}`;
     })
     .join("\n");
 }

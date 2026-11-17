@@ -177,6 +177,34 @@ describe("parseProjectConfig (REQ-GEN-01, REQ-CTX-02)", () => {
   });
 });
 
+describe("model gateways (REQ-LLM-10)", () => {
+  it("REQ-LLM-10/AC1: an openai-compatible provider may be a LiteLLM or OpenRouter gateway; no other type can", () => {
+    const gateway = (type: string, kind: string) => ({
+      ...valid,
+      models: {
+        providers: {
+          gw: {
+            type,
+            base_url: "https://gateway.example.test/v1",
+            api_key: "secret://env/GW_KEY",
+            gateway: kind,
+          },
+        },
+      },
+    });
+    expect(parseProjectConfig(gateway("openai-compatible", "litellm")).models.providers["gw"]?.gateway).toBe(
+      "litellm",
+    );
+    expect(
+      parseProjectConfig(gateway("openai-compatible", "openrouter")).models.providers["gw"]?.gateway,
+    ).toBe("openrouter");
+    expect(() => parseProjectConfig(gateway("openai", "litellm"))).toThrow(
+      /Only an openai-compatible provider/,
+    );
+    expect(() => parseProjectConfig(gateway("openai-compatible", "bedrock"))).toThrow(ConfigError);
+  });
+});
+
 describe("web matrix (REQ-EXEC-13)", () => {
   it("REQ-EXEC-13/AC1: every browser × viewport, primary first; without a matrix one combination of web.browser", () => {
     const base = { project: "demo", jira: { type: "file", tickets_dir: "t", project_key: "DEMO" } };
