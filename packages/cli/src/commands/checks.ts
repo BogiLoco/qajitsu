@@ -1,14 +1,24 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { runUsage, saveRunUsage } from "../run-usage.js";
 import { join, relative, sep } from "node:path";
 import type * as RunnerApiPlugin from "@qajitsu/adapter-runner-api";
 import type { RunCasesOptions } from "@qajitsu/adapter-runner-api";
 import { sessionPlugins } from "./plugin.js";
 import { createLocalEvidenceStore } from "@qajitsu/adapter-evidence-local";
-import { runAuditor, runBlockedHints, runTriage, type AuditInput } from "@qajitsu/agents";
+import {
+  collectAudit,
+  queueAudit,
+  runAuditor,
+  runBlockedHints,
+  runTriage,
+  type AuditInput,
+} from "@qajitsu/agents";
 import {
   AuditRecordSchema,
   CanaryRecordSchema,
+  ConfigError,
+  acquireRunLock,
+  parseEventLines,
   TriageRecordSchema,
   BlockedRecordSchema,
   type BlockedRecord,
@@ -44,6 +54,205 @@ const MEDIA_TYPES: Record<string, string> = {
 };
 
 /**
+ * Queues the audit in the auditor provider's batch (REQ-VER-06/AC4): the request goes to `checks/audit-request.json`
+ * (masked, its hash in run.json), the queued record names the batch. Undefined when the provider has no batch API.
+ * A failure to queue is a failed audit, recorded like any other.
+ */
+async function queuedAuditRecord(
+  session: RunSession,
+  deps: Parameters<typeof queueAudit>[0],
+  input: AuditInput,
+  mode: "optional" | "required",
+  now: () => Date,
+): Promise<AuditRecord | undefined> {
+  let queued;
+  try {
+    queued = await queueAudit(deps, input);
+  } catch (error) {
+    const message = session.masker
+      .maskText(error instanceof Error ? error.message : String(error))
+      .slice(0, 500);
+    session.events.emit("audit", SYSTEM, "audit.failed", { mode, error: message });
+    return { schema: 1, status: "failed", mode, error: message };
+  }
+  if (!queued) {
+    session.events.emit("audit", SYSTEM, "audit.batch_unavailable", {
+      reason: "the auditor's provider has no batch API; audited now",
+    });
+    return undefined;
+  }
+  const request = session.masker.maskJson(queued.request);
+  await writeRecord(session, AUDIT_REQUEST, request);
+  return AuditRecordSchema.parse({
+    schema: 1,
+    status: "queued",
+    mode,
+    model: queued.model,
+    sameModelAsAuthor: queued.sameModelAsAuthor,
+    passed: queued.passed,
+    batch: queued.batch,
+    submittedAt: now().toISOString(),
+    ...(queued.expiresAt ? { expiresAt: queued.expiresAt } : {}),
+    requestSha256: sha256(JSON.stringify(request)),
+    resultsSha256: await resultsDigest(session.ws),
+  });
+}
+
+/** The request of a queued audit, kept until it is collected (REQ-VER-06/AC4). */
+const AUDIT_REQUEST = "audit-request.json";
+
+/**
+ * A digest over the run's result files and evidence manifest (REQ-VER-06/AC4): what a queued audit reviewed. A rerun
+ * of the cases changes it, so an answer about the earlier results is never applied to the new ones.
+ */
+async function resultsDigest(ws: RunSession["ws"]): Promise<string> {
+  const names = (await readdir(ws.path("results")).catch(() => [] as string[]))
+    .filter((n) => n.endsWith(".json"))
+    .sort();
+  const parts: string[] = [];
+  for (const n of names) parts.push(`results/${n} ${sha256(await readFile(ws.path("results", n)))}`);
+  const manifest = await readFile(ws.path("evidence", "manifest.json")).catch(() => undefined);
+  parts.push(`evidence/manifest.json ${manifest === undefined ? "-" : sha256(manifest)}`);
+  return sha256(parts.join("\n"));
+}
+
+/** Removes a check record and its hash (only the orchestrator, while it writes the record anew). */
+async function dropRecord(session: RunSession, name: string): Promise<void> {
+  await rm(session.ws.path("checks", name), { force: true });
+  const checks = Object.fromEntries(
+    Object.entries((session.ws.record.data["checks"] ?? {}) as Record<string, string>).filter(
+      ([k]) => k !== name,
+    ),
+  );
+  await session.ws.update({ data: { ...session.ws.record.data, checks } });
+}
+
+/**
+ * Collects the run's queued audit (REQ-VER-06/AC4): while the batch is pending nothing changes; its answer, checked
+ * like an immediate audit's, or its failure replaces the queued record. The stored request must be the one queued.
+ *
+ * @returns `undefined` when the run has no queued audit; `pending` with the progress; the new record otherwise.
+ * @throws ConfigError `AUDIT_REQUEST_CHANGED` when the stored request or the queued record was changed.
+ */
+export async function collectQueuedAudit(
+  session: RunSession,
+  now: () => Date,
+): Promise<
+  | undefined
+  | { readonly status: "pending"; readonly counts?: { readonly completed: number; readonly total: number } }
+  | { readonly status: "collected"; readonly record: AuditRecord }
+> {
+  const { ws, masker, events } = session;
+  const checks = (ws.record.data["checks"] ?? {}) as Record<string, string>;
+  const read = async (name: string): Promise<string | undefined> => {
+    const text = await readFile(ws.path("checks", name), "utf8").catch(() => undefined);
+    if (text !== undefined && checks[name] !== sha256(text))
+      throw new ConfigError(
+        "AUDIT_REQUEST_CHANGED",
+        `checks/${name} does not match the hash recorded in run.json; the queued audit cannot be trusted.`,
+        { file: name },
+      );
+    return text;
+  };
+  // A missing, changed or broken audit record is not collected: the verdict's record checks fail closed on it.
+  const auditText = await readFile(ws.path("checks", "audit.json"), "utf8").catch(() => undefined);
+  if (auditText === undefined || checks["audit.json"] !== sha256(auditText)) return undefined;
+  let parsedAudit: unknown;
+  try {
+    parsedAudit = JSON.parse(auditText);
+  } catch {
+    return undefined;
+  }
+  const valid = AuditRecordSchema.safeParse(parsedAudit);
+  if (!valid.success || valid.data.status !== "queued") return undefined;
+  const audit = valid.data;
+  const requestText = await read(AUDIT_REQUEST);
+  const request: unknown = requestText === undefined ? undefined : JSON.parse(requestText);
+  if (request === undefined || sha256(JSON.stringify(request)) !== audit.requestSha256)
+    throw new ConfigError(
+      "AUDIT_REQUEST_CHANGED",
+      "checks/audit-request.json is not the request that was queued; the queued audit cannot be trusted.",
+      {},
+    );
+  // The results it reviewed must still be the run's: a rerun voids it, as a required audit that failed.
+  if ((await resultsDigest(ws)) !== audit.resultsSha256) {
+    const record: AuditRecord = {
+      schema: 1,
+      status: "failed",
+      mode: "required",
+      error: `the results changed after the audit was queued in batch ${audit.batch.id}; audit the run again`,
+    };
+    events.emit("audit", SYSTEM, "audit.failed", {
+      mode: "required",
+      error: record.error,
+      batch: audit.batch.id,
+    });
+    await writeRecord(session, "audit.json", record);
+    return { status: "collected", record };
+  }
+  // One collector at a time: the call is recorded once, the record written once.
+  const release = await acquireRunLock(ws.path("run.lock"));
+  try {
+    const journal = await readFile(ws.path("journal", "events.jsonl"), "utf8").catch(() => "");
+    const alreadyRecorded = parseEventLines(journal).events.some(
+      (e) =>
+        e.event === "audit.batch_recorded" &&
+        (e.details as { batch?: unknown } | undefined)?.batch === audit.batch.id,
+    );
+    const usage = runUsage(session);
+    const collected = await collectAudit(
+      {
+        ws,
+        models: session.models,
+        events,
+        usage,
+        now,
+        maskJson: (v: unknown) => masker.maskJson(v),
+        maskText: (t: string) => masker.maskText(t),
+      },
+      {
+        model: audit.model,
+        sameModelAsAuthor: audit.sameModelAsAuthor,
+        passed: audit.passed,
+        batch: audit.batch,
+        ...(audit.expiresAt ? { expiresAt: audit.expiresAt } : {}),
+        request,
+        requestSha256: audit.requestSha256,
+      },
+      { alreadyRecorded },
+    );
+    if (collected.status === "pending") return collected;
+    const record: AuditRecord =
+      collected.status === "done"
+        ? AuditRecordSchema.parse({ schema: 1, status: "done", mode: audit.mode, ...collected.result })
+        : {
+            schema: 1,
+            status: "failed",
+            // An answer that is not a valid report could hide a weak finding: it fails like a required audit.
+            mode: collected.invalidAnswer === true ? "required" : audit.mode,
+            error: masker.maskText(collected.error).slice(0, 500),
+          };
+    events.emit(
+      "audit",
+      SYSTEM,
+      record.status === "done" ? "audit.done" : "audit.failed",
+      record.status === "done"
+        ? {
+            cases: record.findings.length,
+            weak: record.findings.filter((f) => f.weak).length,
+            batch: audit.batch.id,
+          }
+        : { mode: audit.mode, error: record.status === "failed" ? record.error : "", batch: audit.batch.id },
+    );
+    await saveRunUsage(ws, usage, "audit");
+    await writeRecord(session, "audit.json", record);
+    return { status: "collected", record };
+  } finally {
+    await release();
+  }
+}
+
+/**
  * Runs the independent auditor over the PASSED cases and writes `checks/audit.json` (REQ-VER-06).
  * The record is written by this code from the validated auditor answer; statuses are applied later by
  * `applyVerificationChecks`, which can only downgrade. A failing auditor is recorded, never retried
@@ -55,6 +264,22 @@ export async function auditRun(session: RunSession, now: () => Date): Promise<Au
   const { project, ws, masker, events } = session;
   const mode = project.config.verification.auditor;
   if (mode === "off") return undefined;
+  // REQ-VER-06/AC4: the audit runs again for these results; an earlier queued audit reviewed other ones.
+  const earlier = await readFile(ws.path("checks", "audit.json"), "utf8").catch(() => undefined);
+  if (earlier !== undefined) {
+    let earlierRaw: unknown;
+    try {
+      earlierRaw = JSON.parse(earlier);
+    } catch {
+      earlierRaw = undefined;
+    }
+    const parsedEarlier = AuditRecordSchema.safeParse(earlierRaw);
+    if (parsedEarlier.success && parsedEarlier.data.status === "queued") {
+      events.emit("audit", SYSTEM, "audit.superseded", { batch: parsedEarlier.data.batch.id });
+      await dropRecord(session, "audit.json");
+      await dropRecord(session, AUDIT_REQUEST);
+    }
+  }
   const verdict = await computeVerdict(session, now, { checksPending: true });
   const passed = verdict.cases.filter((c) => c.status === "PASSED");
   if (passed.length === 0) return undefined;
@@ -90,20 +315,33 @@ export async function auditRun(session: RunSession, now: () => Date): Promise<Au
     }
   }
   const usage = runUsage(session);
+  const deps = {
+    ws,
+    models: session.models,
+    events,
+    usage,
+    now,
+    maskJson: (v: unknown) => masker.maskJson(v),
+    maskText: (t: string) => masker.maskText(t),
+  };
   let record: AuditRecord;
-  try {
-    const result = await runAuditor(
-      {
-        ws,
-        models: session.models,
-        events,
-        usage,
-        now,
-        maskJson: (v: unknown) => masker.maskJson(v),
-        maskText: (t: string) => masker.maskText(t),
-      },
+  // REQ-VER-06/AC4: through the provider's batch API when the project asks; a provider without one audits now.
+  if (project.config.verification.auditor_delivery === "batch") {
+    const queued = await queuedAuditRecord(
+      session,
+      deps,
       { plan: verdict.plan, cases, texts, images },
+      mode,
+      now,
     );
+    if (queued) {
+      await saveRunUsage(ws, usage, "audit");
+      await writeRecord(session, "audit.json", queued);
+      return queued;
+    }
+  }
+  try {
+    const result = await runAuditor(deps, { plan: verdict.plan, cases, texts, images });
     record = AuditRecordSchema.parse({ schema: 1, status: "done", mode, ...result });
     // REQ-PLAN-16/AC4: how many PASSED the auditor downgraded, for the project's metrics.
     events.emit("audit", SYSTEM, "audit.done", {

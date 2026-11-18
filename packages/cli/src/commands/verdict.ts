@@ -408,7 +408,11 @@ export async function computeVerdict(
         ]
       : audit?.status === "failed"
         ? [`Auditor did not complete (${audit.mode}): ${audit.error}`]
-        : []),
+        : audit?.status === "queued"
+          ? [
+              `Audit pending: batch ${audit.batch.id} of ${audit.model}, queued ${audit.submittedAt}${audit.expiresAt ? `, answered by ${audit.expiresAt} at the latest` : ""}; collect it with qajitsu audit collect ${ws.ticket} --run ${ws.runId}.`,
+            ]
+          : []),
     ...integrity.map((p) => `Verification record problem: ${p}`),
     ...(canary?.status === "skipped"
       ? ["Canary skipped: no PASSED case with a structured expectation."]
@@ -739,6 +743,17 @@ export async function computeVerdict(
     },
     { gate: "results-valid", ok: malformed.length === 0, problems: malformed },
     { gate: "checks-intact", ok: integrity.length === 0, problems: integrity },
+    // REQ-VER-06/AC4: a queued audit has reviewed nothing yet; its PASSED are not published as NEEDS_REVIEW.
+    {
+      gate: "audit-collected",
+      ok: audit?.status !== "queued",
+      problems:
+        audit?.status === "queued"
+          ? [
+              `the audit is still in batch ${audit.batch.id}; run qajitsu audit collect ${ws.ticket} --run ${ws.runId}`,
+            ]
+          : [],
+    },
     {
       gate: "approval-intact",
       ok: approvalCheck.problems.length === 0,

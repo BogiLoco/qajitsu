@@ -264,6 +264,35 @@ Check records fail closed: `checks/audit.json` and `checks/canary.json` are hash
 When a check is enabled and something PASSED, a missing, changed or unreadable record turns every PASSED into
 NEEDS_REVIEW and fails the `checks-intact` publish gate. Deleting a record never brings back a PASSED it took away.
 
+### The audit in a provider batch (REQ-VER-06/AC4, REQ-LLM-12/AC3)
+
+Anthropic, OpenAI and Google answer batched calls at half price, within minutes and at most 24 hours. With
+`auditor_delivery: batch` the run's audit goes there instead of being called during the run:
+
+```yaml
+verification:
+  auditor: required
+  auditor_delivery: batch # now (default) | batch
+```
+
+- `qj run` ends as usual and says `Audit queued in batch <id>`. Until the answer is collected the audit has reviewed
+  nothing, so every PASSED case shows as **NEEDS_REVIEW** with "audit pending", and the `audit-collected` gate keeps
+  the run from being published.
+- `qj audit collect <TICKET> [--wait]` collects it (`qj publish` tries once by itself). The answer is checked like an
+  immediate audit's: one finding for each PASSED case it reviewed and nothing else, naming the run. A batch that
+  failed, expired or was cancelled is a failed audit under the configured mode (`optional`, `required`); an invalid
+  answer, or results that changed after the audit was queued, fail as a required audit (every PASSED to
+  NEEDS_REVIEW), because a batched answer cannot be repaired. No certificate is issued while the audit is queued.
+- The batched call has no tools and one attempt. The request is kept (masked) in `checks/audit-request.json` with its
+  hash in `run.json`; a changed request or queued record is refused (`AUDIT_REQUEST_CHANGED`). The prompt and answer
+  go into the transcript and the tokens and cost (at the batch price) into the run and the spend ledger when it is
+  collected.
+- An auditor whose provider has no batch API (Ollama, OpenAI-compatible, gateways) audits at once; the journal says
+  why (`audit.batch_unavailable`).
+
+It suits runs nobody waits for (nightly, CI before a morning review). For a run a person publishes right away, keep
+`now`.
+
 ## Failure hints (REQ-VER-12)
 
 After a run with FAILED cases, the `triage` role (`models.roles.triage`, else `default`) suggests a likely cause

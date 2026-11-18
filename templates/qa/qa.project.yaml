@@ -183,6 +183,8 @@ test_types: [api, web]
 #
 # Auditor and canary (REQ-VER-06, REQ-VER-09)
 # verification: { auditor: optional, auditor_max_images: 12, canary: false, triage: on }
+# auditor_delivery: batch sends the audit to the provider's batch API at half price; PASSED wait as NEEDS_REVIEW until
+# qj audit collect (REQ-VER-06/AC4). Default now.
 #
 # Plan approval flow (REQ-PLAN-10, ADR-0010): a person by default; a model step needs a model other than the planner's
 # approval: { flow: [model, person], model: local/qwen3:14b, model_only: as-computed, jira: off }

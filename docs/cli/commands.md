@@ -1078,6 +1078,20 @@ report lists which specs a person reviewed. A review can only stop a spec, never
 
 Exit codes: `0` shown or decided, `2` no spec to review, `3` errors (also after the run was executed).
 
+### `qajitsu audit collect <ticket>`
+
+Collects the audit a run sent to the provider's batch API (`verification.auditor_delivery: batch`, REQ-VER-06/AC4).
+While the batch is not answered the run's PASSED cases show as NEEDS_REVIEW ("audit pending") and nothing is
+published. Once collected, the findings are checked and applied as an immediate audit's are, and the statuses and
+reports are computed again. A failed, expired or invalid answer is a failed audit under the configured mode.
+
+- `--run <id>`: run id (default: latest run of the ticket)
+- `--wait`: wait until the batch is answered
+- `--interval <seconds>`: with `--wait`, how often to ask (default 60)
+- `--timeout <seconds>`: with `--wait`, how long to wait at most (default 86400)
+
+Exit codes: `0` collected or nothing queued, `2` still pending, `3` errors (also a changed request or record).
+
 ### `qajitsu audit verify [ticket]`
 
 Checks the hash chain of run journals, also archived ones. For a live run it also checks the approval records and

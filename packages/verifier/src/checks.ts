@@ -13,6 +13,7 @@ export interface CheckedStatus {
  * REQ-VER-09/AC2, invariant 5). Both can only move PASSED to NEEDS_REVIEW, never anything up:
  * - a finding `weak: true` downgrades that case;
  * - a failed audit in `required` mode downgrades every PASSED;
+ * - an audit queued in a provider batch and not collected yet downgrades every PASSED, in both modes;
  * - a canary that passed (the inverted expectation was not caught) or could not run downgrades every PASSED;
  * - a record that is expected but missing, unreadable or changed after it was written downgrades every
  *   PASSED (fail closed: deleting a record must not bring back what it downgraded);
@@ -40,6 +41,9 @@ export function applyVerificationChecks(
     else if (canary?.status === "error") reason = `canary could not run: ${canary.detail}`;
     else if (canary?.status === "ran" && !canary.caught)
       reason = `canary not caught: ${canary.caseId} ${canary.stepId} ${canary.field} passed with an inverted expectation`;
+    else if (audit?.status === "queued")
+      // REQ-VER-06/AC4: an audit nobody collected yet has not reviewed anything; its PASSED wait for it.
+      reason = `audit pending: batch ${audit.batch.id} of ${audit.model}, queued ${audit.submittedAt}`;
     else if (audit?.status === "failed" && audit.mode === "required")
       reason = `required audit failed: ${audit.error}`;
     else if (audit?.status === "done") {

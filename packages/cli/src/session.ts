@@ -21,6 +21,7 @@ import {
   createModelRegistry,
   type CacheTtl,
   type ModelRegistry,
+  type ModelBatch,
   type ResolvedModel,
 } from "@qajitsu/models";
 import { createMasker, type Masker } from "@qajitsu/steps";
@@ -48,6 +49,8 @@ export interface RunSession {
 /** Ports for model access that tests can replace (mock providers by alias). */
 export interface ModelPorts {
   readonly extraModels?: Readonly<Record<string, (model: string) => ResolvedModel["model"]>>;
+  /** Batch APIs of the extra models by alias (tests, REQ-LLM-12/AC3). */
+  readonly extraBatches?: Readonly<Record<string, (model: string) => ModelBatch>>;
   /**
    * Run-level model override (configuration layer 5): `qajitsu bench --model <ref> [--role <role>]`.
    * Without a role the model takes every role except an unconfigured auditor, which keeps choosing
@@ -155,6 +158,7 @@ export async function openSession(
     fetch: ports.fetch,
     cacheTtl,
     ...(ports.extraModels ? { extra: ports.extraModels } : {}),
+    ...(ports.extraBatches ? { extraBatches: ports.extraBatches } : {}),
     ...(ports.contextPolicy ? { contextPolicy: ports.contextPolicy } : {}),
     // REQ-LLM-10: the gateway's answers kept with the project, a silent gateway in the run's log.
     ...(ports.project

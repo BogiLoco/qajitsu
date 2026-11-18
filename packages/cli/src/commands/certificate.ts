@@ -8,6 +8,7 @@ import {
 import { chmod, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
+  AuditRecordSchema,
   CERTIFICATE_DIR,
   CERTIFICATE_FILE,
   ConfigError,
@@ -108,6 +109,8 @@ export function certifiedVerdict(verdict: {
 /** The outcome of issuing a certificate. */
 export type IssueOutcome =
   | { readonly status: "off" }
+  /** The audit is still in a provider batch (REQ-VER-06/AC4): the statuses are not final, nothing is certified. */
+  | { readonly status: "pending"; readonly reason: string }
   | { readonly status: "gaps"; readonly gaps: readonly string[] }
   | {
       readonly status: "issued";
@@ -153,6 +156,18 @@ export async function issueCertificate(
   };
 }
 
+/** The batch id of the run's queued audit, when `checks/audit.json` holds one (REQ-VER-06/AC4). */
+async function queuedAuditBatch(session: Pick<RunSession, "ws">): Promise<string | undefined> {
+  const text = await readFile(session.ws.path("checks", "audit.json"), "utf8").catch(() => undefined);
+  if (text === undefined) return undefined;
+  try {
+    const record = AuditRecordSchema.safeParse(JSON.parse(text));
+    return record.success && record.data.status === "queued" ? record.data.batch.id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function issueOrReuse(
   session: RunSession,
   now: () => Date,
@@ -161,6 +176,13 @@ async function issueOrReuse(
   const key = await signingKey(session);
   if (key === undefined) return { status: "off" };
   const { ws, events } = session;
+  // REQ-VER-06/AC4: a certificate over statuses an audit still holds back would sign results that are not final.
+  const queued = await queuedAuditBatch(session);
+  if (queued !== undefined)
+    return {
+      status: "pending",
+      reason: `the audit is still in batch ${queued}; collect it with qajitsu audit collect ${ws.ticket} --run ${ws.runId}`,
+    };
   const loaded = await loadAuditTrail(session);
   if (loaded.trail.gaps.length > 0) {
     events.emit("certificate", { kind: "system", name: "verifier" }, "certificate.refused", {
@@ -190,7 +212,13 @@ async function issueOrReuse(
       events.emit("certificate", { kind: "system", name: "verifier" }, "certificate.refused", { gaps });
       return { status: "gaps", gaps };
     }
-    if (check.problems.length === 0 && check.statement?.subject.length === covered) {
+    // Reused only when every file it covers is as signed; re-rendered reports or a collected audit get a new one.
+    if (
+      check.problems.length === 0 &&
+      check.changed.length === 0 &&
+      check.missing.length === 0 &&
+      check.statement?.subject.length === covered
+    ) {
       const certificate = {
         id: certificateId(envelope),
         merkleRoot: check.statement.predicate.merkleRoot,
@@ -304,6 +332,11 @@ export async function certificateForPublish(
 ): Promise<string[]> {
   const outcome = await issueCertificate(session, now, verdict, fetchImpl);
   if (outcome.status === "off") return [];
+  // Publishing collects a queued audit first; a pending one never gets here, but nothing unfinal is signed.
+  if (outcome.status === "pending")
+    throw new GateFailedError("PUBLISH_GATES_FAILED", `No certificate: ${outcome.reason}.`, {
+      gates: ["audit-collected"],
+    });
   if (outcome.status === "gaps") {
     if (session.project.config.certificate.required)
       throw new GateFailedError(
@@ -350,6 +383,10 @@ export async function runCertify(
     const verdict = await computeVerdict(session, ports.now);
     await writeReports(session, verdict);
     const outcome = await issueCertificate(session, ports.now, certifiedVerdict(verdict), ports.fetch);
+    if (outcome.status === "pending") {
+      io.write(`No certificate yet: ${outcome.reason}.\n`);
+      return 1;
+    }
     if (outcome.status === "off")
       throw new ConfigError(
         "CERTIFICATE_KEY_MISSING",

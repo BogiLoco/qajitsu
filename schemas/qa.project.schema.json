@@ -512,6 +512,7 @@
     "verification": {
       "default": {
         "auditor": "optional",
+        "auditor_delivery": "now",
         "auditor_max_images": 12,
         "canary": false,
         "triage": "on"
@@ -525,6 +526,14 @@
             "optional",
             "required",
             "off"
+          ]
+        },
+        "auditor_delivery": {
+          "default": "now",
+          "type": "string",
+          "enum": [
+            "now",
+            "batch"
           ]
         },
         "auditor_max_images": {

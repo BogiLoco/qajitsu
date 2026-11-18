@@ -18,17 +18,17 @@ How results and evidence reach Jira and the people who need them.
 
 ### REQ-PUB-02 · Attachments
 
-- Status: in-progress
+- Status: implemented
 - Priority: must
 - Stage: 4
-- Related: REQ-EVD-06, REQ-PRJ-10, REQ-GEN-11, INV-7, INV-8
-- Note: AC3 is built in two steps (one plugin per pull request, REQ-GEN-11/AC11): the instance's limit and S3 (AWS, MinIO and other S3-compatible stores, plugin `evidence-s3`) first, then Azure Blob Storage (plugin `evidence-azure`). The S3 link carries the access key id (masked everywhere else), never the secret.
+- Related: REQ-EVD-06, REQ-PRJ-10, REQ-GEN-11, REQ-PUB-11, INV-7, INV-8
+- Note: on 2026-11-18 the owner moved Azure Blob Storage out of AC3 to REQ-PUB-11 (later): the MVP needs S3 (AWS, MinIO and other S3-compatible stores, plugin `evidence-s3`) only. The S3 link carries the access key id (masked everywhere else), never the secret.
 
 **Acceptance criteria**
 
 - [x] AC1: `<TICKET>_<RUN-ID>_evidence.zip` with the evidence folder, `report.html` and manifest, created in the project's `exports/` (REQ-PRJ-10).
 - [x] AC2: Failure screenshots and videos attached individually so they are visible without unzipping.
-- [ ] AC3: Sizes checked against the instance limit; oversized files go to object storage (S3, MinIO, Azure Blob) with a time-limited link.
+- [x] AC3: Sizes checked against the instance limit; oversized files go to object storage (S3, MinIO and other S3-compatible stores) with a time-limited link.
 
 ### REQ-PUB-03 · Jira Cloud and Data Center
 
@@ -147,3 +147,17 @@ A decision per ticket; REQ-PUB-09 is the readiness of a whole release.
 - [x] AC3: The policy (case priorities, tolerated statuses for lower priorities) is versioned project configuration; the version used is recorded in the report.
 - [x] AC4: The decision lists the cases that caused it; an agent may explain them in text, and that text is validated against the computed decision (REQ-VER-08).
 - [x] AC5: The decision is advisory for the Jira workflow (REQ-FLOW-04) and never overrides a human sign-off rule.
+
+### REQ-PUB-11 · Oversized attachments on Azure Blob Storage
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: REQ-PUB-02, REQ-GEN-11, INV-7, INV-8, INV-12
+- Note: split from REQ-PUB-02/AC3 by the owner on 2026-11-18; built when a project keeps its files on Azure. A plugin of its own (`evidence-azure`, REQ-GEN-11/AC11).
+
+**Acceptance criteria**
+
+- [ ] AC1: `publish.oversized` with `type: azure-blob` (account, container, prefix, optional endpoint for Azurite, the account key as `secret://`, `link_hours`) uploads a file over the limit after the preview is confirmed, as REQ-PUB-02/AC3 does for S3.
+- [ ] AC2: The comment links the file with a read-only service SAS for that one blob, valid for `link_hours`; the account key never leaves the secret provider and is masked everywhere (INV-8).
+- [ ] AC3: The endpoint must be https (plain http only on localhost); a refused upload stops publishing with the storage's error code, never a link to a file that is not there.
