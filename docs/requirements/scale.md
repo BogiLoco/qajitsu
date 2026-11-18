@@ -69,7 +69,7 @@ Running many tickets in parallel as a hosted or self-hosted tester farm. Out of 
 - Status: proposed
 - Priority: should
 - Stage: later
-- Related: REQ-LLM-07, REQ-FLOW-06
+- Related: REQ-LLM-07, REQ-FLOW-06, REQ-SCALE-11, REQ-SCALE-12
 
 **Acceptance criteria**
 
@@ -128,7 +128,7 @@ CI or infrastructure. One plan can use several targets at once.
 - Status: proposed
 - Priority: could
 - Stage: later
-- Related: REQ-SCALE-01, REQ-SCALE-05, REQ-SCALE-06, REQ-SCALE-08, REQ-VER-15, REQ-VER-19, REQ-GEN-12, INV-1
+- Related: REQ-SCALE-01, REQ-SCALE-05, REQ-SCALE-06, REQ-SCALE-08, REQ-SCALE-11, REQ-SCALE-12, REQ-VER-15, REQ-VER-19, REQ-GEN-12, INV-1
 
 What the product must measure and enforce so it can be sold by outcome, wherever it runs. TO BE REVIEWED: plans,
 prices and add-ons are hypotheses to check on the first pilots.
@@ -143,3 +143,42 @@ prices and add-ons are hypotheses to check on the first pilots.
 - [ ] AC6: Higher plans get a faster queue (priority in REQ-SCALE-01) and a stated response time; the queue position is shown.
 - [ ] AC7: With the tenant's own model keys (REQ-SCALE-05), token cost is left out of the bill and shown separately.
 - [ ] AC8: Self-hosted installations and runs in the customer's CI check a licence key offline (as in REQ-GEN-12/AC2); a missing or expired licence stops new runs with the reason and never changes a status or hides existing results.
+
+### REQ-SCALE-11 · QAJitsu model relay
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: REQ-SCALE-04, REQ-SCALE-05, REQ-SCALE-06, REQ-SCALE-10, REQ-LLM-10, REQ-FLOW-06, INV-8, INV-11
+- Note: TO BE REVIEWED (owner, 2026-11-18): how QAJitsu sells its features with its own models without selling access
+  to a model. Options to weigh: runs in the QAJitsu cloud only (the relay is not needed), this relay for installations
+  at the customer's, or the customer's own keys (REQ-SCALE-05). A LiteLLM behind the relay can hold one virtual key per
+  tenant for metering and limits. Prices, margins and plans stay out of this repository.
+
+A customer installation that uses QAJitsu's models never gets a model key or a model address: it talks to a relay
+that only accepts QAJitsu's own stage calls.
+
+**Acceptance criteria**
+
+- [ ] AC1: A customer installation authenticates to the relay with its licence key (REQ-SCALE-10/AC8) only; its configuration holds no model key, no model address and no model name of QAJitsu's providers.
+- [ ] AC2: The relay accepts only the calls of QAJitsu's agent stages (role, stage and answer schema of the installed version) and refuses anything else, so it cannot be used as a general model endpoint.
+- [ ] AC3: The relay chooses the model per role on QAJitsu's side and meters tokens and cost per tenant (REQ-SCALE-06); the tenant's usage counts against its plan, its limits stop new calls with the reason.
+- [ ] AC4: Prompts and answers that pass the relay are masked like every other model call (INV-8) and are not kept beyond what the tenant's run records (REQ-VER-16); the tenant can see what was sent.
+- [ ] AC5: A relay that does not answer or refuses a call makes the stage BLOCKED with the reason, never a status from a guess (INV-1).
+
+### REQ-SCALE-12 · Plan usage instead of token prices for the customer
+
+- Status: proposed
+- Priority: could
+- Stage: later
+- Related: REQ-SCALE-10, REQ-SCALE-11, REQ-FLOW-06, REQ-WEB-11, INV-6
+- Note: TO BE REVIEWED (owner, 2026-11-18): a customer billed per verified ticket sees the use of its plan, not token
+  prices; QAJitsu's own token cost stays in its spend ledger (REQ-FLOW-06). Prices, margins and plans stay out of this
+  repository.
+
+**Acceptance criteria**
+
+- [ ] AC1: For a tenant on a plan with QAJitsu's models, `qj budget`, `qj status` and the console (REQ-WEB-11) show the plan's use: verified tickets this month against the pool, tickets beyond it, runs at the same time; they show no token price and no cost in currency.
+- [ ] AC2: The counts come from the computed statuses and certificates (REQ-SCALE-10/AC1, INV-6), never from a number a client reports.
+- [ ] AC3: Ticket and month limits a tenant sets for itself (REQ-FLOW-06) can be in tickets and active minutes; token and cost limits stay available to tenants with their own model keys (REQ-SCALE-05).
+- [ ] AC4: QAJitsu's operators see each tenant's real token use and cost from the spend ledger and the relay's metering next to the plan's use, so the margin of a plan can be checked; the tenant never does.

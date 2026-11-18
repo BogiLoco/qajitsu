@@ -435,6 +435,8 @@ the evidence bundle as pipeline artifacts.
 - [REQ-SCALE-08](requirements/scale.md#req-scale-08--execution-targets-chosen-per-case-type) Execution targets chosen per case type (should, proposed, AC 0/5)
 - [REQ-SCALE-09](requirements/scale.md#req-scale-09--kubernetes-deployment) Kubernetes deployment (could, proposed, AC 0/6)
 - [REQ-SCALE-10](requirements/scale.md#req-scale-10--billing-units-plans-and-licences) Billing units, plans and licences (could, proposed, AC 0/8)
+- [REQ-SCALE-11](requirements/scale.md#req-scale-11--qajitsu-model-relay) QAJitsu model relay (could, proposed, AC 0/5)
+- [REQ-SCALE-12](requirements/scale.md#req-scale-12--plan-usage-instead-of-token-prices-for-the-customer) Plan usage instead of token prices for the customer (could, proposed, AC 0/4)
 - [REQ-CHAIN-01](requirements/blockchain.md#req-chain-01--chain-adapters-behind-one-interface) Chain adapters behind one interface (should, proposed, AC 0/4)
 - [REQ-CHAIN-02](requirements/blockchain.md#req-chain-02--local-networks-forks-and-deterministic-state) Local networks, forks and deterministic state (should, proposed, AC 0/4)
 - [REQ-CHAIN-03](requirements/blockchain.md#req-chain-03--network-safety) Network safety (must, proposed, AC 0/4)
