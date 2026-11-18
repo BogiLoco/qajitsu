@@ -125,7 +125,7 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 <!-- req-stage:4 -->
 - [REQ-VER-10](requirements/verification.md#req-ver-10--human-preview-before-publishing) Human preview before publishing (must, implemented, AC 2/2)
 - [REQ-PUB-01](requirements/publishing.md#req-pub-01--jira-comment) Jira comment (must, implemented, AC 4/4)
-- [REQ-PUB-02](requirements/publishing.md#req-pub-02--attachments) Attachments (must, in-progress, AC 2/3)
+- [REQ-PUB-02](requirements/publishing.md#req-pub-02--attachments) Attachments (must, implemented, AC 3/3)
 - [REQ-PUB-03](requirements/publishing.md#req-pub-03--jira-cloud-and-data-center) Jira Cloud and Data Center (should, implemented, AC 2/2)
 - [REQ-PUB-04](requirements/publishing.md#req-pub-04--idempotent-publishing) Idempotent publishing (must, implemented, AC 2/2)
 - [REQ-PUB-10](requirements/publishing.md#req-pub-10--go--no-go-decision-computed-from-the-matrix) GO / NO-GO decision computed from the matrix (should, implemented, AC 5/5)
@@ -385,6 +385,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-PUB-07](requirements/publishing.md#req-pub-07--bug-reports-from-failed-cases) Bug reports from failed cases (should, implemented, AC 5/5)
 - [REQ-PUB-08](requirements/publishing.md#req-pub-08--promote-ticket-cases-to-the-regression-suite) Promote ticket cases to the regression suite (should, implemented, AC 4/4)
 - [REQ-PUB-09](requirements/publishing.md#req-pub-09--release-readiness-report) Release readiness report (could, implemented, AC 4/4)
+- [REQ-PUB-11](requirements/publishing.md#req-pub-11--oversized-attachments-on-azure-blob-storage) Oversized attachments on Azure Blob Storage (could, proposed, AC 0/3)
 - [REQ-LLM-09](requirements/models.md#req-llm-09--start-with-an-api-key-only) Start with an API key only (should, implemented, AC 6/6)
 - [REQ-LLM-10](requirements/models.md#req-llm-10--model-profiles-from-gateways-litellm-openrouter) Model profiles from gateways (LiteLLM, OpenRouter) (could, implemented, AC 4/4)
 - [REQ-LLM-15](requirements/models.md#req-llm-15--context-profiles-and-provider-renderers) Context profiles and provider renderers (must, implemented, AC 5/5)
