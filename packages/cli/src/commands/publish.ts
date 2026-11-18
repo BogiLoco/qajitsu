@@ -20,6 +20,7 @@ import {
   zip,
   type CommentFailure,
   type CommentModel,
+  type StoredLink,
 } from "@qajitsu/report";
 import { createMasker } from "@qajitsu/steps";
 import { gateNoSecrets } from "@qajitsu/verifier";
@@ -30,6 +31,7 @@ import type { CommandIO } from "./fetch.js";
 import { exportRunTelemetry } from "./telemetry.js";
 import { certificateForPublish, certifiedVerdict } from "./certificate.js";
 import { applyVerdictPolicy, runWorkflow } from "./workflow.js";
+import { attachmentLimitOf, attachmentStoreOf, storableOversized, storedKey } from "../attachment-store.js";
 import { anchorJournal, codeAccessNote, computeVerdict, writeReports, type RunVerdict } from "./verdict.js";
 
 /** Options of `qajitsu publish`. */
@@ -48,6 +50,8 @@ interface PublishRecord {
   readonly preview: "confirmed" | "auto";
   readonly attachmentNames: readonly string[];
   readonly skipped: readonly { readonly name: string; readonly reason: string }[];
+  /** Files put into object storage (REQ-PUB-02/AC3); their links are in the comment only, never in run.json. */
+  readonly stored?: readonly Omit<StoredLink, "url">[];
 }
 
 const MIME: Record<string, string> = {
@@ -108,6 +112,7 @@ function commentModel(
   now: Date,
   attachments: readonly PublishAttachment[],
   notes: readonly string[],
+  stored: readonly StoredLink[] = [],
 ): CommentModel {
   const { ws, masker } = session;
   const failures: CommentFailure[] = v.cases.flatMap((c) => {
@@ -142,6 +147,7 @@ function commentModel(
     reproduce: `qajitsu evidence ${ws.ticket} --run ${ws.runId} --failed`,
     attachments: attachments.map((a) => a.name),
     notes,
+    ...(stored.length > 0 ? { stored } : {}),
     observations: v.observations,
     fixCheck: v.fixCheck,
     budget: v.budget,
@@ -250,7 +256,12 @@ export async function runPublish(
         bytes: (await stat(ws.path("evidence", m.path))).size,
       });
     }
-    const limit = project.config.publish.max_attachment_mb * 1_000_000;
+    // REQ-PUB-02/AC3: the configured limit, lowered to what the ticket system itself takes.
+    const publisher = publisherFor(session, ports);
+    const limit = await attachmentLimitOf(project.config.publish.max_attachment_mb, publisher, io);
+    const limitMb = `${String(Math.floor(limit / 1e6))} MB`;
+    const oversizedConfig = project.config.publish.oversized;
+    const store = await attachmentStoreOf(session, ports.fetch, ports.now);
     // REQ-EVD-06/AC2: videos over the limit are compressed (ffmpeg) before upload when possible.
     for (let i = 0; i < media.length; i += 1) {
       const item = media[i];
@@ -271,14 +282,22 @@ export async function runPublish(
     const zipHash = createHash("sha256")
       .update(await readFile(evidenceZip.path))
       .digest("hex");
-    const notes = [evidenceZip, ...media]
-      .filter((a) => a.bytes > limit)
-      .map(
-        (a) =>
-          `${a.name} (${String(Math.ceil(a.bytes / 1e6))} MB) is larger than the ${String(project.config.publish.max_attachment_mb)} MB limit and stays in the run folder.`,
-      );
-    notes.push(`Evidence zip sha256 ${zipHash}; Playwright traces stay in the run folder.`);
-    notes.push(...certificate);
+    const oversized = [evidenceZip, ...media].filter((a) => a.bytes > limit);
+    // A Jira that takes no attachments at all was switched off on purpose: nothing goes elsewhere instead. A file
+    // over 2 GB is not read into memory for an upload; it stays in the run folder.
+    const storable = (a: PublishAttachment): boolean =>
+      store !== undefined && storableOversized(a.bytes, limit);
+    // The preview says where an oversized file goes; it is uploaded only once publishing is confirmed.
+    const oversizedNotes = oversized.map((a) =>
+      store && oversizedConfig && storable(a)
+        ? `${a.name} (${String(Math.ceil(a.bytes / 1e6))} MB) is larger than the ${limitMb} limit: it goes to object storage (${store.id}) and the comment links it for ${String(oversizedConfig.link_hours)} h.`
+        : `${a.name} (${String(Math.ceil(a.bytes / 1e6))} MB) is larger than the ${limitMb} limit and stays in the run folder.`,
+    );
+    const otherNotes = [
+      `Evidence zip sha256 ${zipHash}; Playwright traces stay in the run folder.`,
+      ...certificate,
+    ];
+    const notes = [...oversizedNotes, ...otherNotes];
     const attachments = [evidenceZip, ...media];
     const model = commentModel(
       session,
@@ -328,12 +347,66 @@ export async function runPublish(
     }
 
     const previous = ws.record.data["publish"] as PublishRecord | undefined;
-    const publisher = publisherFor(session, ports);
+    // REQ-PUB-02/AC3: after the confirmation the oversized files go to object storage; the comment links them.
+    let comment = { adf, wiki };
+    const stored: StoredLink[] = [];
+    const toStore = oversized.filter(storable);
+    if (store && oversizedConfig && toStore.length > 0) {
+      for (const a of toStore) {
+        const data = await readFile(a.path);
+        const sha256 = createHash("sha256").update(data).digest("hex");
+        const put = await store.put(
+          storedKey(oversizedConfig.prefix, ws.ticket, ws.runId, sha256, a.name),
+          data,
+          {
+            mimeType: a.mimeType,
+            expiresInSeconds: oversizedConfig.link_hours * 3600,
+          },
+        );
+        events.emit("publish", { kind: "system", name: "orchestrator" }, "attachment.stored", {
+          name: a.name,
+          key: put.key,
+          bytes: put.bytes,
+          sha256,
+          expiresAt: put.expiresAt,
+          store: store.id,
+        });
+        stored.push({ name: a.name, bytes: put.bytes, sha256, url: put.url, expiresAt: put.expiresAt });
+      }
+      const linked = commentModel(
+        session,
+        verdict,
+        user,
+        ports.now(),
+        attachments.filter((a) => a.bytes <= limit),
+        otherNotes,
+        stored,
+      );
+      comment = { adf: renderJiraAdf(linked), wiki: renderJiraWiki(linked) };
+      // The links are made by code and carry the store's key id (as every S3 link does), never a secret: the scan
+      // reads the comment with each link replaced, so the key id stays masked everywhere else (INV-8).
+      const unlinked = (text: string): string =>
+        stored.reduce((t, l) => t.split(l.url).join("<stored link>"), text);
+      const scanned = gateNoSecrets(
+        [
+          { name: "comment (ADF)", text: unlinked(JSON.stringify(comment.adf)) },
+          { name: "comment (wiki)", text: unlinked(comment.wiki) },
+        ],
+        (t) => masker.containsSecret(t),
+      );
+      if (!scanned.ok)
+        throw new GateFailedError(
+          "PUBLISH_GATES_FAILED",
+          `Secret scan failed: ${scanned.problems.join("; ")}; nothing was published, the uploaded files stay under ${oversizedConfig.prefix}${ws.ticket}/${ws.runId}/ in the store.`,
+          {},
+        );
+    }
     const result = await publisher.publish({
       ticket: ws.ticket,
       runId: ws.runId,
-      comment: { adf, wiki },
-      attachments,
+      comment,
+      // Files over the limit are linked or stay in the run folder; none is sent for the ticket to refuse.
+      attachments: attachments.filter((a) => a.bytes <= limit),
       ...(previous
         ? { previous: { commentId: previous.commentId, attachmentNames: previous.attachmentNames } }
         : {}),
@@ -347,7 +420,25 @@ export async function runPublish(
       attachmentNames: [
         ...new Set([...(previous?.attachmentNames ?? []), ...result.attachments.map((a) => a.name)]),
       ],
-      skipped: result.skipped,
+      skipped: [
+        ...result.skipped,
+        ...oversized
+          .filter((a) => !stored.some((l) => l.name === a.name))
+          .map((a) => ({
+            name: a.name,
+            reason: `${String(Math.ceil(a.bytes / 1e6))} MB is over the ${limitMb} limit`,
+          })),
+      ],
+      ...(stored.length > 0
+        ? {
+            stored: stored.map((l) => ({
+              name: l.name,
+              bytes: l.bytes,
+              sha256: l.sha256,
+              expiresAt: l.expiresAt,
+            })),
+          }
+        : {}),
     };
     await ws.update({
       data: { ...ws.record.data, publish: record },
@@ -363,7 +454,9 @@ export async function runPublish(
     io.write(
       `${result.updated ? "Updated" : "Published"} ${ws.ticket} comment ${result.commentId}${result.url ? `: ${result.url}` : ""}\n`,
     );
-    for (const s of result.skipped) io.write(`  not attached: ${s.name} (${s.reason})\n`);
+    for (const s of record.skipped) io.write(`  not attached: ${s.name} (${s.reason})\n`);
+    for (const l of stored)
+      io.write(`  stored outside the ticket: ${l.name}, link valid until ${l.expiresAt}\n`);
     // REQ-FLOW-04: the ticket moves after the comment is up, by the computed statuses only.
     const workflow = runWorkflow(session, ports);
     if (workflow)

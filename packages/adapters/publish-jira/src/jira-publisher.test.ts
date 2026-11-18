@@ -164,3 +164,33 @@ describe("Jira publisher (REQ-PUB-01..04)", () => {
     await expect(noEmail.publish(input(dir))).rejects.toMatchObject({ code: "JIRA_AUTH_MISSING" });
   });
 });
+
+describe("the instance's attachment limit (REQ-PUB-02/AC3)", () => {
+  const make = (flavor: "cloud" | "datacenter", meta: unknown) => {
+    const fake = createFakeFetch([{ match: /\/attachment\/meta$/, reply: jsonReply(meta) }]);
+    const publisher = createJiraPublisher(
+      flavor === "cloud"
+        ? {
+            flavor,
+            baseUrl: BASE,
+            email: "secret://env/JIRA_EMAIL",
+            token: "secret://env/JIRA_TOKEN",
+            maxAttachmentBytes: 1e9,
+          }
+        : { flavor, baseUrl: BASE, token: "secret://env/JIRA_TOKEN", maxAttachmentBytes: 1e9 },
+      testDeps(fake.fetch, secrets),
+    );
+    return { publisher, fake };
+  };
+  it("REQ-PUB-02/AC3: Cloud and Data Center report their upload limit; attachments switched off allow nothing", async () => {
+    const cloud = make("cloud", { enabled: true, uploadLimit: 10_485_760 });
+    expect(await cloud.publisher.attachmentLimit?.()).toBe(10_485_760);
+    expect(cloud.fake.requests[0]?.url.pathname).toBe("/rest/api/3/attachment/meta");
+    const dc = make("datacenter", { enabled: true, uploadLimit: 52_428_800 });
+    expect(await dc.publisher.attachmentLimit?.()).toBe(52_428_800);
+    expect(dc.fake.requests[0]?.url.pathname).toBe("/rest/api/2/attachment/meta");
+    expect(await make("cloud", { enabled: false }).publisher.attachmentLimit?.()).toBe(0);
+    // An instance that does not state a limit leaves the configured one.
+    expect(await make("cloud", { enabled: true }).publisher.attachmentLimit?.()).toBeUndefined();
+  });
+});

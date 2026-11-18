@@ -125,7 +125,7 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 <!-- req-stage:4 -->
 - [REQ-VER-10](requirements/verification.md#req-ver-10--human-preview-before-publishing) Human preview before publishing (must, implemented, AC 2/2)
 - [REQ-PUB-01](requirements/publishing.md#req-pub-01--jira-comment) Jira comment (must, implemented, AC 4/4)
-- [REQ-PUB-02](requirements/publishing.md#req-pub-02--attachments) Attachments (must, deferred, AC 2/3)
+- [REQ-PUB-02](requirements/publishing.md#req-pub-02--attachments) Attachments (must, in-progress, AC 2/3)
 - [REQ-PUB-03](requirements/publishing.md#req-pub-03--jira-cloud-and-data-center) Jira Cloud and Data Center (should, implemented, AC 2/2)
 - [REQ-PUB-04](requirements/publishing.md#req-pub-04--idempotent-publishing) Idempotent publishing (must, implemented, AC 2/2)
 - [REQ-PUB-10](requirements/publishing.md#req-pub-10--go--no-go-decision-computed-from-the-matrix) GO / NO-GO decision computed from the matrix (should, implemented, AC 5/5)

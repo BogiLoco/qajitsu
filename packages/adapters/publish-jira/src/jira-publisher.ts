@@ -24,6 +24,10 @@ export interface JiraPublisherConfig {
 }
 
 const CommentSchema = z.object({ id: z.string() }).loose();
+/** `GET /attachment/meta`: whether attachments are on and the instance's upload limit in bytes. */
+const AttachmentMetaSchema = z
+  .object({ enabled: z.boolean(), uploadLimit: z.number().int().positive().optional() })
+  .loose();
 const AttachmentsSchema = z.array(
   z.object({ id: z.union([z.string(), z.number()]).transform(String), filename: z.string() }).loose(),
 );
@@ -64,6 +68,12 @@ export function createJiraPublisher(
 
   return {
     id: `jira-${config.flavor}`,
+    async attachmentLimit(signal) {
+      // REQ-PUB-02/AC3: the instance's own limit; a Jira that does not say leaves the configured one.
+      const meta = await http.json(`${api}/attachment/meta`, AttachmentMetaSchema, signal ? { signal } : {});
+      if (!meta.enabled) return 0;
+      return meta.uploadLimit;
+    },
     async publish(input, signal): Promise<PublishResult> {
       signal?.throwIfAborted();
       const key = TicketKeySchema.parse(input.ticket);

@@ -1423,6 +1423,63 @@
             "type": "string",
             "pattern": "^[a-z0-9.-]+$"
           }
+        },
+        "oversized": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "s3"
+                },
+                "endpoint": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "region": {
+                  "default": "us-east-1",
+                  "type": "string",
+                  "minLength": 1
+                },
+                "bucket": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+                },
+                "prefix": {
+                  "default": "qajitsu/attachments/",
+                  "type": "string",
+                  "pattern": "^([A-Za-z0-9_.-]+\\/)*$"
+                },
+                "path_style": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "access_key_id": {
+                  "type": "string",
+                  "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+                },
+                "secret_access_key": {
+                  "type": "string",
+                  "pattern": "^secret:\\/\\/[a-z0-9-]+\\/.+$"
+                },
+                "link_hours": {
+                  "default": 72,
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 168
+                }
+              },
+              "required": [
+                "type",
+                "endpoint",
+                "bucket",
+                "access_key_id",
+                "secret_access_key"
+              ],
+              "additionalProperties": false
+            }
+          ]
         }
       },
       "additionalProperties": false

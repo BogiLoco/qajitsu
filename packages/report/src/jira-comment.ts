@@ -15,6 +15,19 @@ export interface CommentFailure {
   readonly attachments: readonly string[];
 }
 
+/** A file in object storage, linked from the comment (REQ-PUB-02/AC3); the hash names its content (INV-7). */
+export interface StoredLink {
+  readonly name: string;
+  readonly bytes: number;
+  readonly sha256: string;
+  readonly url: string;
+  readonly expiresAt: string;
+}
+
+const STORED_TITLE = "Stored outside the ticket (links expire)";
+const storedTail = (l: StoredLink): string =>
+  ` (${String(Math.ceil(l.bytes / 1e6))} MB, sha256 ${l.sha256}, link valid until ${l.expiresAt})`;
+
 /** Everything the Jira comment says, computed from structured results (invariant 6). */
 export interface CommentModel {
   readonly ticket: string;
@@ -51,6 +64,8 @@ export interface CommentModel {
   /** Attachment names and notes about files that were not uploaded. */
   readonly attachments: readonly string[];
   readonly notes: readonly string[];
+  /** Files larger than the ticket takes, put into object storage with an expiring link (REQ-PUB-02/AC3). */
+  readonly stored?: readonly StoredLink[] | undefined;
   /** Passive observations, computed by code, never statuses (REQ-EVD-07/AC4). */
   readonly observations?: readonly RunObservation[] | undefined;
   /** Fix verification lines (REQ-VER-11/AC4): verdict first, then one line per reproduction case. */
@@ -223,6 +238,17 @@ export function renderJiraAdf(m: CommentModel): { version: 1; type: "doc"; conte
   }
   content.push(heading(4, "Reproduce locally"));
   content.push({ type: "codeBlock", attrs: { language: "shell" }, content: [text(m.reproduce)] });
+  if (m.stored && m.stored.length > 0) {
+    content.push(heading(4, STORED_TITLE));
+    content.push(
+      bullets(
+        m.stored.map((l) => [
+          { type: "text", text: l.name, marks: [{ type: "link", attrs: { href: l.url } }] },
+          text(storedTail(l)),
+        ]),
+      ),
+    );
+  }
   if (m.attachments.length > 0 || m.notes.length > 0) {
     content.push(para(text(`Attachments: ${m.attachments.join(", ") || "none"}`)));
     for (const n of m.notes) content.push(para(text(n, ["em"])));
@@ -287,6 +313,13 @@ export function renderJiraWiki(m: CommentModel): string {
   if (observed.length > 0)
     lines.push("", `h4. ${OBSERVATIONS_TITLE}`, ...observed.map((o) => `* ${wikiEscape(o)}`));
   lines.push("", "h4. Reproduce locally", `{code:shell}${m.reproduce}{code}`);
+  if (m.stored && m.stored.length > 0)
+    lines.push(
+      "",
+      `h4. ${STORED_TITLE}`,
+      // The link goes in as it is: wiki escaping would break its signature.
+      ...m.stored.map((l) => `* [${wikiEscape(l.name)}|${l.url}]${wikiEscape(storedTail(l))}`),
+    );
   if (m.attachments.length > 0) lines.push(`Attachments: ${m.attachments.map(wikiEscape).join(", ")}`);
   for (const n of m.notes) lines.push(`_${wikiEscape(n)}_`);
   return `${lines.join("\n")}\n`;
@@ -320,6 +353,7 @@ export function renderCommentPreview(m: CommentModel): string {
     "",
     `Reproduce: ${m.reproduce}`,
     `Attachments: ${m.attachments.join(", ") || "none"}`,
+    ...(m.stored ?? []).map((l) => `Stored: ${l.name}${storedTail(l)}`),
     ...m.notes,
   );
   return `${lines.join("\n")}\n`;

@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
@@ -14,7 +14,14 @@ const pipeline = async (flag?: string) => {
   return p;
 };
 interface PublishData {
-  data: { publish: { commentId: string; preview: string; attachmentNames: string[] } };
+  data: {
+    publish: {
+      commentId: string;
+      preview: string;
+      attachmentNames: string[];
+      skipped: { name: string; reason: string }[];
+    };
+  };
 }
 
 describe("qajitsu publish (REQ-PUB-01..04, REQ-VER-10)", () => {
@@ -273,8 +280,16 @@ describe("qajitsu publish (REQ-PUB-01..04, REQ-VER-10)", () => {
     const p = await createDemoPipeline({ ticket: "DEMO-4", flag: "BUG_CHECKOUT_BUTTON_DISABLED" });
     cleanups.push(p.cleanup);
     expect((await p.executed()).exitCode).toBe(1);
+    // The limit sits just under the video, so it is compressed; screenshots under it go up one by one, the others
+    // are listed as not attached (REQ-PUB-02/AC3). Sizes come from this machine's rendering.
+    const evidence = join(p.runDir, "evidence", "TC-01", "attempt-1");
+    const sizeOf = async (f: string) => (await stat(join(evidence, f))).size;
+    const limit = (await sizeOf("video.webm")) - 1;
     const yaml = join(p.project, ".qa", "qa.project.yaml");
-    await writeFile(yaml, `${await readFile(yaml, "utf8")}\npublish: { max_attachment_mb: 0.01 }\n`);
+    await writeFile(
+      yaml,
+      `${await readFile(yaml, "utf8")}\npublish: { max_attachment_mb: ${String(limit / 1e6)} }\n`,
+    );
     const compressed: string[] = [];
     const result = await p.run(["publish", "DEMO-4", "--auto-publish"], {
       compressVideo: async (input, output) => {
@@ -286,11 +301,20 @@ describe("qajitsu publish (REQ-PUB-01..04, REQ-VER-10)", () => {
     expect(result.exitCode).toBe(0);
     const record = JSON.parse(await readFile(join(p.runDir, "run.json"), "utf8")) as PublishData;
     const names = record.data.publish.attachmentNames;
-    expect(names).toEqual(
-      expect.arrayContaining(["TC-01_case_failure.png", "TC-01_S2_S2.png", "TC-01_case_video.mp4"]),
-    );
+    expect(names).toContain("TC-01_case_video.mp4");
     expect(compressed.length).toBeGreaterThan(0);
     const adf = await readFile(join(p.runDir, "report", "published", "jira-comment.adf.json"), "utf8");
-    expect(adf).toContain("TC-01_S2_S2.png");
+    for (const [file, name] of [
+      ["failure.png", "TC-01_case_failure.png"],
+      ["S2.png", "TC-01_S2_S2.png"],
+    ] as const) {
+      if ((await sizeOf(file)) <= limit) {
+        expect(names).toContain(name);
+        expect(adf).toContain(name);
+      } else {
+        expect(names).not.toContain(name);
+        expect(record.data.publish.skipped.map((x) => x.name)).toContain(name);
+      }
+    }
   }, 120_000);
 });

@@ -41,4 +41,9 @@ export interface PublishResult {
 export interface Publisher {
   readonly id: string;
   publish(input: PublishInput, signal?: AbortSignal): Promise<PublishResult>;
+  /**
+   * The largest attachment the ticket system takes, in bytes, as the instance reports it (REQ-PUB-02/AC3); undefined
+   * when it does not say or attachments are off.
+   */
+  attachmentLimit?(signal?: AbortSignal): Promise<number | undefined>;
 }
