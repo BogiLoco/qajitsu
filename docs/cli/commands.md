@@ -144,7 +144,25 @@ yours that is not compatible is information (`!`), with the compatible range and
   Android mirrors, Homebrew; makes real requests)
 - `--fix`: run `qj setup --only <the tools found missing>` (REQ-GEN-06/AC9) and install the plugins found missing
   (REQ-GEN-11/AC3)
-- `--yes`: with `--fix`, no questions; licences are accepted on your behalf and listed
+- `--recommend`: look at the application's repository and recommend what to install for its tests (REQ-GEN-13).
+  Code finds web front-ends, mobile projects (Gradle, Xcode, React Native, Flutter), API descriptions (OpenAPI,
+  GraphQL SDL, `.proto`, WSDL, AsyncAPI), compose files and existing test suites (Playwright, Cypress, Appium, Maestro),
+  each with its files; in a git repository only its own files (`git ls-files`, not ignored ones) are looked at,
+  dependency and build folders and links are skipped, and only file names and the first bytes of candidate files (small
+  source files whole, for HTML a server answers with) are read. The analyst model turns the findings into a recommendation that code checks: only tools of QAJitsu's
+  toolchain and the settings `test_types`, `openapi`, `graphql`, `wsdl`, each resting on a finding of the right kind,
+  or it is dropped and said. It shows each tool with its download size, disk space and the files it rests on, what is
+  not installed and why, and `qj setup --only ...`; it installs after your yes. It runs on its own, not with
+  `--models`, `--online` or `--fix`.
+- `--offline`: with `--recommend`, no model: the findings alone decide (marked as such)
+
+  Only a registered project's configuration chooses the model and the download mirrors; in a folder that is not a
+  registered project (a repository you just cloned), the recommendation comes from the files alone and setup uses the
+  default sources. File names and the model's text are printed without escape sequences or extra lines. With `--yes`
+  in CI the repository decides which tools are installed and which licences are accepted (an `AndroidManifest.xml`
+  brings the Android SDK): use `qj setup --only ...` in CI when the set must not follow the repository.
+
+- `--yes`: with `--fix` or `--recommend`, no questions; licences are accepted on your behalf and listed
 
 A missing tool is reported once: when a check already reports it (the Android SDK for its emulator, Appium for its
 drivers, Docker for Compose), the versions table says `see android above` instead of repeating it. A `.env.local`

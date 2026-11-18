@@ -492,197 +492,299 @@ export function createProgram(version: string, io: ProgramIO): Command {
       "check access to Jira, every code host and the toolchain sources (makes real requests)",
     )
     .option("--fix", "run qj setup for the tools doctor finds missing")
-    .option("--yes", "with --fix: no questions, licences accepted on your behalf")
-    .action(async (options: { models?: boolean; online?: boolean; fix?: boolean; yes?: boolean }) => {
-      /** Probes every role's model and the approval flow's model (REQ-LLM-03/AC2, REQ-GEN-08/AC2). */
-      const probeConfiguredModels = async (): Promise<boolean> => {
-        if (!io.ports) return false;
-        try {
-          const project = await loadProject(io.cwd, resolved);
-          const { createModelRegistry } = await import("@qajitsu/models");
+    .option(
+      "--recommend",
+      "look at the application's repository and recommend what to install for its tests, with sizes",
+    )
+    .option("--offline", "with --recommend: no model, the findings in the files alone")
+    .option("--yes", "with --fix or --recommend: no questions, licences accepted on your behalf")
+    .action(
+      async (options: {
+        models?: boolean;
+        online?: boolean;
+        fix?: boolean;
+        recommend?: boolean;
+        offline?: boolean;
+        yes?: boolean;
+      }) => {
+        // REQ-GEN-13: --recommend looks at the application, not at this machine's readiness; it runs on its own.
+        if (options.recommend === true) {
+          if (options.models === true || options.online === true || options.fix === true) {
+            io.writeError(
+              "--recommend runs on its own: run qj doctor --models, --online or --fix separately.\n",
+            );
+            io.setExitCode(3);
+            return;
+          }
+          if (!io.ports) {
+            io.writeError("Runtime ports are not configured.\n");
+            io.setExitCode(3);
+            return;
+          }
+          const ports = io.ports;
+          // M2: only a registered project's configuration decides the models and the mirrors; a `.qa/` that came
+          // with a repository being looked at is that repository's data, so the recommendation is offline then.
+          const project =
+            resolved && projectError === undefined
+              ? await loadProject(io.cwd, resolved).catch(() => undefined)
+              : undefined;
+          if (!project && options.offline !== true)
+            io.write(
+              "No registered project here: the recommendation comes from the files alone (a .qa/ in a repository being looked at is not trusted).\n",
+            );
           const { createMasker } = await import("@qajitsu/steps");
-          const { createCliSecretResolver } = await import("./adapters.js");
           const masker = createMasker();
-          const { fileGatewayCache } = await import("./gateway-cache.js");
-          const models = createModelRegistry({
-            config: project.config.models,
-            resolveSecret: createCliSecretResolver(project, io.ports, masker),
-            fetch: io.ports.fetch,
-            ...(io.ports.extraModels ? { extra: io.ports.extraModels } : {}),
-            // REQ-LLM-10: gateway answers are kept in the project's home with their time; a silent gateway is said.
-            ...(resolved
-              ? { gatewayCache: fileGatewayCache(join(resolved.paths.home, "cache", "gateways.json")) }
-              : {}),
-            onWarning: (message) => {
-              commandIO.writeError(`! ${message}\n`);
-            },
-          });
-          const approval = project.config.approval;
-          const probes = await probeModels(
-            models,
-            Object.keys(project.config.models.roles),
-            undefined,
-            approval.flow.includes("model") ? approval.model : undefined,
+          const { createModelRegistry } = await import("@qajitsu/models");
+          const { createCliSecretResolver } = await import("./adapters.js");
+          const { runDoctorRecommend } = await import("./recommend/doctor-recommend.js");
+          const models = project
+            ? createModelRegistry({
+                config: project.config.models,
+                resolveSecret: createCliSecretResolver(project, ports, masker),
+                fetch: ports.fetch,
+                ...(ports.extraModels ? { extra: ports.extraModels } : {}),
+              })
+            : undefined;
+          io.setExitCode(
+            await runDoctorRecommend(
+              { yes: options.yes === true, offline: options.offline === true },
+              commandIO,
+              {
+                root: project?.projectDir ?? io.cwd,
+                ...(models ? { models } : {}),
+                host: { os: process.platform },
+                mask: (t) => masker.maskText(t),
+                // REQ-GEN-13/AC1: the repository's own files; build output and generated files are not the application.
+                tracked: () =>
+                  ports
+                    .gitExec(
+                      // L4: the repository's own git settings never run anything (fsmonitor, hooks).
+                      [
+                        "-c",
+                        "core.fsmonitor=false",
+                        "-c",
+                        "core.hooksPath=/dev/null",
+                        "ls-files",
+                        "-z",
+                        "--cached",
+                        "--others",
+                        "--exclude-standard",
+                      ],
+                      {
+                        cwd: project?.projectDir ?? io.cwd,
+                      },
+                    )
+                    .then(
+                      (r) => {
+                        const files = r.stdout.split("\0").filter((f) => f !== "");
+                        // Outside a git repository (or an empty one) the folders are walked instead.
+                        return files.length > 0 ? files : undefined;
+                      },
+                      () => undefined,
+                    ),
+                setup: (tools, yes) =>
+                  runSetupCommand(
+                    { only: tools, ...(yes ? { yes: true } : {}) },
+                    commandIO,
+                    { ...ports, ...(resolved ? { project: resolved } : {}) },
+                    project,
+                  ),
+              },
+            ),
           );
-          // REQ-LLM-09/AC5: a rejected key is named by its variable; provider messages can quote part of the key.
-          const keyOf = (model: string): string => {
-            const ref = project.config.models.providers[model.split("/")[0] ?? ""]?.api_key;
-            return ref === undefined
-              ? "the provider's key"
-              : (/^secret:\/\/env\/(\w+)$/.exec(ref)?.[1] ?? ref);
-          };
-          const shown = probes.map((p) =>
-            p.error === undefined
-              ? p
-              : {
-                  ...p,
-                  error: /\b(401|403)\b|unauthori[sz]ed|authentication|api[- _]?key/i.test(p.error)
-                    ? `the provider rejected the key in ${keyOf(p.model)}`
-                    : masker.maskText(p.error),
-                },
-          );
-          io.write(`${formatProbes(shown)}\n`);
-          return probes.every((p) => p.reachable && p.missing.length === 0);
-        } catch (error) {
-          io.write(`✘ models: ${error instanceof Error ? error.message : String(error)}\n`);
-          return false;
+          return;
         }
-      };
-      // REQ-GEN-08/AC2: --models judges only the models, so a missing phone tool does not fail a model check.
-      if (options.models === true && (options.online === true || options.fix === true)) {
-        io.writeError(
-          "--models checks only the models: run 'qj doctor --online' or 'qj doctor --fix' on its own.\n",
-        );
-        io.setExitCode(3);
-        return;
-      }
-      const checks = runDoctor({
-        nodeVersion: io.nodeVersion,
-        hasProjectConfig:
-          resolved !== undefined && existsSync(join(resolved.record.qa_dir, "qa.project.yaml")),
-      });
-      if (projectError !== undefined)
-        checks.push({
-          name: "project",
-          ok: false,
-          detail: projectError instanceof Error ? projectError.message : "unknown error",
+        /** Probes every role's model and the approval flow's model (REQ-LLM-03/AC2, REQ-GEN-08/AC2). */
+        const probeConfiguredModels = async (): Promise<boolean> => {
+          if (!io.ports) return false;
+          try {
+            const project = await loadProject(io.cwd, resolved);
+            const { createModelRegistry } = await import("@qajitsu/models");
+            const { createMasker } = await import("@qajitsu/steps");
+            const { createCliSecretResolver } = await import("./adapters.js");
+            const masker = createMasker();
+            const { fileGatewayCache } = await import("./gateway-cache.js");
+            const models = createModelRegistry({
+              config: project.config.models,
+              resolveSecret: createCliSecretResolver(project, io.ports, masker),
+              fetch: io.ports.fetch,
+              ...(io.ports.extraModels ? { extra: io.ports.extraModels } : {}),
+              // REQ-LLM-10: gateway answers are kept in the project's home with their time; a silent gateway is said.
+              ...(resolved
+                ? { gatewayCache: fileGatewayCache(join(resolved.paths.home, "cache", "gateways.json")) }
+                : {}),
+              onWarning: (message) => {
+                commandIO.writeError(`! ${message}\n`);
+              },
+            });
+            const approval = project.config.approval;
+            const probes = await probeModels(
+              models,
+              Object.keys(project.config.models.roles),
+              undefined,
+              approval.flow.includes("model") ? approval.model : undefined,
+            );
+            // REQ-LLM-09/AC5: a rejected key is named by its variable; provider messages can quote part of the key.
+            const keyOf = (model: string): string => {
+              const ref = project.config.models.providers[model.split("/")[0] ?? ""]?.api_key;
+              return ref === undefined
+                ? "the provider's key"
+                : (/^secret:\/\/env\/(\w+)$/.exec(ref)?.[1] ?? ref);
+            };
+            const shown = probes.map((p) =>
+              p.error === undefined
+                ? p
+                : {
+                    ...p,
+                    error: /\b(401|403)\b|unauthori[sz]ed|authentication|api[- _]?key/i.test(p.error)
+                      ? `the provider rejected the key in ${keyOf(p.model)}`
+                      : masker.maskText(p.error),
+                  },
+            );
+            io.write(`${formatProbes(shown)}\n`);
+            return probes.every((p) => p.reachable && p.missing.length === 0);
+          } catch (error) {
+            io.write(`✘ models: ${error instanceof Error ? error.message : String(error)}\n`);
+            return false;
+          }
+        };
+        // REQ-GEN-08/AC2: --models judges only the models, so a missing phone tool does not fail a model check.
+        if (options.models === true && (options.online === true || options.fix === true)) {
+          io.writeError(
+            "--models checks only the models: run 'qj doctor --online' or 'qj doctor --fix' on its own.\n",
+          );
+          io.setExitCode(3);
+          return;
+        }
+        const checks = runDoctor({
+          nodeVersion: io.nodeVersion,
+          hasProjectConfig:
+            resolved !== undefined && existsSync(join(resolved.record.qa_dir, "qa.project.yaml")),
         });
-      if (options.models === true) {
-        io.write(`${formatDoctor(checks)}\n`);
-        const modelsOk = checks.every((c) => c.ok) && (await probeConfiguredModels());
-        io.setExitCode(modelsOk ? 0 : 3);
-        return;
-      }
-      if (checks.every((c) => c.ok) && io.ports) {
-        // REQ-GEN-03/AC2: secrets, Docker, Android/Appium and, with --online, Jira and code hosts.
-        try {
-          checks.push(
-            ...(await projectChecks(
-              await loadProject(io.cwd, resolved),
-              { ...io.ports, ...(resolved ? { project: resolved } : {}) },
-              {
-                online: options.online === true,
-              },
-            )),
-          );
-          // REQ-GEN-11/AC2: the plugins the project's settings need, with the command for each missing one.
-          checks.push(
-            await pluginCheck(await loadProject(io.cwd, resolved), {
-              ...io.ports,
-              ...(resolved ? { project: resolved } : {}),
-            }),
-          );
-        } catch (error) {
-          // REQ-GEN-08/AC1: the file exists but does not load: one failed check, not "found" and "invalid".
-          const failed = {
-            name: "project config",
+        if (projectError !== undefined)
+          checks.push({
+            name: "project",
             ok: false,
-            detail: error instanceof Error ? error.message : String(error),
-          };
-          const at = checks.findIndex((c) => c.name === "project config");
-          if (at >= 0) checks.splice(at, 1, failed);
-          else checks.push(failed);
-        }
-      }
-      // REQ-GEN-03/AC4+AC5: versions of every tool and of the application under test.
-      let loaded: LoadedProject | undefined;
-      if (resolved !== undefined && projectError === undefined)
-        loaded = await loadProject(io.cwd, resolved).catch(() => undefined);
-      const tools = await toolVersions({
-        qajitsu: version,
-        node: io.nodeVersion,
-        project: loaded,
-        ...(io.ports?.versionExec ? { exec: io.ports.versionExec } : {}),
-        ...(io.ports?.playwright ? { playwright: io.ports.playwright } : {}),
-      });
-      // docker and appium are already checks of their own above; the others fail here when needed and missing.
-      checks.push(...missingToolChecks(tools, checks));
-      const app =
-        loaded && io.ports
-          ? await appVersions(
-              loaded,
-              { ...io.ports, ...(resolved ? { project: resolved } : {}) },
-              {
-                online: options.online === true,
-              },
-            ).catch(() => [])
-          : [];
-      for (const line of app) if (!line.ok) checks.push({ name: line.name, ok: false, detail: line.detail });
-      // REQ-GEN-06/AC7: with --online, the toolchain's sources answer.
-      if (options.online === true && io.ports)
-        checks.push(...(await checkSources(io.ports, loaded).catch(() => [])));
-      // REQ-GEN-06/AC2: what qj setup would do; a tool of yours that is not compatible is information.
-      const toolchain =
-        loaded && io.ports
-          ? await toolchainDoctor(io.ports, commandIO, loaded).catch((error: unknown) => ({
-              lines: [`  · ${error instanceof Error ? error.message : String(error)}`],
-              missing: [],
-            }))
-          : undefined;
-      io.write(
-        `${formatDoctor(checks)}\n\n${formatToolVersions(tools, (name) => reportedBy(name, checks))}\n`,
-      );
-      if (toolchain && toolchain.lines.length > 0)
-        io.write(`\nToolchain (qj setup):\n${toolchain.lines.join("\n")}\n`);
-      if (loaded) io.write(`\n${formatAppVersions(app)}\n`);
-      let ok = checks.every((c) => c.ok);
-      // REQ-GEN-11/AC3: --fix installs the missing plugins; the plugin check counts as fixed only if all installed.
-      if (options.fix === true && io.ports && loaded && checks.some((c) => c.name === "plugins" && !c.ok)) {
-        const result = await installMissingPlugins(
-          loaded,
-          { ...io.ports, ...(resolved ? { project: resolved } : {}) },
-          (line) => {
-            io.write(`${line}\n`);
-          },
-        );
-        for (const f of result.failed) io.write(`✘ plugin ${f}\n`);
-        const at = checks.findIndex((c) => c.name === "plugins");
-        if (result.failed.length === 0 && at >= 0)
-          checks.splice(at, 1, {
-            name: "plugins",
-            ok: true,
-            detail: `installed ${result.installed.join(", ")}`,
+            detail: projectError instanceof Error ? projectError.message : "unknown error",
           });
-        ok = checks.every((c) => c.ok);
-      }
-      // REQ-GEN-06/AC9: --fix installs what doctor found missing, then the tool checks count as fixed only if setup succeeded.
-      if (options.fix === true && io.ports && toolchain) {
-        if (toolchain.missing.length === 0) io.write("\nNothing for qj setup to install.\n");
-        else {
-          io.write(`\nqj doctor --fix: qj setup --only ${toolchain.missing.join(",")}\n`);
-          const code = await runSetupCommand(
-            { only: toolchain.missing, ...(options.yes === true ? { yes: true } : {}) },
-            commandIO,
-            { ...io.ports, ...(resolved ? { project: resolved } : {}) },
-            loaded,
-          );
-          const toolChecks = new Set([...TOOL_CHECKS, ...tools.map((t) => t.name)]);
-          ok = code === 0 && checks.filter((c) => !toolChecks.has(c.name)).every((c) => c.ok);
-          if (code === 0) io.write("Run qj doctor again to see the result.\n");
+        if (options.models === true) {
+          io.write(`${formatDoctor(checks)}\n`);
+          const modelsOk = checks.every((c) => c.ok) && (await probeConfiguredModels());
+          io.setExitCode(modelsOk ? 0 : 3);
+          return;
         }
-      }
-      io.setExitCode(ok ? 0 : 3);
-    });
+        if (checks.every((c) => c.ok) && io.ports) {
+          // REQ-GEN-03/AC2: secrets, Docker, Android/Appium and, with --online, Jira and code hosts.
+          try {
+            checks.push(
+              ...(await projectChecks(
+                await loadProject(io.cwd, resolved),
+                { ...io.ports, ...(resolved ? { project: resolved } : {}) },
+                {
+                  online: options.online === true,
+                },
+              )),
+            );
+            // REQ-GEN-11/AC2: the plugins the project's settings need, with the command for each missing one.
+            checks.push(
+              await pluginCheck(await loadProject(io.cwd, resolved), {
+                ...io.ports,
+                ...(resolved ? { project: resolved } : {}),
+              }),
+            );
+          } catch (error) {
+            // REQ-GEN-08/AC1: the file exists but does not load: one failed check, not "found" and "invalid".
+            const failed = {
+              name: "project config",
+              ok: false,
+              detail: error instanceof Error ? error.message : String(error),
+            };
+            const at = checks.findIndex((c) => c.name === "project config");
+            if (at >= 0) checks.splice(at, 1, failed);
+            else checks.push(failed);
+          }
+        }
+        // REQ-GEN-03/AC4+AC5: versions of every tool and of the application under test.
+        let loaded: LoadedProject | undefined;
+        if (resolved !== undefined && projectError === undefined)
+          loaded = await loadProject(io.cwd, resolved).catch(() => undefined);
+        const tools = await toolVersions({
+          qajitsu: version,
+          node: io.nodeVersion,
+          project: loaded,
+          ...(io.ports?.versionExec ? { exec: io.ports.versionExec } : {}),
+          ...(io.ports?.playwright ? { playwright: io.ports.playwright } : {}),
+        });
+        // docker and appium are already checks of their own above; the others fail here when needed and missing.
+        checks.push(...missingToolChecks(tools, checks));
+        const app =
+          loaded && io.ports
+            ? await appVersions(
+                loaded,
+                { ...io.ports, ...(resolved ? { project: resolved } : {}) },
+                {
+                  online: options.online === true,
+                },
+              ).catch(() => [])
+            : [];
+        for (const line of app)
+          if (!line.ok) checks.push({ name: line.name, ok: false, detail: line.detail });
+        // REQ-GEN-06/AC7: with --online, the toolchain's sources answer.
+        if (options.online === true && io.ports)
+          checks.push(...(await checkSources(io.ports, loaded).catch(() => [])));
+        // REQ-GEN-06/AC2: what qj setup would do; a tool of yours that is not compatible is information.
+        const toolchain =
+          loaded && io.ports
+            ? await toolchainDoctor(io.ports, commandIO, loaded).catch((error: unknown) => ({
+                lines: [`  · ${error instanceof Error ? error.message : String(error)}`],
+                missing: [],
+              }))
+            : undefined;
+        io.write(
+          `${formatDoctor(checks)}\n\n${formatToolVersions(tools, (name) => reportedBy(name, checks))}\n`,
+        );
+        if (toolchain && toolchain.lines.length > 0)
+          io.write(`\nToolchain (qj setup):\n${toolchain.lines.join("\n")}\n`);
+        if (loaded) io.write(`\n${formatAppVersions(app)}\n`);
+        let ok = checks.every((c) => c.ok);
+        // REQ-GEN-11/AC3: --fix installs the missing plugins; the plugin check counts as fixed only if all installed.
+        if (options.fix === true && io.ports && loaded && checks.some((c) => c.name === "plugins" && !c.ok)) {
+          const result = await installMissingPlugins(
+            loaded,
+            { ...io.ports, ...(resolved ? { project: resolved } : {}) },
+            (line) => {
+              io.write(`${line}\n`);
+            },
+          );
+          for (const f of result.failed) io.write(`✘ plugin ${f}\n`);
+          const at = checks.findIndex((c) => c.name === "plugins");
+          if (result.failed.length === 0 && at >= 0)
+            checks.splice(at, 1, {
+              name: "plugins",
+              ok: true,
+              detail: `installed ${result.installed.join(", ")}`,
+            });
+          ok = checks.every((c) => c.ok);
+        }
+        // REQ-GEN-06/AC9: --fix installs what doctor found missing, then the tool checks count as fixed only if setup succeeded.
+        if (options.fix === true && io.ports && toolchain) {
+          if (toolchain.missing.length === 0) io.write("\nNothing for qj setup to install.\n");
+          else {
+            io.write(`\nqj doctor --fix: qj setup --only ${toolchain.missing.join(",")}\n`);
+            const code = await runSetupCommand(
+              { only: toolchain.missing, ...(options.yes === true ? { yes: true } : {}) },
+              commandIO,
+              { ...io.ports, ...(resolved ? { project: resolved } : {}) },
+              loaded,
+            );
+            const toolChecks = new Set([...TOOL_CHECKS, ...tools.map((t) => t.name)]);
+            ok = code === 0 && checks.filter((c) => !toolChecks.has(c.name)).every((c) => c.ok);
+            if (code === 0) io.write("Run qj doctor again to see the result.\n");
+          }
+        }
+        io.setExitCode(ok ? 0 : 3);
+      },
+    );
 
   program
     .command("plan")
