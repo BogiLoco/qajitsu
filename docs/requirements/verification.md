@@ -71,13 +71,15 @@ The layer that keeps results honest. Background: ADR-0002 and the architecture i
 - Status: implemented
 - Priority: must
 - Stage: 7
-- Related: INV-5, REQ-LLM-02
+- Related: INV-1, INV-5, REQ-LLM-02, REQ-LLM-12, REQ-FLOW-06, ADR-0018
+- Note: AC4 accepted by the owner on 2026-11-18 (MVP point 8): the audit is the first work that goes through a provider batch API.
 
 **Acceptance criteria**
 
 - [x] AC1: A separate agent with fresh context receives the approved plan, raw results and evidence (including images).
 - [x] AC2: Its findings can only downgrade PASSED to NEEDS_REVIEW.
 - [x] AC3: By default the auditor uses a different model than the author.
+- [x] AC4: With `verification.auditor_delivery: batch` the run's audit goes to the auditor provider's batch API (Anthropic, OpenAI, Google; another provider audits at once and the run says why). Until its result is collected (`qj audit collect`, or `qj publish` collecting first) the audit is pending: every PASSED case shows as NEEDS_REVIEW with "audit pending" and nothing is published. A collected result is checked and applied like an immediate audit; a batch that fails, expires or is cancelled counts as a failed audit under the configured mode, an invalid answer (not a report, a finding missing, duplicated or for another case, another run's answer) and results that changed after queuing count as a failed required audit. Nothing is certified while the audit is queued. The batched call has no tools and one attempt; its tokens and cost (at the provider's batch price) are recorded when it is collected.
 
 ### REQ-VER-07 · Publish gates
 

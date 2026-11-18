@@ -814,6 +814,10 @@ export async function runRun(
             ws.record.data["regression"] === undefined ? await auditRun(session, ports.now) : undefined;
           if (audit?.status === "failed")
             io.writeError(`Auditor did not complete (${audit.mode}): ${audit.error}\n`);
+          if (audit?.status === "queued")
+            io.write(
+              `Audit queued in batch ${audit.batch.id} (${audit.model}, batch price); its PASSED cases stay NEEDS_REVIEW until qajitsu audit collect ${ws.ticket} --run ${ws.runId} collects it.\n`,
+            );
         }
         teardownDue = true;
       }
@@ -897,6 +901,7 @@ export async function runRun(
         io.write(
           `${[...certificateLines(certified.certificate), ...(certified.timestamp ? [certified.timestamp] : []), ...(certified.archived ? [certified.archived] : [])].join("\n")}\n`,
         );
+      if (certified.status === "pending") io.write(`No certificate yet: ${certified.reason}.\n`);
       if (certified.status === "gaps")
         io.writeError(
           `Warning: no certificate, the audit trail has ${String(certified.gaps.length)} gap(s):\n${certified.gaps

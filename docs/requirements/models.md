@@ -174,18 +174,18 @@ gateways know them; QAJitsu should ask instead of making the user copy them into
 
 ### REQ-LLM-12 · Provider cost features: prompt caching and batches
 
-- Status: in-progress
+- Status: implemented
 - Priority: should
 - Stage: 3
 - Related: REQ-LLM-01, REQ-LLM-07, REQ-LLM-11, INV-11
 
-- Note: TO BE REVIEWED (2026-10-22): AC3 (provider batch APIs) is open; AI SDK 7 offers an experimental batch API (`experimental_startBatch`, `getBatchStatus`, `getBatchResults`) that fits audits queued across runs and benchmark preparation, not the dependent steps of one run. AC4 stops a call over its limit; reducing the context automatically is not done.
+- Note: AC3 is built on AI SDK 7's experimental batch API (`experimental_startBatch`, `getBatchStatus`, `getBatchResults`) behind the model registry; the run's audit is its first user (REQ-VER-06/AC4, owner 2026-11-18). The dependent steps of one run (plan, author, healer) never wait for a batch. AC4 stops a call over its limit; reducing the context automatically is not done.
 
 **Acceptance criteria**
 
 - [x] AC1: Prompts are laid out with a stable prefix (instructions, project rules, repository context) so provider prompt caching applies; cache hits are recorded.
 - [x] AC2: The cache duration (short or long) is chosen per project from the observed rate of runs; the choice is recorded.
-- [ ] AC3: Work that is not time-critical (benchmarks, nightly regression analysis, queued audits, data preparation) can go through a provider batch API where there is one.
+- [x] AC3: Work that is not time-critical can go through a provider batch API where there is one (Anthropic, OpenAI, Google), at the provider's batch price: the run's audit first (REQ-VER-06/AC4); other work (benchmarks, data preparation) asks the model registry for a batch the same way.
 - [x] AC4: The input size of each call is counted before sending; a call that would exceed its step budget or a provider price tier boundary is reduced or stopped with a reason.
 - [x] AC5: All of this lives in `packages/models` behind the provider interface (INV-11); other packages only ask for "cacheable" or "batchable" work.
 

@@ -16,6 +16,7 @@ import { runTest } from "./commands/test-flow.js";
 import { runFixCheck } from "./commands/fix-check.js";
 import { runClean, runGc, runResume, runRuns, runWorkReset } from "./commands/runs.js";
 import { runBudget } from "./commands/budget.js";
+import { runAuditCollect } from "./commands/audit-collect.js";
 import { runEnvCheck, runEnvRender, runEnvUp } from "./commands/env.js";
 import { runStackInit, runStackPull, type StackInitOptions } from "./commands/stack.js";
 import {
@@ -1224,6 +1225,20 @@ export function createProgram(version: string, io: ProgramIO): Command {
     );
 
   const audit = program.command("audit").description("Audit log and audit trail tools");
+  audit
+    .command("collect")
+    .description(
+      "Collect the audit a run sent to the provider's batch API; its PASSED wait as NEEDS_REVIEW until then",
+    )
+    .argument("<ticket>", "Jira key, e.g. SHOP-482")
+    .option("--run <id>", "run id (default: latest run of the ticket)")
+    .option("--wait", "wait until the batch is answered")
+    .option("--interval <seconds>", "with --wait: how often to ask (default 60)")
+    .option("--timeout <seconds>", "with --wait: how long to wait at most (default 86400)")
+    .action(
+      (ticket: string, options: { run?: string; wait?: boolean; interval?: string; timeout?: string }) =>
+        withPorts((ports) => runAuditCollect(ticket, options, commandIO, ports))(),
+    );
   audit
     .command("verify")
     .description("Check the hash chain of run journals (also archived ones)")

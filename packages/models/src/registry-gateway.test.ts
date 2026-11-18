@@ -162,4 +162,29 @@ describe("a gateway provider's models (REQ-LLM-10)", () => {
     expect((await reg.forRole("author")).profile.costPerMTok?.input).toBe(3);
     expect((await reg.forRole("summary")).profile.costPerMTok).toBeUndefined();
   });
+
+  it("REQ-LLM-12/AC3: Anthropic, OpenAI and Google models have a batch at half price; local and compatible ones do not", async () => {
+    const reg = createModelRegistry({
+      config: parseProjectConfig({
+        project: "demo",
+        jira: { type: "file", tickets_dir: "t", project_key: "DEMO" },
+        models: {
+          providers: {
+            claude: { type: "anthropic", api_key: "secret://env/A" },
+            gpt: { type: "openai", api_key: "secret://env/O" },
+            gem: { type: "google", api_key: "secret://env/G" },
+            local: { type: "ollama", base_url: "http://localhost:11434" },
+            vllm: { type: "openai-compatible", base_url: "http://localhost:8000/v1" },
+          },
+          roles: { default: "claude/claude-sonnet-5" },
+        },
+      }).models,
+      resolveSecret: () => Promise.resolve("fictional-key"),
+      fetch: createFakeFetch([]).fetch,
+    });
+    for (const ref of ["claude/claude-haiku-5", "gpt/gpt-6", "gem/gemini-4-argon"])
+      expect((await reg.resolve(ref)).batch?.priceFactor, ref).toBe(0.5);
+    for (const ref of ["local/qwen3", "vllm/qwen"])
+      expect((await reg.resolve(ref)).batch, ref).toBeUndefined();
+  });
 });

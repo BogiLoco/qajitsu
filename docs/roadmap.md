@@ -105,7 +105,7 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 - [REQ-EVD-01](requirements/evidence.md#req-evd-01--api-evidence) API evidence (must, implemented, AC 3/3)
 - [REQ-EVD-04](requirements/evidence.md#req-evd-04--test-matrix) Test matrix (must, implemented, AC 3/3)
 - [REQ-EVD-05](requirements/evidence.md#req-evd-05--report-formats) Report formats (must, implemented, AC 3/3)
-- [REQ-LLM-12](requirements/models.md#req-llm-12--provider-cost-features-prompt-caching-and-batches) Provider cost features: prompt caching and batches (should, in-progress, AC 4/5)
+- [REQ-LLM-12](requirements/models.md#req-llm-12--provider-cost-features-prompt-caching-and-batches) Provider cost features: prompt caching and batches (should, implemented, AC 5/5)
 - [REQ-GEN-09](requirements/generic.md#req-gen-09--signed-release-images) Signed release images (should, in-progress, AC 1/6)
 - [REQ-GEN-15](requirements/generic.md#req-gen-15--releases-of-installable-packages) Releases of installable packages (must, in-progress, AC 4/5)
 - [REQ-NFR-04](requirements/non-functional.md#req-nfr-04--framework-self-test) Framework self-test (must, implemented, AC 2/2)
@@ -194,7 +194,7 @@ and `qj bench` reports detection and false-FAILED rates per model.
 <!-- req-stage:7 -->
 - [REQ-PLAN-15](requirements/plan.md#req-plan-15--project-lessons-from-revisions) Project lessons from revisions (should, proposed, AC 0/4)
 - [REQ-PLAN-16](requirements/plan.md#req-plan-16--plan-quality-metrics) Plan quality metrics (should, implemented, AC 4/4)
-- [REQ-VER-06](requirements/verification.md#req-ver-06--independent-auditor) Independent auditor (must, implemented, AC 3/3)
+- [REQ-VER-06](requirements/verification.md#req-ver-06--independent-auditor) Independent auditor (must, implemented, AC 4/4)
 - [REQ-VER-09](requirements/verification.md#req-ver-09--canary-check) Canary check (could, implemented, AC 2/2)
 - [REQ-VER-23](requirements/verification.md#req-ver-23--test-code-quality-gate) Test code quality gate (must, implemented, AC 5/5)
 - [REQ-VER-24](requirements/verification.md#req-ver-24--human-review-of-test-code-on-demand) Human review of test code on demand (could, implemented, AC 5/5)

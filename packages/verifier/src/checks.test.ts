@@ -57,6 +57,31 @@ describe("auditor and canary checks (REQ-VER-06, REQ-VER-09, invariant 5)", () =
     });
   });
 
+  it("REQ-VER-06/AC4 + INV-5: a queued audit makes every PASSED NEEDS_REVIEW in both modes and raises nothing", () => {
+    for (const mode of ["optional", "required"] as const) {
+      const queued: AuditRecord = {
+        schema: 1,
+        status: "queued",
+        mode,
+        model: "claude/haiku",
+        sameModelAsAuthor: false,
+        passed: ["TC-01"],
+        batch: { version: 2, id: "msgbatch_fictional", provider: "anthropic.batch" },
+        submittedAt: "2026-11-18T10:00:00.000Z",
+        requestSha256: "a".repeat(64),
+        resultsSha256: "c".repeat(64),
+      };
+      const checked = applyVerificationChecks(all, queued);
+      for (const [i, c] of checked.entries()) {
+        const before = all[i]?.status;
+        expect(c.status, mode).toBe(before === "PASSED" ? "NEEDS_REVIEW" : before);
+      }
+      expect(checked.find((c) => c.downgradedBy)?.downgradedBy).toBe(
+        "audit pending: batch msgbatch_fictional of claude/haiku, queued 2026-11-18T10:00:00.000Z",
+      );
+    }
+  });
+
   it("REQ-VER-09/AC2: a canary that passes makes every PASSED NEEDS_REVIEW; a caught canary changes nothing", () => {
     expect(applyVerificationChecks(all, undefined, canary(true)).map((c) => c.status)).toEqual([
       ...TEST_STATUSES,

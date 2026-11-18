@@ -348,6 +348,12 @@ export const ProjectConfigSchema = z.strictObject({
        * and statuses stay; `required`: an auditor failure turns every PASSED into NEEDS_REVIEW; `off`.
        */
       auditor: z.enum(["optional", "required", "off"]).default("optional"),
+      /**
+       * How the audit is sent (REQ-VER-06/AC4): `now` (default) calls the auditor during the run; `batch` sends it
+       * to the provider's batch API at its batch price (Anthropic, OpenAI, Google), and the run's PASSED wait as
+       * NEEDS_REVIEW until `qajitsu audit collect` (or `qajitsu publish`) collects the answer.
+       */
+      auditor_delivery: z.enum(["now", "batch"]).default("now"),
       /** Screenshots the auditor sees per run (vision models only). */
       auditor_max_images: z.number().int().min(0).max(50).default(12),
       /** Run one step with an inverted expectation; if it passes, the run becomes NEEDS_REVIEW (REQ-VER-09). */
@@ -355,7 +361,13 @@ export const ProjectConfigSchema = z.strictObject({
       /** Suggested causes of FAILED cases with cited evidence (REQ-VER-12); never a status. */
       triage: z.enum(["on", "off"]).default("on"),
     })
-    .default({ auditor: "optional", auditor_max_images: 12, canary: false, triage: "on" }),
+    .default({
+      auditor: "optional",
+      auditor_delivery: "now",
+      auditor_max_images: 12,
+      canary: false,
+      triage: "on",
+    }),
   /**
    * Who approves a plan, in order (REQ-PLAN-10, ADR-0010): `person` (as before) and `model` steps. A model step needs
    * `model`, a model other than the planner's, and never approves a plan with flagged expectations or open questions.

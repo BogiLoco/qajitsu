@@ -27,3 +27,4 @@ export * from "./context-manager.js";
 export * from "./context-semantic.js";
 export * from "./change-split.js";
 export * from "./context-rebuild.js";
+export * from "./audit-batch.js";

@@ -19,8 +19,13 @@ export interface ExchangeResult {
   readonly response?: { readonly modelId?: string | undefined };
 }
 
-/** Binary parts (screenshots) are kept as their hash and size: the files themselves are evidence. */
-const plain = (value: unknown): unknown => {
+/**
+ * A request as the transcript keeps it: binary parts (screenshots) are kept as their hash and size, the files
+ * themselves are evidence.
+ *
+ * @param value - The request or any part of it.
+ */
+export const plain = (value: unknown): unknown => {
   if (value instanceof Uint8Array) return { sha256: sha256(value), bytes: value.byteLength };
   if (value instanceof URL) return value.toString();
   if (Array.isArray(value)) return value.map(plain);

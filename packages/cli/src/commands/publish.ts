@@ -31,6 +31,7 @@ import type { CommandIO } from "./fetch.js";
 import { exportRunTelemetry } from "./telemetry.js";
 import { certificateForPublish, certifiedVerdict } from "./certificate.js";
 import { applyVerdictPolicy, runWorkflow } from "./workflow.js";
+import { collectAndReport } from "./audit-collect.js";
 import { attachmentLimitOf, attachmentStoreOf, storableOversized, storedKey } from "../attachment-store.js";
 import { anchorJournal, codeAccessNote, computeVerdict, writeReports, type RunVerdict } from "./verdict.js";
 
@@ -216,6 +217,13 @@ export async function runPublish(
         `Run ${ws.runId} is a benchmark run and is never published.`,
         {},
       );
+    // REQ-VER-06/AC4: a queued audit is collected first; while its batch is unanswered nothing is published.
+    if ((await collectAndReport(session, io, ports.now)) === "pending") {
+      io.write(
+        `Not published: the audit of run ${ws.runId} is still in the provider's batch; run qajitsu audit collect ${ws.ticket} --run ${ws.runId} --wait, then publish.\n`,
+      );
+      return 2;
+    }
     const verdict = await computeVerdict(session, ports.now);
     await writeReports(session, verdict);
     if (!verdict.ok) {

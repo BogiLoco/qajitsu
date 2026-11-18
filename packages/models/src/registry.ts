@@ -17,6 +17,7 @@ import {
 } from "./gateway.js";
 import { cacheProviderOptions, inputLimit, type CacheTtl } from "./cost-features.js";
 import { contextProfile, type ContextProfile } from "./context-profile.js";
+import { providerBatch, type ModelBatch } from "./batch.js";
 import { parseModelRef, resolveRoleModel, type ModelRef, type ModelRole } from "./model-ref.js";
 
 /** A resolved model: AI SDK handle plus its capability profile. */
@@ -41,6 +42,8 @@ export interface ResolvedModel {
   readonly sources?: ProfileSources | undefined;
   /** When the gateway's answer behind the profile was read (REQ-LLM-10/AC3). */
   readonly gatewayReadAt?: string | undefined;
+  /** The provider's batch API for work that is not time-critical (REQ-LLM-12/AC3); undefined without one. */
+  readonly batch?: ModelBatch | undefined;
 }
 
 /** Access to the configured models: the core ModelProvider with AI SDK types (ADR-0005). */
@@ -68,6 +71,8 @@ export function createModelRegistry(options: {
   readonly fetch?: typeof globalThis.fetch;
   /** Extra providers by alias, e.g. a mock model in tests; they win over configured ones. */
   readonly extra?: Readonly<Record<string, (model: string) => ResolvedModel["model"]>>;
+  /** Batch APIs of extra providers by alias (tests): their models can be batched like a provider's (REQ-LLM-12/AC3). */
+  readonly extraBatches?: Readonly<Record<string, (model: string) => ModelBatch>>;
   /** The project's prompt cache duration, already chosen when `cache_ttl` is `auto` (REQ-LLM-12/AC2). */
   readonly cacheTtl?: CacheTtl;
   /**
@@ -134,7 +139,11 @@ export function createModelRegistry(options: {
     };
   };
 
-  const build = async (alias: string, provider: ProviderConfig, model: string): Promise<LanguageModel> => {
+  const build = async (
+    alias: string,
+    provider: ProviderConfig,
+    model: string,
+  ): Promise<{ readonly model: LanguageModel; readonly batch?: ModelBatch }> => {
     const contextWindow = provider.models[model]?.context_window;
     const think = provider.models[model]?.think;
     const apiKey = provider.api_key === undefined ? undefined : await resolveSecret(provider.api_key);
@@ -146,31 +155,42 @@ export function createModelRegistry(options: {
     // REQ-LLM-01/AC7: local and self-hosted models wait as long as `timeout_s`, not the HTTP client's 5 minutes.
     const local = options.fetch ? {} : { fetch: patientFetch((provider.timeout_s ?? 1800) * 1000) };
     switch (provider.type) {
-      case "anthropic":
-        return createAnthropic(common).languageModel(model);
-      case "openai":
-        return createOpenAI(common).languageModel(model);
-      case "google":
-        return createGoogle(common).languageModel(model);
+      // REQ-LLM-12/AC3: these providers have a batch API; the others are called at once.
+      case "anthropic": {
+        const p = createAnthropic(common);
+        return { model: p.languageModel(model), batch: providerBatch(p, model) };
+      }
+      case "openai": {
+        const p = createOpenAI(common);
+        return { model: p.languageModel(model), batch: providerBatch(p, model) };
+      }
+      case "google": {
+        const p = createGoogle(common);
+        return { model: p.languageModel(model), batch: providerBatch(p, model) };
+      }
       case "ollama":
         // ai-sdk-ollama wants the host URL; accept the common `.../api` form too.
-        return createOllama({
-          ...common,
-          ...local,
-          ...(provider.base_url ? { baseURL: provider.base_url.replace(/\/api\/?$/, "") } : {}),
-        }).languageModel(model, {
-          // Ollama's default context is small; a declared context window is what the role checks rely on.
-          ...(contextWindow === undefined ? {} : { options: { num_ctx: contextWindow } }),
-          // Reasoning models such as Qwen3 call tools only with an explicit thinking mode.
-          ...(think === undefined ? {} : { think }),
-        });
+        return {
+          model: createOllama({
+            ...common,
+            ...local,
+            ...(provider.base_url ? { baseURL: provider.base_url.replace(/\/api\/?$/, "") } : {}),
+          }).languageModel(model, {
+            // Ollama's default context is small; a declared context window is what the role checks rely on.
+            ...(contextWindow === undefined ? {} : { options: { num_ctx: contextWindow } }),
+            // Reasoning models such as Qwen3 call tools only with an explicit thinking mode.
+            ...(think === undefined ? {} : { think }),
+          }),
+        };
       case "openai-compatible":
-        return createOpenAICompatible({
-          name: alias,
-          baseURL: provider.base_url ?? "",
-          ...common,
-          ...local,
-        }).languageModel(model);
+        return {
+          model: createOpenAICompatible({
+            name: alias,
+            baseURL: provider.base_url ?? "",
+            ...common,
+            ...local,
+          }).languageModel(model),
+        };
     }
   };
 
@@ -213,6 +233,9 @@ export function createModelRegistry(options: {
           ref,
           id,
           model: extra(ref.model),
+          ...(options.extraBatches?.[ref.provider]
+            ? { batch: options.extraBatches[ref.provider]?.(ref.model) }
+            : {}),
           profile: modelProfile(
             "mock",
             ref.model,
@@ -255,12 +278,14 @@ export function createModelRegistry(options: {
             gateway?.models.get(ref.model),
             declared,
           );
+    const built = await build(ref.provider, provider, ref.model);
     return withCostFeatures(
       provider.type,
       {
         ref,
         id,
-        model: await build(ref.provider, provider, ref.model),
+        model: built.model,
+        ...(built.batch ? { batch: built.batch } : {}),
         profile: localZero(
           fromGateway
             ? // Declared extras (prices by date, price tiers) still come from the config.

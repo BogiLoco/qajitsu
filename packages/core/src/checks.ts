@@ -19,6 +19,26 @@ export const AuditRecordSchema = z.discriminatedUnion("status", [
     mode: z.enum(["optional", "required"]),
     error: z.string(),
   }),
+  /**
+   * The audit went to the provider's batch API (REQ-VER-06/AC4) and is not collected yet: every PASSED shows as
+   * NEEDS_REVIEW and nothing is published until `qj audit collect` replaces this record.
+   */
+  z.strictObject({
+    schema: z.literal(1),
+    status: z.literal("queued"),
+    mode: z.enum(["optional", "required"]),
+    model: z.string(),
+    sameModelAsAuthor: z.boolean(),
+    /** The PASSED cases the audit reviews; findings for any other case are refused. */
+    passed: z.array(z.string()),
+    batch: z.strictObject({ version: z.literal(2), id: z.string().min(1), provider: z.string().min(1) }),
+    submittedAt: z.string(),
+    expiresAt: z.string().optional(),
+    /** SHA-256 of `checks/audit-request.json`, the request as sent. */
+    requestSha256: z.string().regex(/^[0-9a-f]{64}$/),
+    /** SHA-256 over the run's results and evidence manifest it reviewed: changed results void the queued audit. */
+    resultsSha256: z.string().regex(/^[0-9a-f]{64}$/),
+  }),
 ]);
 
 /** Parsed `checks/audit.json`. */
