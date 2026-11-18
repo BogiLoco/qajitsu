@@ -72,7 +72,7 @@ of them before any adapter moves out of the core installation.
 | [Local evidence store](#local-evidence-store) | evidence store | EvidenceStore | exists | core | official open source |
 | [S3 Object Lock (WORM)](#s3-object-lock-worm) | evidence archive | EvidenceArchive | exists | plugin | official open source |
 | [S3 attachment store](#s3-attachment-store) | attachment store | AttachmentStore | exists | plugin | official open source |
-| [Azure Blob attachment store](#azure-blob-attachment-store) | attachment store | AttachmentStore | planned | plugin | official open source |
+| [Azure Blob attachment store](#azure-blob-attachment-store) | attachment store | AttachmentStore | idea | plugin | official open source |
 | [Other immutable storage](#other-immutable-storage) | evidence archive | EvidenceArchive | idea | plugin | official commercial |
 | [Slack and Microsoft Teams](#slack-and-microsoft-teams) | publisher | Publisher | idea | plugin | official open source |
 | [Model providers](#model-providers) | model provider | ModelProvider | exists | core | official open source |
@@ -837,9 +837,9 @@ of them before any adapter moves out of the core installation.
 
 - Type: attachment store
 - Interface: AttachmentStore
-- Status: planned
+- Status: idea
 - Package: -
-- Requirements: REQ-PUB-02
+- Requirements: REQ-PUB-11
 - Dependencies: none (own Shared Key and SAS signing)
 - Hosts: Azure Blob Storage (or Azurite)
 - Secrets: the storage account key
