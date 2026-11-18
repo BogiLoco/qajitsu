@@ -144,6 +144,7 @@ function commentModel(
     notes,
     observations: v.observations,
     fixCheck: v.fixCheck,
+    budget: v.budget,
     ...(v.versions ? { versions: v.versions } : {}),
   };
 }
@@ -372,6 +373,7 @@ export async function runPublish(
         workflow,
         publisher,
         verdict.cases.map((c) => c.status),
+        verdict.budget.length > 0,
       );
     // REQ-OBS-03: export what this command added to the journal; telemetry never changes the result.
     await anchorJournal(session);

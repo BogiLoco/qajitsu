@@ -1,3 +1,4 @@
+import { assertLedgerTrusted } from "../budget-admission.js";
 import { modelForRole } from "@qajitsu/agents";
 import { graphqlSchemaOf } from "../graphql-schema.js";
 import { soapContractOf } from "../soap-contract.js";
@@ -6,6 +7,7 @@ import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   AgentOutputError,
+  isScopeBudgetStop,
   TokenBudgetExceededError,
   buildChangeContext,
   loadKnowledge,
@@ -378,6 +380,8 @@ export async function runPlan(
   let saveUsage: (() => Promise<void>) | undefined;
   try {
     session = await openSession(rawKey, options.run, io.cwd, ports, masker);
+    // REQ-FLOW-06/AC2: no spending on a ledger the journals do not prove.
+    await assertLedgerTrusted(session);
     const ws = session.ws;
     if (!ws.record.checkpoints.some((c) => c.stage === "fetch")) {
       throw new ConfigError(
@@ -714,7 +718,15 @@ export async function runPlan(
       await saveUsage?.();
       await session.ws.update({
         status: "failed",
-        data: { ...session.ws.record.data, blocked: { reason: error.code } },
+        // REQ-FLOW-06/AC6: a stopped model stage is BLOCKED with the scope, spent amount, limit and period.
+        data: {
+          ...session.ws.record.data,
+          blocked: {
+            reason: error.code,
+            detail: masker.maskText(error.message),
+            ...(isScopeBudgetStop(error) ? { budget: error.context } : {}),
+          },
+        },
       });
     }
     io.writeError(formatError(error, (t) => masker.maskText(t)));
@@ -758,6 +770,8 @@ export async function runApprove(
   const masker = createMasker();
   try {
     const session = await openSession(rawKey, options.run, io.cwd, ports, masker);
+    // REQ-FLOW-06/AC2: no spending on a ledger the journals do not prove.
+    await assertLedgerTrusted(session);
     const approver = options.approver ?? review.user;
     if (options.reuseFrom !== undefined) {
       const reused = await reuseApprovedPlan(session, options.reuseFrom, approver, ports.now);

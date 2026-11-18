@@ -13,7 +13,7 @@ import {
 import { generateText } from "ai";
 import { extractCode } from "./author.js";
 import { modelExchange } from "./exchange.js";
-import { callUsage } from "./usage.js";
+import { callUsage, recordCall } from "./usage.js";
 import { prepareCall } from "./prepare-call.js";
 import { assembleFor, instructions, modelForRole, question, type AgentStageDeps } from "./roles-run.js";
 
@@ -110,6 +110,8 @@ export async function healSpec(
     ],
   });
   const prompt = context.prompt;
+  // REQ-FLOW-06/AC5: the ticket and month budgets are checked before the call is sent.
+  await deps.usage.beforeCall("heal", "healer", model.id, model.profile);
   const startedAt = Date.now();
   const result = await generateText({
     model: model.model,
@@ -117,13 +119,15 @@ export async function healSpec(
     ...(deps.signal ? { abortSignal: deps.signal } : {}),
     maxRetries: 2,
   });
-  deps.usage.record(
+  await recordCall(
+    deps.usage,
     "heal",
     "healer",
     model.id,
     model.profile,
     callUsage(result.usage, startedAt),
     modelExchange("heal", "healer", model, { system: context.system, prompt }, result),
+    { caseIds: [request.caseId] },
   );
   const code = extractCode(result.text);
   let problems: SpecProblem[] =

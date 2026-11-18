@@ -902,10 +902,33 @@ run") and the command that continues it, with the ticket's latest notes, then th
 runs (`run --build`, `env up --detach`) with their URLs and `qajitsu clean` to stop them. Computed from the run
 folders; `context.json` in the project home is only an index of it.
 
+With ticket or month budgets (REQ-FLOW-06) it adds the month's spend against its limits and the tickets at 80% or
+more of their budget.
+
 - `--all`: every project
 - `--rebuild`: rebuild `context.json` from the run folders
 
 Exit codes: `0` shown, `3` errors.
+
+### `qajitsu budget`
+
+Spend against the ticket and month budgets (REQ-FLOW-06/AC9), from the project's spend ledger
+(`<project runs>/budget/spend.jsonl`, written by code at every model call and when a command ends): cost, tokens and
+active minutes of the month against every limit with the percent, the most expensive tickets and cases, and the calls
+of models without a price. A cost that misses such calls is shown as "at least", never as $0 or within budget. The
+auditor's calls are shared equally by the cases it reviewed.
+
+- `--month YYYY-MM`: another calendar month, in `budget.time_zone` (default: this month)
+- `--ticket <key>`: the ticket's versions (a new summary, description or acceptance criteria starts a new budget
+  window), its cases, its shared work (analysis, plan, approval) and its spend by role, model and stage
+- `--json`: the same as JSON, with any mismatch against the journals
+- `--rebuild`: regenerate the ledger from the run journals; runs no longer on disk keep their entries, so cleaning
+  runs never lowers a total. Refused while a run is active.
+
+The run journals are the authority: a ledger that does not parse, or whose model calls differ from the journals of the
+runs on disk (deleted, cut or edited), stops new runs (`LEDGER_INVALID`, `LEDGER_MISMATCH`) until `--rebuild`.
+
+Exit codes: `0` shown, `2` the ledger does not match the journals, `3` errors.
 
 ### `qajitsu note <ticket> <text>`
 

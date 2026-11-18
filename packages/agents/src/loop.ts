@@ -1,3 +1,4 @@
+import { TokenBudgetExceededError } from "./errors.js";
 import { withPlacementHint } from "./plan-hints.js";
 import type { Guard } from "@qajitsu/guard";
 import type { ResolvedModel } from "@qajitsu/models";
@@ -15,7 +16,7 @@ import {
 import { z } from "zod";
 import { AgentOutputError } from "./errors.js";
 import { modelExchange } from "./exchange.js";
-import { callUsage, type UsageTracker } from "./usage.js";
+import { callUsage, recordCall, type CallAttribution, type UsageTracker } from "./usage.js";
 import { prepareCall } from "./prepare-call.js";
 import type { AssembledContext } from "./context-manager.js";
 
@@ -139,6 +140,8 @@ export interface StructuredRun<T extends z.ZodType> {
   readonly tools?: readonly AgentTool[];
   readonly guard?: Guard;
   readonly usage: UsageTracker;
+  /** The cases the run works for, e.g. the auditor's reviewed cases (REQ-FLOW-06/AC3); none for shared work. */
+  readonly attribution?: CallAttribution;
   readonly maxSteps?: number;
   readonly signal?: AbortSignal;
   /**
@@ -217,6 +220,8 @@ export async function runStructuredAgent<T extends z.ZodType>(
       // REQ-CTX-16/AC1: repairs grow the conversation; it is compacted only when the next call would not fit.
       const offered = Boolean(tools) && !constrained;
       messages = run.context.compact?.(messages, offered && canRead) ?? messages;
+      // REQ-FLOW-06/AC5: the ticket and month budgets are checked before the call is sent.
+      await run.usage.beforeCall(run.stage, run.role, run.model.id, run.model.profile);
       result = await generateText({
         model: run.model.model,
         ...prepareCall(run.model, run.context, messages),
@@ -229,6 +234,7 @@ export async function runStructuredAgent<T extends z.ZodType>(
         maxRetries: 2,
       });
     } catch (error) {
+      if (error instanceof TokenBudgetExceededError) throw error;
       if (!constrained || run.signal?.aborted || !(error instanceof Error)) throw error;
       if (!/No (object|output) generated/i.test(error.message)) {
         // The provider rejected constrained decoding (e.g. a grammar it cannot compile): keep JSON mode.
@@ -244,13 +250,15 @@ export async function runStructuredAgent<T extends z.ZodType>(
       ];
       continue;
     }
-    run.usage.record(
+    await recordCall(
+      run.usage,
       run.stage,
       run.role,
       run.model.id,
       run.model.profile,
       callUsage(result.usage, startedAt),
       modelExchange(run.stage, run.role, run.model, { system: run.context.system, messages }, result),
+      run.attribution,
     );
     let errors: string[];
     try {

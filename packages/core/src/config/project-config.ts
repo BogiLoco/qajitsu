@@ -25,6 +25,13 @@ const Alias = z
   .string()
   .regex(/^[a-z0-9][a-z0-9_-]{0,39}$/, "Use a lowercase alias: letters, digits, - and _");
 
+/** Limits of one budget scope (REQ-FLOW-06/AC1); minutes are active minutes (REQ-NFR-11/AC2). */
+export const BudgetLimitsSchema = z.strictObject({
+  max_cost_usd: z.number().positive().optional(),
+  max_tokens: z.number().int().positive().optional(),
+  max_minutes: z.number().positive().optional(),
+});
+
 /** Capabilities that can be declared per model when the built-in profile is wrong or missing (REQ-LLM-03). */
 const CapabilityOverrideSchema = z.strictObject({
   tools: z.boolean().optional(),
@@ -826,8 +833,24 @@ export const ProjectConfigSchema = z.strictObject({
     .strictObject({
       max_minutes: z.number().positive().max(1440).optional(),
       max_cost_usd: z.number().positive().optional(),
+      /** Limits of one version of a ticket's content, over all its runs (REQ-FLOW-06/AC1+AC4). */
+      ticket: BudgetLimitsSchema.optional(),
+      /** Limits of the project in a calendar month (REQ-FLOW-06/AC1). */
+      month: BudgetLimitsSchema.optional(),
+      /** The time zone of the calendar month, an IANA name (REQ-FLOW-06/AC3). */
+      time_zone: z
+        .string()
+        .refine((tz) => {
+          try {
+            new Intl.DateTimeFormat("en-US", { timeZone: tz });
+            return true;
+          } catch {
+            return false;
+          }
+        }, "Expected an IANA time zone, e.g. Europe/Warsaw")
+        .default("UTC"),
     })
-    .default({}),
+    .default({ time_zone: "UTC" }),
   /**
    * How much of the application's code QAJitsu may read (REQ-CTX-10): `full` checks out the repositories at the
    * change, `metadata` keeps only the PR/MR title, description and the list of changed files, `none` reads nothing

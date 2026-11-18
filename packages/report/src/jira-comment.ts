@@ -55,7 +55,12 @@ export interface CommentModel {
   readonly observations?: readonly RunObservation[] | undefined;
   /** Fix verification lines (REQ-VER-11/AC4): verdict first, then one line per reproduction case. */
   readonly fixCheck?: readonly string[] | undefined;
+  /** What a ticket or month budget stopped (REQ-FLOW-06/AC8), computed by code; numbers never come from a model. */
+  readonly budget?: readonly string[] | undefined;
 }
+
+/** The budget section (REQ-FLOW-06/AC8). */
+const BUDGET_TITLE = "Budget";
 
 /** Observations shown in a comment; the rest are in the report. */
 const MAX_COMMENT_OBSERVATIONS = 15;
@@ -191,6 +196,10 @@ export function renderJiraAdf(m: CommentModel): { version: 1; type: "doc"; conte
     content.push(heading(4, "Fix verification"));
     content.push(bullets(m.fixCheck.map((l) => [text(l)])));
   }
+  if (m.budget && m.budget.length > 0) {
+    content.push(heading(4, BUDGET_TITLE));
+    content.push(bullets(m.budget.map((l) => [text(l)])));
+  }
   if (comboLines(m).length > 0) {
     content.push(heading(4, combosTitle(m)));
     content.push(bullets(comboLines(m).map((l) => [text(l)])));
@@ -264,6 +273,8 @@ export function renderJiraWiki(m: CommentModel): string {
   }
   if (m.fixCheck && m.fixCheck.length > 0)
     lines.push("", "h4. Fix verification", ...m.fixCheck.map((l) => `* ${wikiEscape(l)}`));
+  if (m.budget && m.budget.length > 0)
+    lines.push("", `h4. ${BUDGET_TITLE}`, ...m.budget.map((l) => `* ${wikiEscape(l)}`));
   if (comboLines(m).length > 0)
     lines.push("", `h4. ${combosTitle(m)}`, ...comboLines(m).map((l) => `* ${wikiEscape(l)}`));
   if (localeLines(m).length > 0)
@@ -298,6 +309,7 @@ export function renderCommentPreview(m: CommentModel): string {
   }
   if (m.fixCheck && m.fixCheck.length > 0)
     lines.push("", "Fix verification:", ...m.fixCheck.map((l) => `  ${l}`));
+  if (m.budget && m.budget.length > 0) lines.push("", `${BUDGET_TITLE}:`, ...m.budget.map((l) => `  ${l}`));
   if (comboLines(m).length > 0) lines.push("", `${combosTitle(m)}:`, ...comboLines(m).map((l) => `  ${l}`));
   if (localeLines(m).length > 0) lines.push("", `${LOCALES_TITLE}:`, ...localeLines(m).map((l) => `  ${l}`));
   if (manualLines(m).length > 0) lines.push("", `${MANUAL_TITLE}:`, ...manualLines(m).map((l) => `  ${l}`));

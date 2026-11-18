@@ -1,8 +1,9 @@
+import { assertLedgerTrusted } from "../budget-admission.js";
 import { httpCredentialsFor, testHeadersFor } from "../http-auth.js";
 import { extractDownloadText, readFixture } from "../web-files.js";
 import { warnStageBudgets } from "../timing.js";
 import type { KnowledgePorts } from "./knowledge.js";
-import { runUsage, saveRunUsage } from "../run-usage.js";
+import { runUsage, saveActiveTime, saveRunUsage, scopeMinutesStop } from "../run-usage.js";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { compareDeployedSha, createRemoteEnvProvider } from "@qajitsu/adapter-env-remote";
@@ -503,6 +504,7 @@ export async function runRun(
   const masker = createMasker();
   const startedAt = ports.now().getTime();
   let release: (() => Promise<void>) | undefined;
+  let opened: RunSession | undefined;
   let messages: RunMessages | undefined;
   let stopOnInterrupt: (() => Promise<void>) | undefined;
   // REQ-CFG-05/AC2: an interrupt still stops the environment and deletes the generated .env files.
@@ -527,6 +529,9 @@ export async function runRun(
   signals.on("SIGTERM", onSignal);
   try {
     const session = await openSession(rawKey, options.run, io.cwd, ports, masker);
+    // REQ-FLOW-06/AC2: no spending on a ledger the journals do not prove.
+    await assertLedgerTrusted(session);
+    opened = session;
     const { ws, events, project } = session;
     if (ws.record.data["results"] !== undefined) {
       throw new ConfigError(
@@ -945,6 +950,13 @@ export async function runRun(
   } finally {
     signals.off("SIGINT", onSignal);
     signals.off("SIGTERM", onSignal);
+    // REQ-FLOW-06/AC2: the command's active time goes to the spend ledger, however the run ended.
+    if (opened)
+      await saveActiveTime(opened, "run", ports.now).catch((error: unknown) => {
+        io.writeError(
+          `Warning: the run's active time was not added to the spend ledger: ${error instanceof Error ? error.message : String(error)}\n`,
+        );
+      });
     // REQ-ENV-08/AC5: the run's inboxes are deleted when it ends, whatever the result.
     const problems = (await messages?.deleteAll().catch(() => ["inbox cleanup failed"])) ?? [];
     for (const p of problems) io.writeError(`Warning: an inbox was not deleted: ${p}\n`);
@@ -1034,10 +1046,12 @@ async function executeCases(
   // REQ-PLAN-08/AC3: the run's budget; remaining cases are NOT_RUN with the reason once a limit is reached.
   const budget = project.config.budget;
   const startedAt = run.startedAt ?? ports.now().getTime();
+  // REQ-FLOW-06/AC5: the ticket's and the month's active minutes are checked before each case too.
+  const scopeStop = await scopeMinutesStop(session, ports.now);
   const timeStop = (): string | undefined =>
     budget.max_minutes !== undefined && ports.now().getTime() - startedAt >= budget.max_minutes * 60_000
       ? `the run's time budget (${String(budget.max_minutes)} min) was reached`
-      : undefined;
+      : scopeStop();
   // The author writes the specs of the given cases; `notes` are a reviewer's reasons (REQ-VER-24/AC3).
   const writeSpecs = async (cases: Plan["cases"], notes?: ReadonlyMap<string, string>) => {
     const analysis = AnalysisSchema.parse(JSON.parse(await readFile(ws.path("analysis.json"), "utf8")));

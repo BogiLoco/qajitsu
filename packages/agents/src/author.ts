@@ -22,7 +22,7 @@ import { compactStep, guardTools } from "./loop.js";
 import { openMcpTools } from "./mcp.js";
 import { renderTestsRepo } from "./tests-repo.js";
 import { modelExchange } from "./exchange.js";
-import { callUsage } from "./usage.js";
+import { callUsage, isScopeBudgetStop, recordCall } from "./usage.js";
 import { prepareCall } from "./prepare-call.js";
 import type { ChangeContext } from "./context.js";
 import {
@@ -300,7 +300,7 @@ export async function runAuthor(
         type === "web" ? s.platform === "web" : type === "mobile" && s.platform !== "web",
       );
     for (const planCase of plan.cases) {
-      const stop = stopReason?.();
+      const stop = stopReason?.() ?? deps.usage.stopped?.reason;
       if (stop !== undefined) {
         deps.events.emit("author", actor, "case.skipped", { caseId: planCase.id, reason: stop });
         out.push({ caseId: planCase.id, attempts: 0, problems: [], skipped: stop });
@@ -401,110 +401,126 @@ export async function runAuthor(
       let file: string | undefined;
       let attempts = 0;
       let askedAboutSelectors = false;
-      for (let attempt = 1; attempt <= AUTHOR_MAX_ATTEMPTS; attempt += 1) {
-        attempts += 1;
-        const startedAt = Date.now();
-        // REQ-CTX-16: rounds of rejected specs grow the conversation; compacted only when the next call would not fit.
-        const canRead = Boolean(tools) && (input.tools ?? []).some((t) => t.name === "read_context");
-        messages = input.compact?.(messages, canRead) ?? messages;
-        const result = await generateText({
-          model: model.model,
-          ...prepareCall(model, input, messages),
-          // REQ-CTX-12/AC4: the case's catalogue tools join the author's own, through the same guard.
-          ...(tools
-            ? {
-                tools: { ...tools, ...guardTools([...(input.tools ?? [])], guard, deps.signal) },
-                stopWhen: stepCountIs(10),
-                ...(input.compact ? { prepareStep: compactStep(input.compact, canRead) } : {}),
-              }
-            : {}),
-          ...(deps.signal ? { abortSignal: deps.signal } : {}),
-          maxRetries: 2,
-        });
-        deps.usage.record(
-          "author",
-          "author",
-          model.id,
-          model.profile,
-          callUsage(result.usage, startedAt),
-          modelExchange("author", "author", model, { system: input.system, messages }, result),
-        );
-        const code = extractCode(result.text);
-        problems =
-          code === undefined
-            ? [{ check: "lint", message: "answer contained no ```ts code block" }]
-            : await checkSpec(code, planCase.id, plan, deps.specChecks);
-        rejected.push(...problems);
-        // REQ-EXEC-22/AC3: selectors that match nothing recorded go back to the author once, with the closest ones;
-        // the question does not use up an attempt, and the answer is accepted when it passes the checks.
-        const ask = code !== undefined && problems.length === 0 && !askedAboutSelectors;
-        const unknown = ask
-          ? unknownSelectors(specSelectors(code), planCase.type, {
-              screens: screensFor(planCase.type),
-              inventory: context.ui,
-            })
-          : [];
-        // REQ-EXEC-01: a UI step that only verifies checks a state nobody produced; its plan action says what to do.
-        const idle =
-          ask && planCase.type !== "api"
-            ? stepsWithoutActions(code).flatMap((id) => {
-                const s = planCase.steps.find((x) => x.id === id);
-                return s && s.manual !== true ? [s] : [];
+      // REQ-FLOW-06/AC5+AC6: a ticket or month budget that stops the case makes it, and every later one, NOT_RUN.
+      let budgetStop: string | undefined;
+      try {
+        for (let attempt = 1; attempt <= AUTHOR_MAX_ATTEMPTS; attempt += 1) {
+          attempts += 1;
+          const startedAt = Date.now();
+          // REQ-CTX-16: rounds of rejected specs grow the conversation; compacted only when the next call would not fit.
+          const canRead = Boolean(tools) && (input.tools ?? []).some((t) => t.name === "read_context");
+          messages = input.compact?.(messages, canRead) ?? messages;
+          // REQ-FLOW-06/AC5: the ticket and month budgets are checked before the call is sent.
+          await deps.usage.beforeCall("author", "author", model.id, model.profile);
+          const result = await generateText({
+            model: model.model,
+            ...prepareCall(model, input, messages),
+            // REQ-CTX-12/AC4: the case's catalogue tools join the author's own, through the same guard.
+            ...(tools
+              ? {
+                  tools: { ...tools, ...guardTools([...(input.tools ?? [])], guard, deps.signal) },
+                  stopWhen: stepCountIs(10),
+                  ...(input.compact ? { prepareStep: compactStep(input.compact, canRead) } : {}),
+                }
+              : {}),
+            ...(deps.signal ? { abortSignal: deps.signal } : {}),
+            maxRetries: 2,
+          });
+          await recordCall(
+            deps.usage,
+            "author",
+            "author",
+            model.id,
+            model.profile,
+            callUsage(result.usage, startedAt),
+            modelExchange("author", "author", model, { system: input.system, messages }, result),
+            { caseIds: [planCase.id] },
+          );
+          const code = extractCode(result.text);
+          problems =
+            code === undefined
+              ? [{ check: "lint", message: "answer contained no ```ts code block" }]
+              : await checkSpec(code, planCase.id, plan, deps.specChecks);
+          rejected.push(...problems);
+          // REQ-EXEC-22/AC3: selectors that match nothing recorded go back to the author once, with the closest ones;
+          // the question does not use up an attempt, and the answer is accepted when it passes the checks.
+          const ask = code !== undefined && problems.length === 0 && !askedAboutSelectors;
+          const unknown = ask
+            ? unknownSelectors(specSelectors(code), planCase.type, {
+                screens: screensFor(planCase.type),
+                inventory: context.ui,
               })
             : [];
-        if (code !== undefined && (unknown.length > 0 || idle.length > 0)) {
-          askedAboutSelectors = true;
-          const known = snapshotSelectors(
-            screensFor(planCase.type),
-            planCase.type === "web" ? ["web"] : ["android", "ios"],
-          );
-          deps.events.emit("author", actor, "selectors.unknown", {
-            caseId: planCase.id,
-            selectors: unknown.length,
-          });
+          // REQ-EXEC-01: a UI step that only verifies checks a state nobody produced; its plan action says what to do.
+          const idle =
+            ask && planCase.type !== "api"
+              ? stepsWithoutActions(code).flatMap((id) => {
+                  const s = planCase.steps.find((x) => x.id === id);
+                  return s && s.manual !== true ? [s] : [];
+                })
+              : [];
+          if (code !== undefined && (unknown.length > 0 || idle.length > 0)) {
+            askedAboutSelectors = true;
+            const known = snapshotSelectors(
+              screensFor(planCase.type),
+              planCase.type === "web" ? ["web"] : ["android", "ios"],
+            );
+            deps.events.emit("author", actor, "selectors.unknown", {
+              caseId: planCase.id,
+              selectors: unknown.length,
+            });
+            messages = [
+              ...messages,
+              ...result.responseMessages,
+              {
+                role: "user",
+                content: [
+                  ...(unknown.length > 0
+                    ? [
+                        "These selectors match no element of the recorded pages or screens and no element id in the code:",
+                        ...unknown.map(
+                          (s) =>
+                            `- ${s} (closest recorded: ${closestSelectors(s, known).join(", ") || "none"})`,
+                        ),
+                        "Use a recorded selector instead. Keep one only if its element appears after an action of the spec.",
+                      ]
+                    : []),
+                  ...(idle.length > 0
+                    ? [
+                        "These steps only verify; they perform no action, so they check a state nobody produced:",
+                        ...idle.map((s) => `- step("${s.id}"): the plan says "${s.action}"`),
+                        "Perform that action through ui in the step before its verify() (tap or fill the elements that do it). Keep a step without action only if its action needs nothing.",
+                      ]
+                    : []),
+                  "Answer with the complete spec.",
+                ].join("\n"),
+              },
+            ];
+            attempt -= 1;
+            continue;
+          }
+          if (code !== undefined && problems.length === 0) {
+            file = deps.ws.path("specs", `${planCase.id}.spec.ts`);
+            await writeFile(file, code, "utf8");
+            break;
+          }
           messages = [
             ...messages,
             ...result.responseMessages,
             {
               role: "user",
-              content: [
-                ...(unknown.length > 0
-                  ? [
-                      "These selectors match no element of the recorded pages or screens and no element id in the code:",
-                      ...unknown.map(
-                        (s) =>
-                          `- ${s} (closest recorded: ${closestSelectors(s, known).join(", ") || "none"})`,
-                      ),
-                      "Use a recorded selector instead. Keep one only if its element appears after an action of the spec.",
-                    ]
-                  : []),
-                ...(idle.length > 0
-                  ? [
-                      "These steps only verify; they perform no action, so they check a state nobody produced:",
-                      ...idle.map((s) => `- step("${s.id}"): the plan says "${s.action}"`),
-                      "Perform that action through ui in the step before its verify() (tap or fill the elements that do it). Keep a step without action only if its action needs nothing.",
-                    ]
-                  : []),
-                "Answer with the complete spec.",
-              ].join("\n"),
+              content: `The spec was rejected (attempt ${String(attempt)} of ${String(AUTHOR_MAX_ATTEMPTS)}). Fix these problems and answer with the complete spec:\n${formatSpecProblems(problems)}`,
             },
           ];
-          attempt -= 1;
-          continue;
         }
-        if (code !== undefined && problems.length === 0) {
-          file = deps.ws.path("specs", `${planCase.id}.spec.ts`);
-          await writeFile(file, code, "utf8");
-          break;
-        }
-        messages = [
-          ...messages,
-          ...result.responseMessages,
-          {
-            role: "user",
-            content: `The spec was rejected (attempt ${String(attempt)} of ${String(AUTHOR_MAX_ATTEMPTS)}). Fix these problems and answer with the complete spec:\n${formatSpecProblems(problems)}`,
-          },
-        ];
+      } catch (error) {
+        if (!isScopeBudgetStop(error)) throw error;
+        budgetStop = error.message;
+      }
+      if (budgetStop !== undefined) {
+        deps.events.emit("author", actor, "case.skipped", { caseId: planCase.id, reason: budgetStop });
+        out.push({ caseId: planCase.id, attempts, problems: [], skipped: budgetStop });
+        continue;
       }
       const findings: Record<string, number> = {};
       const rules: Record<string, number> = {};

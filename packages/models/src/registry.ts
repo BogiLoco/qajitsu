@@ -236,6 +236,16 @@ export function createModelRegistry(options: {
     }
     const declared = provider.models[ref.model];
     const gateway = await gatewayOf(ref.provider, provider);
+    /** REQ-FLOW-06/AC7: a model served from this machine costs nothing, unless a price is declared. */
+    const localZero = (profile: ModelProfile): ModelProfile =>
+      profile.costPerMTok === undefined &&
+      (profile.datedPrices ?? []).length === 0 &&
+      // A gateway on this machine (LiteLLM, OpenRouter) forwards to paid providers: its prices come from it.
+      provider.gateway === undefined &&
+      provider.base_url !== undefined &&
+      /^https?:\/\/(localhost|127\.\d+\.\d+\.\d+|\[::1\])(:\d+)?(\/|$)/i.test(provider.base_url)
+        ? { ...profile, costPerMTok: { input: 0, output: 0 } }
+        : profile;
     const fromGateway =
       provider.gateway === undefined
         ? undefined
@@ -251,10 +261,12 @@ export function createModelRegistry(options: {
         ref,
         id,
         model: await build(ref.provider, provider, ref.model),
-        profile: fromGateway
-          ? // Declared extras (prices by date, price tiers) still come from the config.
-            { ...modelProfile(provider.type, ref.model, declared), ...fromGateway.profile }
-          : modelProfile(provider.type, ref.model, declared),
+        profile: localZero(
+          fromGateway
+            ? // Declared extras (prices by date, price tiers) still come from the config.
+              { ...modelProfile(provider.type, ref.model, declared), ...fromGateway.profile }
+            : modelProfile(provider.type, ref.model, declared),
+        ),
         ...(fromGateway ? { sources: fromGateway.sources } : {}),
         ...(gateway ? { gatewayReadAt: gateway.readAt } : {}),
         ...(provider.type === "anthropic"

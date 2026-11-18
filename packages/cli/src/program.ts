@@ -15,6 +15,7 @@ import { runRun, type RunPorts } from "./commands/run.js";
 import { runTest } from "./commands/test-flow.js";
 import { runFixCheck } from "./commands/fix-check.js";
 import { runClean, runGc, runResume, runRuns, runWorkReset } from "./commands/runs.js";
+import { runBudget } from "./commands/budget.js";
 import { runEnvCheck, runEnvRender, runEnvUp } from "./commands/env.js";
 import { runStackInit, runStackPull, type StackInitOptions } from "./commands/stack.js";
 import {
@@ -1094,6 +1095,17 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .option("--unkeep <id>", "let a run follow the retention policy again")
     .action((ticket: string, options: { keep?: string; unkeep?: string }) =>
       withPorts((ports) => runRuns(ticket, commandIO, ports, options))(),
+    );
+
+  program
+    .command("budget")
+    .description("Spend against the ticket and month budgets, the most expensive tickets and cases")
+    .option("--month <YYYY-MM>", "calendar month in budget.time_zone (default: this month)")
+    .option("--ticket <key>", "break one ticket down per version, case, shared stage, role and model")
+    .option("--json", "machine-readable output")
+    .option("--rebuild", "regenerate the spend ledger from the run journals")
+    .action((options: { month?: string; ticket?: string; json?: boolean; rebuild?: boolean }) =>
+      withPorts((ports) => runBudget(options, commandIO, ports))(),
     );
 
   program

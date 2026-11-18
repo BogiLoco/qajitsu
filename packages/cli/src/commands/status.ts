@@ -1,3 +1,4 @@
+import { budgetStatusLines } from "./budget.js";
 import { existsSync } from "node:fs";
 import { optionalPlugin, pluginLoader } from "./plugin.js";
 import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
@@ -8,7 +9,9 @@ import {
   QajitsuError,
   RunRecordSchema,
   TicketKeySchema,
+  fileSpendLedger,
   listProjects,
+  SPEND_LEDGER_FILE,
   projectPaths,
   qajitsuHome,
   readKnowledgeIndex,
@@ -302,9 +305,21 @@ async function projectStatus(project: LoadedProject, ports: RuntimePorts): Promi
     ...renderWork(open, done),
     ...environments,
     ...costLines(digests),
+    ...(await budgetLinesOf(project, runsRoot, ports.now())),
     ...timeLines(digests),
     ...qualityLines(digests),
   ];
+}
+
+/** REQ-FLOW-06/AC9: the month against its limit and the tickets close to theirs; a broken ledger is said, not hidden. */
+async function budgetLinesOf(project: LoadedProject, root: string, now: Date): Promise<string[]> {
+  const { budget } = project.config;
+  if (budget.month === undefined && budget.ticket === undefined) return [];
+  try {
+    return budgetStatusLines(await fileSpendLedger(join(root, SPEND_LEDGER_FILE)).read(), budget, now);
+  } catch (error) {
+    return [`Budget: unknown (${error instanceof Error ? error.message : String(error)})`];
+  }
 }
 
 const fail = (io: CommandIO, error: unknown): number => {

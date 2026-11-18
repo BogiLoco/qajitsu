@@ -62,6 +62,8 @@ export const DEFAULT_PROTECTED_PATHS: readonly string[] = [
   "live/",
   // Pages and screens recorded before planning (REQ-EXEC-22/AC7): the plan check accepts elements they show.
   "ui/",
+  // The frozen ticket snapshot (REQ-CTX-01/AC2): its content version decides the ticket budget (REQ-FLOW-06/AC4).
+  "ticket/",
   "run.json",
 ];
 

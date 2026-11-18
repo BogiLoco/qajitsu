@@ -1,3 +1,4 @@
+import { budgetLines } from "./budget-lines.js";
 import { annotatedFirst } from "./annotated.js";
 import { sealProblems } from "./audit-trail.js";
 import { specReviewNotes } from "./spec-review.js";
@@ -124,6 +125,8 @@ export interface RunVerdict {
   readonly observations: readonly RunObservation[];
   /** Fix verification lines for the Jira comment (REQ-VER-11/AC4); empty without `--fix-check`. */
   readonly fixCheck: readonly string[];
+  /** The budget section for the Jira comment (REQ-FLOW-06/AC8); empty when no ticket or month budget stopped work. */
+  readonly budget: readonly string[];
   /** Versions of the tools and models the run used (REQ-OBS-10); undefined for runs that did not record them. */
   readonly versions?: Readonly<Record<string, string>> | undefined;
   /** Set when no person approved the plan (REQ-PLAN-10/AC5): every report says so. */
@@ -653,6 +656,15 @@ export async function computeVerdict(
         `Evidence before the fix: qajitsu evidence ${ws.ticket} --run ${fixCheck.baseRun}`,
       ]
     : [];
+  // REQ-FLOW-06/AC8: what a ticket or month budget stopped, from the journal and the computed statuses.
+  const budget = budgetLines(
+    parseEventLines(journalText).events,
+    cases.map((c) => ({
+      caseId: c.caseId,
+      status: c.status,
+      reason: results.get(c.caseId)?.attempts.at(-1)?.error,
+    })),
+  ).map((l) => masker.maskText(l));
   const matrixMd = `${renderMatrixMarkdown(rows)}\n**${decisionLine}**\n${approvalNote ? `\n_${approvalNote}_\n` : ""}`;
   const csv = renderMatrixCsv(rows);
   // REQ-EXEC-23/AC2: the tested mobile app, recorded by code when the devices were prepared.
@@ -761,6 +773,7 @@ export async function computeVerdict(
     checks: checkNotes,
     observations,
     fixCheck: fixCheckLines,
+    budget,
     ...(versions ? { versions } : {}),
     ...(approvalNote ? { approvalNote } : {}),
     decision,
