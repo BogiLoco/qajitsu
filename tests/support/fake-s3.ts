@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:http";
-import { signV4 } from "../../packages/adapters/evidence-s3/src/sigv4.js";
+import { presignV4, signV4 } from "../../packages/adapters/evidence-s3/src/sigv4.js";
 
 /** An object the fake S3 holds, with its lock. */
 export interface FakeS3Object {
@@ -10,13 +10,40 @@ export interface FakeS3Object {
   readonly versionId: string;
 }
 
+/** Whether a presigned link is signed with the credentials and has not expired. */
+function presignedValid(
+  url: URL,
+  credentials: { accessKeyId: string; secretAccessKey: string },
+  now: number,
+): boolean {
+  const date = url.searchParams.get("X-Amz-Date") ?? "";
+  const at = new Date(
+    `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}T${date.slice(9, 11)}:${date.slice(11, 13)}:${date.slice(13, 15)}Z`,
+  );
+  const expires = Number(url.searchParams.get("X-Amz-Expires"));
+  const unsigned = new URL(url);
+  for (const k of [...unsigned.searchParams.keys()])
+    if (k.startsWith("X-Amz-")) unsigned.searchParams.delete(k);
+  const again = presignV4(unsigned, credentials, "us-east-1", at, expires);
+  return (
+    again.searchParams.get("X-Amz-Signature") === url.searchParams.get("X-Amz-Signature") &&
+    now <= at.getTime() + expires * 1000
+  );
+}
+
 /**
  * A fake S3 with Object Lock on localhost (path-style): checks the SigV4 signature of every request with the test
  * credentials, needs `Content-MD5` on a locked PUT, keeps every version of an object, and refuses deletes of locked
  * versions. `objectLock: false` behaves like a bucket created without Object Lock.
  */
 export async function startFakeS3(
-  options: { readonly objectLock?: boolean; readonly bucket?: string; readonly ignoreLock?: boolean } = {},
+  options: {
+    readonly objectLock?: boolean;
+    readonly bucket?: string;
+    readonly ignoreLock?: boolean;
+    /** The clock a presigned link's expiry is checked against. */
+    readonly now?: () => Date;
+  } = {},
 ) {
   const credentials = { accessKeyId: "TESTACCESSKEY", secretAccessKey: "fictional-test-secret" };
   const bucket = options.bucket ?? "qa-evidence";
@@ -40,13 +67,16 @@ export async function startFakeS3(
       const at = new Date(
         `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}T${date.slice(9, 11)}:${date.slice(11, 13)}:${date.slice(13, 15)}Z`,
       );
-      const expected = signV4(
-        { method: req.method ?? "", url, headers: signedHeaders, body },
-        credentials,
-        "us-east-1",
-        at,
-      )["authorization"];
-      const authorized = expected === auth;
+
+      // A presigned GET carries its signature in the query (REQ-PUB-02/AC3): checked the same way, and its expiry.
+      const presigned = req.method === "GET" && url.searchParams.has("X-Amz-Signature");
+      const expected = (): string | undefined =>
+        signV4({ method: req.method ?? "", url, headers: signedHeaders, body }, credentials, "us-east-1", at)[
+          "authorization"
+        ];
+      const authorized = presigned
+        ? presignedValid(url, credentials, (options.now ?? (() => new Date()))().getTime())
+        : expected() === auth;
       requests.push({ method: req.method ?? "", path: url.pathname, authorized });
       const fail = (status: number, code: string): void => {
         res
@@ -93,6 +123,15 @@ export async function startFakeS3(
             "x-amz-version-id": entry.versionId,
           })
           .end();
+        return;
+      }
+      if (req.method === "GET" && presigned) {
+        const latest = objects.get(key)?.at(-1);
+        if (!latest) {
+          fail(404, "NoSuchKey");
+          return;
+        }
+        res.writeHead(200, { "content-length": String(latest.data.length) }).end(latest.data);
         return;
       }
       if (req.method === "HEAD") {

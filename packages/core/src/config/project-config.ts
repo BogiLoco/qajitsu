@@ -15,6 +15,35 @@ const HookPath = z
   .refine((p) => !p.split("/").includes(".."), "Hooks live in .qa/hooks/");
 
 const SecretRef = z.string().regex(/^secret:\/\/[a-z0-9-]+\/.+$/, "Expected a secret:// reference");
+/** Key prefix in object storage: path segments ending with `/`. */
+const KeyPrefix = z.string().regex(/^([A-Za-z0-9_.-]+\/)*$/, "Path segments ending with /");
+/** How long a link to an oversized attachment works: an S3 presigned link lasts at most 7 days. */
+const LinkHours = z.number().int().min(1).max(168).default(72);
+const OversizedStoreSchema = z.discriminatedUnion("type", [
+  z.strictObject({
+    type: z.literal("s3"),
+    // The links go into tickets and work for days: plain http only on this machine (MinIO in a lab).
+    endpoint: z
+      .url()
+      .refine(
+        (u) =>
+          u.startsWith("https://") || /^http:\/\/(localhost|127\.\d+\.\d+\.\d+|\[::1\])(:\d+)?(\/|$)/.test(u),
+        "an https URL (plain http only on localhost)",
+      ),
+    region: z.string().min(1).default("us-east-1"),
+    bucket: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/, "S3 bucket name"),
+    prefix: KeyPrefix.refine((p) => !p.split("/").includes(".."), "no .. segments").default(
+      "qajitsu/attachments/",
+    ),
+    /** Path-style addressing, as MinIO needs. */
+    path_style: z.boolean().default(false),
+    /** Part of every link (X-Amz-Credential): use a key that can only write and read this prefix. */
+    access_key_id: SecretRef,
+    secret_access_key: SecretRef,
+    link_hours: LinkHours,
+  }),
+]);
+
 /** A bootstrap secret of a secret manager: only the `env` provider can hold it (REQ-CFG-03/AC3). */
 const EnvSecretRef = z
   .string()
@@ -485,6 +514,11 @@ export const ProjectConfigSchema = z.strictObject({
       auto: z.boolean().default(false),
       /** Hosts Jira may redirect attachment downloads to; fetched without credentials (qj pull). */
       media_hosts: z.array(z.string().regex(/^[a-z0-9.-]+$/)).default(["media.atlassian.com"]),
+      /**
+       * Object storage for attachments larger than the limit (REQ-PUB-02/AC3): they are uploaded there and the
+       * comment links them with a link that expires after `link_hours`. Without it they stay in the run folder.
+       */
+      oversized: OversizedStoreSchema.optional(),
     })
     .default({ max_attachment_mb: 10, auto: false, media_hosts: ["media.atlassian.com"] }),
   workspace: z

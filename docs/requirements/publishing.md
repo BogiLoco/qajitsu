@@ -18,12 +18,11 @@ How results and evidence reach Jira and the people who need them.
 
 ### REQ-PUB-02 · Attachments
 
-- Status: deferred
+- Status: in-progress
 - Priority: must
 - Stage: 4
-- Related: REQ-EVD-06, REQ-PRJ-10
-
-Deferred: AC3 (object storage for oversized attachments) is parked; oversized files are skipped and reported.
+- Related: REQ-EVD-06, REQ-PRJ-10, REQ-GEN-11, INV-7, INV-8
+- Note: AC3 is built in two steps (one plugin per pull request, REQ-GEN-11/AC11): the instance's limit and S3 (AWS, MinIO and other S3-compatible stores, plugin `evidence-s3`) first, then Azure Blob Storage (plugin `evidence-azure`). The S3 link carries the access key id (masked everywhere else), never the secret.
 
 **Acceptance criteria**
 

@@ -48,6 +48,8 @@ export function pluginNeeds(
   for (const [i, source] of config.test_cases.entries())
     if (source.type !== "file") need("testcases", `test_cases[${String(i)}].type: ${source.type}`);
   if (config.archive !== undefined) need("evidence-s3", `archive.type: ${config.archive.type}`);
+  if (config.publish.oversized !== undefined)
+    need("evidence-s3", `publish.oversized.type: ${config.publish.oversized.type}`);
   if (options.knowledge)
     need(`knowledge-${config.knowledge.store}`, `knowledge.store: ${config.knowledge.store}`);
   if (config.knowledge.confluence !== undefined) need("knowledge-confluence", "knowledge.confluence");

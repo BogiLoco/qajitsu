@@ -366,6 +366,15 @@ describe("plugins: install, load, remove (REQ-GEN-11)", () => {
       code_hosts: { gh: { type: "github", token: "secret://env/GH" } },
       secrets: { vault: { address: "https://vault.example", token: "secret://env/VAULT_TOKEN" } },
       test_cases: [{ type: "xray", client_id: "secret://env/X", client_secret: "secret://env/Y" }],
+      publish: {
+        oversized: {
+          type: "s3",
+          endpoint: "https://s3.eu-central-1.amazonaws.com",
+          bucket: "qa-files",
+          access_key_id: "secret://env/K",
+          secret_access_key: "secret://env/S",
+        },
+      },
     });
     const needs = pluginNeeds(config, { knowledge: true });
     expect(needs).toEqual(
@@ -377,6 +386,8 @@ describe("plugins: install, load, remove (REQ-GEN-11)", () => {
         { id: "testcases", setting: "test_cases[0].type: xray" },
         { id: "knowledge-lancedb", setting: "knowledge.store: lancedb" },
         { id: "runner-api", setting: "test runs" },
+        // REQ-PUB-02/AC3: oversized attachments go to S3 through its plugin.
+        { id: "evidence-s3", setting: "publish.oversized.type: s3" },
       ]),
     );
     expect(pluginNeeds(config, { knowledge: false }).map((n) => n.id)).not.toContain("knowledge-lancedb");

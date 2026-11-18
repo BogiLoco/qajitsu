@@ -1,7 +1,7 @@
 {
   "name": "@qajitsu/adapter-evidence-s3",
   "version": "0.2.0",
-  "description": "QAJitsu EvidenceArchive on S3 Object Lock (AWS, MinIO and other S3-compatible storage): write-once evidence and certificates.",
+  "description": "QAJitsu on S3 (AWS, MinIO and other S3-compatible storage): write-once evidence and certificates on Object Lock, and oversized ticket attachments with expiring links.",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -46,7 +46,8 @@
   "qajitsu": {
     "plugin": {
       "types": [
-        "evidence archive"
+        "evidence archive",
+        "attachment store"
       ],
       "core_api": "^1.0.0",
       "secrets": [

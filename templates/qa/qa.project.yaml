@@ -268,6 +268,10 @@ test_types: [api, web]
 #
 # Jira comment and attachments (REQ-PUB-01, REQ-PUB-02, REQ-VER-10)
 # publish: { max_attachment_mb: 10, auto: false, media_hosts: [media.atlassian.com] }
+# Attachments over the limit to S3 with a link that expires (REQ-PUB-02/AC3); needs the evidence-s3 plugin:
+# publish:
+#   oversized: { type: s3, endpoint: https://s3.eu-central-1.amazonaws.com, region: eu-central-1, bucket: qa-attachments,
+#                access_key_id: secret://env/QA_FILES_KEY_ID, secret_access_key: secret://env/QA_FILES_SECRET, link_hours: 72 }
 #
 # OpenTelemetry export (REQ-OBS-03, docs/guides/observability.md)
 # telemetry: { otlp: { endpoint: http://localhost:4318, service_name: qajitsu, include_details: false } }

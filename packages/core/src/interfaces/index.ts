@@ -55,4 +55,5 @@ export type { TestCaseSource } from "./test-case-source.js";
 export type { DevelopmentLink, ReleaseQuery, ReleaseTicket, Ticket, TicketSource } from "./ticket-source.js";
 export type { TicketComment, TicketTransition, TicketWorkflow } from "./ticket-workflow.js";
 export type { ArchivedObject, EvidenceArchive, RetentionMode } from "./evidence-archive.js";
+export type { AttachmentStore, StoredAttachment } from "./attachment-store.js";
 export type { TestDataProvider, TestDataRecord } from "./test-data.js";

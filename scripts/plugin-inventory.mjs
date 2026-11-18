@@ -22,6 +22,7 @@ export const PLUGIN_TYPES = [
   "secret provider",
   "evidence store",
   "evidence archive",
+  "attachment store",
   "knowledge store",
   "document source",
   "embedder",
