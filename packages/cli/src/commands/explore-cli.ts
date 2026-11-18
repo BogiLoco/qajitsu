@@ -1,3 +1,4 @@
+import { assertLedgerTrusted } from "../budget-admission.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { runUsage, saveRunUsage } from "../run-usage.js";
 import { homedir } from "node:os";
@@ -136,6 +137,8 @@ export async function runCliExplore(
     const minutes = numberOption(options.timeBox, 10, "--time-box", 240);
     const maxSteps = Math.floor(numberOption(options.maxSteps, 40, "--max-steps", 1000));
     const session = await openSession(rawKey, options.run, io.cwd, ports, masker);
+    // REQ-FLOW-06/AC2: no spending on a ledger the journals do not prove.
+    await assertLedgerTrusted(session);
     const { ws, events, project } = session;
     // REQ-EXEC-24/AC7: only a tool described in the project's configuration.
     const tool = project.config.explore.cli[options.cli];

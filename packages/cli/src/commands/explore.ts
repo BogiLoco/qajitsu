@@ -1,3 +1,4 @@
+import { assertLedgerTrusted } from "../budget-admission.js";
 import { httpCredentialsFor } from "../http-auth.js";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { runUsage, saveRunUsage } from "../run-usage.js";
@@ -125,6 +126,8 @@ export async function runExplore(
     const minutes = numberOption(options.timeBox, 10, "--time-box", 240);
     const maxSteps = Math.floor(numberOption(options.maxSteps, 40, "--max-steps", 1000));
     const session = await openSession(rawKey, options.run, io.cwd, ports, masker);
+    // REQ-FLOW-06/AC2: no spending on a ledger the journals do not prove.
+    await assertLedgerTrusted(session);
     const { ws, events, project } = session;
     if (!ws.record.checkpoints.some((c) => c.stage === "fetch"))
       throw new ConfigError(
@@ -394,6 +397,8 @@ export async function runExplorePromote(
   const masker = createMasker();
   try {
     const session = await openSession(rawKey, options.run, io.cwd, ports, masker);
+    // REQ-FLOW-06/AC2: no spending on a ledger the journals do not prove.
+    await assertLedgerTrusted(session);
     const { ws } = session;
     if (!/^S\d{2,3}$/.test(options.session))
       throw new ConfigError("EXPLORE_SESSION_NOT_FOUND", `No exploratory session ${options.session}.`, {});

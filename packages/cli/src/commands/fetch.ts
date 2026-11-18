@@ -5,6 +5,8 @@ import {
   createEventLog,
   createGitRepos,
   createRunWorkspace,
+  readTicketSnapshot,
+  ticketVersion,
   fetchContext,
   fileSink,
   journalTailHash,
@@ -13,6 +15,7 @@ import {
 import { createMasker } from "@qajitsu/steps";
 import { buildAdapters, createCliSecretResolver, type RuntimePorts } from "../adapters.js";
 import { createCliLogger } from "../logger.js";
+import { budgetAdmission } from "../budget-admission.js";
 import { loadProject, resolveConfigPath } from "../project.js";
 import { importTestCases } from "./import-cases.js";
 import { publisherFor } from "./publish.js";
@@ -69,6 +72,12 @@ export async function runFetch(
       },
     });
     if (refused !== undefined) return refused;
+    // REQ-FLOW-06/AC5: a month at its limit starts no run.
+    const month = await budgetAdmission(project, root, ports.now);
+    if (month !== undefined) {
+      io.writeError(`Error [MONTH_BUDGET_EXCEEDED]: ${month.reason}; no new run of ${key.data}.\n`);
+      return 2;
+    }
     const ws = await createRunWorkspace({ root, ticket: key.data, now: ports.now, random: ports.random });
     const mask = (value: unknown): unknown => masker.maskJson(value);
     const logger = createCliLogger({ file: ws.path("logs", "qajitsu.log"), mask });
@@ -132,6 +141,23 @@ export async function runFetch(
           }
         : {}),
     });
+    // REQ-FLOW-06/AC5+AC6: the ticket's version is known now; at its limit the run stops BLOCKED before any model.
+    const ticketStop = await budgetAdmission(project, root, ports.now, {
+      key: key.data,
+      version: ticketVersion(await readTicketSnapshot(ws.path("ticket", "ticket.json"))),
+    });
+    if (ticketStop !== undefined) {
+      events.emit("fetch", { kind: "system", name: "orchestrator" }, "budget.exceeded", { ...ticketStop });
+      await ws.update({
+        status: "failed",
+        data: {
+          ...ws.record.data,
+          blocked: { reason: "TICKET_BUDGET_EXCEEDED", detail: ticketStop.reason, budget: { ...ticketStop } },
+        },
+      });
+      io.writeError(`Error [TICKET_BUDGET_EXCEEDED]: ${ticketStop.reason}; the run stops here.\n`);
+      return 2;
+    }
     // REQ-CTX-10: say how much of the code was read, so a found change is not taken for checked-out code.
     const access = project.config.code.access;
     if (access === "none")

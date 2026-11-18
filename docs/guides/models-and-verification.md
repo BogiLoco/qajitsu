@@ -132,6 +132,37 @@ with a call of a model without a price is marked `costUnknown` and estimates say
 `budget.max_cost_usd` stops a model stage once the run's cost reaches it (`COST_BUDGET_EXCEEDED`, BLOCKED, exit code 2) and makes the cases not written yet NOT_RUN. `qj doctor --models` makes one call per role and names a rejected
 key by its variable, never by its value.
 
+### Ticket and month budgets (REQ-FLOW-06)
+
+`budget.max_cost_usd` and `budget.max_minutes` limit one run. `budget.ticket` and `budget.month` limit a ticket and the
+whole project over time, each with `max_cost_usd`, `max_tokens` and `max_minutes` (active minutes):
+
+```yaml
+budget:
+  max_cost_usd: 5 # one run
+  ticket: { max_cost_usd: 20, max_minutes: 60 } # one version of a ticket
+  month: { max_cost_usd: 400, max_tokens: 50000000 } # the whole project
+  time_zone: Europe/Warsaw # the calendar month (default UTC)
+```
+
+- **Per version of the ticket.** The ticket budget counts the spend since the ticket's current summary, description
+  and acceptance criteria first appeared; changed requirements start a new window, a new status, comment or label
+  does not. Earlier versions stay in the ledger and in `qj budget --ticket`.
+- **Where it is checked.** Before a new run (`qj fetch`, workflow pickup, CI: a scope at its limit starts nothing, exit
+  code 2), before every model call (nothing is sent), after every call, and before each case for the minutes.
+  Parallel runs share the ledger, so a limit is exceeded by at most the calls already in flight.
+- **What a stop does.** A stopped model stage is BLOCKED; cases without a spec are NOT_RUN, each with the scope, the
+  spent amount, the limit and the period. Specs already written still run, failing cases are not healed and stay
+  FAILED, a stopped audit counts as failed. A budget never sets or raises a status, and finished results are reported
+  and published. The ticket comment gets a "Budget" section; with a `workflow` the ticket goes to `needs_review`
+  (to development when a case FAILED).
+- **Prices.** A model of provider type `ollama`, or one served from a loopback address, costs nothing, unless the
+  provider is a `gateway` (a local LiteLLM forwards to paid providers, so its own prices count). A paid model
+  without a known price is refused under a ticket or month cost limit, with where to declare `cost_per_mtok`; under
+  the run limit alone its cost shows as unknown.
+- **Attribution.** The author's and the healer's calls belong to their case, the auditor's are shared equally by the
+  cases it reviewed (marked apportioned), analysis, plan and approval belong to the ticket. `qj budget` shows it.
+
 ### Cache prices, dated prices and cost per verified ticket (REQ-LLM-11)
 
 Every model call records its input tokens, the input tokens read from or written to the provider's prompt cache,

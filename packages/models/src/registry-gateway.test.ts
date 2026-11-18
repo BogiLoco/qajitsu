@@ -108,4 +108,58 @@ describe("a gateway provider's models (REQ-LLM-10)", () => {
       expect(r.headers["authorization"]).toBe(`Bearer ${KEY}`);
     }
   });
+
+  it("REQ-FLOW-06/AC7: a model served from this machine costs nothing; a remote one without a price stays unpriced", async () => {
+    const make = (base_url: string, models: Record<string, unknown> = {}) =>
+      createModelRegistry({
+        config: parseProjectConfig({
+          project: "demo",
+          jira: { type: "file", tickets_dir: "t", project_key: "DEMO" },
+          models: {
+            providers: { vllm: { type: "openai-compatible", base_url, models } },
+            roles: { default: "vllm/qwen" },
+          },
+        }).models,
+        resolveSecret: () => Promise.resolve(""),
+        fetch: createFakeFetch([]).fetch,
+      });
+    expect((await make("http://localhost:8000/v1").forRole("author")).profile.costPerMTok).toEqual({
+      input: 0,
+      output: 0,
+    });
+    expect((await make("http://127.0.0.1:1234/v1").forRole("author")).profile.costPerMTok).toEqual({
+      input: 0,
+      output: 0,
+    });
+    expect(
+      (await make("https://vllm.example.test/v1").forRole("author")).profile.costPerMTok,
+    ).toBeUndefined();
+    // A declared price wins, also for a local model (someone pays for that GPU).
+    const declared = await make("http://localhost:8000/v1", {
+      qwen: { cost_per_mtok: { input: 0.1, output: 0.2 } },
+    }).forRole("author");
+    expect(declared.profile.costPerMTok).toEqual({ input: 0.1, output: 0.2 });
+  });
+
+  it("REQ-FLOW-06/AC7: a gateway on this machine is not free; a model it gives no price stays unpriced", async () => {
+    const reg = createModelRegistry({
+      config: parseProjectConfig({
+        project: "demo",
+        jira: { type: "file", tickets_dir: "t", project_key: "DEMO" },
+        models: {
+          providers: {
+            proxy: { type: "openai-compatible", base_url: "http://localhost:4000/v1", gateway: "litellm" },
+          },
+          roles: { default: "proxy/strong", summary: "proxy/inhouse" },
+        },
+      }).models,
+      resolveSecret: () => Promise.resolve(""),
+      fetch: createFakeFetch([info]).fetch,
+      gatewayCache: memoryGatewayCache(),
+      now: () => new Date("2026-11-17T10:00:00Z"),
+    });
+    // LiteLLM forwards to paid providers: its own prices count, a model without one is not $0.
+    expect((await reg.forRole("author")).profile.costPerMTok?.input).toBe(3);
+    expect((await reg.forRole("summary")).profile.costPerMTok).toBeUndefined();
+  });
 });

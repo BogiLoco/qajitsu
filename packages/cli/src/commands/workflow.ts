@@ -153,9 +153,12 @@ async function changeAuthor(session: Pick<RunSession, "ws">): Promise<string | u
 export function verdictTarget(
   statuses: readonly TestStatus[],
   passedToDone: boolean,
+  budgetStopped = false,
 ): { role: StatusRole; why: string } {
   if (statuses.length === 0) return { role: "needs_review", why: "no case ran" };
   if (statuses.includes("FAILED")) return { role: "failed", why: "a case FAILED" };
+  // REQ-FLOW-06/AC8: work a ticket or month budget stopped needs a person, even when everything that ran PASSED.
+  if (budgetStopped) return { role: "needs_review", why: "a budget stopped the run's work" };
   if (statuses.every((s) => s === "PASSED"))
     return passedToDone
       ? { role: "done", why: "every case PASSED" }
@@ -177,10 +180,15 @@ export async function applyVerdictPolicy(
   workflow: TicketWorkflow,
   publisher: Publisher,
   statuses: readonly TestStatus[],
+  budgetStopped = false,
 ): Promise<StatusRole | undefined> {
   const flow = session.project.config.workflow;
   if (!flow) return undefined;
-  const target = verdictTarget(statuses, flow.passed_to_done && flow.statuses.done !== undefined);
+  const target = verdictTarget(
+    statuses,
+    flow.passed_to_done && flow.statuses.done !== undefined,
+    budgetStopped,
+  );
   if (target.role === "done") await moveToRole(session, io, workflow, publisher, "passed", target.why);
   const moved = await moveToRole(session, io, workflow, publisher, target.role, target.why);
   const { ws } = session;

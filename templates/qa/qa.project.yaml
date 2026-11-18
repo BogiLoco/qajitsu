@@ -111,6 +111,11 @@ test_types: [api, web]
 
 # Run budget (REQ-PLAN-08): once a limit is reached the remaining cases are NOT_RUN with the reason.
 # budget: { max_minutes: 30, max_cost_usd: 2.00 }
+# Ticket and month budgets (REQ-FLOW-06): per version of a ticket's content and per calendar month of the project.
+# budget:
+#   ticket: { max_cost_usd: 20, max_minutes: 60 }
+#   month: { max_cost_usd: 400, max_tokens: 50000000 }
+#   time_zone: UTC
 
 # How cases run (REQ-EXEC-19): API, web and mobile lanes at the same time; each case holds its own pool accounts
 # (accounts: { user:standard: { pool: [...] } } in envs/<name>.yaml). sequential: true runs one case at a time.

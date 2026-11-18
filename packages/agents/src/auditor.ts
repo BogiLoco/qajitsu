@@ -215,6 +215,8 @@ export async function runAuditor(deps: AgentStageDeps, input: AuditInput): Promi
     tools: createReadOnlyTools({ root: deps.ws.dir, mask: deps.maskText, wrap: contextOf(deps).wrap }),
     guard: stageGuard(deps, "audit", role),
     usage: deps.usage,
+    // One review for every PASSED case: its cost is split equally between them (REQ-FLOW-06/AC3).
+    attribution: { caseIds: passedIds, apportioned: true },
     images: input.images,
     ...(deps.signal ? { signal: deps.signal } : {}),
   });

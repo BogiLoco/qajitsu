@@ -157,3 +157,22 @@ A chat panel beside the screens, aware of what the person is looking at (project
 
 - [ ] AC1: A short animated summary (Dojo) or a summary image (Professional) of a finished run can be exported for sharing.
 - [ ] AC2: The export holds only the ticket key, counts and duration, never URLs, data, screenshots or secrets.
+
+### REQ-WEB-11 · Cost view
+
+- Status: proposed
+- Priority: should
+- Stage: later
+- Related: REQ-WEB-01, REQ-FLOW-06, REQ-LLM-11, REQ-OBS-13, INV-6
+- Note: asked for by the owner on 2026-11-17, to be built after the MVP; REQ-FLOW-06 records the costs it needs.
+
+People who run QA, and those who pay for it, need to see where the money goes: which tests and tickets are expensive,
+which are cheap, and why, before the monthly budget runs out.
+
+**Acceptance criteria**
+
+- [ ] AC1: The console (REQ-WEB-01) shows the project's spending this month against its budget, the most and least expensive tickets and test cases, and the cost per model, role and stage, for a chosen period.
+- [ ] AC2: A ticket or case shows what made it cost what it did: the stages and roles (analysis and plan for the ticket; writing, healing and auditing for each case), healing rounds and re-runs, each with tokens, model and price.
+- [ ] AC3: Every number is computed by code from the run records (REQ-FLOW-06, REQ-LLM-11) and links to the runs behind it; a cost that cannot be priced shows as unknown, never as zero.
+- [ ] AC4: Views can be compared over time (week, month, release) and filtered by project, component, label and model; the same numbers can be exported (CSV, XLSX).
+- [ ] AC5: The view only describes: nothing in it changes a status, a plan or a budget; changing a budget is the matching config change, done explicitly.

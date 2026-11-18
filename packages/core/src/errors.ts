@@ -37,6 +37,9 @@ export class AdapterError extends QajitsuError {}
 /** A plugin is missing, incompatible, unverifiable or still in use (REQ-GEN-11). */
 export class PluginError extends QajitsuError {}
 
+/** A cost budget stopped work or cannot be checked: `LEDGER_INVALID`, `TICKET_BUDGET_REACHED`, `MONTH_BUDGET_REACHED` (REQ-FLOW-06). */
+export class BudgetError extends QajitsuError {}
+
 /** The tool guard denied an agent action (REQ-VER-03). */
 export class GuardDeniedError extends QajitsuError {}
 

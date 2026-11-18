@@ -2794,7 +2794,9 @@
       }
     },
     "budget": {
-      "default": {},
+      "default": {
+        "time_zone": "UTC"
+      },
       "type": "object",
       "properties": {
         "max_minutes": {
@@ -2805,6 +2807,48 @@
         "max_cost_usd": {
           "type": "number",
           "exclusiveMinimum": 0
+        },
+        "ticket": {
+          "type": "object",
+          "properties": {
+            "max_cost_usd": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "max_tokens": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "max_minutes": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "month": {
+          "type": "object",
+          "properties": {
+            "max_cost_usd": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "max_tokens": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 9007199254740991
+            },
+            "max_minutes": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "time_zone": {
+          "default": "UTC",
+          "type": "string"
         }
       },
       "additionalProperties": false

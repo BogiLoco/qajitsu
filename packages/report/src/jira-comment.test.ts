@@ -120,3 +120,22 @@ describe("failure hints in the Jira comment (REQ-VER-12/AC3)", () => {
     expect(JSON.stringify(renderJiraAdf(model))).not.toContain("Failure hints");
   });
 });
+
+describe("budget section (REQ-FLOW-06/AC8)", () => {
+  const lines = [
+    "Work stopped: ticket budget reached: $10.00 of $10.00 spent on this version of the ticket.",
+    "Not tested because of it: TC-02 NOT_RUN.",
+    "The other 1 of 2 case(s) have their computed results above.",
+  ];
+  it("REQ-FLOW-06/AC8: the comment has one budget section with the lines code computed, in both formats", () => {
+    const adf = JSON.stringify(renderJiraAdf({ ...model, budget: lines }));
+    expect(adf.match(/"text":"Budget"/g)).toHaveLength(1);
+    for (const l of lines) expect(adf).toContain(l);
+    const wiki = renderJiraWiki({ ...model, budget: lines });
+    expect(wiki).toContain("h4. Budget");
+    expect(wiki).toContain("Not tested because of it: TC\\-02 NOT\\_RUN.");
+    // Without a stop there is no section.
+    expect(JSON.stringify(renderJiraAdf({ ...model, budget: [] }))).not.toContain('"text":"Budget"');
+    expect(renderJiraWiki(model)).not.toContain("h4. Budget");
+  });
+});
