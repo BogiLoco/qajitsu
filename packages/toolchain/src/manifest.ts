@@ -61,6 +61,8 @@ export interface ToolSpec {
   readonly source: string;
   /** Approximate download size in bytes, for the plan, the disk check and the confirmation. */
   readonly bytes: number;
+  /** Approximate disk space once installed, in bytes (REQ-GEN-13/AC3). */
+  readonly diskBytes: number;
 }
 
 const MB = 1024 * 1024;
@@ -148,6 +150,7 @@ export const MANIFEST: Readonly<Record<ToolId, ToolSpec>> = {
     licence: "Chromium BSD-3-Clause, Firefox MPL-2.0, WebKit LGPL-2.1/BSD (Playwright builds)",
     source: "playwright.azureedge.net (or sources.playwright_host)",
     bytes: 340 * MB,
+    diskBytes: 1100 * MB,
   },
   docker: {
     id: "docker",
@@ -158,6 +161,7 @@ export const MANIFEST: Readonly<Record<ToolId, ToolSpec>> = {
     licence: "Colima MIT, Docker CLI and Engine Apache-2.0, Compose Apache-2.0",
     source: "Homebrew (macOS), the distribution's packages (Linux)",
     bytes: 450 * MB,
+    diskBytes: 3072 * MB,
   },
   java: {
     id: "java",
@@ -168,6 +172,7 @@ export const MANIFEST: Readonly<Record<ToolId, ToolSpec>> = {
     licence: "GPL-2.0 with Classpath Exception (Eclipse Temurin)",
     source: "github.com/adoptium (or sources.java_mirror)",
     bytes: 190 * MB,
+    diskBytes: 330 * MB,
   },
   android: {
     id: "android",
@@ -178,6 +183,7 @@ export const MANIFEST: Readonly<Record<ToolId, ToolSpec>> = {
     licence: "Android Software Development Kit License Agreement (and the licences sdkmanager lists)",
     source: "dl.google.com/android/repository (or sources.android_mirror)",
     bytes: 170 * MB,
+    diskBytes: 1536 * MB,
   },
   appium: {
     id: "appium",
@@ -188,6 +194,7 @@ export const MANIFEST: Readonly<Record<ToolId, ToolSpec>> = {
     licence: "Apache-2.0",
     source: "npm registry (or sources.npm_registry)",
     bytes: 60 * MB,
+    diskBytes: 250 * MB,
   },
   uiautomator2: {
     id: "uiautomator2",
@@ -198,6 +205,7 @@ export const MANIFEST: Readonly<Record<ToolId, ToolSpec>> = {
     licence: "Apache-2.0",
     source: "npm registry (or sources.npm_registry)",
     bytes: 40 * MB,
+    diskBytes: 120 * MB,
   },
   xcuitest: {
     id: "xcuitest",
@@ -208,6 +216,7 @@ export const MANIFEST: Readonly<Record<ToolId, ToolSpec>> = {
     licence: "Apache-2.0",
     source: "npm registry (or sources.npm_registry)",
     bytes: 80 * MB,
+    diskBytes: 200 * MB,
   },
   xcode: {
     id: "xcode",
@@ -218,6 +227,7 @@ export const MANIFEST: Readonly<Record<ToolId, ToolSpec>> = {
     licence: "Xcode and Apple SDKs Agreement",
     source: "Apple Developer, through xcodes (needs an Apple ID)",
     bytes: 4096 * MB,
+    diskBytes: 40960 * MB,
   },
 };
 

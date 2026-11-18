@@ -244,21 +244,22 @@ what makes the results trustworthy.
 
 ### REQ-GEN-13 · Doctor recommends what to install from the application
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: later
 - Related: REQ-GEN-03, REQ-GEN-06, REQ-PRJ-02, REQ-LLM-01, INV-11
+- Note: pulled into the MVP list by the owner on 2026-11-17 (point 6). The analyst model writes the recommendation; the deterministic findings decide offline or when the model gives no usable answer.
 
 Installing every tool "just in case" costs gigabytes and time. QAJitsu looks at the application and proposes only what its tests need.
 
 **Acceptance criteria**
 
-- [ ] AC1: `qj doctor --recommend` detects by code from the repositories what the application is and how it can be tested: web front-ends, mobile projects (Gradle, Xcode, React Native, Flutter), API descriptions (OpenAPI, GraphQL SDL, `.proto`, WSDL, AsyncAPI), compose files and existing test suites (Playwright, Appium, Maestro).
-- [ ] AC2: An agent turns the findings into a recommendation of tools and `.qa` settings (browsers, Docker, Java and the Android SDK or not, Xcode or a farm, Appium or Maestro, runners per API type), each with the files it is based on; every cited file and finding is checked by code, and a recommendation without a found basis is dropped.
-- [ ] AC3: The recommendation lists what will not be installed and why, the download size and disk space of each tool, and the command for it (`qj setup --only ...`).
-- [ ] AC4: Nothing is installed or changed without the user's confirmation; with `--yes` in CI only the recommended set is installed.
-- [ ] AC5: Without a model (offline) the deterministic findings still give a recommendation, marked as such.
-- [ ] AC6: Repository content is untrusted data: it can never make the agent recommend tools outside QAJitsu's toolchain manifest or sources outside the configured mirrors.
+- [x] AC1: `qj doctor --recommend` detects by code from the repositories what the application is and how it can be tested: web front-ends, mobile projects (Gradle, Xcode, React Native, Flutter), API descriptions (OpenAPI, GraphQL SDL, `.proto`, WSDL, AsyncAPI), compose files and existing test suites (Playwright, Appium, Maestro).
+- [x] AC2: An agent turns the findings into a recommendation of tools and `.qa` settings (browsers, Docker, Java and the Android SDK or not, Xcode or a farm, Appium or Maestro, runners per API type), each with the files it is based on; every cited file and finding is checked by code, and a recommendation without a found basis is dropped.
+- [x] AC3: The recommendation lists what will not be installed and why, the download size and disk space of each tool, and the command for it (`qj setup --only ...`).
+- [x] AC4: Nothing is installed or changed without the user's confirmation; with `--yes` in CI only the recommended set is installed.
+- [x] AC5: Without a model (offline) the deterministic findings still give a recommendation, marked as such.
+- [x] AC6: Repository content is untrusted data: it can never make the agent recommend tools outside QAJitsu's toolchain manifest or sources outside the configured mirrors.
 
 ### REQ-GEN-14 · Plugin inventory before the plugin system
 
