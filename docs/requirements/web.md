@@ -4,7 +4,7 @@ A local web console over the files the CLI writes: progress, details, plans, env
 
 ### REQ-WEB-01 · Local web console
 
-- Status: in-progress
+- Status: implemented
 - Priority: should
 - Stage: 5
 - Related: REQ-OBS-09, REQ-OBS-02, REQ-EVD-05, REQ-WEB-07, REQ-CI-07, INV-1, INV-8, ADR-0019
@@ -16,7 +16,7 @@ The base of the WEB area: a console in the browser over the same files the CLI w
 
 - [x] AC1: `qj console` serves the console on 127.0.0.1: projects, tickets, runs, plans, reports and evidence, read from the project home.
 - [x] AC2: Everything shown is read from run records and evidence; the console computes no status of its own.
-- [ ] AC3: Actions that change anything are explicit buttons with the same rules as the matching CLI command.
+- [x] AC3: Actions that change anything are explicit buttons with the same rules as the matching CLI command.
 - [x] AC4: Only the person who started it can use it: it listens on 127.0.0.1, answers only requests that name that address (no DNS rebinding) and lives under a random path; the printed address signs in one browser once and that browser gets a session cookie of its own (HttpOnly, SameSite=Strict, scoped to that path and port, never the token); its pages run no script, run files (reports, pages the application returned) are shown in a sandbox nobody can frame, and it never serves the journal, `env/`, `repos/`, a link out of the run or anything outside a run's real `report/` and `evidence/` folders.
 
 ### REQ-WEB-02 · Gamified dojo avatar
@@ -107,16 +107,16 @@ The tester can look inside a run when they want to; by default the progress view
 
 ### REQ-WEB-07 · Plan review screen
 
-- Status: accepted
+- Status: implemented
 - Priority: should
 - Stage: 5
-- Related: REQ-PLAN-04, REQ-PLAN-14, REQ-FLOW-09
+- Related: REQ-PLAN-04, REQ-PLAN-14, REQ-PLAN-10, REQ-FLOW-09, REQ-WEB-01, ADR-0019
 
 **Acceptance criteria**
 
-- [ ] AC1: Shows plan versions side by side with added, removed and changed cases.
-- [ ] AC2: Shows the coverage matrix and the "changed but not tested" risk list next to the plan (REQ-PLAN-14).
-- [ ] AC3: Approve, revise (free text) and edit are explicit buttons; approval states which version is frozen.
+- [x] AC1: Shows plan versions side by side with added, removed and changed cases.
+- [x] AC2: Shows the coverage matrix and the "changed but not tested" risk list next to the plan (REQ-PLAN-14).
+- [x] AC3: Approve, revise (free text) and edit are explicit buttons; approval states which version is frozen.
 
 ### REQ-WEB-08 · Contextual chat
 

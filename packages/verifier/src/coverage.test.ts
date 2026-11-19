@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { PlanSchema } from "@qajitsu/core";
 import { describe, expect, it } from "vitest";
-import { checkPlanCoverage, endpointReach, formatCoverageGaps } from "./coverage.js";
+import { checkPlanCoverage, coverageMatrix, endpointReach, formatCoverageGaps } from "./coverage.js";
 
 const criteria = [
   "GET /cart returns total = sum of (unit price × quantity) for all lines, rounded once to 2 decimals.",
@@ -130,5 +130,32 @@ describe("coverage computed by code (REQ-PLAN-14)", () => {
       { id: "/app/notes", cases: ["TC-01"] },
       { id: "DELETE /orders/{id}", cases: [] },
     ]);
+  });
+});
+
+describe("the coverage matrix for the reviewer (REQ-WEB-07/AC2)", () => {
+  it("REQ-WEB-07/AC2 + REQ-PLAN-14: each criterion with the cases that cover it, an existing test or its exclusion, by the same rules", () => {
+    const p = plan((x) => {
+      x["out_of_scope"] = ["AC4: the 404 is covered by the pricing service's own tests"];
+    });
+    const rows = coverageMatrix(p, { acceptanceCriteria: criteria, endpoints });
+    expect(rows.map((r) => r.id)).toEqual([
+      "AC1",
+      "AC2",
+      "AC3",
+      "AC4",
+      "GET /cart",
+      "POST /orders/{id}/cancel",
+    ]);
+    const ac1 = rows.find((r) => r.id === "AC1");
+    expect(ac1?.cases.length).toBeGreaterThan(0);
+    expect(ac1?.text).toBe(criteria[0]);
+    expect(rows.find((r) => r.id === "AC4")?.excluded).toBe(
+      "the 404 is covered by the pricing service's own tests",
+    );
+    const gaps = checkPlanCoverage(p, { acceptanceCriteria: criteria, endpoints }).map((g) => g.id);
+    // A row is uncovered exactly when checkPlanCoverage lists it: one rule, two views.
+    for (const r of rows) expect(r.covered, r.id).toBe(!gaps.includes(r.id));
+    expect(rows.find((r) => r.id === "POST /orders/{id}/cancel")?.covered).toBe(false);
   });
 });

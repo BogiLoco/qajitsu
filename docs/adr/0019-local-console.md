@@ -36,7 +36,10 @@ user of the machine. What it shows includes evidence, plans and results; later i
 
 ## Consequences
 
-- Changing actions (approve, revise) add a CSRF check on top of the cookie (an origin check and a form token) in the
+- Changing actions (approve, revise, edit) are POST forms that need the console's own `Origin`, the form token of
+  the signed-in session and a small `application/x-www-form-urlencoded` body; they run the same functions as `qj approve`,
+  `qj plan --revise` and the plan edit of `qj plan`, with their checks and the approval flow, as the person who started
+  the console.
   plan review pull request.
 - A team that wants a shared console needs the hosted control plane (REQ-SCALE-01), with real accounts; the local
   console is deliberately single-user.

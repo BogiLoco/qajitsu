@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
-import { lstat, open, realpath } from "node:fs/promises";
+import { lstat, open, readFile, realpath } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { extname, join, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -14,6 +14,8 @@ import {
   type ConsoleProject,
 } from "./data.js";
 import { notFoundPage, page, planPage, projectsPage, runPage, runsPage, ticketsPage } from "./pages.js";
+import { actionPage, reviewPage } from "./pages-review.js";
+import { consolePlanReview } from "./review.js";
 
 /** Folders of a run the console serves files from; the journal, `env/`, `repos/` and `checks/` never are. */
 const SERVED = ["report", "evidence"] as const;
@@ -56,6 +58,37 @@ const SESSION_S = 12 * 3600;
 /** The registered projects are read again at most this often. */
 const PROJECTS_TTL_MS = 5_000;
 
+/** The run an action is about. */
+export interface ActionTarget {
+  readonly slug: string;
+  readonly ticket: string;
+  readonly runId: string;
+}
+
+/** What an action did, as the matching CLI command printed it. */
+export interface ActionResult {
+  readonly ok: boolean;
+  readonly output: string;
+}
+
+/** What the console's buttons do (REQ-WEB-01/AC3): the same code as the CLI commands, with their rules. */
+export interface ConsoleActions {
+  readonly approve: (
+    target: ActionTarget,
+    options: {
+      readonly version: number;
+      readonly confirmUncovered: boolean;
+      readonly confirmPlaceholders: boolean;
+      readonly confirmOpenQuestions: boolean;
+    },
+  ) => Promise<ActionResult>;
+  readonly revise: (target: ActionTarget, instruction: string) => Promise<ActionResult>;
+  readonly edit: (target: ActionTarget, planYaml: string) => Promise<ActionResult>;
+}
+
+/** The largest form an action takes (an edited plan). */
+const MAX_FORM_BYTES = 512 * 1024;
+
 /** Where the console is and how to stop it. */
 export interface ConsoleServer {
   /** The address to open, with the one-time token that signs the browser in. */
@@ -83,9 +116,12 @@ export async function startConsole(options: {
   readonly port?: number;
   /** The sign-in token; random by default (tests pass one). */
   readonly token?: string;
+  /** What the buttons do (REQ-WEB-01/AC3); without them the console only reads. */
+  readonly actions?: ConsoleActions;
 }): Promise<ConsoleServer> {
   let signinToken: string | undefined = options.token ?? randomBytes(24).toString("base64url");
-  const sessions = new Set<string>();
+  /** Session id → the form token of that session (REQ-WEB-01/AC3: changing actions need it). */
+  const sessions = new Map<string, string>();
   const prefix = `/${randomBytes(12).toString("base64url")}`;
   let hosts: readonly string[] = [];
   let cookieName = "qj_console";
@@ -95,12 +131,21 @@ export async function startConsole(options: {
       .map((c) => c.trim())
       .find((c) => c.startsWith(`${cookieName}=`))
       ?.slice(cookieName.length + 1);
-    return id !== undefined && [...sessions].some((s) => same(s, id));
+    return id !== undefined && [...sessions.keys()].some((s) => same(s, id));
+  };
+  const csrfOf = (req: IncomingMessage): string | undefined => {
+    const id = (req.headers.cookie ?? "")
+      .split(";")
+      .map((c) => c.trim())
+      .find((c) => c.startsWith(`${cookieName}=`))
+      ?.slice(cookieName.length + 1);
+    const found = [...sessions.entries()].find(([s]) => id !== undefined && same(s, id));
+    return found?.[1];
   };
   // Every link of a page is written from the root by code; the console's pages live under its random path.
   const send = (res: ServerResponse, status: number, html: string): void => {
     res.writeHead(status, PAGE_HEADERS);
-    res.end(html.replaceAll('href="/', `href="${prefix}/`));
+    res.end(html.replaceAll('href="/', `href="${prefix}/`).replaceAll('action="/', `action="${prefix}/`));
   };
   let projects: { readonly at: number; readonly list: Promise<ConsoleProject[]> } | undefined;
   const projectRoot = async (slug: string): Promise<string | undefined> => {
@@ -168,6 +213,94 @@ export async function startConsole(options: {
     send(res, 403, page("Not signed in", [], `<p class="muted">${text}</p>`));
   };
 
+  /**
+   * A changing action (REQ-WEB-01/AC3, REQ-WEB-07/AC3): only from the console's own page (its Origin), with the form
+   * token of the signed-in session, as a small form; it runs the same code as the matching CLI command.
+   */
+  const post = async (req: IncomingMessage, res: ServerResponse, path: string): Promise<void> => {
+    const origin = req.headers.origin ?? "";
+    if (!hosts.some((h) => origin === `http://${h}`)) {
+      res.writeHead(403, { "content-type": "text/plain" });
+      res.end("forbidden: not from the console\n");
+      return;
+    }
+    const type = (req.headers["content-type"] ?? "").split(";")[0]?.trim();
+    if (type !== "application/x-www-form-urlencoded") {
+      res.writeHead(415, { "content-type": "text/plain" });
+      res.end("unsupported form\n");
+      return;
+    }
+    // An oversized form is read to its end without being kept, then refused: the browser gets the answer, not a reset.
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of req as AsyncIterable<Buffer>) {
+      size += chunk.length;
+      if (size <= MAX_FORM_BYTES) chunks.push(chunk);
+    }
+    if (size > MAX_FORM_BYTES) {
+      res.writeHead(413, { "content-type": "text/plain" });
+      res.end("form too large\n");
+      return;
+    }
+    const form = new URLSearchParams(Buffer.concat(chunks).toString("utf8"));
+    const csrf = csrfOf(req);
+    if (csrf === undefined || !same(form.get("csrf") ?? "", csrf)) {
+      res.writeHead(403, { "content-type": "text/plain" });
+      res.end("forbidden: the form is not from this session\n");
+      return;
+    }
+    const parts = path
+      .split("/")
+      .filter((x) => x !== "")
+      .map((x) => decodeURIComponent(x));
+    const [p, slug = "", t, ticket = "", r, runId = "", action, ...rest] = parts;
+    const actions = options.actions;
+    if (
+      actions === undefined ||
+      p !== "p" ||
+      t !== "t" ||
+      r !== "r" ||
+      rest.length > 0 ||
+      !TicketKeySchema.safeParse(ticket).success ||
+      !RunIdSchema.safeParse(runId).success ||
+      (await projectRoot(slug)) === undefined
+    ) {
+      send(res, 404, notFoundPage("Not found."));
+      return;
+    }
+    const target = { slug, ticket, runId };
+    const back = `/p/${encodeURIComponent(slug)}/t/${encodeURIComponent(ticket)}/r/${encodeURIComponent(runId)}/review`;
+    let result: ActionResult;
+    if (action === "approve") {
+      // Exactly the version the reviewer saw, never whatever is newest on disk.
+      const version = form.get("version");
+      if (version === null || !/^\d{1,4}$/.test(version)) {
+        send(res, 400, actionPage("Approve", back, false, "Name the version to approve."));
+        return;
+      }
+      result = await actions.approve(target, {
+        version: Number(version),
+        confirmUncovered: form.get("confirm_uncovered") === "1",
+        confirmPlaceholders: form.get("confirm_placeholders") === "1",
+        confirmOpenQuestions: form.get("confirm_open_questions") === "1",
+      });
+    } else if (action === "revise") {
+      const instruction = (form.get("instruction") ?? "").trim();
+      if (instruction === "") {
+        send(res, 400, actionPage("Revise", back, false, "Say what should change."));
+        return;
+      }
+      result = await actions.revise(target, instruction);
+    } else if (action === "edit") {
+      result = await actions.edit(target, form.get("plan") ?? "");
+    } else {
+      send(res, 404, notFoundPage("Not found."));
+      return;
+    }
+    const title = action === "approve" ? "Approve" : action === "revise" ? "Revise" : "Edit";
+    send(res, result.ok ? 200 : 422, actionPage(title, back, result.ok, result.output));
+  };
+
   const route = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     // DNS rebinding: a request must name this address, never another host that resolves to it.
     if (!hosts.includes(req.headers.host ?? "")) {
@@ -195,7 +328,7 @@ export async function startConsole(options: {
       }
       signinToken = undefined;
       const session = randomBytes(24).toString("base64url");
-      sessions.add(session);
+      sessions.set(session, randomBytes(24).toString("base64url"));
       res.writeHead(303, {
         "set-cookie": `${cookieName}=${session}; HttpOnly; SameSite=Strict; Path=${prefix}/; Max-Age=${String(SESSION_S)}`,
         location: `${prefix}/`,
@@ -209,9 +342,12 @@ export async function startConsole(options: {
       notSignedIn(res, "Open the address qj console printed.");
       return;
     }
-    // REQ-WEB-01/AC3 comes with the plan review: nothing in this console changes anything yet.
+    if (req.method === "POST") {
+      await post(req, res, path);
+      return;
+    }
     if (req.method !== "GET" && req.method !== "HEAD") {
-      res.writeHead(405, { allow: "GET, HEAD", "content-type": "text/plain" });
+      res.writeHead(405, { allow: "GET, HEAD, POST", "content-type": "text/plain" });
       res.end("method not allowed\n");
       return;
     }
@@ -249,6 +385,26 @@ export async function startConsole(options: {
       const run = await consoleRun(root, ticket, runId);
       if (run) send(res, 200, runPage(slug, ticket, run));
       else send(res, 404, notFoundPage("No such run."));
+      return;
+    }
+    if (kind === "review" && rest.length === 0) {
+      const number = (name: string): number | undefined => {
+        const v = url.searchParams.get(name);
+        return v !== null && /^\d{1,4}$/.test(v) ? Number(v) : undefined;
+      };
+      const review = await consolePlanReview(root, ticket, runId, {
+        right: number("right"),
+        left: number("left"),
+      });
+      if (!review) {
+        send(res, 404, notFoundPage("This run has no plan yet."));
+        return;
+      }
+      const yaml = await readFile(
+        join(root, ticket, runId, "plan", `plan.v${String(review.right.version)}.yaml`),
+        "utf8",
+      ).catch(() => "");
+      send(res, 200, reviewPage(slug, ticket, runId, review, csrfOf(req) ?? "", yaml));
       return;
     }
     if (kind === "plan" && rest.length === 1) {

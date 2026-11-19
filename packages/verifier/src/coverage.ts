@@ -12,12 +12,14 @@ export interface CoverageGap {
 const normalize = (s: string): string => s.toLowerCase().replace(/\s+/g, " ").trim();
 
 /** `AC3: why` or `POST /orders: why` in out_of_scope: an exclusion on purpose, with its reason. */
-const excluded = (plan: Plan, id: string): boolean =>
-  plan.out_of_scope.some((entry) => {
+const exclusionOf = (plan: Plan, id: string): string | undefined => {
+  for (const entry of plan.out_of_scope) {
     // "AC3: why" or "GET /cart-items — why": a colon or a spaced dash separates the id from the reason.
     const m = /^\s*(.+?)(?::\s+|\s+[—–-]\s+)(\S.*)$/.exec(entry);
-    return m !== null && normalize(m[1] ?? "") === normalize(id);
-  });
+    if (m !== null && normalize(m[1] ?? "") === normalize(id)) return m[2];
+  }
+  return undefined;
+};
 
 /** Whether a step action calls the endpoint (`POST /orders/42/cancel` calls `POST /orders/{id}/cancel`). */
 const calls = (action: string, method: string | undefined, path: string): boolean => {
@@ -28,24 +30,40 @@ const calls = (action: string, method: string | undefined, path: string): boolea
   return new RegExp(`\\b${verb}${template}(?=$|[\\s?])`, "i").test(action);
 };
 
+/** One row of the coverage matrix: a criterion or an endpoint and what covers it (REQ-WEB-07/AC2). */
+export interface CoverageRow {
+  readonly kind: "criterion" | "endpoint";
+  /** `AC2` or `POST /orders/{id}/cancel`. */
+  readonly id: string;
+  /** The criterion's text; the endpoint has none. */
+  readonly text?: string;
+  /** Cases that cover it (an `ac` source or a quote of the criterion; a call to the endpoint or opening the page). */
+  readonly cases: readonly string[];
+  /** Existing tests (`repo/file`) that cover the criterion. */
+  readonly existing: readonly string[];
+  /** The reason in `out_of_scope` when it is excluded on purpose. */
+  readonly excluded?: string;
+  readonly covered: boolean;
+}
+
 /**
- * What of the ticket and the change the plan covers, computed by code (REQ-PLAN-14): every acceptance criterion maps
- * to a case (an `ac` source, a quote of the criterion), to an existing test that covers it, or to an exclusion with a
- * reason in `out_of_scope` (`AC3: why`); every endpoint the analysis found in the diff maps to a case that calls it or
- * to an exclusion (`POST /orders: why`). The agent's claims are not trusted: only sources and step actions count.
+ * The coverage matrix, computed by code (REQ-PLAN-14, REQ-WEB-07/AC2): every acceptance criterion with the cases that
+ * cover it (an `ac` source, a quote of the criterion), the existing tests that cover it, or its exclusion with a
+ * reason in `out_of_scope` (`AC3: why`); every endpoint the analysis found in the diff with the cases that call it (or
+ * open the page) or its exclusion (`POST /orders: why`). The agent's claims are not trusted: only sources and step
+ * actions count.
  *
  * @param plan - The plan version.
  * @param change - The ticket's acceptance criteria and the endpoints of the change.
- * @returns What no case covers; empty when everything is covered or excluded on purpose.
  */
-export function checkPlanCoverage(
+export function coverageMatrix(
   plan: Plan,
   change: {
     readonly acceptanceCriteria: readonly string[];
     readonly endpoints: readonly { readonly method?: string | undefined; readonly path: string }[];
   },
-): CoverageGap[] {
-  const gaps: CoverageGap[] = [];
+): CoverageRow[] {
+  const rows: CoverageRow[] = [];
   change.acceptanceCriteria.forEach((criterion, i) => {
     const id = `AC${String(i + 1)}`;
     const quoted = (text: string): boolean => {
@@ -54,11 +72,24 @@ export function checkPlanCoverage(
       const q = normalize(text);
       return q.length >= 12 && normalize(criterion).includes(q);
     };
-    const byCase = plan.cases.some((c) =>
-      c.source.some((s) => (s.kind === "ac" && s.id === id) || (s.kind === "quote" && quoted(s.text))),
-    );
-    const byExisting = plan.existing_coverage.some((e) => e.covers.includes(id));
-    if (!byCase && !byExisting && !excluded(plan, id)) gaps.push({ kind: "criterion", id, text: criterion });
+    const cases = plan.cases
+      .filter((c) =>
+        c.source.some((s) => (s.kind === "ac" && s.id === id) || (s.kind === "quote" && quoted(s.text))),
+      )
+      .map((c) => c.id);
+    const existing = plan.existing_coverage
+      .filter((e) => e.covers.includes(id))
+      .map((e) => `${e.repo}/${e.file}`);
+    const excluded = exclusionOf(plan, id);
+    rows.push({
+      kind: "criterion",
+      id,
+      text: criterion,
+      cases,
+      existing,
+      ...(excluded === undefined ? {} : { excluded }),
+      covered: cases.length > 0 || existing.length > 0 || excluded !== undefined,
+    });
   });
   for (const e of change.endpoints) {
     const id = `${e.method ? `${e.method.toUpperCase()} ` : ""}${e.path}`;
@@ -71,10 +102,42 @@ export function checkPlanCoverage(
           s.action,
         ),
       );
-    const byCase = plan.cases.some((c) => opens(c) || c.steps.some((s) => calls(s.action, e.method, e.path)));
-    if (!byCase && !excluded(plan, id) && !excluded(plan, e.path)) gaps.push({ kind: "endpoint", id });
+    const cases = plan.cases
+      .filter((c) => opens(c) || c.steps.some((s) => calls(s.action, e.method, e.path)))
+      .map((c) => c.id);
+    const excluded = exclusionOf(plan, id) ?? exclusionOf(plan, e.path);
+    rows.push({
+      kind: "endpoint",
+      id,
+      cases,
+      existing: [],
+      ...(excluded === undefined ? {} : { excluded }),
+      covered: cases.length > 0 || excluded !== undefined,
+    });
   }
-  return gaps;
+  return rows;
+}
+
+/**
+ * What of the ticket and the change the plan covers, computed by code (REQ-PLAN-14): the rows of
+ * {@link coverageMatrix} that nothing covers, so the matrix the reviewer sees and the gaps approval checks are one rule.
+ *
+ * @param plan - The plan version.
+ * @param change - The ticket's acceptance criteria and the endpoints of the change.
+ * @returns What no case covers; empty when everything is covered or excluded on purpose.
+ */
+export function checkPlanCoverage(
+  plan: Plan,
+  change: {
+    readonly acceptanceCriteria: readonly string[];
+    readonly endpoints: readonly { readonly method?: string | undefined; readonly path: string }[];
+  },
+): CoverageGap[] {
+  return coverageMatrix(plan, change)
+    .filter((r) => !r.covered)
+    .map((r) =>
+      r.text === undefined ? { kind: r.kind, id: r.id } : { kind: r.kind, id: r.id, text: r.text },
+    );
 }
 
 /** The gaps as lines next to the plan (REQ-PLAN-14/AC3). */

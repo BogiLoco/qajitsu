@@ -89,10 +89,10 @@ describe("qj console (REQ-WEB-01)", () => {
     expect((await fetch(`${start.origin}/p/demo`, { headers: { cookie } })).status).toBe(404);
     // DNS rebinding: a page of another site that resolves to 127.0.0.1 names its own host.
     expect(await raw(start.port, `${prefix}/`, { host: "evil.example", cookie })).toBe(421);
-    // Nothing changes anything yet.
+    // A change without the console's own Origin is refused before anything is read.
     expect(
       (await fetch(`${start.origin}${prefix}/p/demo`, { method: "POST", headers: { cookie } })).status,
-    ).toBe(405);
+    ).toBe(403);
   }, 240_000);
 
   it("REQ-WEB-01/AC4 + INV-8: only report/ and evidence/ are served; traversal, other folders and links out are not", async () => {
