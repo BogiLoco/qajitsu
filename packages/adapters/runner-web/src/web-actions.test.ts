@@ -487,6 +487,8 @@ describe("web actions (REQ-EXEC-38, REQ-EXEC-39, REQ-EXEC-40, REQ-EXEC-56)", () 
       expect(r.record.browser).toMatchObject({ name: "chrome" });
       expect(r.record.browser?.version).toMatch(/^\d+\.\d+/);
     },
+    // Starting the real Google Chrome takes 4 s alone and more than 30 s while the whole suite starts browsers at once.
+    90_000,
   );
 
   it("REQ-EVD-09/AC1: the driver sees every request of the page: errors, allowlist refusals and login redirects", async () => {
