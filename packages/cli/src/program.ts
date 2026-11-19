@@ -16,6 +16,7 @@ import { runTest } from "./commands/test-flow.js";
 import { runFixCheck } from "./commands/fix-check.js";
 import { runClean, runGc, runResume, runRuns, runWorkReset } from "./commands/runs.js";
 import { runBudget } from "./commands/budget.js";
+import { runConsole } from "./commands/console.js";
 import { runAuditCollect } from "./commands/audit-collect.js";
 import { runEnvCheck, runEnvRender, runEnvUp } from "./commands/env.js";
 import { runStackInit, runStackPull, type StackInitOptions } from "./commands/stack.js";
@@ -1199,6 +1200,12 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .action((ticket: string, options: { keep?: string; unkeep?: string }) =>
       withPorts((ports) => runRuns(ticket, commandIO, ports, options))(),
     );
+
+  program
+    .command("console")
+    .description("The local web console: projects, tickets, runs, plans, reports and evidence, on 127.0.0.1")
+    .option("--port <n>", "port to listen on (default: a free one)")
+    .action((options: { port?: string }) => withPorts((ports) => runConsole(options, commandIO, ports))());
 
   program
     .command("budget")

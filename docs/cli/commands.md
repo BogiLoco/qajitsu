@@ -912,6 +912,19 @@ Below the table, the tool and model versions each run recorded (REQ-OBS-10).
 
 Exit codes: `0` listed (also when there are none), `3` errors or an unknown run.
 
+### `qajitsu console`
+
+The local web console (REQ-WEB-01, ADR-0019): every registered project, its tickets and runs, a run with the statuses
+it computed, its matrix, plan versions, report and evidence (by SHA-256), read from the files the CLI writes; the
+console computes no status of its own. It listens on 127.0.0.1 until Ctrl+C, under a random path, and prints a start
+address whose token signs in one browser once; requests that name another host are refused, pages run no script and
+run files are shown in a sandbox. Only a run's `report/` and `evidence/` are served. Nothing can be changed from it
+yet; plan review and approval come next (REQ-WEB-07).
+
+- `--port <n>`: port to listen on (default: a free one)
+
+Exit codes: `0` stopped with Ctrl+C, `3` errors.
+
 ### `qajitsu status`
 
 The active project at a glance (REQ-PRJ-05): configuration readiness, default environment, knowledge base, and every
