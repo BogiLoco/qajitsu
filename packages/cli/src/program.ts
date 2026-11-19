@@ -1205,7 +1205,9 @@ export function createProgram(version: string, io: ProgramIO): Command {
     .command("console")
     .description("The local web console: projects, tickets, runs, plans, reports and evidence, on 127.0.0.1")
     .option("--port <n>", "port to listen on (default: a free one)")
-    .action((options: { port?: string }) => withPorts((ports) => runConsole(options, commandIO, ports))());
+    .action((options: { port?: string }) =>
+      withPorts((ports) => runConsole(options, commandIO, ports, io.user ?? "unknown"))(),
+    );
 
   program
     .command("budget")

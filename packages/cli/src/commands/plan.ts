@@ -547,6 +547,11 @@ export async function runPlan(
       current = undefined;
     }
     let instruction = options.revise;
+    // Who asked for a revision and what, as the interactive review records it (masked by the journal).
+    if (current && instruction !== undefined)
+      session.events.emit("plan", { kind: "user", name: review.user }, "plan.revision_requested", {
+        instruction,
+      });
     if (current && instruction === undefined && !io.ask) {
       io.write(
         `Plan v${String(current.version)} exists: ${ws.path("plan", `plan.v${String(current.version)}.md`)}\n`,
@@ -733,6 +738,57 @@ export async function runPlan(
     return exitFor(error);
   } finally {
     await closeKnowledge();
+  }
+}
+
+/**
+ * Stores an edited plan as a new version (REQ-PLAN-04/AC3, REQ-WEB-07/AC3): the same checks as editing in `qajitsu
+ * plan` (schema, grounded sources); an approved plan is never edited.
+ *
+ * @param rawKey - The ticket.
+ * @param options - The run and the edited plan as YAML.
+ * @returns 0 stored, 2 rejected (the problems are written), 3 errors.
+ */
+export async function applyPlanEdit(
+  rawKey: string,
+  options: { readonly run?: string | undefined; readonly text: string },
+  io: CommandIO,
+  ports: RuntimePorts & ModelPorts,
+  review: ReviewPorts,
+): Promise<number> {
+  const masker = createMasker();
+  try {
+    const session = await openSession(rawKey, options.run, io.cwd, ports, masker);
+    const { ws } = session;
+    if (ws.record.data["approval"] !== undefined)
+      throw new ConfigError(
+        "PLAN_ALREADY_APPROVED",
+        "The plan of this run is approved and frozen; it is not edited.",
+        {},
+      );
+    const current = await readPlan(ws).then(
+      (r) => r.plan,
+      () => undefined,
+    );
+    if (!current) throw new ConfigError("PLAN_MISSING", "This run has no plan to edit yet.", {});
+    const draftFile = ws.path("plan", "plan.edit.yaml");
+    await writeFile(draftFile, options.text, "utf8");
+    const { plan, problems } = await acceptEditedPlan(session, draftFile);
+    if (!plan) {
+      io.write(`The edited plan was rejected:\n${problems.map((p) => `  - ${p}`).join("\n")}\n`);
+      return 2;
+    }
+    session.events.emit("plan", { kind: "user", name: review.user }, "plan.edited", {
+      version: plan.version,
+    });
+    io.write(
+      `Plan v${String(plan.version)} stored. Changes v${String(current.version)} → v${String(plan.version)}:\n${formatPlanDiff(diffPlans(current, plan))}\n`,
+    );
+    await anchorJournal(session);
+    return 0;
+  } catch (error) {
+    io.writeError(formatError(error, (t) => masker.maskText(t)));
+    return 3;
   }
 }
 

@@ -152,7 +152,7 @@ export function runPage(slug: string, ticket: string, run: ConsoleRun): string {
           : `<table><tr><th>Case</th><th>Status</th></tr>${results.map(([c, s]) => `<tr><td>${esc(c)}</td><td>${status(s)}</td></tr>`).join("")}</table>`
       }${run.hasReport ? `<p><a href="${base}/files/report/report.html">Full report</a></p>` : ""}</section>` +
       (run.matrixMd ? `<section><h2>Matrix</h2><pre>${esc(run.matrixMd)}</pre></section>` : "") +
-      `<section><h2>Plans</h2>${plans === "" ? `<p class="muted">No plan yet.</p>` : `<p>${plans}</p>`}</section>` +
+      `<section><h2>Plans</h2>${plans === "" ? `<p class="muted">No plan yet.</p>` : `<p>${plans}</p><p><a href="${base}/review">Review the plan</a></p>`}</section>` +
       `<section><h2>Evidence (${String(run.evidence.length)} files, by SHA-256)</h2>${
         run.evidence.length === 0
           ? `<p class="muted">No evidence yet.</p>`

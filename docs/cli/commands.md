@@ -918,8 +918,13 @@ The local web console (REQ-WEB-01, ADR-0019): every registered project, its tick
 it computed, its matrix, plan versions, report and evidence (by SHA-256), read from the files the CLI writes; the
 console computes no status of its own. It listens on 127.0.0.1 until Ctrl+C, under a random path, and prints a start
 address whose token signs in one browser once; requests that name another host are refused, pages run no script and
-run files are shown in a sandbox. Only a run's `report/` and `evidence/` are served. Nothing can be changed from it
-yet; plan review and approval come next (REQ-WEB-07).
+run files are shown in a sandbox. Only a run's `report/` and `evidence/` are served.
+
+The plan review of a run (REQ-WEB-07) shows two plan versions side by side with added, removed and changed cases, the
+coverage matrix computed by code and the "changed but not tested" list, and has three buttons: approve (with the same
+confirmations as `qajitsu approve` and the project's approval flow), revise (an instruction to the planner, as
+`qajitsu plan --revise`) and edit (the plan's YAML, checked like an edit in `qajitsu plan`). They are recorded as the
+person who started the console; a change needs the console's own page and the session's form token.
 
 - `--port <n>`: port to listen on (default: a free one)
 
