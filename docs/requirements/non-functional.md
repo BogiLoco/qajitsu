@@ -205,3 +205,23 @@ TypeScript stays the language of the orchestrator, agents, runners, web console 
 - [ ] AC4: Optional separate programs: an egress proxy and sandbox enforcing the allowlist and write bans at operating-system level, and the code-context indexer served over MCP; an existing proxy may be used instead if it passes the same tests.
 - [ ] AC5: Native binaries are built for Linux, macOS and Windows on amd64 and arm64, signed, and installable without a Rust toolchain.
 - [ ] AC6: Every native component has a pure fallback or a clear error when the binary is missing; a missing native component never weakens a check silently.
+
+### REQ-NFR-14 · Mutation testing of the trust-critical packages
+
+- Status: in-progress
+- Priority: should
+- Stage: 10
+- Related: REQ-NFR-02, REQ-NFR-10, INV-1, INV-2, INV-5
+- Note: added to the MVP list by the owner on 2026-11-17. Coverage says a line ran; a mutation score says the tests
+  would notice if it were wrong. This is QAJitsu's own test quality, not the product feature REQ-VER-14. Each
+  package is checked by its own unit tests: the adversarial suite (seconds per scenario) made one package take hours,
+  and it still runs on every pull request; a mutant only it would kill is a missing unit test. First scores (2026-11-20): guard 100%, verifier 78.9%, steps 78.1%; the thresholds are their floors (100, 78, 78). AC4 stays open until the surviving
+  mutants of verifier and steps have their tests or reasons.
+
+**Acceptance criteria**
+
+- [x] AC1: StrykerJS mutates the sources of `packages/guard`, `packages/verifier` and `packages/steps` and runs their Vitest tests against every mutant: nightly in CI and on demand with `pnpm mutation`, never on every pull request.
+- [x] AC2: The run fails below the mutation score threshold of each package; a threshold is only ever raised, never lowered to make a run pass (as for coverage, REQ-NFR-02/AC2).
+- [x] AC3: The HTML and JSON reports of every nightly run are kept as CI artifacts, with the surviving mutants by file and line.
+- [ ] AC4: A surviving mutant gets a test that kills it, or, when it cannot change behaviour (an equivalent mutant), an exclusion in the source that states why; an exclusion without a reason fails the check.
+- [x] AC5: The mutation tools are development dependencies only, pinned in the lockfile, with no install scripts.

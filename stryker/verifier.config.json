@@ -1,0 +1,26 @@
+{
+  "$schema": "../node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "vitest",
+  "vitest": {
+    "configFile": "vitest.mutation.config.ts",
+    "dir": "packages/verifier"
+  },
+  "plugins": ["@stryker-mutator/vitest-runner"],
+  "mutate": ["packages/verifier/src/**/*.ts", "!packages/verifier/src/**/*.test.ts"],
+  "disableTypeChecks": "packages/verifier/src/**/*.ts",
+  "coverageAnalysis": "perTest",
+  "reporters": ["html", "json", "clear-text", "progress"],
+  "htmlReporter": {
+    "fileName": "reports/mutation/verifier/index.html"
+  },
+  "jsonReporter": {
+    "fileName": "reports/mutation/verifier/mutation.json"
+  },
+  "tempDirName": ".stryker-tmp/verifier",
+  "thresholds": {
+    "high": 90,
+    "low": 75,
+    "break": 78
+  },
+  "timeoutMS": 10000
+}

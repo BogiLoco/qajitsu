@@ -35,3 +35,7 @@ examples/demo-shop/android/build/
 
 # Generated documentation site (pnpm run docs)
 docs-site/
+
+# Mutation testing (REQ-NFR-14): reports and StrykerJS sandboxes
+reports/mutation/
+.stryker-tmp/

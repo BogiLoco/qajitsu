@@ -1462,7 +1462,8 @@ verification: { auditor: optional, canary: true, triage: on } # auditor_delivery
 9. Production is unreachable unless explicitly allowed.
 
 All twelve rules: [.claude/rules/architecture-invariants.md](.claude/rules/architecture-invariants.md). The
-adversarial suite (`pnpm test:adversarial`) simulates lying agents, tampered files and weak models.
+adversarial suite (`pnpm test:adversarial`) simulates lying agents, tampered files and weak models. Nightly mutation
+testing (`pnpm mutation`, StrykerJS) checks that the tests of guard, verifier and steps would notice a wrong line.
 
 ---
 
@@ -1531,6 +1532,7 @@ More: [docs/guides/getting-started.md](docs/guides/getting-started.md), [docs/ar
 pnpm install
 pnpm verify          # fast: typecheck, lint, format, unit tests, hook tests, requirements and plugin inventory check
 pnpm verify:full     # everything CI checks: also the integration tests (CLI end to end, real browser) and coverage
+pnpm mutation        # StrykerJS on guard, verifier, steps (or name one); minutes, so nightly in CI, not per PR
 pnpm test:e2e        # demo-shop self-test (Docker and Android suites skip themselves when unavailable)
 pnpm run docs        # API reference and guides into docs-site/ (`pnpm docs` would open npm's page instead)
 ```
