@@ -56,17 +56,16 @@ export function createMasker(
   } = {},
 ): Masker {
   const secrets = new Set<string>();
-  const headers = new Set(
-    [...DEFAULT_SENSITIVE_HEADERS, ...(options.sensitiveHeaders ?? [])].map((h) => h.toLowerCase()),
-  );
-  const keys = new Set(
-    [...DEFAULT_SENSITIVE_KEYS, ...(options.sensitiveKeys ?? [])].map((k) => k.toLowerCase()),
-  );
+  const headers = new Set(DEFAULT_SENSITIVE_HEADERS);
+  options.sensitiveHeaders?.forEach((h) => headers.add(h.toLowerCase()));
+  const keys = new Set(DEFAULT_SENSITIVE_KEYS);
+  options.sensitiveKeys?.forEach((k) => keys.add(k.toLowerCase()));
   let pattern: RegExp | undefined;
 
+  // Runs only after a secret was added, so the pattern is never empty (an empty one would match everywhere).
   const rebuild = (): void => {
     const sorted = [...secrets].sort((a, b) => b.length - a.length).map(escapeRegExp);
-    pattern = sorted.length > 0 ? new RegExp(sorted.join("|"), "g") : undefined;
+    pattern = new RegExp(sorted.join("|"), "g");
   };
 
   const register = (secret: string): void => {
@@ -75,7 +74,9 @@ export function createMasker(
     rebuild();
   };
 
-  for (const secret of options.secrets ?? []) register(secret);
+  options.secrets?.forEach((secret) => {
+    register(secret);
+  });
 
   const maskText = (text: string): string => (pattern ? text.replace(pattern, MASK) : text);
 

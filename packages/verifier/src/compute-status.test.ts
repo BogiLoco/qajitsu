@@ -79,3 +79,43 @@ describe("assertions that need a person (REQ-EXEC-12/AC3)", () => {
     expect(status([attempt("failed", [bad], 1), attempt("passed", [ok, review], 2)])).toBe("FLAKY");
   });
 });
+
+// Found by mutation testing (REQ-NFR-14): each rule on its own, with the case that only it decides.
+describe("each status rule decides alone (REQ-VER-01, REQ-VER-02, REQ-NFR-14)", () => {
+  const healed = (a: CaseAttempt, flag = true): CaseAttempt => ({ ...a, healed: flag });
+
+  it("REQ-VER-02: a runner that reports failed fails the case even when every assertion held (a crash, a timeout)", () => {
+    expect(status([attempt("failed", [ok])])).toBe("FAILED");
+    expect(status([attempt("failed", [ok], 1), attempt("passed", [ok], 2)])).toBe("FLAKY");
+  });
+
+  it("REQ-VER-02: one failed assertion among passing ones fails the case, whatever the runner says", () => {
+    expect(status([attempt("passed", [ok, bad])])).toBe("FAILED");
+    expect(status([attempt("passed", [bad], 1), attempt("passed", [ok], 2)])).toBe("FLAKY");
+  });
+
+  it("REQ-VER-02: an attempt without assertions never hides a failed one", () => {
+    expect(status([attempt("passed", [], 1), attempt("passed", [bad], 2)])).toBe("FAILED");
+    expect(status([attempt("passed", [], 1), attempt("passed", [ok], 2)])).toBe("NEEDS_REVIEW");
+  });
+
+  it("REQ-VER-02: a pass after an attempt that did not run is not PASSED (fail-closed)", () => {
+    expect(status([attempt("error", [], 1), attempt("passed", [ok], 2)])).toBe("FAILED");
+    expect(status([attempt("skipped", [], 1), attempt("passed", [ok], 2)])).toBe("FAILED");
+  });
+
+  it("REQ-EXEC-09/AC3: a pass that ran a healed spec is NEEDS_REVIEW, never PASSED or FLAKY", () => {
+    expect(status([healed(attempt("passed", [ok]))])).toBe("NEEDS_REVIEW");
+    expect(status([attempt("failed", [bad], 1), healed(attempt("passed", [ok], 2))])).toBe("NEEDS_REVIEW");
+    expect(status([healed(attempt("failed", [bad], 1)), attempt("passed", [ok], 2)])).toBe("NEEDS_REVIEW");
+  });
+
+  it("REQ-EXEC-09/AC3: a healed spec that still fails stays FAILED; healed: false is not a heal", () => {
+    expect(status([attempt("failed", [bad], 1), healed(attempt("failed", [bad], 2))])).toBe("FAILED");
+    expect(status([healed(attempt("passed", [ok]), false)])).toBe("PASSED");
+  });
+
+  it("REQ-VER-02: a skipped first attempt does not make a later failure NOT_RUN", () => {
+    expect(status([attempt("skipped", [], 1), attempt("failed", [bad], 2)])).toBe("FAILED");
+  });
+});

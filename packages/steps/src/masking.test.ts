@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MASK, createMasker } from "./masking.js";
+import { DEFAULT_SENSITIVE_HEADERS, DEFAULT_SENSITIVE_KEYS, MASK, createMasker } from "./masking.js";
 
 // Fake values only; real credentials never appear in this repository.
 const token = ["fake", "token", "0123456789"].join("-");
@@ -61,5 +61,42 @@ describe("createMasker (REQ-CFG-06)", () => {
     expect(masker.containsSecret(`x ${token}`)).toBe(true);
     expect(masker.containsSecret(`x ${token}`)).toBe(true);
     expect(masker.containsSecret("clean")).toBe(false);
+  });
+
+  // Found by mutation testing (REQ-NFR-14): every default name is masked, not only the first ones. The names are
+  // written out: a list built from the constants under test would change along with a mutant.
+  it.each(
+    ["authorization", "proxy-authorization", "cookie", "set-cookie", "x-api-key", "x-auth-token"].map((h) => [
+      h,
+    ]),
+  )("REQ-CFG-06: the %s header is masked by default", (h) => {
+    expect(createMasker().maskHeaders({ [h.toUpperCase()]: "value-1", accept: "text/html" })).toEqual({
+      [h.toUpperCase()]: MASK,
+      accept: "text/html",
+    });
+  });
+
+  it.each(
+    [
+      "password",
+      "passwd",
+      "secret",
+      "token",
+      "access_token",
+      "refresh_token",
+      "api_key",
+      "apikey",
+      "client_secret",
+    ].map((k) => [k]),
+  )("REQ-CFG-06: the %s key is masked by default", (k) => {
+    expect(createMasker().maskJson({ [k.toUpperCase()]: "value-1", name: "Ada" })).toEqual({
+      [k.toUpperCase()]: MASK,
+      name: "Ada",
+    });
+  });
+
+  it("REQ-CFG-06: the default names are lowercase, as the case-insensitive lookup needs", () => {
+    for (const name of [...DEFAULT_SENSITIVE_HEADERS, ...DEFAULT_SENSITIVE_KEYS])
+      expect(name).toBe(name.toLowerCase());
   });
 });
