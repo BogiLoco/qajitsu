@@ -23,14 +23,15 @@ The workflow has three jobs before the image:
   installed from its tarball (`tests/e2e/plugins-installed.e2e.test.ts`) and the full release check below.
 - **version**, with the rights to push a branch and open a pull request and nothing else (no npm token, no OIDC
   token), opens or updates the version pull request when changesets are pending.
-- **release** runs when none are pending, in the `npm-publish` environment, with the npm token and the OIDC token for
-  provenance. Before it installs anything, `scripts/unpublished-check.mjs` asks the registry about every package at its
+- **release** runs when none are pending, in the `npm-publish` environment, with the OIDC token and no npm token:
+  npm trusted publishing exchanges the OIDC token, which names this repository, `release.yml` and that environment,
+  for a short-lived publish token, and signs the provenance with it (REQ-GEN-15/AC6). Before it installs anything, `scripts/unpublished-check.mjs` asks the registry about every package at its
   version:
   - none of them is there: this run publishes;
   - all of them are and the CLI's release tag exists: the release is done, the job does nothing;
   - some or all are, but the tag is missing, and each has the provenance of a run of this workflow on `main`: this run
     publishes the rest, tags them and finishes that release. This happens when the registry stopped a release half-way
-    (npm limits how many new packages may be created in a row, `E429`) or when npm staged new packages: a token
+    (npm limits how many new packages may be created in a row, `E429`) or when npm staged new packages: a publisher
     allowed to "publish and stage" may have a first version of a package held for approval (npm shows a
     `0.0.0-stage` placeholder). Approve the staged versions on npmjs.com (each package's page), then re-run the
     failed job or wait for the next push to `main`;
@@ -43,7 +44,9 @@ The workflow has three jobs before the image:
   1. the publish guard;
   2. `pnpm clean` and `pnpm build`, so no stale file reaches a package;
   3. the release check without installs (`--no-install`): the tarballs that are published are inspected again;
-  4. `pnpm -r publish` with npm provenance: pnpm, not npm, because only pnpm turns `workspace:` ranges into versions;
+  4. `pnpm -r publish` with npm provenance: pnpm, not npm, because only pnpm turns `workspace:` ranges into versions.
+     pnpm 10 hands each tarball to `npm publish`, and only npm 11.5.1 and later do trusted publishing, so the step
+     before installs a pinned npm 11 (Node.js 22 ships npm 10);
   5. `scripts/release-tags.mjs` tags each published version (`changeset git-tag`).
 
   Then `scripts/provenance-check.mjs` reads every package back from the registry: its npm provenance must name this
@@ -53,7 +56,7 @@ The workflow has three jobs before the image:
   pnpm skipped, fails the job here, before `scripts/github-release.mjs` pushes the tags and creates the GitHub release
   with the CLI's changelog.
 
-The npm token reaches the publish step only. Every action is pinned to a commit.
+No workflow holds an npm token. Every action is pinned to a commit.
 
 ## The release check
 
@@ -157,10 +160,21 @@ node scripts/image-check.mjs qj <version>
 
 - An npm organisation `qajitsu` that owns the `@qajitsu` scope.
 - A GitHub environment `npm-publish` (Settings → Environments), limited to the `main` branch, with required reviewers if
-  a person should approve each release, holding the secret `NPM_TOKEN`: a granular npm token with publish rights on the
-  `@qajitsu` packages only and an expiry date. The first publish of each package needs a token. After it, switch the
-  packages to npm trusted publishing for this workflow, revoke the token and set the packages to require two-factor
-  authentication and disallow tokens.
+  a person should approve each release. It holds no secret.
+- Every package trusts this workflow as its publisher (npm trusted publishing). A package's first version needs a
+  person (or a short-lived granular token) to create it; then, logged in to npm with an account that may change the
+  packages' settings (`npm login`, npm 11.10 or later):
+
+  ```sh
+  node scripts/trusted-publishing.mjs           # sets BogiLoco/qajitsu, release.yml, npm-publish where it is missing
+  node scripts/trusted-publishing.mjs --check   # every package trusts exactly that publisher, or it exits 1
+  ```
+
+  npm may ask for a one-time password for each package. Then, on npmjs.com, set each package (Settings → Publishing
+  access) to require two-factor authentication and disallow tokens, revoke any npm token that could publish, and
+  delete the `NPM_TOKEN` secret if it still exists. A new package added later needs the same steps after its first
+  version.
+
 - Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests", so the workflow can open
   the version pull request.
 - Optionally the secret `RELEASE_PR_TOKEN`, used by the version job only. A pull request opened with the workflow's
@@ -179,6 +193,7 @@ node scripts/image-check.mjs qj <version>
 ## Notes
 
 - The publish guard (`scripts/publish-guard.mjs`) protects against accidents, not against an attacker: it can be
-  skipped. What protects the packages is where the token lives: in the environment, reachable by the publish step only.
+  skipped. What protects the packages is that npm accepts a publish only from this workflow's OIDC identity in the
+  `npm-publish` environment, and no token exists that could publish instead.
 - `pnpm -r publish` hands each tarball to npm, which signs the provenance. pnpm 11 publishes natively: check provenance
   again before `packageManager` moves past pnpm 10.
