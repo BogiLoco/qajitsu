@@ -1,5 +1,16 @@
 # @qajitsu/adapter-runner-api
 
+## 0.3.0
+
+### Patch Changes
+
+- Updated dependencies [cb7c374]
+- Updated dependencies [5d8dd94]
+- Updated dependencies [51fc3c7]
+- Updated dependencies [fb7628a]
+  - @qajitsu/core@0.3.0
+  - @qajitsu/steps@0.3.0
+
 ## 0.2.0
 
 ### Patch Changes
