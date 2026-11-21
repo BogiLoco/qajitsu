@@ -5,8 +5,10 @@ name: Release
 # release. Nothing is released from a person's machine (scripts/publish-guard.mjs).
 #
 # `test` runs the tests, the networked plugin suite and the release check with read rights and no secrets. `version`
-# (the version pull request) has no npm or OIDC token; `release` alone has them, and only once
-# scripts/unpublished-check.mjs has found that none of the new versions is in the registry yet. The image jobs follow.
+# (the version pull request) has no OIDC token; `release` alone has it, and publishes only once
+# scripts/unpublished-check.mjs has found that none of the new versions is in the registry yet. There is no npm token:
+# npm trusted publishing exchanges that OIDC token, which names this workflow and the npm-publish environment, for a
+# short-lived one (REQ-GEN-15/AC6, scripts/trusted-publishing.mjs). The image jobs follow.
 # Actions are pinned to commits.
 on:
   push:
@@ -95,7 +97,7 @@ jobs:
     if: needs.version.outputs.has-changesets == 'false'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    # The npm token lives in this environment only; it can be limited to main and to reviewers in the settings.
+    # The trusted publisher of every package names this environment; it can be limited to main and to reviewers.
     environment: npm-publish
     # The version this run released, for the image jobs; empty when there was nothing to publish.
     outputs:
@@ -105,7 +107,7 @@ jobs:
       earlier-runs: ${{ steps.decide.outputs.earlier-runs }}
     permissions:
       contents: write # the tags and the GitHub release
-      id-token: write # npm provenance
+      id-token: write # npm trusted publishing and provenance
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -115,7 +117,6 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version-file: .nvmrc
-          registry-url: https://registry.npmjs.org
       # Before anything is installed: a version already in the registry is never skipped silently.
       - name: nothing of the release published yet
         id: decide
@@ -123,11 +124,14 @@ jobs:
       # pnpm runs no dependency install scripts.
       - if: steps.decide.outputs.publish == 'true'
         run: pnpm install --frozen-lockfile --ignore-scripts
+      # pnpm publishes through npm, and only npm 11.5.1 and later do trusted publishing; Node.js 22 ships npm 10.
+      - name: npm for trusted publishing
+        if: steps.decide.outputs.publish == 'true'
+        run: npm install --global --ignore-scripts npm@11.21.3
       - name: publish
         if: steps.decide.outputs.publish == 'true'
         run: pnpm release
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "true"
       # What the registry now serves must be this run's: a version someone published after the decision above, which
       # pnpm skipped, is refused before anything is tagged.

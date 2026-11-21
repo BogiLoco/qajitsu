@@ -115,7 +115,7 @@ describe("the release workflow (REQ-GEN-15/AC1+AC2)", () => {
     ]);
   });
 
-  it("REQ-GEN-15/AC2: the release job holds the rights and the token, each step only what it needs", () => {
+  it("REQ-GEN-15/AC2+AC6: the release job holds the rights, each step only what it needs, and no npm token", () => {
     expect(publishJob?.environment).toBe("npm-publish");
     expect(publishJob?.permissions).toEqual({ contents: "write", "id-token": "write" });
     expect(steps.find((s) => s.uses?.startsWith("actions/checkout@"))?.with).toMatchObject({
@@ -123,17 +123,32 @@ describe("the release workflow (REQ-GEN-15/AC1+AC2)", () => {
       "persist-credentials": false,
     });
     expect(steps.some((s) => s.uses?.startsWith("changesets/action@") === true)).toBe(false);
-    // The npm token reaches the publish step only, never the decision or the install.
-    for (const step of steps) {
-      const npmToken = JSON.stringify(step.env ?? {}).includes("NPM_TOKEN");
-      expect(npmToken, JSON.stringify(step)).toBe(step === publish);
-    }
-    expect(publish?.env).toEqual({
-      NODE_AUTH_TOKEN: "${{ secrets.NPM_TOKEN }}",
-      NPM_CONFIG_PROVENANCE: "true",
-    });
+    // Trusted publishing: npm exchanges the job's OIDC token for a short-lived one. No setup step writes an .npmrc
+    // that expects a token, and no workflow names one.
+    expect(
+      steps.find((s) => s.uses?.startsWith("actions/setup-node@"))?.with?.["registry-url"],
+    ).toBeUndefined();
+    for (const name of WORKFLOWS)
+      expect(readFileSync(join(root, ".github", "workflows", name), "utf8"), name).not.toMatch(
+        /NPM_TOKEN|NODE_AUTH_TOKEN|_authToken/,
+      );
+    expect(publish?.env).toEqual({ NPM_CONFIG_PROVENANCE: "true" });
     expect(githubRelease?.env).toEqual({ GH_TOKEN: "${{ github.token }}" });
     expect(index(steps, (s) => s === githubRelease)).toBeGreaterThan(index(steps, (s) => s === publish));
+  });
+
+  it("REQ-GEN-15/AC6: pnpm publishes through an npm that does trusted publishing, pinned, installed just before", () => {
+    const npm = steps.find((s) => s.name === "npm for trusted publishing");
+    const version = /^npm install --global --ignore-scripts npm@(\d+)\.(\d+)\.(\d+)$/.exec(npm?.run ?? "");
+    expect(version, npm?.run).not.toBeNull();
+    const [major, minor, patch] = (version ?? []).slice(1).map(Number);
+    // npm 11.5.1 is the first with trusted publishing.
+    expect((major ?? 0) * 1e6 + (minor ?? 0) * 1e3 + (patch ?? 0)).toBeGreaterThanOrEqual(11_005_001);
+    expect(npm?.if).toBe("steps.decide.outputs.publish == 'true'");
+    expect(npm?.env).toBeUndefined();
+    const install = index(steps, (s) => s.run === "pnpm install --frozen-lockfile --ignore-scripts");
+    expect(index(steps, (s) => s === npm)).toBeGreaterThan(install);
+    expect(index(steps, (s) => s === npm)).toBe(index(steps, (s) => s === publish) - 1);
   });
 
   it("REQ-GEN-15/AC2: it publishes only when none of the new versions is in the registry, decided before any install", () => {
