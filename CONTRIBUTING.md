@@ -20,6 +20,10 @@ Node.js 22 LTS and pnpm 10 (`corepack enable`). Then `pnpm install && pnpm verif
    (also the integration tests, which drive the CLI end to end and a real browser, and the coverage thresholds) must be
    green, on the Node.js major of `.nvmrc` (CI's; verify warns on another one). CI runs `verify:full`.
    Never weaken a test or lower a threshold to get there.
+   Changing `guard`, `verifier` or `steps`? `pnpm mutation <package>` (StrykerJS, REQ-NFR-14) tells you whether the
+   tests would notice if your code were wrong: a surviving mutant gets a test, or, when it cannot change behaviour, an
+   exclusion that says why (`// Stryker disable next-line <mutator>: <why>`). It runs nightly in CI; its thresholds are
+   only ever raised.
 6. **Commit** with [Conventional Commits](https://www.conventionalcommits.org/) and a package scope, and reference requirements in the footer:
 
    ```text

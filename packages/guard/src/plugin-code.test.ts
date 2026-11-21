@@ -66,4 +66,65 @@ describe("plugin code against its permissions (REQ-GEN-11/AC9, ADR-0015)", () =>
       "dist/a.js:3 uses node:child_process without the exec permission; dist/b.js:9 refers to plan.approved.yaml, which no plugin may",
     );
   });
+
+  // Found by mutation testing (REQ-NFR-14): each module's permission, the spellings of an import and where a line
+  // stops being a type-only import or a comment.
+  it.each([
+    ["net", "network"],
+    ["http", "network"],
+    ["https", "network"],
+    ["http2", "network"],
+    ["tls", "network"],
+    ["dgram", "network"],
+    ["dns", "network"],
+    ["dns/promises", "network"],
+    ["child_process", "exec"],
+    ["worker_threads", "exec"],
+    ["cluster", "exec"],
+    ["fs", "filesystem"],
+    ["fs/promises", "filesystem"],
+  ] as const)("REQ-GEN-11/AC9: node:%s needs the %s permission", (name, needs) => {
+    const code = `import x from "node:${name}";`;
+    expect(checkPluginCode([file(code)], [])).toEqual([
+      { file: "dist/index.js", line: 1, use: `node:${name}`, needs },
+    ]);
+    expect(checkPluginCode([file(code)], [needs])).toEqual([]);
+  });
+
+  it("REQ-GEN-11/AC9: minified and spaced imports are found as well", () => {
+    const code = [
+      'import x from"node:fs";',
+      'const a = await import ("node:net");',
+      'const b = await import( "node:tls");',
+      'const c = require ("child_process");',
+      'const d = require( "cluster");',
+    ].join("\n");
+    expect(checkPluginCode([file(code)], []).map((v) => [v.line, v.use])).toEqual([
+      [1, "node:fs"],
+      [2, "node:net"],
+      [3, "node:tls"],
+      [4, "node:child_process"],
+      [5, "node:cluster"],
+    ]);
+  });
+
+  it("REQ-GEN-11/AC9: only a line that starts as a type-only import or a comment is skipped", () => {
+    const code = [
+      '  import  type { Stats } from "node:fs";',
+      '   // require("node:net") in a comment',
+      'const fs = require("fs"); export type T = 1;',
+      'const net = require("net"); // the network',
+    ].join("\n");
+    expect(checkPluginCode([file(code)], []).map((v) => [v.line, v.use])).toEqual([
+      [3, "node:fs"],
+      [4, "node:net"],
+    ]);
+  });
+
+  it("invariant 3: no permission, even one a manifest should not have, lets a plugin refer to the frozen plan", () => {
+    const text = 'readFile("plan.approved.yaml");';
+    expect(checkPluginCode([file(text)], ["never" as never])).toEqual([
+      { file: "dist/index.js", line: 1, use: "plan.approved.yaml", needs: "never" },
+    ]);
+  });
 });

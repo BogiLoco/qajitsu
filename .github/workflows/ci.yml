@@ -197,6 +197,38 @@ jobs:
           echo "IMAGE=localhost:5000/qajitsu:ci@$(cat "$RUNNER_TEMP/digest")" >> "$GITHUB_ENV"
       - run: node scripts/stack-smoke.mjs podman "$IMAGE"
 
+  # REQ-NFR-14: mutation testing of the trust-critical packages, nightly and on demand, never on every pull request
+  # (it runs the tests once per mutant). Each package is checked by its own unit tests, fails below its threshold
+  # (stryker/<package>.config.json, only ever raised), and the reports are kept.
+  mutation:
+    name: mutation (${{ matrix.package }})
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [guard, verifier, steps]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Some steps unit tests drive a page, as in the verify job.
+      - run: pnpm --filter @qajitsu/cli exec playwright-core install chromium
+      - run: pnpm mutation ${{ matrix.package }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: mutation-${{ matrix.package }}
+          path: reports/mutation/${{ matrix.package }}/
+          if-no-files-found: ignore
+
   # REQ-NFR-06/AC2: a new contributor gets `pnpm install && pnpm verify` green in under five minutes: no caches, a
   # fresh runner, the commands from CONTRIBUTING.md. Only the Linux system libraries for Chromium are installed first.
   # `pnpm verify` runs the unit tests; the integration tests and the coverage thresholds run in the verify job.

@@ -39,6 +39,7 @@ The non-negotiable invariants live in `.claude/rules/architecture-invariants.md`
 | `pnpm build` / `pnpm qajitsu <cmd>`   | Build packages to `dist/` / run the built CLI                                                                           |
 | `pnpm format`                         | Prettier write                                                                                                          |
 | `pnpm bench -- --model <ref>`         | Benchmark a model on the demo-shop seeded bugs (real model calls; never in PR CI)                                       |
+| `pnpm mutation [package]`             | StrykerJS mutation testing of guard, verifier, steps (nightly in CI, never per PR; thresholds only go up)               |
 | `pnpm run docs`                       | API reference and guides with TypeDoc into `docs-site/` (every export needs TSDoc)                                      |
 
 ## Repository map

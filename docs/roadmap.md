@@ -281,6 +281,7 @@ the evidence bundle as pipeline artifacts.
 - [REQ-CI-03](requirements/ci-cd.md#req-ci-03--plan-approval-inside-the-pipeline) Plan approval inside the pipeline (must, implemented, AC 4/4)
 - [REQ-CI-04](requirements/ci-cd.md#req-ci-04--outputs-for-pipelines) Outputs for pipelines (must, implemented, AC 4/4)
 - [REQ-CI-05](requirements/ci-cd.md#req-ci-05--gradual-rollout-and-cost-control) Gradual rollout and cost control (should, implemented, AC 3/3)
+- [REQ-NFR-14](requirements/non-functional.md#req-nfr-14--mutation-testing-of-the-trust-critical-packages) Mutation testing of the trust-critical packages (should, in-progress, AC 4/5)
 - [REQ-FLOW-01](requirements/workflow.md#req-flow-01--start-from-a-jira-status) Start from a Jira status (should, implemented, AC 4/4)
 - [REQ-FLOW-02](requirements/workflow.md#req-flow-02--status-mapping-per-project) Status mapping per project (must, implemented, AC 3/3)
 - [REQ-FLOW-03](requirements/workflow.md#req-flow-03--plan-approval-in-the-ticket) Plan approval in the ticket (must, implemented, AC 7/7)

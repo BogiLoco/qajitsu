@@ -66,6 +66,7 @@ export function checkPluginCode(
       };
       if (!TYPE_ONLY.test(text))
         for (const m of text.matchAll(SPECIFIER)) {
+          // Stryker disable next-line StringLiteral: the capture group is not optional, so m[1] is always a string
           const spec = m[1] ?? "";
           const needs = moduleNeeds(spec);
           if (needs) add(spec.startsWith("node:") ? spec : `node:${spec}`, needs);

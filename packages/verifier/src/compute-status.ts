@@ -34,9 +34,9 @@ const attemptPassed = (attempt: CaseAttempt): boolean =>
  */
 export function computeStatus(result: CaseRunResult, context: StatusContext): TestStatus {
   const { attempts } = result;
-  const first = attempts[0];
   const last = attempts.at(-1);
-  if (first === undefined || last === undefined || last.outcome === "skipped") return "NOT_RUN";
+  if (last === undefined || last.outcome === "skipped") return "NOT_RUN";
+  const first = attempts[0] ?? last;
   if (last.outcome === "error")
     return attempts.some((a) => a.assertions.some((x) => !x.pass)) ? "FAILED" : "BLOCKED";
   if (attempts.some((a) => a.healed === true) && attemptPassed(last)) return "NEEDS_REVIEW";
