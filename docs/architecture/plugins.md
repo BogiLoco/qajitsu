@@ -1022,7 +1022,10 @@ the command with `qj plugin add <id>`.
 
 - At install, and again when an installed plugin is loaded, its own code is checked against its permissions. Node's
   network, process and file modules, reads of `process.env` and the global `fetch` must be declared, and no plugin may
-  refer to `plan.approved.yaml`. A plugin that does more is refused.
+  refer to `plan.approved.yaml`. A plugin that does more is refused. The code is parsed, so a comment or a string
+  cannot hide anything; code that loads other code (`node:module`, `vm`, `eval`, `process.getBuiltinModule`, a
+  native addon) needs `exec`, `process` or the global object passed on counts as all it could reach, and a file that
+  does not parse or has HTML-like comments is refused (ADR-0015).
 - Every HTTP call of an integration plugin goes through a guarded `fetch`: only to the hosts of its manifest and the
   URLs the project configures for it.
 - A contract test runs the same code check over every adapter in this repository.

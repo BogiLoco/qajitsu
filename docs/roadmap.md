@@ -97,7 +97,7 @@ Author agent, `@qajitsu/steps`, the API runner, evidence, publish gates and the 
 - [REQ-EXEC-03](requirements/execution.md#req-exec-03--static-checks-before-execution) Static checks before execution (must, implemented, AC 5/5)
 - [REQ-EXEC-04](requirements/execution.md#req-exec-04--api-testing) API testing (must, implemented, AC 3/3)
 - [REQ-EXEC-08](requirements/execution.md#req-exec-08--retries-and-flaky) Retries and FLAKY (must, implemented, AC 3/3)
-- [REQ-VER-02](requirements/verification.md#req-ver-02--verdict-from-runner-output-only) Verdict from runner output only (must, implemented, AC 3/3)
+- [REQ-VER-02](requirements/verification.md#req-ver-02--verdict-from-runner-output-only) Verdict from runner output only (must, implemented, AC 4/4)
 - [REQ-VER-05](requirements/verification.md#req-ver-05--evidence-manifest-with-hashes) Evidence manifest with hashes (must, implemented, AC 3/3)
 - [REQ-VER-07](requirements/verification.md#req-ver-07--publish-gates) Publish gates (must, implemented, AC 7/7)
 - [REQ-VER-08](requirements/verification.md#req-ver-08--computed-numbers-and-validated-summary) Computed numbers and validated summary (must, implemented, AC 2/2)
