@@ -1,5 +1,37 @@
 # @qajitsu/core
 
+## 0.3.0
+
+### Minor Changes
+
+- cb7c374: The audit through a provider batch (REQ-VER-06/AC4, REQ-LLM-12/AC3): with `verification.auditor_delivery: batch` the
+  run's audit goes to the auditor provider's batch API (Anthropic, OpenAI, Google) at half price. Until it is collected
+  with `qj audit collect` (or `qj publish`), every PASSED case shows as NEEDS_REVIEW ("audit pending") and nothing is
+  published; the collected answer is checked and applied like an immediate audit, and a failed, expired or invalid
+  answer is a failed audit. A provider without a batch API audits at once. `ResolvedModel.batch` (`ModelBatch`) offers
+  batches to other work too.
+- 5d8dd94: Ticket and month budgets (REQ-FLOW-06): `budget.ticket` and `budget.month` limit the cost, tokens and active minutes
+  of one version of a ticket's content and of the project per calendar month (`budget.time_zone`). Every model call and
+  every command's active time go to a spend ledger written by code, attributed to their case (the auditor's shared by
+  the cases it reviewed) or to the ticket. Budgets are checked before a new run, before and after every model call and
+  before each case; a stop makes model stages BLOCKED and unwritten cases NOT_RUN with the scope, spent amount, limit
+  and period, never changing a status, and the Jira comment gets a budget section. A local model costs nothing; a paid
+  model without a price is refused under a ticket or month cost limit. `qj budget` shows the spend against every limit
+  and the most expensive tickets and cases, `qj status` the tickets close to their budget, and a ledger that does not
+  match the run journals stops new runs until `qj budget --rebuild`.
+- 51fc3c7: Model profiles from gateways (REQ-LLM-10): an OpenAI-compatible provider marked `gateway: litellm` or
+  `gateway: openrouter` gets each model's context window, tools, structured output, vision and prices from LiteLLM's
+  model info or OpenRouter's model list. Declared values win; what nobody states stays unknown. The answer is kept a day
+  in the project's home with its read time, `qj doctor --models` names where every capability came from, and a gateway
+  that does not answer is warned about while the configured profiles are used. `qj init` sets OpenRouter up from
+  `OPENROUTER_API_KEY` and a LiteLLM gateway from `LITELLM_API_KEY` with `LITELLM_BASE_URL`.
+- fb7628a: Oversized attachments in object storage (REQ-PUB-02/AC3): the attachment limit is
+  `publish.max_attachment_mb`, lowered to the Jira instance's own upload limit when it reports one. With
+  `publish.oversized` (`type: s3`: AWS, MinIO and other S3-compatible stores, plugin `evidence-s3`), a file over the
+  limit is uploaded after the preview is confirmed and the comment links it under "Stored outside the ticket" with its
+  size, SHA-256 and a presigned link that expires after `link_hours`. A refused upload stops publishing; `run.json` and
+  the journal name stored files by key and hash. New plugin type `attachment store`; `Publisher.attachmentLimit()`.
+
 ## 0.2.0
 
 No changes in this release.
