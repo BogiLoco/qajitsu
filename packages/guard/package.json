@@ -38,6 +38,7 @@
     "prepublishOnly": "node ../../scripts/publish-guard.mjs"
   },
   "dependencies": {
-    "@qajitsu/core": "workspace:*"
+    "@qajitsu/core": "workspace:*",
+    "typescript": "catalog:"
   }
 }

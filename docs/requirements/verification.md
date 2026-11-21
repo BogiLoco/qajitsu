@@ -27,6 +27,7 @@ The layer that keeps results honest. Background: ADR-0002 and the architecture i
 - [x] AC1: Statuses are computed only by `computeStatus` in `@qajitsu/verifier` from runner attempts and assertions.
 - [x] AC2: No agent has a tool that sets or changes a status.
 - [x] AC3: A runner claiming "passed" while an assertion failed yields FAILED; "passed" without assertions never yields PASSED.
+- [x] AC4: A failure observed in any attempt is never hidden by a later attempt that was skipped: the case is FAILED, not NOT_RUN (as a retry that could not execute does not hide it).
 
 ### REQ-VER-03 · Write bans for agents
 
