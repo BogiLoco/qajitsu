@@ -17,7 +17,8 @@ const attemptPassed = (attempt: CaseAttempt): boolean =>
  * are decided (REQ-VER-01, REQ-VER-02, invariant 1). Fail-closed: anything ambiguous never becomes PASSED.
  *
  * Rules, in order:
- * 1. No attempts, or the last attempt was skipped → NOT_RUN.
+ * 1. No attempts → NOT_RUN. The last attempt was skipped → FAILED when an earlier attempt failed (a skipped retry must
+ *    not hide a defect, REQ-VER-02/AC4), otherwise NOT_RUN.
  * 2. The last attempt errored (could not execute) → FAILED when an earlier attempt observed a failed
  *    assertion (a crash on retry must not hide a defect), otherwise BLOCKED.
  * 2b. A passing last attempt that ran a healed spec → NEEDS_REVIEW: an agent changed the test, so a
@@ -35,7 +36,9 @@ const attemptPassed = (attempt: CaseAttempt): boolean =>
 export function computeStatus(result: CaseRunResult, context: StatusContext): TestStatus {
   const { attempts } = result;
   const last = attempts.at(-1);
-  if (last === undefined || last.outcome === "skipped") return "NOT_RUN";
+  if (last === undefined) return "NOT_RUN";
+  // REQ-VER-02/AC4: a skipped retry, like one that could not execute, must not hide a failure seen before it.
+  if (last.outcome === "skipped") return attempts.some(attemptFailed) ? "FAILED" : "NOT_RUN";
   const first = attempts[0] ?? last;
   if (last.outcome === "error")
     return attempts.some((a) => a.assertions.some((x) => !x.pass)) ? "FAILED" : "BLOCKED";
