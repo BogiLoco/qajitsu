@@ -118,4 +118,12 @@ describe("each status rule decides alone (REQ-VER-01, REQ-VER-02, REQ-NFR-14)", 
   it("REQ-VER-02: a skipped first attempt does not make a later failure NOT_RUN", () => {
     expect(status([attempt("skipped", [], 1), attempt("failed", [bad], 2)])).toBe("FAILED");
   });
+
+  it("REQ-VER-02/AC4: a skipped retry never hides an earlier failure; skipped after skipped is NOT_RUN", () => {
+    expect(status([attempt("failed", [bad], 1), attempt("skipped", [], 2)])).toBe("FAILED");
+    expect(status([attempt("failed", [ok], 1), attempt("skipped", [], 2)])).toBe("FAILED");
+    expect(status([attempt("passed", [ok, bad], 1), attempt("skipped", [], 2)])).toBe("FAILED");
+    expect(status([attempt("passed", [ok], 1), attempt("skipped", [], 2)])).toBe("NOT_RUN");
+    expect(status([attempt("skipped", [], 1), attempt("skipped", [], 2)])).toBe("NOT_RUN");
+  });
 });

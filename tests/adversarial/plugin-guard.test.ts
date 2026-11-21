@@ -94,6 +94,201 @@ describe("a plugin that lies about what it does (REQ-GEN-11/AC9, ADR-0015)", () 
     expect(err.message).toContain("process.env without the environment permission");
   });
 
+  it.each([
+    ["code after a block comment on the same line", '/**/const c = require("child_process");'],
+    [
+      "a minified bundle behind a license banner",
+      '/*! (c) x */import{spawn as s}from"node:child_process";s("sh");',
+    ],
+    [
+      "code after a type-only import on the same line",
+      'import type { A } from "./a.js";const c = require("child_process");',
+    ],
+    [
+      "a line inside a template literal that looks like a comment",
+      'const s = `\n// `; const c = require("child_process");',
+    ],
+    [
+      "a block comment start inside a string",
+      'const s = "/*"; const c = require("child_process"); const t = "*/";',
+    ],
+    ["a continuation line that starts with *", 'const n = 2\n* require("child_process").length;'],
+    ["a regex literal with slashes in it", 'const r = /[//]/; const c = require("child_process");'],
+  ])("REQ-GEN-11/AC9: %s does not hide a process start from the check", async (_, code) => {
+    const err = await refusal(install(manifest(["network"]), { "dist/index.js": `${code}\n` }));
+    expect(err.code).toBe("PLUGIN_PERMISSION");
+    expect(err.message).toContain("node:child_process without the exec permission");
+  });
+
+  // Found by the verification audit of the parser-based check: what Node runs differently from how TypeScript reads
+  // it, and the ways around a named import.
+  it.each([
+    [
+      "an HTML-like comment in CommonJS before a template",
+      "dist/index.cjs",
+      'const x = 1 <!-- `\nrequire("child_process").execSync("id");\n// `\n',
+      "refers to an HTML-like comment, which no plugin may",
+    ],
+    [
+      "an HTML-like comment before a block comment",
+      "dist/index.js",
+      'const y = 0;\nconst x = 1 <!-- /*\nrequire("child_process").execSync("id");\n// */ y\n',
+      "refers to an HTML-like comment, which no plugin may",
+    ],
+    [
+      "an HTML-like closing comment at the start of a line",
+      "dist/index.cjs",
+      '/* a */ --> require("child_process")\n',
+      "refers to an HTML-like comment, which no plugin may",
+    ],
+    [
+      "module.require",
+      "dist/index.cjs",
+      'module.require("child_process").execSync("id");\n',
+      "uses node:child_process",
+    ],
+    [
+      "require.main.require",
+      "dist/index.cjs",
+      'require.main.require("child_process");\n',
+      "uses node:child_process",
+    ],
+    [
+      "process.getBuiltinModule",
+      "dist/index.js",
+      'process.getBuiltinModule("node:child_process");\n',
+      "uses process.getBuiltinModule",
+    ],
+    [
+      "createRequire",
+      "dist/index.js",
+      'import { createRequire } from "node:module";\ncreateRequire(import.meta.url)("child_process");\n',
+      "uses node:module",
+    ],
+    ["eval", "dist/index.js", "eval(\"require('child_process')\");\n", "uses eval"],
+    ["a native addon", "dist/index.cjs", 'require("./build/addon.node");\n', "uses ./build/addon.node"],
+    [
+      "a literal joined with an empty string",
+      "dist/index.js",
+      'await import("child_process" + "");\n',
+      "uses node:child_process",
+    ],
+    // Second audit: code in strings run by the Function constructor, inline modules, renamed and two-step aliases.
+    [
+      "the Function constructor of an arrow function",
+      "dist/index.js",
+      '(() => {}).constructor("return process.getBuiltinModule(\'child_process\')")().execSync("id");\n',
+      "uses .constructor",
+    ],
+    [
+      "the Function constructor held in a variable",
+      "dist/index.js",
+      'const F = Function; F("return 1")();\n',
+      "uses Function passed on",
+    ],
+    [
+      "an inline data: module",
+      "dist/index.mjs",
+      "await import(\"data:text/javascript,import cp from 'node:child_process'; export default 1\");\n",
+      "data:text/javascript",
+    ],
+    [
+      "require.call",
+      "dist/index.cjs",
+      'require.call(null, "child_process").execSync("id");\n',
+      "uses node:child_process",
+    ],
+    [
+      "require.apply",
+      "dist/index.cjs",
+      'require.apply(null, ["child_process"]);\n',
+      "uses node:child_process",
+    ],
+    ["Module._load", "dist/index.cjs", 'module.constructor._load("child_process");\n', "uses ._load"],
+    [
+      "a template that starts with an empty piece",
+      "dist/index.cjs",
+      'require(`${""}child_process`);\n',
+      "uses node:child_process",
+    ],
+    ["an absolute path", "dist/index.cjs", 'require("/tmp/evil.js");\n', "uses /tmp/evil.js"],
+    [
+      "process renamed out of the global object",
+      "dist/index.js",
+      'const { process: p } = global; p.getBuiltinModule("child_process").execSync("id");\n',
+      "uses process passed on",
+    ],
+    [
+      "process of the global object taken in two steps",
+      "dist/index.js",
+      'const p = (function () { return this; })().process; p.getBuiltinModule("child_process");\n',
+      "uses process passed on",
+    ],
+    // Final audit: the same, taken as values first.
+    [
+      "the Function constructor held in a variable",
+      "dist/index.js",
+      "const C = (() => {}).constructor; C(\"return process['env']\")().JIRA_TOKEN;\n",
+      "uses .constructor",
+    ],
+    [
+      "the Function constructor through Reflect.apply",
+      "dist/index.js",
+      'Reflect.apply((() => {}).constructor, null, ["return 1"])();\n',
+      "uses .constructor",
+    ],
+    [
+      "Module._load held in a variable",
+      "dist/index.cjs",
+      'const L = module.constructor._load; L("child_process");\n',
+      "uses ._load",
+    ],
+    [
+      "a data: module held in a variable",
+      "dist/index.mjs",
+      "const u = \"data:text/javascript,export default process['env']\"; (await import(u)).default;\n",
+      "uses a data: module in a string",
+    ],
+    [
+      "process destructured from an alias of the global object",
+      "dist/index.cjs",
+      "const g = (function () { return this; })(); const { process: p } = g; p.env;\n",
+      "uses process passed on",
+    ],
+  ])("REQ-GEN-11/AC9: %s does not get past the check", async (_, path, code, reason) => {
+    const err = await refusal(install(manifest(["network"]), { [path]: code }));
+    expect(err.code).toBe("PLUGIN_PERMISSION");
+    expect(err.message).toContain(reason);
+  });
+
+  it.each([
+    ["an alias of the global object", "const g = globalThis; export const t = g.process.env.JIRA_TOKEN;"],
+    [
+      "the global object of a function",
+      "export const t = (function () { return this; })().process.env.JIRA_TOKEN;",
+    ],
+    ["a chain of global names", "export const t = globalThis.self.process.env.JIRA_TOKEN;"],
+    ["a computed key", 'export const t = globalThis["process"].env.JIRA_TOKEN;'],
+    [
+      "code in a string run by the Function constructor",
+      'export const t = (() => {}).constructor("return process.env")().JIRA_TOKEN;',
+    ],
+    ["an inline data: module", 'const m = await import("data:text/javascript,export default process.env");'],
+  ])("REQ-GEN-11/AC4: %s does not read the environment for a plugin with network only", async (_, code) => {
+    const err = await refusal(install(manifest(["network"]), { "dist/index.js": `${code}\n` }));
+    expect(err.message).toContain("process.env without the environment permission");
+  });
+
+  it("invariant 3: a regular expression that finds the frozen plan is refused too", async () => {
+    const err = await refusal(
+      install(manifest(["filesystem"]), {
+        "dist/index.js":
+          "export const find = (files) => files.filter((f) => /plan\\.approved\\.yaml$/.test(f));\n",
+      }),
+    );
+    expect(err.message).toContain("refers to plan.approved.yaml, which no plugin may");
+  });
+
   it("REQ-GEN-11/AC9: no permission lets a plugin refer to the frozen plan", async () => {
     const err = await refusal(
       install(manifest(["network", "exec", "filesystem", "environment"]), {

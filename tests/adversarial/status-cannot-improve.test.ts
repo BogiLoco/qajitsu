@@ -36,6 +36,17 @@ describe("invariant 1: the verdict comes from assertions, not from claims (REQ-V
     expect(computeStatus({ caseId: "TC-01", attempts }, { evidenceComplete: true })).toBe("FLAKY");
   });
 
+  it("REQ-VER-02/AC4: a retry reported as skipped does not turn an observed failure into NOT_RUN", () => {
+    for (const failed of [
+      attempt("failed", [false]),
+      attempt("passed", [true, false]),
+      attempt("failed", [true]),
+    ]) {
+      const attempts = [failed, { ...attempt("skipped"), attempt: 2 }];
+      expect(computeStatus({ caseId: "TC-01", attempts }, { evidenceComplete: true })).toBe("FAILED");
+    }
+  });
+
   it("missing evidence turns PASSED into NEEDS_REVIEW (REQ-VER-05)", () => {
     expect(
       computeStatus({ caseId: "TC-01", attempts: [attempt("passed", [true])] }, { evidenceComplete: false }),
