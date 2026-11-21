@@ -1,5 +1,40 @@
 # @qajitsu/verifier
 
+## 0.3.0
+
+### Minor Changes
+
+- cb7c374: The audit through a provider batch (REQ-VER-06/AC4, REQ-LLM-12/AC3): with `verification.auditor_delivery: batch` the
+  run's audit goes to the auditor provider's batch API (Anthropic, OpenAI, Google) at half price. Until it is collected
+  with `qj audit collect` (or `qj publish`), every PASSED case shows as NEEDS_REVIEW ("audit pending") and nothing is
+  published; the collected answer is checked and applied like an immediate audit, and a failed, expired or invalid
+  answer is a failed audit. A provider without a batch API audits at once. `ResolvedModel.batch` (`ModelBatch`) offers
+  batches to other work too.
+- bcafed0: Plan review in `qj console` (REQ-WEB-07): two plan versions side by side with added, removed and changed cases, the
+  coverage matrix and the "changed but not tested" list, and approve, revise and edit buttons that run `qj approve`,
+  `qj plan --revise` and the plan edit with their rules, as the person who started the console. A change needs the
+  console's own origin and the session's form token. `coverageMatrix` in the verifier gives each criterion and endpoint
+  the cases that cover it; `checkPlanCoverage` is computed from it.
+
+### Patch Changes
+
+- 20b3ec3: Two integrity fixes found by mutation testing. A failure seen in one attempt is no longer hidden by a retry reported
+  as skipped: the case is FAILED, not NOT_RUN (REQ-VER-02/AC4). The plugin code check (REQ-GEN-11/AC9) now parses a plugin's code with TypeScript instead of reading it line by line,
+  so code after a comment or a type-only import on the same line, a template literal that looks like a comment, or a
+  minified bundle behind a license banner can no longer hide a module from the permission check. It also covers more:
+  `module.require`, every `x.require`, `require.call` and `require.apply`; `node:module`, `vm`, `inspector`, `wasi`,
+  `repl`, `v8`, native addons, modules from a URL or an absolute path, `eval` and `Function` (also held or reached as
+  `.constructor`), `Module._load`, and `process.getBuiltinModule` with every other `process` property but a few harmless
+  ones need `exec`; code written into strings is still read as before; `node:sqlite` needs `filesystem` and `node:process` `environment`; `process` or the global object passed on,
+  or `.process.env` read from any object, counts as all it could reach; a file that does not parse or has HTML-like
+  comments is refused. A plugin that used one of these without the permission is now refused at install and load.
+- Updated dependencies [cb7c374]
+- Updated dependencies [5d8dd94]
+- Updated dependencies [51fc3c7]
+- Updated dependencies [fb7628a]
+  - @qajitsu/core@0.3.0
+  - @qajitsu/steps@0.3.0
+
 ## 0.2.0
 
 ### Patch Changes
